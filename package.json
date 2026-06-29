@@ -1,0 +1,25 @@
+{
+  "name": "encre-et-plume",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Encre & Plume — French manga-creator collaboration platform (monorepo).",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "e2e": "turbo run e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.7.3"
+  }
+}

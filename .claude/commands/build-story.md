@@ -1,0 +1,54 @@
+---
+description: Implement one Encre & Plume user story end-to-end through the multi-agent pipeline — Manager → Backend → Frontend → QA → Reviewer — looping back to the Manager on a failed review until it passes (max 3 rounds).
+argument-hint: <story-id | epic-folder>   e.g. F-1  or  00-foundation
+disable-model-invocation: true
+---
+
+You are the **orchestrator** for the Encre & Plume dev pipeline. Run this loop yourself in the main
+thread (you hold the loop state; the agents start fresh and hand off through files on disk). Target: `$1`.
+
+## 0 · Resolve & init
+- If `$1` is an epic folder (e.g. `00-foundation`), list its `*.md` stories (skip `_epic.md`), order by
+  dependency, and run the full pipeline below for each story in turn. Otherwise treat `$1` as a story ID.
+- Find the story file: `user-stories/**/$1-*.md`. Read it, its `[[dependencies]]`, and the epic `_epic.md`.
+- Create `.claude/pipeline/$1/` and write `state.json` = `{ "story": "$1", "iteration": 1, "verdict": null }`.
+- If `apps/` does not exist, the repo is greenfield — tell the Manager (step 1) to scaffold the monorepo
+  (per `CLAUDE.md`) before planning.
+
+## 1 · Manager  (loop entry — re-enters here on a failed review)
+Dispatch the **project-manager** agent. Pass: the story file path, the pipeline dir
+`.claude/pipeline/$1/`, and — **only when `iteration > 1`** — point it at `review.md` and `qa-report.md`
+so it revises the plan and adds a "Changes this round" section. Wait until `plan.md` exists.
+
+## 2 · Backend
+Dispatch the **backend-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md`. Wait for
+`backend-notes.md`.
+
+## 3 · Frontend
+Dispatch the **frontend-developer** agent. Pass the story path + `plan.md` + `backend-notes.md` (real API
+contracts). Wait for `frontend-notes.md`.
+
+## 4 · QA
+Dispatch the **qa-test** agent. Pass the story path + `plan.md` + the two notes files. Wait for `qa-report.md`.
+
+## 5 · Reviewer  (the gate)
+Dispatch the **reviewer** agent. Pass the story path + `plan.md` + `qa-report.md`. Read its `review.md`
+and the `verdict` in `state.json`.
+
+## 6 · Gate
+- **VERDICT: PASS** → the story is done. Summarize to the user: what was built (key files/endpoints/
+  components), how to run it, the QA result, and any non-blocking follow-ups from `review.md`. If iterating
+  an epic, move to the next story. Stop the loop for this story.
+- **VERDICT: FAIL and iteration < 3** → increment `iteration` in `state.json`, briefly relay the blocking
+  findings to the user, and **go back to step 1 (Manager)** — the Manager folds the feedback in and the
+  devs/QA/Reviewer run again.
+- **VERDICT: FAIL and iteration == 3** → STOP. Do not loop further. Report to the user the outstanding
+  blocking findings and the artifact paths (`.claude/pipeline/$1/`) so they can decide. Never loop indefinitely.
+
+## Rules
+- Dispatch agents **one at a time, in order** (Backend before Frontend so the UI binds to real contracts).
+  All failures route back through the Manager — agents never call each other directly.
+- Keep your own context small: pass agents **file paths**, not pasted file contents; they read from disk.
+- Between stages, sanity-check the expected artifact was actually written before proceeding; if an agent
+  failed to produce its file, report it rather than continuing blindly.
+- Announce each stage to the user as you go (e.g. "Round 1 · Backend…") so the run is followable.

@@ -1,0 +1,69 @@
+name: Deploy
+
+# CD scaffold. Maps each environment branch to its environment and runs a templated,
+# secret-guarded deploy. Steps no-op until you add the matching <ENV>_* secrets.
+# On GitHub Pro, the `environment:` key activates approval gates / environment secrets.
+
+on:
+  push:
+    branches: [develop, staging, main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  resolve:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.map.outputs.env_name }}
+      env_prefix: ${{ steps.map.outputs.env_prefix }}
+    steps:
+      - id: map
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            develop) echo "env_name=dev"     >> "$GITHUB_OUTPUT"; echo "env_prefix=DEV"     >> "$GITHUB_OUTPUT" ;;
+            staging) echo "env_name=staging" >> "$GITHUB_OUTPUT"; echo "env_prefix=STAGING" >> "$GITHUB_OUTPUT" ;;
+            main)    echo "env_name=prod"    >> "$GITHUB_OUTPUT"; echo "env_prefix=PROD"    >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  deploy:
+    name: Deploy to ${{ needs.resolve.outputs.env_name }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy web (Vercel)
+        env:
+          VERCEL_TOKEN: ${{ secrets[format('{0}_VERCEL_TOKEN', needs.resolve.outputs.env_prefix)] }}
+          VERCEL_ORG_ID: ${{ secrets[format('{0}_VERCEL_ORG_ID', needs.resolve.outputs.env_prefix)] }}
+          VERCEL_PROJECT_ID: ${{ secrets[format('{0}_VERCEL_PROJECT_ID', needs.resolve.outputs.env_prefix)] }}
+        run: |
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::notice::No ${{ needs.resolve.outputs.env_prefix }}_VERCEL_TOKEN set — skipping web deploy for '${{ needs.resolve.outputs.env_name }}'."
+            exit 0
+          fi
+          echo "Deploying apps/web to Vercel (${{ needs.resolve.outputs.env_name }})…"
+          npx vercel@latest pull --yes --environment=production --token="${VERCEL_TOKEN}"
+          npx vercel@latest build --prod --token="${VERCEL_TOKEN}"
+          npx vercel@latest deploy --prebuilt --prod --token="${VERCEL_TOKEN}"
+
+      - name: Deploy api (deploy hook)
+        env:
+          API_DEPLOY_HOOK: ${{ secrets[format('{0}_API_DEPLOY_HOOK', needs.resolve.outputs.env_prefix)] }}
+        run: |
+          if [ -z "${API_DEPLOY_HOOK}" ]; then
+            echo "::notice::No ${{ needs.resolve.outputs.env_prefix }}_API_DEPLOY_HOOK set — skipping api deploy for '${{ needs.resolve.outputs.env_name }}'."
+            exit 0
+          fi
+          echo "Triggering api deploy hook (${{ needs.resolve.outputs.env_name }})…"
+          curl -fsSL -X POST "${API_DEPLOY_HOOK}"
+
+      - name: Summary
+        run: echo "Deploy stage complete for '${{ needs.resolve.outputs.env_name }}'. Configure ${{ needs.resolve.outputs.env_prefix }}_* secrets to enable real deploys."
