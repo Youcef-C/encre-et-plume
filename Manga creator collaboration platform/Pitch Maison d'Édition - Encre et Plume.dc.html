@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Anton&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700;900&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#16130f;}
+  @keyframes epFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+</style>
+</helmet>
+
+<x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1920" height="1080" hint-size="100%,100%" data-uneditable="">
+
+<!-- ========================= 01 · COVER ========================= -->
+<section data-label="Couverture" data-speaker-notes="Bonjour. Encre &amp; Plume — la plateforme qui structure la création manga en France et fait émerger les auteurs de demain. Aujourd'hui je viens vous proposer un partenariat." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;justify-content:space-between;padding:90px 110px;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.05) 2px,transparent 2.1px),radial-gradient(rgba(241,236,225,.035) 2px,transparent 2.1px);background-size:22px 22px,22px 22px;background-position:0 0,11px 11px;position:relative;overflow:hidden;">
+  <div style="position:absolute;top:-160px;right:-160px;width:760px;height:760px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2.4px,transparent 2.5px);background-size:18px 18px;clip-path:polygon(100% 0,100% 100%,0 0);"></div>
+  <div style="display:flex;align-items:center;gap:20px;position:relative;z-index:2;">
+    <span style="width:60px;height:60px;border-radius:50%;background:#e8261c;border:4px solid #f1ece1;display:block;position:relative;overflow:hidden;"><span style="position:absolute;inset:0;left:50%;background:#16130f;opacity:.25;"></span></span>
+    <span style="font-family:'Anton',sans-serif;font-size:34px;letter-spacing:.04em;white-space:nowrap;">ENCRE &amp; PLUME</span>
+    <span style="margin-left: auto; font-family: 'JetBrains Mono',monospace; font-size: 18px; letter-spacing: .18em; color: #16130f; border: 2px solid #43392f; border-radius: 6px; padding: 9px 16px; background-color: #ffffff">DOSSIER PARTENARIAT · 2026</span>
+  </div>
+  <div style="position:relative;z-index:2;max-width:1180px;">
+    <div style="display:inline-block;transform:rotate(-2deg);background:#f1ece1;color:#16130f;font-weight:900;letter-spacing:.06em;font-size:20px;padding:9px 18px;border:3px solid #f1ece1;border-radius:4px;margin-bottom:30px;">PROPOSITION DE PARTENARIAT</div>
+    <h1 style="font-family: 'Anton',sans-serif; font-weight: 400; font-size: 178px; line-height: .9; margin: 0; text-transform: uppercase">Faisons émerger<br>le manga<br><span style="color:#e8261c;">français.</span></h1>
+    <div style="font-size: 32px; font-weight: 500; margin-top: 38px; max-width: 920px; line-height: 1.2; color: #cabfb2">La première plateforme qui réunit auteurs, lecteurs et éditeurs — de la première planche au contrat d'édition.</div>
+  </div>
+  <div style="position:relative;z-index:2;font-family:'JetBrains Mono',monospace;font-size:18px;letter-spacing:.1em;color:#8f8475;">À l'attention de&nbsp;&nbsp;—&nbsp;&nbsp;<span style="color:#f1ece1;">[ MAISON D'ÉDITION ]</span></div>
+</section>
+
+<!-- ========================= 02 · LE PARADOXE ========================= -->
+<section data-label="Le paradoxe" data-speaker-notes="Voici le constat de départ, et c'est presque une anomalie. La France est le 2e marché mondial du manga, juste derrière le Japon. Et pourtant, la part de créations françaises reste minuscule. On consomme énormément, on ne produit presque pas." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;flex-direction:column;padding:80px 110px;background-color:#f6f2e8;background-image:radial-gradient(rgba(22,19,15,.05) 1.6px,transparent 1.7px),radial-gradient(rgba(22,19,15,.035) 1.6px,transparent 1.7px);background-size:15px 15px,15px 15px;background-position:0 0,7.5px 7.5px;">
+  <div style="display:inline-flex;align-self:flex-start;align-items:center;gap:12px;transform:rotate(-1.5deg);background:#16130f;color:#f1ece1;font-weight:900;letter-spacing:.08em;font-size:18px;padding:9px 18px;border-radius:4px;margin-bottom:26px;">LE CONSTAT</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:84px;line-height:.96;margin:0 0 56px;text-transform:uppercase;max-width:1300px;">La France dévore le manga.<br>Elle n'en <span style="color:#e8261c;">produit</span> presque pas.</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:36px;flex:1;">
+    <div style="background:#16130f;color:#f1ece1;border:4px solid #16130f;border-radius:14px;box-shadow:12px 12px 0 rgba(22,19,15,.18);padding:48px 52px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;">
+      <div style="position:absolute;bottom:-60px;right:-60px;width:300px;height:300px;background:#e8261c;border-radius:50%;opacity:.18;"></div>
+      <div style="font-family:'Anton',sans-serif;font-size:200px;line-height:.82;color:#e8261c;">2ᵉ</div>
+      <div style="font-size:30px;font-weight:700;margin-top:8px;">marché mondial du manga</div>
+      <div style="font-size:22px;color:#b0a596;margin-top:8px;">Juste derrière le Japon — devant les États-Unis.</div>
+    </div>
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:12px 12px 0 rgba(22,19,15,.12);padding:48px 52px;display:flex;flex-direction:column;justify-content:center;">
+      <div style="font-family:'Anton',sans-serif;font-size:200px;line-height:.82;">~5<span style="font-size:90px;">%</span></div>
+      <div style="font-size:30px;font-weight:700;margin-top:8px;">des titres publiés sont des créations françaises</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:16px;color:#9a8f80;margin-top:14px;">[ chiffre indicatif — à remplacer ]</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 03 · LE CHAÎNON MANQUANT ========================= -->
+<section data-label="Chaînon manquant" data-speaker-notes="Le talent existe — il est sur Instagram, sur les forums, sur Discord. Mais il manque un pont entre la passion d'un lecteur et la signature d'un auteur. Trois ruptures dans la chaîne." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;flex-direction:column;padding:80px 110px;background-color:#f6f2e8;background-image:radial-gradient(rgba(22,19,15,.05) 1.6px,transparent 1.7px),radial-gradient(rgba(22,19,15,.035) 1.6px,transparent 1.7px);background-size:15px 15px,15px 15px;background-position:0 0,7.5px 7.5px;">
+  <div style="display:inline-flex;align-self:flex-start;align-items:center;gap:12px;transform:rotate(-1.5deg);background:#16130f;color:#f1ece1;font-weight:900;letter-spacing:.08em;font-size:18px;padding:9px 18px;border-radius:4px;margin-bottom:26px;">LE CHAÎNON MANQUANT</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:82px;line-height:.96;margin:0 0 18px;text-transform:uppercase;max-width:1320px;">Le talent est là.<br>Le <span style="color:#e8261c;">chemin</span> n'existe pas.</h2>
+  <div style="font-size:26px;font-weight:500;color:#6f655a;max-width:1100px;margin-bottom:50px;">Entre l'amateur passionné et l'auteur édité, la chaîne est rompue en trois endroits.</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:32px;flex:1;">
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:10px 10px 0 rgba(22,19,15,.12);padding:40px;display:flex;flex-direction:column;">
+      <div style="font-family:'Anton',sans-serif;font-size:60px;color:#e8261c;line-height:1;">01</div>
+      <div style="font-family:'Anton',sans-serif;font-size:38px;text-transform:uppercase;margin:14px 0 14px;line-height:1.02;">Talents dispersés</div>
+      <div style="font-size:25px;font-weight:500;line-height:1.45;color:#3a342d;">Les créateurs sont éparpillés sur Instagram, TikTok et Discord. Aucun lieu ne les rassemble ni ne les fait progresser.</div>
+    </div>
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:10px 10px 0 rgba(22,19,15,.12);padding:40px;display:flex;flex-direction:column;">
+      <div style="font-family:'Anton',sans-serif;font-size:60px;color:#e8261c;line-height:1;">02</div>
+      <div style="font-family:'Anton',sans-serif;font-size:38px;text-transform:uppercase;margin:14px 0 14px;line-height:1.02;">Binômes introuvables</div>
+      <div style="font-size:25px;font-weight:500;line-height:1.45;color:#3a342d;">Un scénariste sans dessinateur. Une dessinatrice sans histoire. Ils ne se rencontrent jamais — et les projets meurent seuls.</div>
+    </div>
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:10px 10px 0 rgba(22,19,15,.12);padding:40px;display:flex;flex-direction:column;">
+      <div style="font-family:'Anton',sans-serif;font-size:60px;color:#e8261c;line-height:1;">03</div>
+      <div style="font-family:'Anton',sans-serif;font-size:38px;text-transform:uppercase;margin:14px 0 14px;line-height:1.02;">Scouting à l'aveugle</div>
+      <div style="font-size:25px;font-weight:500;line-height:1.45;color:#3a342d;">Les éditeurs reçoivent des planches sur papier, sans aucune donnée d'audience. Repérer le bon titre relève du pari.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 04 · LA SOLUTION ========================= -->
+<section data-label="La solution" data-speaker-notes="Encre &amp; Plume répond aux trois ruptures avec un écosystème unique : on trouve son binôme, on crée ensemble, on publie et on est lu, et on se fait repérer. Quatre étapes, une seule plateforme." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;padding:80px 110px;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.05) 2px,transparent 2.1px),radial-gradient(rgba(241,236,225,.03) 2px,transparent 2.1px);background-size:22px 22px,22px 22px;background-position:0 0,11px 11px;">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:48px;">
+    <div>
+      <div style="display:inline-flex;align-items:center;gap:12px;transform:rotate(-1.5deg);background:#e8261c;color:#fff;font-weight:900;letter-spacing:.08em;font-size:18px;padding:9px 18px;border-radius:4px;margin-bottom:22px;">LA SOLUTION</div>
+      <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:96px;line-height:.92;margin:0;text-transform:uppercase;">Un écosystème,<br>de l'idée au <span style="color:#e8261c;">contrat.</span></h2>
+    </div>
+    <div style="font-size:25px;font-weight:500;color:#cabfb2;max-width:440px;text-align:right;line-height:1.45;">Créer, publier, lire — et révéler les auteurs de demain. Au même endroit.</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;flex:1;">
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:38px 32px;display:flex;flex-direction:column;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#e8261c;letter-spacing:.1em;">ÉTAPE 01</div>
+      <div style="font-family:'Anton',sans-serif;font-size:46px;text-transform:uppercase;margin:18px 0 16px;line-height:.98;">Trouver<br>un binôme</div>
+      <div style="font-size:23px;font-weight:500;line-height:1.45;color:#b0a596;margin-top:auto;">Matching scénariste × dessinateur·rice par affinité de style et de genre.</div>
+    </div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:38px 32px;display:flex;flex-direction:column;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#e8261c;letter-spacing:.1em;">ÉTAPE 02</div>
+      <div style="font-family:'Anton',sans-serif;font-size:46px;text-transform:uppercase;margin:18px 0 16px;line-height:.98;">Créer<br>ensemble</div>
+      <div style="font-size:23px;font-weight:500;line-height:1.45;color:#b0a596;margin-top:auto;">Un éditeur collaboratif : du nemu à la planche finale, versions et droits inclus.</div>
+    </div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:38px 32px;display:flex;flex-direction:column;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#e8261c;letter-spacing:.1em;">ÉTAPE 03</div>
+      <div style="font-family:'Anton',sans-serif;font-size:46px;text-transform:uppercase;margin:18px 0 16px;line-height:.98;">Publier<br>&amp; être lu</div>
+      <div style="font-size:23px;font-weight:500;line-height:1.45;color:#b0a596;margin-top:auto;">Chaque chapitre rencontre son public et génère un vrai signal d'audience.</div>
+    </div>
+    <div style="background:#e8261c;border:3px solid #e8261c;border-radius:14px;padding:38px 32px;display:flex;flex-direction:column;color:#fff;position:relative;overflow:hidden;">
+      <div style="position:absolute;bottom:-50px;right:-50px;width:200px;height:200px;background:rgba(22,19,15,.18);border-radius:50%;"></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;letter-spacing:.1em;position:relative;">ÉTAPE 04</div>
+      <div style="font-family:'Anton',sans-serif;font-size:46px;text-transform:uppercase;margin:18px 0 16px;line-height:.98;position:relative;">Être<br>repéré</div>
+      <div style="font-size:23px;font-weight:600;line-height:1.45;margin-top:auto;position:relative;">Les éditeurs accèdent aux talents validés par le public — c'est là que vous entrez.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 05 · LA RENCONTRE ========================= -->
+<section data-label="01 La rencontre" data-speaker-notes="Premier pilier : la rencontre. Notre algorithme suggère des binômes par affinité de style et de genre. Un scénariste trouve sa dessinatrice en quelques clics, et le projet démarre." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;padding:0;background:#f6f2e8;">
+  <div style="flex:1.05;padding:80px 70px 80px 110px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:18px;">01 — LA RENCONTRE</div>
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:88px;line-height:.92;margin:0 0 28px;text-transform:uppercase;">Scénariste<br>× dessinateur·rice</h2>
+    <div style="font-size:28px;font-weight:500;line-height:1.5;color:#3a342d;max-width:640px;">L'algorithme suggère le binôme idéal par <strong>affinité de style et de genre</strong>. On parcourt les portfolios, on lance une collaboration, et l'œuvre commence à deux.</div>
+    <div style="display:flex;gap:14px;margin-top:40px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;">
+      <span style="border:3px solid #16130f;border-radius:8px;padding:12px 20px;background:#fffefb;">Portfolios</span>
+      <span style="border:3px solid #16130f;border-radius:8px;padding:12px 20px;background:#fffefb;">Matching<br></span>
+      <span style="border:3px solid #16130f;border-radius:8px;padding:12px 20px;background:#fffefb;">Appels à collaboration</span>
+    </div>
+  </div>
+  <div style="flex:1;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.06) 2px,transparent 2.1px);background-size:20px 20px;padding:80px 90px;display:flex;flex-direction:column;justify-content:center;gap:24px;position:relative;">
+    <div style="background:#241f19;border:3px solid #4a4239;border-radius:14px;padding:24px 26px;display:flex;align-items:center;gap:20px;box-shadow:8px 8px 0 rgba(0,0,0,.3);">
+      <span style="width:74px;height:74px;border-radius:50%;flex:none;border:3px solid #f1ece1;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2px,transparent 2.1px);background-size:11px 11px;"></span>
+      <div style="flex:1;color:#f1ece1;"><div style="font-weight:700;font-size:26px;">Léa B.</div><div style="font-size:20px;color:#b0a596;">Scénariste · Shōnen, Fantastique</div></div>
+    </div>
+    <div style="align-self:center;display:flex;align-items:center;gap:14px;font-family:'Anton',sans-serif;font-size:30px;color:#e8261c;"><span style="width:80px;height:3px;background:#43392f;"></span>AFFINITÉ 94%<span style="width:80px;height:3px;background:#43392f;"></span></div>
+    <div style="background:#241f19;border:3px solid #4a4239;border-radius:14px;padding:24px 26px;display:flex;align-items:center;gap:20px;box-shadow:8px 8px 0 rgba(0,0,0,.3);">
+      <span style="width:74px;height:74px;border-radius:50%;flex:none;border:3px solid #f1ece1;background-color:#16130f;background-image:radial-gradient(rgba(255,255,255,.18) 2px,transparent 2.1px);background-size:11px 11px;"></span>
+      <div style="flex:1;color:#f1ece1;"><div style="font-weight:700;font-size:26px;">Hugo D.</div><div style="font-size:20px;color:#b0a596;">Dessinateur · Encrage, Action</div></div>
+    </div>
+    <div style="align-self:center;margin-top:8px;background:#e8261c;color:#fff;font-family:'Anton',sans-serif;font-size:26px;text-transform:uppercase;padding:14px 30px;border-radius:8px;border:3px solid #f1ece1;">Binôme formé</div>
+  </div>
+</section>
+
+<!-- ========================= 06 · LA CRÉATION ========================= -->
+<section data-label="02 La création" data-speaker-notes="Deuxième pilier : la création. Tout se passe dans un éditeur collaboratif — du nemu, le storyboard, jusqu'à la planche finale. Versions, gestion des droits, messagerie : le binôme travaille comme un vrai studio." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;flex-direction:column;padding:80px 110px;background-color:#f6f2e8;background-image:radial-gradient(rgba(22,19,15,.05) 1.6px,transparent 1.7px),radial-gradient(rgba(22,19,15,.035) 1.6px,transparent 1.7px);background-size:15px 15px,15px 15px;background-position:0 0,7.5px 7.5px;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:16px;">02 — LA CRÉATION</div>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:46px;">
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:84px;line-height:.94;margin:0;text-transform:uppercase;">Du nemu à la planche,<br>au même endroit.</h2>
+    <div style="font-size:25px;font-weight:500;color:#6f655a;max-width:460px;text-align:right;line-height:1.45;">Un studio numérique complet, pensé pour le travail à deux mains.</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:26px;flex:1;">
+    <div style="border:4px solid #16130f;border-radius:14px;overflow:hidden;background:#fffefb;box-shadow:8px 8px 0 rgba(22,19,15,.12);display:flex;flex-direction:column;">
+      <div style="height:150px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2px,transparent 2.1px),linear-gradient(150deg,#16130f 0%,#16130f 40%,transparent 40.2%);background-size:13px 13px,100% 100%;border-bottom:4px solid #16130f;"></div>
+      <div style="padding:26px 24px;"><div style="font-family:'Anton',sans-serif;font-size:32px;text-transform:uppercase;">Nemu</div><div style="font-size:22px;font-weight:500;color:#3a342d;margin-top:6px;line-height:1.4;">Storyboard partagé, case par case.</div></div>
+    </div>
+    <div style="border:4px solid #16130f;border-radius:14px;overflow:hidden;background:#fffefb;box-shadow:8px 8px 0 rgba(22,19,15,.12);display:flex;flex-direction:column;">
+      <div style="height:150px;background-color:#16130f;background-image:radial-gradient(rgba(255,255,255,.16) 2px,transparent 2.1px),linear-gradient(150deg,#e8261c 0%,#e8261c 38%,transparent 38.2%);background-size:13px 13px,100% 100%;border-bottom:4px solid #16130f;"></div>
+      <div style="padding:26px 24px;"><div style="font-family:'Anton',sans-serif;font-size:32px;text-transform:uppercase;">Arrangement</div><div style="font-size:22px;font-weight:500;color:#3a342d;margin-top:6px;line-height:1.4;">Mise en page et rythme des planches.</div></div>
+    </div>
+    <div style="border:4px solid #16130f;border-radius:14px;overflow:hidden;background:#fffefb;box-shadow:8px 8px 0 rgba(22,19,15,.12);display:flex;flex-direction:column;">
+      <div style="height:150px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2px,transparent 2.1px),linear-gradient(30deg,#16130f 0%,#16130f 40%,transparent 40.2%);background-size:13px 13px,100% 100%;border-bottom:4px solid #16130f;"></div>
+      <div style="padding:26px 24px;"><div style="font-family:'Anton',sans-serif;font-size:32px;text-transform:uppercase;">Permissions</div><div style="font-size:22px;font-weight:500;color:#3a342d;margin-top:6px;line-height:1.4;">Droits clairs entre co-auteurs.</div></div>
+    </div>
+    <div style="border:4px solid #16130f;border-radius:14px;overflow:hidden;background:#fffefb;box-shadow:8px 8px 0 rgba(22,19,15,.12);display:flex;flex-direction:column;">
+      <div style="height:150px;background-color:#16130f;background-image:radial-gradient(rgba(255,255,255,.16) 2px,transparent 2.1px),linear-gradient(30deg,#e8261c 0%,#e8261c 38%,transparent 38.2%);background-size:13px 13px,100% 100%;border-bottom:4px solid #16130f;"></div>
+      <div style="padding:26px 24px;"><div style="font-family:'Anton',sans-serif;font-size:32px;text-transform:uppercase;">Messagerie</div><div style="font-size:22px;font-weight:500;color:#3a342d;margin-top:6px;line-height:1.4;">Retours et révisions en contexte.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 07 · LA PUBLICATION ========================= -->
+<section data-label="03 La publication" data-speaker-notes="Troisième pilier : la publication. Chaque chapitre est lu immédiatement par une communauté. Favoris, calendrier des sorties, concours — et surtout : chaque lecture produit de la donnée. C'est cette donnée qui change tout pour vous." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;padding:0;background:#16130f;">
+  <div style="flex:1;background-color:#1d1813;background-image:radial-gradient(rgba(241,236,225,.06) 2px,transparent 2.1px);background-size:20px 20px;padding:80px 80px;display:flex;flex-direction:column;justify-content:center;gap:22px;border-right:4px solid #43392f;">
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:22px 24px;display:flex;align-items:center;gap:20px;">
+      <span style="width:64px;height:84px;flex:none;border:3px solid #f1ece1;border-radius:5px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2px,transparent 2.1px),linear-gradient(150deg,#16130f 0%,#16130f 42%,transparent 42.2%);background-size:10px 10px,100% 100%;"></span>
+      <div style="flex:1;"><div style="font-family:'Anton',sans-serif;font-size:30px;">NÉON SUTRA</div><div style="font-size:19px;color:#b0a596;">Shōnen · 20 chapitres</div></div>
+      <div style="text-align:right;"><div style="font-family:'Anton',sans-serif;font-size:34px;color:#e8261c;">8,1k</div><div style="font-size:16px;color:#b0a596;">♥ j'aime</div></div>
+    </div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:22px 24px;display:flex;align-items:center;gap:20px;">
+      <span style="width:64px;height:84px;flex:none;border:3px solid #f1ece1;border-radius:5px;background-color:#16130f;background-image:radial-gradient(rgba(255,255,255,.18) 2px,transparent 2.1px),linear-gradient(150deg,#e8261c 0%,#e8261c 40%,transparent 40.2%);background-size:10px 10px,100% 100%;"></span>
+      <div style="flex:1;"><div style="font-family:'Anton',sans-serif;font-size:30px;">LE DERNIER RONIN</div><div style="font-size:19px;color:#b0a596;">Seinen · en cours</div></div>
+      <div style="text-align:right;"><div style="font-family:'Anton',sans-serif;font-size:34px;color:#e8261c;">5,7k</div><div style="font-size:16px;color:#b0a596;">↑ 18% / sem.</div></div>
+    </div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:22px 24px;display:flex;align-items:center;gap:20px;">
+      <span style="width:64px;height:84px;flex:none;border:3px solid #f1ece1;border-radius:5px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2px,transparent 2.1px),linear-gradient(30deg,#16130f 0%,#16130f 44%,transparent 44.2%);background-size:10px 10px,100% 100%;"></span>
+      <div style="flex:1;"><div style="font-family:'Anton',sans-serif;font-size:30px;">LAMES DE BRUME</div><div style="font-size:19px;color:#b0a596;">Seinen · ch. 2 vendredi</div></div>
+      <div style="text-align:right;"><div style="font-family:'Anton',sans-serif;font-size:34px;color:#e8261c;">3,4k</div><div style="font-size:16px;color:#b0a596;">♥ j'aime</div></div>
+    </div>
+  </div>
+  <div style="flex:1;padding:80px 90px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:18px;">03 — LA PUBLICATION</div>
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:80px;line-height:.92;margin:0 0 28px;text-transform:uppercase;">Chaque chapitre<br>trouve son <span style="color:#e8261c;">public.</span></h2>
+    <div style="font-size:28px;font-weight:500;line-height:1.5;color:#cabfb2;max-width:580px;">Lecture en ligne, favoris, calendrier des sorties, concours. Et à chaque lecture, une donnée se crée.</div>
+    <div style="margin-top:40px;background:#26211b;border:3px solid #e8261c;border-radius:14px;padding:28px 30px;font-size:25px;font-weight:600;line-height:1.45;">→ La publication devient un <span style="color:#e8261c;">test de marché grandeur nature</span>, gratuit et continu.</div>
+  </div>
+</section>
+
+<!-- ========================= 08 · CE QUE VOUS GAGNEZ — INTRO ========================= -->
+<section data-label="Pour l'éditeur" data-speaker-notes="Tout ce qu'on vient de voir produit quatre bénéfices directs pour une maison d'édition. C'est le cœur de la proposition. On va les détailler un par un." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;justify-content:center;padding:90px 110px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.16) 2.4px,transparent 2.5px);background-size:20px 20px;position:relative;overflow:hidden;">
+  <div style="position:absolute;top:-120px;left:-120px;width:520px;height:520px;border:4px solid rgba(241,236,225,.25);border-radius:50%;"></div>
+  <div style="display:inline-block;align-self:flex-start;transform:rotate(-2deg);background:#16130f;color:#f1ece1;font-weight:900;letter-spacing:.08em;font-size:18px;padding:10px 20px;border-radius:4px;margin-bottom:30px;position:relative;">POUR LA MAISON D'ÉDITION</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:128px;line-height:.9;margin:0;text-transform:uppercase;position:relative;">Ce que vous<br>y gagnez.</h2>
+  <div style="display:flex;gap:18px;margin-top:46px;position:relative;font-family:'Anton',sans-serif;font-size:24px;text-transform:uppercase;">
+    <span style="background:#16130f;color:#f1ece1;padding:14px 24px;border-radius:8px;">01 · Vivier validé</span>
+    <span style="background:#16130f;color:#f1ece1;padding:14px 24px;border-radius:8px;">02 · Données</span>
+    <span style="background:#16130f;color:#f1ece1;padding:14px 24px;border-radius:8px;">03 · Concours</span>
+    <span style="background:#16130f;color:#f1ece1;padding:14px 24px;border-radius:8px;">04 · Diffusion</span>
+  </div>
+</section>
+
+<!-- ========================= 09 · VIVIER VALIDÉ ========================= -->
+<section data-label="01 Vivier validé" data-speaker-notes="Premier bénéfice : un vivier de talents déjà validés par le public. Vous ne signez plus sur un pitch papier, mais sur des séries qui ont déjà un lectorat. Le risque éditorial baisse drastiquement." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;flex-direction:column;padding:80px 110px;background-color:#f6f2e8;background-image:radial-gradient(rgba(22,19,15,.05) 1.6px,transparent 1.7px),radial-gradient(rgba(22,19,15,.035) 1.6px,transparent 1.7px);background-size:15px 15px,15px 15px;background-position:0 0,7.5px 7.5px;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:16px;">CE QUE VOUS Y GAGNEZ · 01</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:86px;line-height:.94;margin:0 0 26px;text-transform:uppercase;max-width:1280px;">Un vivier déjà<br>validé par le <span style="color:#e8261c;">public.</span></h2>
+  <div style="font-size:28px;font-weight:500;color:#3a342d;max-width:1080px;margin-bottom:50px;line-height:1.5;">Fini les piles de planches anonymes. Vous puisez dans un catalogue de séries qui ont <strong>déjà prouvé qu'elles trouvent un lectorat.</strong></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;flex:1;">
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:10px 10px 0 rgba(22,19,15,.12);padding:44px;display:flex;flex-direction:column;">
+      <div style="font-family:'Anton',sans-serif;font-size:30px;text-transform:uppercase;color:#9a8f80;text-decoration:line-through;margin-bottom:18px;">Avant</div>
+      <div style="font-size:27px;font-weight:500;line-height:1.5;">Un pitch sur papier. Une intuition. Des mois de pari avant de savoir si le titre rencontre son public.</div>
+    </div>
+    <div style="background:#16130f;color:#f1ece1;border:4px solid #16130f;border-radius:14px;box-shadow:10px 10px 0 rgba(22,19,15,.18);padding:44px;display:flex;flex-direction:column;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-40px;right:-40px;width:180px;height:180px;background:#e8261c;border-radius:50%;opacity:.2;"></div>
+      <div style="font-family:'Anton',sans-serif;font-size:30px;text-transform:uppercase;color:#e8261c;margin-bottom:18px;position:relative;">Avec Encre &amp; Plume</div>
+      <div style="font-size:27px;font-weight:500;line-height:1.5;position:relative;">Une série suivie, des milliers de lectures, une courbe d'engagement. Vous signez ce qui marche <strong>déjà.</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 10 · DONNÉES ========================= -->
+<section data-label="02 Données" data-speaker-notes="Deuxième bénéfice : la donnée. Pour chaque titre, vous avez les lecteurs, les j'aime, la rétention, la courbe de croissance et la démographie. Vous signez avec des chiffres, plus à l'instinct." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;padding:80px 110px;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.05) 2px,transparent 2.1px),radial-gradient(rgba(241,236,225,.03) 2px,transparent 2.1px);background-size:22px 22px,22px 22px;background-position:0 0,11px 11px;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:16px;">CE QUE VOUS Y GAGNEZ · 02</div>
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:44px;">
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:86px;line-height:.94;margin:0;text-transform:uppercase;">Signez avec des données,<br>plus à l'<span style="color:#e8261c;">instinct.</span></h2>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:#8f8475;text-align:right;">[ chiffres indicatifs<br>à remplacer ]</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-bottom:24px;">
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px;"><div style="font-family:'Anton',sans-serif;font-size:72px;line-height:1;color:#e8261c;">12,4k</div><div style="font-size:22px;font-weight:600;margin-top:8px;">lecteurs uniques</div></div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px;"><div style="font-family:'Anton',sans-serif;font-size:72px;line-height:1;color:#e8261c;">78<span style="font-size:40px;">%</span></div><div style="font-size:22px;font-weight:600;margin-top:8px;">rétention ch. 1→5</div></div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px;"><div style="font-family:'Anton',sans-serif;font-size:72px;line-height:1;color:#e8261c;">+24<span style="font-size:40px;">%</span></div><div style="font-size:22px;font-weight:600;margin-top:8px;">croissance / mois</div></div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px;"><div style="font-family:'Anton',sans-serif;font-size:72px;line-height:1;color:#e8261c;">15-24</div><div style="font-size:22px;font-weight:600;margin-top:8px;">cœur de cible (ans)</div></div>
+  </div>
+  <div style="flex:1;background:#26211b;border:3px solid #43392f;border-radius:14px;padding:36px 40px;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><div style="font-family:'Anton',sans-serif;font-size:30px;text-transform:uppercase;">Courbe d'engagement — « Néon Sutra »</div><div style="font-size:20px;color:#b0a596;font-weight:600;">6 derniers mois</div></div>
+    <div style="flex:1;display:flex;align-items:flex-end;gap:20px;padding-top:10px;">
+      <div style="flex:1;height:30%;background:#e8261c;border-radius:6px 6px 0 0;"></div>
+      <div style="flex:1;height:42%;background:#e8261c;border-radius:6px 6px 0 0;"></div>
+      <div style="flex:1;height:38%;background:#e8261c;border-radius:6px 6px 0 0;"></div>
+      <div style="flex:1;height:58%;background:#e8261c;border-radius:6px 6px 0 0;"></div>
+      <div style="flex:1;height:74%;background:#e8261c;border-radius:6px 6px 0 0;"></div>
+      <div style="flex:1;height:100%;background:#e8261c;border-radius:6px 6px 0 0;position:relative;"><span style="position:absolute;top:-44px;left:50%;transform:translateX(-50%);font-family:'Anton',sans-serif;font-size:26px;color:#f1ece1;white-space:nowrap;">8,1k ♥</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 11 · CONCOURS ========================= -->
+<section data-label="03 Concours" data-speaker-notes="Troisième bénéfice : les concours. Vous lancez vos propres concours sur la plateforme — thématiques, à votre marque. Vous scoutez en direct, vous repérez les talents et vous engagez le contrat sans intermédiaire." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;padding:0;background:#f6f2e8;">
+  <div style="flex:1;padding:80px 70px 80px 110px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:18px;">CE QUE VOUS Y GAGNEZ · 03</div>
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:88px;line-height:.92;margin:0 0 28px;text-transform:uppercase;">Lancez vos concours.<br>Scoutez en <span style="color:#e8261c;">direct.</span></h2>
+    <div style="font-size:28px;font-weight:500;line-height:1.5;color:#3a342d;max-width:640px;">Des concours thématiques <strong>à votre marque</strong>, hébergés sur la plateforme. Vous fixez le thème, la communauté crée, vous repérez — et signez sans intermédiaire.</div>
+    <div style="display:flex;gap:40px;margin-top:46px;">
+      <div><div style="font-family:'Anton',sans-serif;font-size:64px;color:#e8261c;line-height:1;">+800</div><div style="font-size:22px;font-weight:600;">participations / concours</div></div>
+      <div style="width:3px;background:#ded7c7;"></div>
+      <div><div style="font-family:'Anton',sans-serif;font-size:64px;color:#e8261c;line-height:1;">30 j</div><div style="font-size:22px;font-weight:600;">de visibilité de marque</div></div>
+    </div>
+  </div>
+  <div style="flex:.92;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.06) 2px,transparent 2.1px);background-size:20px 20px;padding:80px 80px;display:flex;flex-direction:column;justify-content:center;">
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:16px;box-shadow:14px 14px 0 rgba(232,38,28,.55);overflow:hidden;">
+      <div style="height:170px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2.4px,transparent 2.5px),linear-gradient(135deg,#16130f 0%,#16130f 36%,transparent 36.2%);background-size:15px 15px,100% 100%;border-bottom:4px solid #16130f;display:flex;align-items:flex-start;padding:22px;"><span style="background:#16130f;color:#f1ece1;font-family:'Anton',sans-serif;font-size:22px;padding:8px 16px;border-radius:6px;">🏆 CONCOURS SPONSORISÉ</span></div>
+      <div style="padding:34px 38px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#e8261c;letter-spacing:.08em;">PRÉSENTÉ PAR [ VOTRE MAISON ]</div>
+        <div style="font-family:'Anton',sans-serif;font-size:50px;text-transform:uppercase;margin:10px 0 8px;line-height:1;">Prix du jeune mangaka</div>
+        <div style="font-size:24px;color:#6f655a;font-weight:500;">Thème « Sous la pluie » · clôture dans 30 j</div>
+        <div style="display:flex;gap:12px;margin-top:24px;"><span style="background:#e8261c;color:#fff;font-weight:700;font-size:20px;padding:12px 22px;border-radius:8px;border:3px solid #16130f;">Participer</span><span style="border:3px solid #16130f;font-weight:700;font-size:20px;padding:12px 22px;border-radius:8px;">812 planches reçues</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= 12 · DIFFUSION / ESPACE ÉDITEUR ========================= -->
+<section data-label="04 Diffusion" data-speaker-notes="Quatrième bénéfice : la diffusion. Un titre que vous éditez peut continuer à vivre sur la plateforme comme canal de pré-publication et de promotion. Et tout cela depuis un espace éditeur dédié : tendances, talents, contrats, concours." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#16130f;display:flex;flex-direction:column;padding:80px 110px;background-color:#f6f2e8;background-image:radial-gradient(rgba(22,19,15,.05) 1.6px,transparent 1.7px),radial-gradient(rgba(22,19,15,.035) 1.6px,transparent 1.7px);background-size:15px 15px,15px 15px;background-position:0 0,7.5px 7.5px;">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;color:#e8261c;letter-spacing:.12em;margin-bottom:16px;">CE QUE VOUS Y GAGNEZ · 04 — VOTRE ESPACE ÉDITEUR</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:84px;line-height:.94;margin:0 0 24px;text-transform:uppercase;">Un cockpit éditeur,<br>+ un canal de <span style="color:#e8261c;">diffusion.</span></h2>
+  <div style="font-size:27px;font-weight:500;color:#3a342d;max-width:1120px;margin-bottom:46px;line-height:1.5;">Pilotez le repérage depuis un espace dédié — et utilisez la plateforme comme canal de <strong>pré-publication et de promotion</strong> pour vos titres et co-éditions.</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;flex:1;">
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:8px 8px 0 rgba(22,19,15,.12);padding:36px 32px;display:flex;flex-direction:column;"><div style="font-family:'Anton',sans-serif;font-size:40px;text-transform:uppercase;color:#e8261c;">Tendances</div><div style="font-size:23px;font-weight:500;margin-top:14px;line-height:1.45;color:#3a342d;">Genres qui montent, titres qui accélèrent, en temps réel.</div></div>
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:8px 8px 0 rgba(22,19,15,.12);padding:36px 32px;display:flex;flex-direction:column;"><div style="font-family:'Anton',sans-serif;font-size:40px;text-transform:uppercase;color:#e8261c;">Talents</div><div style="font-size:23px;font-weight:500;margin-top:14px;line-height:1.45;color:#3a342d;">Profils repérés, portfolios et signaux d'audience.</div></div>
+    <div style="background:#fffefb;border:4px solid #16130f;border-radius:14px;box-shadow:8px 8px 0 rgba(22,19,15,.12);padding:36px 32px;display:flex;flex-direction:column;"><div style="font-family:'Anton',sans-serif;font-size:40px;text-transform:uppercase;color:#e8261c;">Contrats</div><div style="font-size:23px;font-weight:500;margin-top:14px;line-height:1.45;color:#3a342d;">Proposition, négociation et signature, tracées.</div></div>
+    <div style="background:#16130f;color:#f1ece1;border:4px solid #16130f;border-radius:14px;box-shadow:8px 8px 0 rgba(22,19,15,.18);padding:36px 32px;display:flex;flex-direction:column;"><div style="font-family:'Anton',sans-serif;font-size:40px;text-transform:uppercase;color:#e8261c;">Concours</div><div style="font-size:23px;font-weight:500;margin-top:14px;line-height:1.45;color:#b0a596;">Vos opérations de scouting, pilotées de A à Z.</div></div>
+  </div>
+</section>
+
+<!-- ========================= 13 · LE PARTENARIAT ========================= -->
+<section data-label="Le partenariat" data-speaker-notes="Voici le modèle, et il est gagnant-gagnant. La plateforme gagne en visibilité et en revenus, indexés sur un pourcentage des signatures et contrats. La maison d'édition gagne un accès prioritaire aux talents, à la donnée, et un pipeline structuré. Au centre : développer le marché du manga français." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;padding:80px 110px;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.05) 2px,transparent 2.1px),radial-gradient(rgba(241,236,225,.03) 2px,transparent 2.1px);background-size:22px 22px,22px 22px;background-position:0 0,11px 11px;">
+  <div style="display:inline-flex;align-self:flex-start;transform:rotate(-1.5deg);background:#e8261c;color:#fff;font-weight:900;letter-spacing:.08em;font-size:18px;padding:9px 18px;border-radius:4px;margin-bottom:22px;">LE PARTENARIAT</div>
+  <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:90px;line-height:.92;margin:0 0 44px;text-transform:uppercase;">Un modèle <span style="color:#e8261c;">gagnant-gagnant.</span></h2>
+  <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:34px;align-items:stretch;flex:1;">
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:16px;padding:44px;display:flex;flex-direction:column;">
+      <div style="font-family:'Anton',sans-serif;font-size:34px;text-transform:uppercase;margin-bottom:24px;">Encre &amp; Plume reçoit</div>
+      <div style="display:flex;flex-direction:column;gap:18px;font-size:25px;font-weight:500;line-height:1.4;">
+        <div style="display:flex;gap:14px;"><span style="color:#e8261c;font-weight:900;">→</span>De la visibilité et de la crédibilité éditoriale</div>
+        <div style="display:flex;gap:14px;"><span style="color:#e8261c;font-weight:900;">→</span>Une croissance de la communauté et des auteurs</div>
+        <div style="display:flex;gap:14px;"><span style="color:#e8261c;font-weight:900;">→</span>Des revenus indexés sur un <strong style="color:#f1ece1;">% des signatures &amp; contrats</strong></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+      <div style="width:96px;height:96px;border-radius:50%;background:#e8261c;border:4px solid #f1ece1;display:flex;align-items:center;justify-content:center;font-family:'Anton',sans-serif;font-size:54px;color:#fff;animation:epFloat 3s ease-in-out infinite;">&amp;</div>
+    </div>
+    <div style="background:#e8261c;border:3px solid #e8261c;border-radius:16px;padding:44px;display:flex;flex-direction:column;color:#fff;">
+      <div style="font-family:'Anton',sans-serif;font-size:34px;text-transform:uppercase;margin-bottom:24px;">La maison d'édition reçoit</div>
+      <div style="display:flex;flex-direction:column;gap:18px;font-size:25px;font-weight:600;line-height:1.4;">
+        <div style="display:flex;gap:14px;"><span style="color:#16130f;font-weight:900;">→</span>Un accès prioritaire aux talents de demain</div>
+        <div style="display:flex;gap:14px;"><span style="color:#16130f;font-weight:900;">→</span>De la donnée d'audience pour dé-risquer chaque signature</div>
+        <div style="display:flex;gap:14px;"><span style="color:#16130f;font-weight:900;">→</span>Un pipeline structuré + un canal de diffusion</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:38px;text-align:center;font-family:'Anton',sans-serif;font-size:40px;text-transform:uppercase;">Au centre : <span style="color:#e8261c;">développer le marché du manga français.</span></div>
+</section>
+
+<!-- ========================= 14 · L'APPEL ========================= -->
+<section data-label="L'appel" data-speaker-notes="Le déséquilibre est l'opportunité : 2e marché mondial, presque aucun auteur français qui émerge. Construisons ensemble la première maison du manga français. Concrètement, je propose un pilote : co-éditer deux titres issus de la plateforme, un accès scouting exclusif, et un partage de revenus. Parlons-en." style="height:100%;font-family:'Zen Kaku Gothic New',sans-serif;color:#f1ece1;display:flex;flex-direction:column;justify-content:space-between;padding:90px 110px;background-color:#16130f;background-image:radial-gradient(rgba(241,236,225,.05) 2px,transparent 2.1px);background-size:22px 22px;position:relative;overflow:hidden;">
+  <div style="position:absolute;bottom:-200px;left:-160px;width:760px;height:760px;background-color:#e8261c;background-image:radial-gradient(rgba(22,19,15,.4) 2.4px,transparent 2.5px);background-size:18px 18px;clip-path:polygon(0 100%,100% 100%,0 0);"></div>
+  <div style="position:relative;z-index:2;">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:20px;letter-spacing:.14em;color:#e8261c;margin-bottom:24px;">LA PROCHAINE PLANCHE</div>
+    <h2 style="font-family:'Anton',sans-serif;font-weight:400;font-size:130px;line-height:.88;margin:0;text-transform:uppercase;max-width:1400px;">Construisons la première maison du <span style="color:#e8261c;">manga français.</span></h2>
+  </div>
+  <div style="position:relative;z-index:2;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px 32px;"><div style="font-family:'Anton',sans-serif;font-size:28px;text-transform:uppercase;color:#e8261c;margin-bottom:10px;">Le pilote</div><div style="font-size:24px;font-weight:500;line-height:1.4;">Co-éditer <strong>2 titres</strong> issus de la plateforme sur 12 mois.</div></div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px 32px;"><div style="font-family:'Anton',sans-serif;font-size:28px;text-transform:uppercase;color:#e8261c;margin-bottom:10px;">L'accès</div><div style="font-size:24px;font-weight:500;line-height:1.4;">Scouting <strong>exclusif</strong> + concours à votre marque.</div></div>
+    <div style="background:#26211b;border:3px solid #43392f;border-radius:14px;padding:30px 32px;"><div style="font-family:'Anton',sans-serif;font-size:28px;text-transform:uppercase;color:#e8261c;margin-bottom:10px;">Le modèle</div><div style="font-size:24px;font-weight:500;line-height:1.4;">Partage de revenus au <strong>%</strong> sur les signatures.</div></div>
+  </div>
+  <div style="position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;border-top:3px solid #43392f;padding-top:30px;">
+    <div style="display:flex;align-items:center;gap:18px;"><span style="width:48px;height:48px;border-radius:50%;background:#e8261c;border:3px solid #f1ece1;display:block;"></span><span style="font-family:'Anton',sans-serif;font-size:30px;letter-spacing:.04em;">ENCRE &amp; PLUME</span></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#cabfb2;letter-spacing:.06em;">parlons-en&nbsp;&nbsp;—&nbsp;&nbsp;[ contact@encre-et-plume.fr ]</div>
+  </div>
+</section>
+
+</x-import>
+</x-dc>
+</body>
+</html>

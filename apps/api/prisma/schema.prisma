@@ -1,0 +1,36 @@
+// F-1: account sign-up & login. F-3 extends Profile via its own migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  utilisateur
+  maintainer
+  editor
+  admin
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  displayName  String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(utilisateur)
+  profileSlug  String   @unique
+  avatar       String?
+  createdAt    DateTime @default(now())
+  profile      Profile?
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  accountId String   @unique
+  account   Account  @relation(fields: [accountId], references: [id])
+  createdAt DateTime @default(now())
+}

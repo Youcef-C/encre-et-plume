@@ -28,10 +28,20 @@ Manager on a blocking FAIL, capped at 3 rounds. Announce each story as you start
 "[3/65] DR-3 — Work page…").
 
 Then record the outcome in `_batch.json`:
-- **PASS** → `passed`. Continue to the next story.
+- **PASS** → `passed`. **Commit & push the completed feature** before moving on: stage the story's work,
+  commit on the current branch (`develop`) with a message like `feat(<ID>): <story title>` (English, ending
+  with the standard `Co-Authored-By` trailer), and `git push origin <branch>`. If the push fails (no
+  network/auth), report it and keep going — don't block the batch. Then continue to the next story.
 - **FAIL after 3 rounds** → `failed`. Do **not** halt the whole batch. Mark every not-yet-built story
   that lists this story in its `[[dependencies]]` (directly or transitively) as `skipped` — they can't
-  be built on a broken dependency — and continue with the rest.
+  be built on a broken dependency — and continue with the rest. (Don't commit a failed story's WIP.)
+
+## 2b · Epic-boundary pause
+After the **last story of an epic folder** finishes (the next story belongs to a different `NN-…` folder,
+or the list is exhausted), **pause**: give a short per-epic recap (passed / failed / skipped for that
+folder, and that its commits are pushed) and **ask the user whether to continue to the next epic** before
+starting it. Wait for their go-ahead. This keeps the long run in human-reviewable chunks. (If the user has
+said to run straight through, skip the prompt.)
 
 ## 3 · Final report
 When the list is exhausted, summarize to the user: counts of passed / failed / skipped, the list of

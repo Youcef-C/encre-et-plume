@@ -25,6 +25,8 @@ write a verdict that either ships the story or sends it back to the Manager with
 - `.claude/pipeline/<ID>/plan.md` (the **Acceptance checklist** is the contract),
   `qa-report.md`, `backend-notes.md`, `frontend-notes.md`.
 - The story file. The working diff (`git diff`, `git status`); build/lint/test output (re-run if in doubt).
+- The **prototype** (design source of truth): `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`
+  (+ `Wireframes …`). Grep it for the screen's French label / `id` to compare the built UI against it.
 
 ## How to judge — FAIL the gate if ANY of:
 - An acceptance criterion is unmet or only partially met.
@@ -32,6 +34,11 @@ write a verdict that either ships the story or sends it back to the Manager with
 - A blocking correctness or **security** issue exists (broken authz, missing validation at a trust
   boundary, leaked secret, money-path error).
 - The build, typecheck, lint, or tests don't actually pass.
+- **Design fidelity:** the frontend doesn't match the prototype — wrong/absent design tokens or fonts,
+  unstyled "scaffold"-looking UI, layout that materially diverges from the prototype, or non-verbatim
+  French copy. Treat a material divergence on an `Explicit` screen as **blocking**; minor polish gaps on
+  `Inferred` screens are non-blocking nits. Confirm QA actually checked fidelity (its Design-fidelity row);
+  if QA didn't, verify it yourself against the prototype.
 
 Non-blocking nits (style, minor simplifications, follow-ups) do NOT fail the gate — list them separately.
 

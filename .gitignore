@@ -38,3 +38,14 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Claude pipeline scratch (per-story working artifacts: plan/notes/qa/review/state/ledger)
+.claude/pipeline/
+
+# Design prototype — keep the .dc.html design references in repo; drop heavy editor artifacts
+Manga creator collaboration platform/Encre et Plume.html
+Manga creator collaboration platform/*.js
+Manga creator collaboration platform/.image-slots.state.json
+Manga creator collaboration platform/.thumbnail
+Manga creator collaboration platform/screenshots/
+Manga creator collaboration platform/uploads/

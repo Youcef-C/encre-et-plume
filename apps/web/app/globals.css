@@ -1,0 +1,168 @@
+/* Encre & Plume — manga-zine design system
+   Tokens mirror the prototype :root palette exactly.
+   Fonts loaded via next/font in layout.tsx (Anton + Zen Kaku Gothic New).
+*/
+
+@import "tailwindcss";
+
+/* ─── Design tokens (light mode, matching prototype :root) ──────────── */
+:root {
+  --paper: #f1ece1;
+  --card: #fffefb;
+  --ink: #16130f;
+  --ink2: #6f655a;
+  --border: #16130f;
+  --accent: #e8261c;
+  --accent-soft: #f7dcd8;
+  --tone: #ded7c7;
+  --shadow: #16130f;
+  --dot: 6px;
+}
+
+/* Dark mode palette (matches prototype [data-theme="dark"]) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1d1813;
+    --card: #26211b;
+    --ink: #f1ece1;
+    --ink2: #b0a596;
+    --border: #43392f;
+    --tone: #4a4239;
+    --shadow: #0b0907;
+    --accent-soft: #3a2a26;
+    /* --accent stays red in dark mode */
+  }
+}
+
+/* ─── Tailwind v4 theme extension ───────────────────────────────────── */
+@theme {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-tone: var(--tone);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-shadow-ink: var(--shadow);
+
+  --font-display: 'Anton', sans-serif;
+  --font-body: 'Zen Kaku Gothic New', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ─── Base reset / body ─────────────────────────────────────────────── */
+body {
+  font-family: var(--font-body);
+  background-color: var(--paper);
+  color: var(--ink);
+  min-height: 100dvh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ─── Utility classes mirroring prototype patterns ──────────────────── */
+
+/* Manga-zine card: bold border + hard offset shadow */
+.ep-card {
+  background-color: var(--card);
+  border: 3px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 5px 5px 0 var(--shadow);
+}
+
+/* Primary button: accent fill, ink border, hard shadow */
+.ep-btn-primary {
+  background-color: var(--accent);
+  color: #fff;
+  border: 3px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.ep-btn-primary:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+.ep-btn-primary:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+
+.ep-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+
+/* Secondary / outline button */
+.ep-btn-secondary {
+  background-color: var(--card);
+  color: var(--ink);
+  border: 3px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 18px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+.ep-btn-secondary:hover {
+  background-color: var(--accent-soft);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+/* Form input */
+.ep-input {
+  width: 100%;
+  background-color: var(--card);
+  color: var(--ink);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.ep-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ep-input[aria-invalid="true"] {
+  border-color: var(--accent);
+}
+
+/* Error message */
+.ep-error {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* Label */
+.ep-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: 6px;
+  display: block;
+}

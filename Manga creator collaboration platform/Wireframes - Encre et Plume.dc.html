@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  :root{--accent:#d62828;}
+  body{margin:0;}
+  [data-anno="off"] [data-anno-item]{display:none !important;}
+  [data-tone="off"] [data-tone-fill]{background-image:none !important;}
+</style>
+</helmet>
+
+<div data-anno="{{ annoState }}" data-tone="{{ toneState }}" style="--accent: {{ accentVar }}; width:max-content; min-width:100%; min-height:100vh; padding:42px 56px 90px; background:#e7e5df; background-image:radial-gradient(#0000000d 1px,transparent 1px); background-size:22px 22px; font-family:'Patrick Hand',system-ui,sans-serif; color:#1a1a1a;">
+
+  <!-- BOARD HEADER -->
+  <div style="display:flex;align-items:flex-end;gap:20px;margin-bottom:6px;">
+    <div style="display:flex;align-items:center;gap:11px;">
+      <span style="width:30px;height:30px;background:var(--accent,#d62828);border-radius:50% 50% 50% 2px;display:inline-block;"></span>
+      <span style="font-family:'Caveat';font-weight:700;font-size:46px;line-height:0.9;">Encre &amp; Plume</span>
+    </div>
+    <span style="font-family:'Caveat';font-size:24px;color:#6f6a5e;padding-bottom:5px;">où le dessin rencontre le récit</span>
+  </div>
+  <div style="font-size:16px;color:#6f6a5e;margin-bottom:8px;">Wireframes basse-fidélité · plateforme de collaboration mangaka × scénariste · web desktop</div>
+  <div style="display:flex;gap:18px;align-items:center;font-family:'Caveat';font-size:18px;color:#6f6a5e;flex-wrap:wrap;">
+    <span style="display:flex;align-items:center;gap:6px;"><span data-tone-fill style="width:24px;height:16px;background-color:#efece4;background-image:radial-gradient(#1a1a1a44 1.3px,transparent 1.4px);background-size:6px 6px;border:1.5px dashed #b3aa97;display:inline-block;border-radius:3px;"></span>= illustration à placer</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span style="width:34px;height:8px;background:#d8d3c8;border-radius:4px;display:inline-block;"></span>= texte / copy</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span style="color:var(--accent,#d62828);font-size:21px;">↳</span>= note de conception</span>
+  </div>
+
+  <!-- ===================== SECTION 1 ===================== -->
+  <div style="display:flex;align-items:center;gap:10px;margin:30px 0 14px;">
+    <span style="font-family:'Caveat';font-weight:700;font-size:16px;color:#fff;background:#1a1a1a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;">1</span>
+    <span style="font-family:'Caveat';font-weight:700;font-size:28px;">Accueil, découverte &amp; profils</span>
+  </div>
+  <div style="display:flex;gap:48px;align-items:flex-start;">
+
+    <!-- FRAME: ACCUEIL / SHOWROOM (landing) -->
+    <div style="flex:none;width:1000px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Accueil — page d'accueil / showroom</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ landing scrollable façon MangaPlus : bandeau d'annonces · à la une · populaires à chaud (grandes cartes) · populaires en général · sorties programmées</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Caveat';font-weight:700;font-size:22px;"><span style="width:17px;height:17px;background:var(--accent,#d62828);border-radius:50% 50% 50% 2px;display:inline-block;"></span>Encre &amp; Plume</div>
+          <div style="display:flex;gap:15px;font-size:15px;color:#555;">
+            <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:2px;">Accueil</span><span>Découvrir</span><span>Lire</span><span>Écrire</span><span>Projets</span><span>Messages</span>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="font-size:14px;color:#9a938a;background:#f3f1ec;border:1.5px solid #cfc9bd;border-radius:14px;padding:4px 14px;">Rechercher…</div>
+          <span style="width:30px;height:30px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+        </div>
+        <!-- hero -->
+        <div data-tone-fill style="position:relative;height:282px;background-color:#ddd8cc;background-image:repeating-linear-gradient(135deg,#1a1a1a16 0 2px,transparent 2px 10px);border-bottom:2px solid #1a1a1a;display:flex;align-items:flex-end;padding:20px;">
+          <span style="position:absolute;top:16px;left:18px;font-size:11px;font-weight:700;letter-spacing:.08em;background:var(--accent,#d62828);color:#fff;padding:3px 10px;border-radius:11px;">À LA UNE</span>
+          <span style="position:absolute;top:14px;right:18px;font-family:ui-monospace,monospace;font-size:11px;color:#7a7058;background:#fff;border:1.5px dashed #b3aa97;padding:2px 8px;border-radius:4px;">[ visuel héros pleine largeur ]</span>
+          <div style="position:relative;background:rgba(255,255,255,.9);border:2px solid #1a1a1a;border-radius:9px;padding:15px 18px;max-width:58%;">
+            <div style="font-family:'Caveat';font-weight:700;font-size:36px;line-height:0.95;">Néon Sutra</div>
+            <div style="font-size:13px;color:#6f6a5e;margin:6px 0 11px;">Léa B. ✒ × Hugo D. 🖌 · Shōnen · série terminée · 20 chapitres</div>
+            <div style="display:flex;gap:9px;"><span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:7px 18px;font-size:14px;">Lire maintenant</span><span style="border:2px solid #1a1a1a;border-radius:13px;padding:6px 14px;font-size:14px;">＋ Ma liste</span></div>
+          </div>
+        </div>
+        <!-- rows -->
+        <div style="position:relative;padding:16px 28px 16px 16px;background:#faf8f3;">
+          <div style="position:absolute;top:14px;right:6px;bottom:14px;width:7px;background:#e4e0d6;border-radius:4px;"><div style="position:absolute;top:0;left:0;width:100%;height:30%;background:#b3aa97;border-radius:4px;"></div></div>
+          <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px;"><span style="font-family:'Caveat';font-weight:700;font-size:24px;">Populaires cette semaine · à chaud</span><span style="margin-left:auto;font-size:13px;color:#8a8478;">Tout voir →</span></div>
+          <div style="display:flex;gap:16px;overflow:hidden;">
+            <div style="flex:none;width:214px;"><div data-tone-fill style="position:relative;height:248px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.6px,transparent 1.7px);background-size:10px 10px;border:2px solid #1a1a1a;border-radius:6px;"><span style="position:absolute;top:-11px;left:-11px;width:38px;height:38px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:22px;">1</span><span style="position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;letter-spacing:.04em;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:1px 8px;">À CHAUD</span></div><div style="font-size:15px;font-weight:700;margin-top:8px;">Néon Sutra</div><div style="font-size:12px;color:#8a8478;">Shōnen · série terminée</div><div style="font-size:12px;color:#6f6a5e;margin-top:3px;">♡ 8,1k · ↑ 24% cette semaine</div></div>
+            <div style="flex:none;width:214px;"><div data-tone-fill style="position:relative;height:248px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 9px);border:2px solid #1a1a1a;border-radius:6px;"><span style="position:absolute;top:-11px;left:-11px;width:38px;height:38px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:22px;">2</span><span style="position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;letter-spacing:.04em;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:1px 8px;">À CHAUD</span></div><div style="font-size:15px;font-weight:700;margin-top:8px;">Le Dernier Ronin</div><div style="font-size:12px;color:#8a8478;">Seinen · série terminée</div><div style="font-size:12px;color:#6f6a5e;margin-top:3px;">♡ 5,7k · ↑ 18% cette semaine</div></div>
+            <div style="flex:none;width:214px;"><div data-tone-fill style="position:relative;height:248px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:7px 7px;border:2px solid #1a1a1a;border-radius:6px;"><span style="position:absolute;top:-11px;left:-11px;width:38px;height:38px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:22px;">3</span><span style="position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;letter-spacing:.04em;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:1px 8px;">À CHAUD</span></div><div style="font-size:15px;font-weight:700;margin-top:8px;">Spectres d'Avril</div><div style="font-size:12px;color:#8a8478;">Fantastique · série terminée</div><div style="font-size:12px;color:#6f6a5e;margin-top:3px;">♡ 4,0k · ↑ 12% cette semaine</div></div>
+            <div style="flex:none;width:214px;"><div data-tone-fill style="position:relative;height:248px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 9px);border:2px solid #1a1a1a;border-radius:6px;"><span style="position:absolute;top:-11px;left:-11px;width:38px;height:38px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:22px;">4</span><span style="position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;letter-spacing:.04em;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:1px 8px;">À CHAUD</span></div><div style="font-size:15px;font-weight:700;margin-top:8px;">Lames de Brume</div><div style="font-size:12px;color:#8a8478;">Seinen · série terminée</div><div style="font-size:12px;color:#6f6a5e;margin-top:3px;">♡ 3,4k · ↑ 9% cette semaine</div></div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:9px;margin:24px 0 11px;"><span style="font-family:'Caveat';font-weight:700;font-size:22px;">Populaires en général</span><span style="margin-left:auto;font-size:13px;color:#8a8478;">Tout voir →</span></div>
+          <div style="display:flex;gap:14px;overflow:hidden;">
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">1</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Néon Sutra</div><div style="font-size:11px;color:#8a8478;">Shōnen · ♡ 8,1k</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">2</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Le Dernier Ronin</div><div style="font-size:11px;color:#8a8478;">Seinen · ♡ 5,7k</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">3</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Spectres d'Avril</div><div style="font-size:11px;color:#8a8478;">Fantastique · ♡ 4,0k</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">4</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Lames de Brume</div><div style="font-size:11px;color:#8a8478;">Seinen · ♡ 3,4k</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:11px 11px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">5</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Encre Blanche</div><div style="font-size:11px;color:#8a8478;">Josei · ♡ 2,2k</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-family:'Caveat';font-weight:700;font-size:18px;">6</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Café Comète</div><div style="font-size:11px;color:#8a8478;">Tranche de vie · ♡ 1,9k</div></div>
+          </div>
+          <!-- announcement stripe (entre Populaires en général et Sorties programmées) -->
+          <div style="display:flex;align-items:center;gap:12px;margin:24px 0 0;padding:10px 14px;background:#1a1a1a;color:#f3f1ec;border-radius:8px;font-size:13px;overflow:hidden;">
+            <span style="font-weight:700;letter-spacing:.06em;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:2px 9px;flex:none;">ANNONCES</span>
+            <div style="display:flex;gap:20px;white-space:nowrap;align-items:center;flex:1;min-width:0;">
+              <span><b style="color:#fff;">Concours</b> « Prix du jeune mangaka 2026 » — clôture dans 30 j</span>
+              <span style="color:#6f6a5e;">•</span>
+              <span><b style="color:#fff;">À chaud</b> « Néon Sutra » dépasse les 8k j'aime</span>
+              <span style="color:#6f6a5e;">•</span>
+              <span><b style="color:#fff;">Événement</b> sortie « Lames de Brume » Ch.2 vendredi</span>
+            </div>
+            <span style="flex:none;color:#b8b1a3;font-size:15px;">‹ ›</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:9px;margin:24px 0 11px;"><span style="font-family:'Caveat';font-weight:700;font-size:22px;">Sorties programmées</span><span data-anno-item style="font-family:'Caveat';font-size:15px;color:var(--accent,#d62828);">↳ chapitres planifiés par les auteurs</span><span style="margin-left:auto;font-size:13px;color:#8a8478;">Calendrier →</span></div>
+          <div style="display:flex;gap:14px;overflow:hidden;">
+            <div style="flex:none;width:226px;border:2px solid #1a1a1a;border-radius:6px;overflow:hidden;background:#fff;display:flex;"><div data-tone-fill style="width:74px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border-right:2px solid #1a1a1a;"></div><div style="padding:9px 11px;flex:1;min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);">VEN. 21 JUIN · 18:00</div><div style="font-size:14px;font-weight:700;margin-top:2px;">Lames de Brume</div><div style="font-size:12px;color:#8a8478;">Ch. 2 · Seinen</div><div style="display:inline-block;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 8px;margin-top:8px;color:#6f6a5e;">dans 2 j · ♡ Me prévenir</div></div></div>
+            <div style="flex:none;width:226px;border:2px solid #1a1a1a;border-radius:6px;overflow:hidden;background:#fff;display:flex;"><div data-tone-fill style="width:74px;flex:none;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;border-right:2px solid #1a1a1a;"></div><div style="padding:9px 11px;flex:1;min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);">LUN. 24 JUIN · 12:00</div><div style="font-size:14px;font-weight:700;margin-top:2px;">Onibi</div><div style="font-size:12px;color:#8a8478;">Ch. 7 · Fantastique</div><div style="display:inline-block;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 8px;margin-top:8px;color:#6f6a5e;">dans 5 j · ♡ Me prévenir</div></div></div>
+            <div style="flex:none;width:226px;border:2px solid #1a1a1a;border-radius:6px;overflow:hidden;background:#fff;display:flex;"><div data-tone-fill style="width:74px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border-right:2px solid #1a1a1a;"></div><div style="padding:9px 11px;flex:1;min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);">JEU. 27 JUIN · 18:00</div><div style="font-size:14px;font-weight:700;margin-top:2px;">Vertige</div><div style="font-size:12px;color:#8a8478;">Ch. 3 · Shōnen</div><div style="display:inline-block;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 8px;margin-top:8px;color:#6f6a5e;">dans 8 j · ♡ Me prévenir</div></div></div>
+            <div style="flex:none;width:226px;border:2px solid #1a1a1a;border-radius:6px;overflow:hidden;background:#fff;display:flex;"><div data-tone-fill style="width:74px;flex:none;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:11px 11px;border-right:2px solid #1a1a1a;"></div><div style="padding:9px 11px;flex:1;min-width:0;"><div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);">SAM. 6 JUIL. · 10:00</div><div style="font-size:14px;font-weight:700;margin-top:2px;">Encre Blanche</div><div style="font-size:12px;color:#8a8478;">Ch. 9 · Josei</div><div style="display:inline-block;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 8px;margin-top:8px;color:#6f6a5e;">dans 17 j · ♡ Me prévenir</div></div></div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:9px;margin:24px 0 11px;"><span style="font-family:'Caveat';font-weight:700;font-size:22px;">Nouveautés complètes</span><span style="margin-left:auto;font-size:13px;color:#8a8478;">Tout voir →</span></div>
+          <div style="display:flex;gap:14px;overflow:hidden;">
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Sel &amp; Cendres</div><div style="font-size:11px;color:#8a8478;">Seinen · terminé</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Onibi</div><div style="font-size:11px;color:#8a8478;">Fantastique · terminé</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(90deg,#1a1a1a18 0 1px,transparent 1px 6px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">La Ligne Bleue</div><div style="font-size:11px;color:#8a8478;">Josei · terminé</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:10px 10px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Koké</div><div style="font-size:11px;color:#8a8478;">Tranche de vie · terminé</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Vertige</div><div style="font-size:11px;color:#8a8478;">Shōnen · terminé</div></div>
+            <div style="flex:none;width:144px;"><div data-tone-fill style="position:relative;height:188px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;background:#1a1a1a;color:#fff;border-radius:9px;padding:1px 7px;">NOUV.</span></div><div style="font-size:13px;font-weight:700;margin-top:6px;">Mariposa</div><div style="font-size:11px;color:#8a8478;">Romance · terminé</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: HOME FEED -->
+    <div style="flex:none;width:980px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Découvrir — catalogue &amp; recherche</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ page de navigation (distincte de l'accueil) : filtres genre/statut/format · grille de résultats · colonne actualités</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/decouvrir</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Caveat';font-weight:700;font-size:22px;"><span style="width:17px;height:17px;background:var(--accent,#d62828);border-radius:50% 50% 50% 2px;display:inline-block;"></span>Encre &amp; Plume</div>
+          <div style="display:flex;gap:15px;font-size:15px;color:#555;">
+            <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:2px;">Découvrir</span><span>Lire</span><span>Écrire</span><span>Projets</span><span>Messages</span>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="font-size:14px;color:#9a938a;background:#f3f1ec;border:1.5px solid #cfc9bd;border-radius:14px;padding:4px 14px;">Rechercher…</div>
+          <div style="font-size:15px;color:#fff;background:#1a1a1a;border-radius:14px;padding:5px 14px;">＋ Poster</div>
+          <span style="width:30px;height:30px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+        </div>
+        <div style="display:flex;">
+          <!-- left filters -->
+          <div style="width:184px;border-right:2px solid #ded8cb;padding:15px 14px;flex:none;">
+            <div style="font-weight:700;font-size:16px;margin-bottom:9px;">Filtrer</div>
+            <div style="font-size:13px;color:#8a8478;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;">Genre</div>
+            <div style="display:flex;flex-direction:column;gap:7px;font-size:15px;color:#3a3a3a;">
+              <span>▢ Shōnen</span><span>▣ Seinen</span><span>▢ Josei</span><span>▢ Tranche de vie</span><span>▢ Fantastique</span>
+            </div>
+            <div style="font-size:13px;color:#8a8478;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.05em;">Statut</div>
+            <div style="display:flex;flex-direction:column;gap:7px;font-size:15px;color:#3a3a3a;">
+              <span style="color:var(--accent,#d62828);">▣ Œuvres complètes</span><span style="color:#b8b1a3;">▢ En cours <span style="font-size:12px;">(masqué ici)</span></span>
+            </div>
+            <div style="font-size:13px;color:#8a8478;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.05em;">Format</div>
+            <div style="display:flex;flex-direction:column;gap:7px;font-size:15px;color:#3a3a3a;">
+              <span style="color:var(--accent,#d62828);">▣ Manga</span><span>▢ One-shot</span><span>▢ Roman</span><span>▢ Illustrations</span>
+            </div>
+            <div style="font-size:13px;color:#8a8478;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.05em;">Trier</div>
+            <div style="display:flex;flex-direction:column;gap:7px;font-size:15px;color:#3a3a3a;">
+              <span>◉ Populaires</span><span>○ Nouveautés</span><span>○ Mieux notées</span>
+            </div>
+          </div>
+          <!-- center showroom -->
+          <div style="flex:1;padding:16px;background:#faf8f3;">
+            <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:13px;">
+              <span style="font-family:'Caveat';font-weight:700;font-size:23px;">Œuvres complètes</span>
+              <span style="font-size:13px;color:#8a8478;">312 mangas terminés · mis en vitrine</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Lames de Brume</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Camille R. ✒ × Yuki M. 🖌</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Seinen</span><span>12 ch.</span><span style="margin-left:auto;">♡ 3,4k</span></div></div>
+              </div>
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Néon Sutra</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Léa B. ✒ × Hugo D. 🖌</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Shōnen</span><span>20 ch.</span><span style="margin-left:auto;">♡ 8,1k</span></div></div>
+              </div>
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:7px 7px;display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Encre Blanche</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Inès K. ✒🖌 (auteure complète)</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Josei</span><span>8 ch.</span><span style="margin-left:auto;">♡ 2,2k</span></div></div>
+              </div>
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Le Dernier Ronin</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Théo M. ✒ × Sora V. 🖌</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Seinen</span><span>15 ch.</span><span style="margin-left:auto;">♡ 5,7k</span></div></div>
+              </div>
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:11px 11px;display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Café Comète</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Maya L. ✒ × Rin T. 🖌</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Tranche de vie</span><span>6 ch.</span><span style="margin-left:auto;">♡ 1,9k</span></div></div>
+              </div>
+              <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+                <div data-tone-fill style="height:138px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);display:flex;align-items:flex-start;justify-content:flex-end;padding:7px;border-bottom:2px solid #1a1a1a;"><span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:10px;padding:1px 8px;">✓ Complet</span></div>
+                <div style="padding:9px 10px;"><div style="font-weight:700;font-size:14px;">Spectres d'Avril</div><div style="font-size:11px;color:#8a8478;margin-top:1px;">Camille R. ✒ × Inès K. 🖌</div><div style="display:flex;align-items:center;gap:7px;margin-top:7px;font-size:12px;color:#6f6a5e;"><span style="background:#efece4;border-radius:9px;padding:1px 8px;">Fantastique</span><span>10 ch.</span><span style="margin-left:auto;">♡ 4,0k</span></div></div>
+              </div>
+            </div>
+          </div>
+          <!-- right news -->
+          <div style="width:248px;border-left:2px solid #ded8cb;padding:15px 13px;flex:none;">
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px;">Actualités</div>
+            <div data-anno-item style="font-family:'Caveat';font-size:15px;color:var(--accent,#d62828);margin-bottom:11px;line-height:1.1;">↳ concours, titres en vogue, sélections d'éditeurs</div>
+            <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;margin-bottom:13px;">
+              <div data-tone-fill style="height:62px;background-color:#e6e2d8;background-image:repeating-linear-gradient(135deg,#1a1a1a18 0 2px,transparent 2px 9px);display:flex;align-items:center;justify-content:center;border-bottom:2px solid #1a1a1a;"><span style="font-family:ui-monospace,monospace;font-size:11px;color:#8a7f68;">[ visuel concours ]</span></div>
+              <div style="padding:9px 11px;"><div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--accent,#d62828);">CONCOURS</div><div style="font-size:14px;font-weight:700;margin:1px 0 2px;">Prix du jeune mangaka 2026</div><div style="font-size:12px;color:#8a8478;">Doté par un éditeur partenaire · clôture 30 j</div><div style="font-size:13px;text-align:center;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px;margin-top:9px;">Participer</div></div>
+            </div>
+            <div style="font-weight:700;font-size:14px;margin-bottom:10px;">En vogue cette semaine</div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;"><span style="font-family:'Caveat';font-weight:700;font-size:20px;width:14px;color:var(--accent,#d62828);">1</span><span data-tone-fill style="width:30px;height:40px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border:1.5px solid #1a1a1a;border-radius:3px;flex:none;"></span><div style="min-width:0;"><div style="font-size:13px;font-weight:700;">Néon Sutra</div><div style="font-size:11px;color:#8a8478;">Shōnen · ↑ 24%</div></div></div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;"><span style="font-family:'Caveat';font-weight:700;font-size:20px;width:14px;color:var(--accent,#d62828);">2</span><span data-tone-fill style="width:30px;height:40px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 7px);border:1.5px solid #1a1a1a;border-radius:3px;flex:none;"></span><div style="min-width:0;"><div style="font-size:13px;font-weight:700;">Le Dernier Ronin</div><div style="font-size:11px;color:#8a8478;">Seinen · ↑ 18%</div></div></div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;"><span style="font-family:'Caveat';font-weight:700;font-size:20px;width:14px;color:var(--accent,#d62828);">3</span><span data-tone-fill style="width:30px;height:40px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:9px 9px;border:1.5px solid #1a1a1a;border-radius:3px;flex:none;"></span><div style="min-width:0;"><div style="font-size:13px;font-weight:700;">Encre Blanche</div><div style="font-size:11px;color:#8a8478;">Josei · ↑ 12%</div></div></div>
+            <div style="font-size:13px;color:#8a8478;text-align:center;margin-bottom:13px;">Voir le classement →</div>
+            <div style="border:2px dashed #b3aa97;border-radius:7px;padding:9px 11px;"><div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:#6f6a5e;">SÉLECTION ÉDITEUR</div><div style="font-size:13px;margin-top:2px;line-height:1.3;">« Encre Blanche » repéré par une maison partenaire</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: PROFILE -->
+    <div style="flex:none;width:760px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Profil — artiste / scénariste</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ bannière « recherche un·e partenaire » · tags de genres sélectionnables · soutien (abonnement)</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/yuki-moreau</div>
+        </div>
+        <!-- cover -->
+        <div data-tone-fill style="height:120px;background-color:#e6e2d8;background-image:repeating-linear-gradient(135deg,#1a1a1a14 0 2px,transparent 2px 9px);border-bottom:2px solid #1a1a1a;"></div>
+        <div style="padding:0 18px 18px;">
+          <div style="display:flex;align-items:flex-end;gap:14px;margin-top:-42px;">
+            <span style="width:84px;height:84px;border-radius:50%;border:3px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+            <div style="padding-bottom:6px;">
+              <div style="font-family:'Caveat';font-weight:700;font-size:28px;line-height:1;">Yuki Moreau</div>
+              <div style="font-size:14px;color:#6f6a5e;">🖌 Dessinateur·rice · encre &amp; screentone · Lyon, FR</div>
+            </div>
+            <div style="flex:1;"></div>
+            <div style="display:flex;gap:8px;padding-bottom:6px;">
+              <span style="font-size:14px;border:2px solid #1a1a1a;border-radius:14px;padding:5px 14px;">Suivre</span>
+              <span style="font-size:14px;border:2px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:14px;padding:5px 14px;">＋ Se connecter</span>
+              <span style="font-size:14px;border:2px solid #1a1a1a;border-radius:14px;padding:5px 14px;">★ Soutenir</span>
+              <span style="font-size:14px;background:#1a1a1a;color:#fff;border-radius:14px;padding:6px 14px;">Proposer une collab</span>
+            </div>
+          </div>
+          <!-- status banner -->
+          <div style="margin-top:13px;border:2px dashed var(--accent,#d62828);border-radius:8px;padding:9px 13px;display:flex;align-items:center;gap:9px;">
+            <span style="width:9px;height:9px;border-radius:50%;background:var(--accent,#d62828);display:block;"></span>
+            <span style="font-size:15px;">Cherche actuellement un·e <b>scénariste</b> — Seinen / Thriller, projet long</span>
+          </div>
+          <!-- genres & affinités (sélectionnables) -->
+          <div style="margin-top:14px;">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;"><span style="font-weight:700;font-size:14px;">Genres &amp; affinités</span><span data-anno-item style="font-family:'Caveat';font-size:15px;color:var(--accent,#d62828);">↳ tags sélectionnables — définissent le profil &amp; alimentent le matching</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:13px;">
+              <span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:4px 12px;">Seinen ✓</span>
+              <span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:4px 12px;">Thriller ✓</span>
+              <span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:4px 12px;">Encre dense ✓</span>
+              <span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:4px 12px;">Récit long ✓</span>
+              <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:4px 12px;">Shōnen</span>
+              <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:4px 12px;">Fantastique</span>
+              <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:4px 12px;">Action</span>
+              <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:4px 12px;">Romance</span>
+              <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:4px 12px;">Horreur</span>
+              <span style="border:1.5px dashed #1a1a1a;border-radius:13px;padding:4px 12px;">＋ Ajouter</span>
+            </div>
+          </div>
+          <!-- stats -->
+          <div style="display:flex;gap:26px;margin-top:14px;font-size:15px;">
+            <span><b>1 240</b> abonnés</span><span><b>3,4k</b> J'aime</span><span><b>12</b> œuvres</span><span><b>48</b> soutiens</span>
+          </div>
+          <!-- tabs -->
+          <div style="display:flex;gap:20px;margin-top:15px;border-bottom:2px solid #ded8cb;font-size:15px;color:#8a8478;">
+            <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding:0 0 7px;">Portfolio</span><span style="padding-bottom:7px;">Œuvres publiées</span><span style="padding-bottom:7px;">À propos</span><span style="padding-bottom:7px;">Avis</span>
+          </div>
+          <!-- portfolio grid -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border:2px solid #1a1a1a;border-radius:5px;"></div>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"></div>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:7px 7px;border:2px solid #1a1a1a;border-radius:5px;"></div>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);border:2px solid #1a1a1a;border-radius:5px;"></div>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:11px 11px;border:2px solid #1a1a1a;border-radius:5px;"></div>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- FRAME: MA LISTE & LIKÉS -->
+    <div style="flex:none;width:560px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Ma liste &amp; coups de cœur</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ titres mis de côté (à lire) + œuvres likées</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/ma-liste</div>
+        </div>
+        <div style="display:flex;gap:18px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:15px;color:#8a8478;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:7px;">Ma liste <span style="font-size:12px;">· 4</span></span>
+          <span style="padding-bottom:7px;">Coups de cœur <span style="font-size:12px;">· 6</span></span>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="font-weight:700;font-size:14px;margin-bottom:10px;">À lire</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">✕</span><span style="position:absolute;left:0;right:0;bottom:0;height:5px;background:#0000001a;"><span style="display:block;height:100%;width:60%;background:var(--accent,#d62828);"></span></span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Lames de Brume</div><div style="font-size:11px;color:#8a8478;">reprendre Ch.5</div></div>
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">✕</span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Onibi</div><div style="font-size:11px;color:#8a8478;">pas commencé</div></div>
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">✕</span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Café Comète</div><div style="font-size:11px;color:#8a8478;">pas commencé</div></div>
+          </div>
+          <div style="font-weight:700;font-size:14px;margin:16px 0 10px;">Likés ♡</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">♥</span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Néon Sutra</div><div style="font-size:11px;color:#8a8478;">Shōnen</div></div>
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">♥</span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Encre Blanche</div><div style="font-size:11px;color:#8a8478;">Josei</div></div>
+            <div><div data-tone-fill style="position:relative;height:120px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);border:2px solid #1a1a1a;border-radius:5px;"><span style="position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:1.5px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:11px;">♥</span></div><div style="font-size:12px;font-weight:700;margin-top:5px;">Le Dernier Ronin</div><div style="font-size:11px;color:#8a8478;">Seinen</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SECTION 2 : ROLES ===================== -->
+  <div style="display:flex;align-items:center;gap:10px;margin:40px 0 4px;">
+    <span style="font-family:'Caveat';font-weight:700;font-size:16px;color:#fff;background:#1a1a1a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;">2</span>
+    <span style="font-family:'Caveat';font-weight:700;font-size:28px;">Rôles : utilisateur · éditeur · admin</span>
+  </div>
+  <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:0 0 14px;">↳ accès différenciés — l'éditeur repère les talents &amp; propose des contrats ; l'admin modère &amp; vérifie</div>
+  <div style="display:flex;gap:48px;align-items:flex-start;">
+
+    <!-- FRAME: EDITOR SPACE -->
+    <div style="flex:none;width:800px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Espace éditeur — détection de talents</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ vue réservée aux maisons (Kana, Glénat, Kazé…) : repérer → shortlister → proposer un contrat</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/editeur/talents</div>
+        </div>
+        <div style="padding:10px 16px;background:#1a1a1a;color:#cfcabf;display:flex;align-items:center;gap:9px;font-size:14px;border-bottom:2px solid #1a1a1a;">
+          <span style="width:9px;height:9px;border-radius:50%;background:var(--accent,#d62828);display:block;"></span>
+          Connecté·e en tant qu'<b style="color:#fff;">Éditeur</b> · Maison partenaire
+          <span style="margin-left:6px;font-size:12px;border:1.5px solid #6f6a5e;border-radius:10px;padding:1px 8px;">✓ compte vérifié</span>
+        </div>
+        <div style="display:flex;gap:8px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:13px;flex-wrap:wrap;align-items:center;">
+          <span style="font-weight:700;font-size:14px;margin-right:4px;">Radar de talents</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Genre ▾</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Région : Europe ▾</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Dispo signature ▾</span>
+          <span style="margin-left:auto;color:#8a8478;">Trié par croissance ↑</span>
+        </div>
+        <div style="padding:4px 16px 12px;">
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="width:46px;height:46px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Yuki Moreau</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinateur</span><span style="font-size:12px;color:#8a8478;">Lyon</span></div>
+              <div style="display:flex;gap:14px;font-size:12px;color:#6f6a5e;margin-top:5px;flex-wrap:wrap;"><span><b>1,2k</b> abonnés</span><span style="color:var(--accent,#d62828);">↑ 38% / 30 j</span><span><b>3</b> œuvres complètes</span><span>compat. ligne édito. <b>91%</b></span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 12px;">★ Shortlist</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 12px;">Proposer un contrat</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="width:46px;height:46px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Inès Khelifi</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinatrice</span><span style="font-size:12px;color:#8a8478;">Paris</span></div>
+              <div style="display:flex;gap:14px;font-size:12px;color:#6f6a5e;margin-top:5px;flex-wrap:wrap;"><span><b>890</b> abonnés</span><span style="color:var(--accent,#d62828);">↑ 52% / 30 j</span><span><b>2</b> œuvres complètes</span><span>compat. ligne édito. <b>84%</b></span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 12px;">★ Shortlist</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 12px;">Proposer un contrat</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;padding:13px 0;">
+            <span style="width:46px;height:46px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Camille Roux</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 7px;">✒ Scénariste</span><span style="font-size:12px;color:#8a8478;">Lyon</span></div>
+              <div style="display:flex;gap:14px;font-size:12px;color:#6f6a5e;margin-top:5px;flex-wrap:wrap;"><span><b>2,1k</b> abonnés</span><span style="color:var(--accent,#d62828);">↑ 29% / 30 j</span><span><b>4</b> récits complets</span><span>compat. ligne édito. <b>88%</b></span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 12px;">★ Shortlist</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 12px;">Proposer un contrat</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: ADMIN -->
+    <div style="flex:none;width:720px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Administration &amp; modération</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ gérer les rôles, vérifier les comptes éditeurs, traiter les signalements</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/admin</div>
+        </div>
+        <div style="display:flex;gap:18px;padding:12px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#8a8478;align-items:center;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:9px;display:flex;align-items:center;gap:6px;">Signalements <span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:0 6px;">4</span></span>
+          <span>Utilisateurs</span><span>Comptes éditeurs</span><span>Contenus</span>
+        </div>
+        <div style="padding:8px 16px 12px;font-size:13px;">
+          <div style="display:flex;color:#8a8478;font-size:12px;padding:7px 0;border-bottom:1.5px solid #ece8de;text-transform:uppercase;letter-spacing:.04em;"><span style="flex:2;">Contenu</span><span style="flex:1.3;">Motif</span><span style="flex:1.1;">Statut</span><span style="flex:1;text-align:right;">Action</span></div>
+          <div style="display:flex;align-items:center;padding:11px 0;border-bottom:1.5px solid #ece8de;"><span style="flex:2;">Commentaire · « Néon Sutra »</span><span style="flex:1.3;color:#6f6a5e;">Spam</span><span style="flex:1.1;color:var(--accent,#d62828);">● à traiter</span><span style="flex:1;text-align:right;"><span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:3px 10px;">Examiner</span></span></div>
+          <div style="display:flex;align-items:center;padding:11px 0;border-bottom:1.5px solid #ece8de;"><span style="flex:2;">Planche · « Spectres d'Avril »</span><span style="flex:1.3;color:#6f6a5e;">Contenu sensible</span><span style="flex:1.1;color:var(--accent,#d62828);">● à traiter</span><span style="flex:1;text-align:right;"><span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:3px 10px;">Examiner</span></span></div>
+          <div style="display:flex;align-items:center;padding:11px 0;"><span style="flex:2;">Profil · Théo M.</span><span style="flex:1.3;color:#6f6a5e;">Usurpation</span><span style="flex:1.1;color:#8a8478;">○ en cours</span><span style="flex:1;text-align:right;"><span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:3px 10px;">Examiner</span></span></div>
+        </div>
+        <div style="margin:0 16px 16px;border:2px dashed #b3aa97;border-radius:7px;padding:9px 12px;display:flex;align-items:center;gap:9px;font-size:13px;">
+          <b>2 comptes éditeurs</b> en attente de vérification
+          <span style="margin-left:auto;background:#1a1a1a;color:#fff;border-radius:11px;padding:4px 12px;">Vérifier</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SECTION 3 ===================== -->
+  <div style="display:flex;align-items:center;gap:10px;margin:40px 0 4px;">
+    <span style="font-family:'Caveat';font-weight:700;font-size:16px;color:#fff;background:#1a1a1a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;">3</span>
+    <span style="font-family:'Caveat';font-weight:700;font-size:28px;">Trouver un·e partenaire</span>
+    <span style="font-family:'Caveat';font-size:20px;color:#6f6a5e;">— 2 approches à départager</span>
+  </div>
+  <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:0 0 14px;">↳ le cœur de la plateforme : comment un dessinateur et un scénariste se rencontrent ?</div>
+  <div style="display:flex;gap:48px;align-items:flex-start;">
+
+    <!-- MATCH A: directory -->
+    <div style="flex:none;width:600px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:21px;">A · Annuaire &amp; portfolios</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:16px;color:#6f6a5e;margin:1px 0 9px;">parcourir + filtrer, contact direct</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;gap:8px;padding:11px 13px;border-bottom:2px solid #1a1a1a;font-size:13px;flex-wrap:wrap;">
+          <span style="background:#1a1a1a;color:#fff;border-radius:12px;padding:3px 11px;">Dessinateur·rice</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Scénariste</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Genre ▾</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Dispo ▾</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Région ▾</span>
+        </div>
+        <div style="padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:13px;">
+          <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;">
+            <div style="display:flex;gap:4px;padding:6px;">
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border-radius:3px;"></div>
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 7px);border-radius:3px;"></div>
+            </div>
+            <div style="padding:4px 10px 11px;">
+              <div style="font-weight:700;font-size:15px;">Théo M.</div>
+              <div style="font-size:12px;color:#8a8478;">🖌 Dessinateur · Seinen, Action</div>
+              <div style="font-size:13px;margin-top:8px;text-align:center;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px;">Proposer une collab</div>
+            </div>
+          </div>
+          <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;">
+            <div style="display:flex;gap:4px;padding:6px;">
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 7px);border-radius:3px;"></div>
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:9px 9px;border-radius:3px;"></div>
+            </div>
+            <div style="padding:4px 10px 11px;">
+              <div style="font-weight:700;font-size:15px;">Inès K.</div>
+              <div style="font-size:12px;color:#8a8478;">🖌 Dessinatrice · Josei</div>
+              <div style="font-size:13px;margin-top:8px;text-align:center;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px;">Proposer une collab</div>
+            </div>
+          </div>
+          <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;">
+            <div style="display:flex;gap:4px;padding:6px;">
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:8px 8px;border-radius:3px;"></div>
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 7px);border-radius:3px;"></div>
+            </div>
+            <div style="padding:4px 10px 11px;">
+              <div style="font-weight:700;font-size:15px;">Hugo D.</div>
+              <div style="font-size:12px;color:#8a8478;">🖌 Dessinateur · Fantastique</div>
+              <div style="font-size:13px;margin-top:8px;text-align:center;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px;">Proposer une collab</div>
+            </div>
+          </div>
+          <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;">
+            <div style="display:flex;gap:4px;padding:6px;">
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 7px);border-radius:3px;"></div>
+              <div data-tone-fill style="flex:1;height:60px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border-radius:3px;"></div>
+            </div>
+            <div style="padding:4px 10px 11px;">
+              <div style="font-weight:700;font-size:15px;">Sora V.</div>
+              <div style="font-size:12px;color:#8a8478;">🖌 Dessinateur · Tranche de vie</div>
+              <div style="font-size:13px;margin-top:8px;text-align:center;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px;">Proposer une collab</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MATCH B: algorithmic list -->
+    <div style="flex:none;width:580px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:21px;">B · Suggestions expliquées</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:16px;color:#6f6a5e;margin:1px 0 9px;">liste algorithmique avec « pourquoi ce match »</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="padding:12px 15px;border-bottom:2px solid #1a1a1a;font-size:15px;"><b>Pour vous, Camille</b> <span style="color:#8a8478;">· scénariste cherchant un·e dessinateur·rice</span></div>
+        <div style="padding:6px 15px 14px;display:flex;flex-direction:column;">
+          <div style="display:flex;gap:11px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="width:44px;height:44px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:15px;">Théo M.</span><span style="font-size:12px;color:#8a8478;">🖌 Dessinateur</span><span style="margin-left:auto;font-size:13px;color:var(--accent,#d62828);">● 94%</span></div>
+              <div style="font-size:13px;color:#5a5448;margin-top:4px;line-height:1.3;">↳ même genre <b>Seinen</b> · rythme de publication compatible · cherche un récit long</div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 11px;">Voir le profil</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 11px;">Proposer</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:11px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="width:44px;height:44px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:15px;">Inès K.</span><span style="font-size:12px;color:#8a8478;">🖌 Dessinatrice</span><span style="margin-left:auto;font-size:13px;color:var(--accent,#d62828);">● 88%</span></div>
+              <div style="font-size:13px;color:#5a5448;margin-top:4px;line-height:1.3;">↳ style encre proche de vos références · disponible dès maintenant</div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 11px;">Voir le profil</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 11px;">Proposer</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:11px;padding:13px 0;">
+            <span style="width:44px;height:44px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:700;font-size:15px;">Hugo D.</span><span style="font-size:12px;color:#8a8478;">🖌 Dessinateur</span><span style="margin-left:auto;font-size:13px;color:var(--accent,#d62828);">● 81%</span></div>
+              <div style="font-size:13px;color:#5a5448;margin-top:4px;line-height:1.3;">↳ a illustré 2 récits du même univers · bonne note de collaboration</div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 11px;">Voir le profil</span><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 11px;">Proposer</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SECTION 3 ===================== -->
+  <div style="display:flex;align-items:center;gap:10px;margin:40px 0 14px;">
+    <span style="font-family:'Caveat';font-weight:700;font-size:16px;color:#fff;background:#1a1a1a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;">4</span>
+    <span style="font-family:'Caveat';font-weight:700;font-size:28px;">Créer &amp; lire</span>
+  </div>
+  <div style="display:flex;gap:48px;align-items:flex-start;">
+
+    <!-- FRAME: SCENARIO EDITOR -->
+    <div style="flex:none;width:1060px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Éditeur de scénario</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ format planche → case → dialogue : exploitable directement par le dessinateur</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:14px;padding:9px 14px;border-bottom:2px solid #1a1a1a;font-size:14px;color:#555;">
+          <span style="font-weight:700;color:#1a1a1a;">« Lames de Brume »</span><span>Fichier</span><span>Édition</span><span>Insérer case</span>
+          <span style="margin-left:auto;font-size:13px;color:#8a8478;">✓ Enregistré · collab : Yuki</span>
+          <span style="width:26px;height:26px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+        </div>
+        <div style="display:flex;height:430px;">
+          <!-- outline -->
+          <div style="width:200px;border-right:2px solid #ded8cb;padding:13px;flex:none;font-size:14px;">
+            <div style="font-weight:700;margin-bottom:9px;">Chapitres</div>
+            <div style="display:flex;flex-direction:column;gap:3px;color:#4a4a4a;">
+              <span style="padding:4px 6px;">▸ 1. Sous la pluie</span>
+              <span style="padding:4px 6px;background:#f0ede5;border-radius:5px;color:#1a1a1a;">▾ 2. La rencontre</span>
+              <span style="padding:3px 6px 3px 18px;font-size:13px;color:#8a8478;">Planche 1</span>
+              <span style="padding:3px 6px 3px 18px;font-size:13px;color:var(--accent,#d62828);">Planche 3 ●</span>
+              <span style="padding:3px 6px 3px 18px;font-size:13px;color:#8a8478;">Planche 4</span>
+              <span style="padding:4px 6px;">▸ 3. Le pacte</span>
+            </div>
+            <div style="margin-top:14px;font-size:13px;color:#8a8478;border:1.5px dashed #cfc9bd;border-radius:7px;padding:7px;text-align:center;">＋ Nouvelle planche</div>
+          </div>
+          <!-- script -->
+          <div style="flex:1;padding:18px 22px;font-size:14px;line-height:1.5;overflow:hidden;background:#fdfcf9;">
+            <div style="font-family:'Caveat';font-weight:700;font-size:22px;border-bottom:2px solid #1a1a1a;padding-bottom:5px;margin-bottom:13px;">PLANCHE 3 / 40</div>
+            <div style="margin-bottom:14px;">
+              <div style="font-weight:700;letter-spacing:.04em;color:var(--accent,#d62828);">CASE 1</div>
+              <div style="color:#4a4a4a;"><i>Description —</i> Plan large : la ville noyée sous la pluie, néons flous.</div>
+              <div style="color:#6f6a5e;">SFX : <b>ZAAAAH</b></div>
+            </div>
+            <div style="margin-bottom:14px;">
+              <div style="font-weight:700;letter-spacing:.04em;color:var(--accent,#d62828);">CASE 2</div>
+              <div style="color:#4a4a4a;"><i>Description —</i> Gros plan sur Rin, regard déterminé sous la capuche.</div>
+              <div style="margin-top:3px;"><b>RIN</b> — « Je n'abandonnerai pas. Pas cette fois. »</div>
+            </div>
+            <div>
+              <div style="font-weight:700;letter-spacing:.04em;color:var(--accent,#d62828);">CASE 3</div>
+              <div style="color:#4a4a4a;"><i>Description —</i> Une silhouette l'attend au bout de la ruelle…</div>
+              <div style="height:9px;border-radius:5px;background:#e4e0d6;margin-top:7px;width:70%;"></div>
+            </div>
+          </div>
+          <!-- collab notes -->
+          <div style="width:230px;border-left:2px solid #ded8cb;padding:13px;flex:none;font-size:13px;background:#faf8f3;">
+            <div style="font-weight:700;margin-bottom:10px;">Notes du dessinateur</div>
+            <div style="border:1.5px solid #ded8cb;border-radius:7px;padding:9px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;"></span><b style="font-size:13px;">Yuki</b><span style="color:#8a8478;font-size:11px;">case 2</span></div>
+              <div style="color:#4a4a4a;line-height:1.3;">On garde la capuche ? J'aimerais voir ses yeux pour l'intensité.</div>
+            </div>
+            <div style="border:1.5px solid #ded8cb;border-radius:7px;padding:9px;">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;"></span><b style="font-size:13px;">Camille</b></div>
+              <div style="color:#4a4a4a;line-height:1.3;">Oui, capuche relevée case 1, baissée case 2 ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: TITLE READER -->
+    <div style="flex:none;width:900px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Lecteur de titre</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ bascule Pages / Webtoon · réactions par planche</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-bottom:2px solid #1a1a1a;font-size:14px;">
+          <span>←</span><span style="font-weight:700;">Lames de Brume · Ch. 2</span>
+          <div style="margin-left:auto;display:flex;border:1.5px solid #1a1a1a;border-radius:13px;overflow:hidden;font-size:13px;"><span style="background:#1a1a1a;color:#fff;padding:3px 11px;">Pages</span><span style="padding:3px 11px;">Webtoon</span></div>
+        </div>
+        <div style="display:flex;height:430px;">
+          <!-- chapter list -->
+          <div style="width:170px;border-right:2px solid #ded8cb;padding:12px;flex:none;font-size:13px;">
+            <div style="font-weight:700;margin-bottom:9px;">Chapitres</div>
+            <div style="display:flex;flex-direction:column;gap:4px;color:#4a4a4a;">
+              <span style="padding:5px 7px;">1. Sous la pluie</span>
+              <span style="padding:5px 7px;background:#f0ede5;border-radius:5px;color:#1a1a1a;font-weight:700;">2. La rencontre</span>
+              <span style="padding:5px 7px;">3. Le pacte</span>
+              <span style="padding:5px 7px;color:#b8b1a3;">4. — verrouillé ★</span>
+            </div>
+          </div>
+          <!-- page view -->
+          <div style="flex:1;background:#d9d4ca;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;">
+            <div style="width:280px;height:380px;background:#fff;border:2px solid #1a1a1a;box-shadow:4px 4px 0 rgba(0,0,0,.15);padding:8px;display:flex;flex-direction:column;gap:6px;">
+              <div data-tone-fill style="flex:2;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border:1.5px solid #1a1a1a;"></div>
+              <div style="flex:1.5;display:flex;gap:6px;">
+                <div data-tone-fill style="flex:1;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:1.5px solid #1a1a1a;"></div>
+                <div data-tone-fill style="flex:1;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:7px 7px;border:1.5px solid #1a1a1a;"></div>
+              </div>
+              <div data-tone-fill style="flex:1.5;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);border:1.5px solid #1a1a1a;"></div>
+            </div>
+            <div style="position:absolute;left:14px;top:50%;width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;">‹</div>
+            <div style="position:absolute;right:14px;top:50%;width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;">›</div>
+            <div style="position:absolute;bottom:12px;font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:3px 12px;">Planche 12 / 40</div>
+          </div>
+          <!-- reactions -->
+          <div style="width:190px;border-left:2px solid #ded8cb;padding:12px;flex:none;font-size:13px;">
+            <div style="font-weight:700;margin-bottom:9px;">Réactions</div>
+            <div style="display:flex;gap:14px;margin-bottom:12px;font-size:14px;"><span>♡ 1,2k</span><span>★ 340</span></div>
+            <div style="font-weight:700;margin-bottom:7px;font-size:13px;">Commentaires</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="display:flex;gap:7px;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span><div style="height:24px;flex:1;background:#ece8de;border-radius:6px;"></div></div>
+              <div style="display:flex;gap:7px;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span><div style="height:36px;flex:1;background:#ece8de;border-radius:6px;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SECTION 4 ===================== -->
+  <div style="display:flex;align-items:center;gap:10px;margin:40px 0 14px;">
+    <span style="font-family:'Caveat';font-weight:700;font-size:16px;color:#fff;background:#1a1a1a;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;">5</span>
+    <span style="font-family:'Caveat';font-weight:700;font-size:28px;">Collaborer</span>
+  </div>
+  <div style="display:flex;gap:48px;align-items:flex-start;">
+
+    <!-- FRAME: OPEN CALLS -->
+    <div style="flex:none;width:760px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Appels à projets</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ « poster un appel » · candidater avec un échantillon</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:2px solid #1a1a1a;font-size:13px;">
+          <span style="color:#8a8478;">Je suis :</span>
+          <span style="background:#1a1a1a;color:#fff;border-radius:12px;padding:3px 11px;">Dessinateur·rice</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Scénariste</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:12px;padding:3px 11px;color:#6f6a5e;">Genre ▾</span>
+          <span style="margin-left:auto;background:var(--accent,#d62828);color:#fff;border-radius:12px;padding:4px 13px;font-size:14px;">＋ Poster un appel</span>
+        </div>
+        <div style="padding:15px;display:flex;flex-direction:column;gap:13px;">
+          <div style="border:2px solid #1a1a1a;border-radius:7px;padding:13px 14px;display:flex;gap:13px;">
+            <div data-tone-fill style="width:80px;height:96px;flex:none;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;border:1.5px dashed #b3aa97;border-radius:4px;"></div>
+            <div style="flex:1;">
+              <div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);letter-spacing:.05em;">SCÉNARISTE CHERCHE DESSINATEUR·RICE</div>
+              <div style="font-family:'Caveat';font-weight:700;font-size:21px;margin:2px 0 4px;">« Lames de Brume » — récit long, Seinen</div>
+              <div style="display:flex;gap:6px;margin-bottom:7px;"><span style="font-size:12px;background:#efece4;border-radius:10px;padding:2px 9px;">Seinen</span><span style="font-size:12px;background:#efece4;border-radius:10px;padding:2px 9px;">Thriller</span><span style="font-size:12px;background:#efece4;border-radius:10px;padding:2px 9px;">~120 planches</span></div>
+              <div style="height:8px;border-radius:5px;background:#e4e0d6;margin-bottom:5px;"></div>
+              <div style="height:8px;width:80%;border-radius:5px;background:#e4e0d6;"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:#8a8478;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;"></span>Camille R.<span>·</span>Clôture dans 12 j<span style="margin-left:auto;background:#1a1a1a;color:#fff;border-radius:12px;padding:4px 14px;font-size:14px;">Candidater</span></div>
+            </div>
+          </div>
+          <div style="border:2px solid #1a1a1a;border-radius:7px;padding:13px 14px;display:flex;gap:13px;">
+            <div data-tone-fill style="width:80px;height:96px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:1.5px dashed #b3aa97;border-radius:4px;"></div>
+            <div style="flex:1;">
+              <div style="font-size:12px;font-weight:700;color:var(--accent,#d62828);letter-spacing:.05em;">DESSINATEUR CHERCHE SCÉNARISTE</div>
+              <div style="font-family:'Caveat';font-weight:700;font-size:21px;margin:2px 0 4px;">One-shot fantastique — j'ai l'univers, pas l'histoire</div>
+              <div style="display:flex;gap:6px;margin-bottom:7px;"><span style="font-size:12px;background:#efece4;border-radius:10px;padding:2px 9px;">Fantastique</span><span style="font-size:12px;background:#efece4;border-radius:10px;padding:2px 9px;">One-shot</span></div>
+              <div style="height:8px;border-radius:5px;background:#e4e0d6;margin-bottom:5px;"></div>
+              <div style="height:8px;width:65%;border-radius:5px;background:#e4e0d6;"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:#8a8478;"><span style="width:22px;height:22px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;"></span>Théo M.<span>·</span>5 candidatures<span style="margin-left:auto;background:#1a1a1a;color:#fff;border-radius:12px;padding:4px 14px;font-size:14px;">Candidater</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: DASHBOARD (all projects) -->
+    <div style="flex:none;width:980px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Tableau de bord — mes projets</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ gérer tous les projets en cours : statut, avancement, rôle, prochaine sortie · ouvrir l'espace projet</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/tableau-de-bord</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;padding:11px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="display:flex;align-items:center;gap:8px;font-family:'Caveat';font-weight:700;font-size:22px;"><span style="width:17px;height:17px;background:var(--accent,#d62828);border-radius:50% 50% 50% 2px;display:inline-block;"></span>Encre &amp; Plume</div>
+          <div style="display:flex;gap:15px;font-size:15px;color:#555;"><span>Accueil</span><span>Découvrir</span><span>Lire</span><span>Écrire</span><span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:2px;">Projets</span></div>
+          <div style="flex:1;"></div>
+          <span style="width:30px;height:30px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:2px solid #ded8cb;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:24px;">Mes projets</div>
+          <span style="font-size:13px;color:#8a8478;">3 actifs · 1 en révision · prochaine sortie ven. 21 juin</span>
+          <div style="flex:1;"></div>
+          <span style="font-size:14px;background:var(--accent,#d62828);color:#fff;border-radius:13px;padding:6px 15px;">＋ Nouveau projet</span>
+        </div>
+        <div style="display:flex;gap:9px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:13px;align-items:center;">
+          <span style="background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 11px;">Tous</span>
+          <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:11px;padding:3px 11px;">En cours</span>
+          <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:11px;padding:3px 11px;">En pause</span>
+          <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:11px;padding:3px 11px;">Publiés</span>
+          <span style="margin-left:auto;color:#8a8478;">Trier : récents ▾</span>
+        </div>
+        <div style="padding:4px 16px 14px;">
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <div data-tone-fill style="width:54px;height:70px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:4px;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Lames de Brume</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 8px;">Manga</span><span style="font-size:11px;color:#fff;background:var(--accent,#d62828);border-radius:10px;padding:1px 8px;">En cours</span></div>
+              <div style="font-size:12px;color:#8a8478;margin-top:3px;">Avec Yuki 🖌 · vous êtes ✒ scénariste · étape : encrage Ch.1</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:7px;"><div style="width:210px;height:8px;border:1.5px solid #1a1a1a;border-radius:5px;overflow:hidden;"><div style="width:42%;height:100%;background:var(--accent,#d62828);"></div></div><span style="font-size:11px;color:#6f6a5e;">42%</span><span style="font-size:11px;color:#6f6a5e;">· prochaine sortie ven. 21 juin</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;align-items:center;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">Ouvrir</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <div data-tone-fill style="width:54px;height:70px;flex:none;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;border:2px solid #1a1a1a;border-radius:4px;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Spectres d'Avril</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 8px;">Manga</span><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 8px;">En révision</span></div>
+              <div style="font-size:12px;color:#8a8478;margin-top:3px;">Avec Inès 🖌 · vous êtes ✒ scénariste · étape : corrections (2 notes)</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:7px;"><div style="width:210px;height:8px;border:1.5px solid #1a1a1a;border-radius:5px;overflow:hidden;"><div style="width:68%;height:100%;background:var(--accent,#d62828);"></div></div><span style="font-size:11px;color:#6f6a5e;">68%</span><span style="font-size:11px;color:#6f6a5e;">· sortie programmée lun. 24 juin</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;align-items:center;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">Ouvrir</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1.5px solid #ece8de;">
+            <div data-tone-fill style="width:54px;height:70px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);border:2px solid #1a1a1a;border-radius:4px;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Carnet d'encre</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 8px;">Illustration(s)</span><span style="font-size:11px;color:#fff;background:var(--accent,#d62828);border-radius:10px;padding:1px 8px;">En cours</span></div>
+              <div style="font-size:12px;color:#8a8478;margin-top:3px;">Solo · vous êtes 🖌 dessinateur·rice · 12 illustrations</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:7px;"><div style="width:210px;height:8px;border:1.5px solid #1a1a1a;border-radius:5px;overflow:hidden;"><div style="width:80%;height:100%;background:var(--accent,#d62828);"></div></div><span style="font-size:11px;color:#6f6a5e;">80%</span><span style="font-size:11px;color:#6f6a5e;">· pas de sortie programmée</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;align-items:center;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">Ouvrir</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:13px 0;">
+            <div data-tone-fill style="width:54px;height:70px;flex:none;background-color:#efece4;background-image:repeating-linear-gradient(90deg,#1a1a1a1c 0 1px,transparent 1px 6px);border:2px solid #1a1a1a;border-radius:4px;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;"><b style="font-size:15px;">Sel &amp; Cendres</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 8px;">Histoire (illustrée)</span><span style="font-size:11px;border:1.5px solid #cfc9bd;color:#8a8478;border-radius:10px;padding:1px 8px;">En pause</span></div>
+              <div style="font-size:12px;color:#8a8478;margin-top:3px;">Recherche un·e dessinateur·rice · vous êtes ✒ scénariste · étape : scénario</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:7px;"><div style="width:210px;height:8px;border:1.5px solid #1a1a1a;border-radius:5px;overflow:hidden;"><div style="width:20%;height:100%;background:#b3aa97;"></div></div><span style="font-size:11px;color:#6f6a5e;">20%</span><span style="font-size:11px;color:#6f6a5e;">· —</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex:none;align-items:center;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">Ouvrir</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: CREATE PROJECT -->
+    <div style="flex:none;width:720px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Créer un projet</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ choisir le type : Illustration(s) · Histoire (texte + illustrations) · Manga</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:22px;">Nouveau projet</div>
+          <div style="flex:1;"></div>
+          <span style="font-size:18px;color:#8a8478;">✕</span>
+        </div>
+        <div style="padding:16px;">
+          <div style="font-size:13px;color:#8a8478;text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px;">1 · Type de projet</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+            <div style="border:2px solid #1a1a1a;border-radius:8px;padding:12px;background:#fff;">
+              <div style="height:62px;border:1.5px solid #cfc9bd;border-radius:5px;display:flex;align-items:center;justify-content:center;margin-bottom:9px;background:#faf8f3;"><div data-tone-fill style="width:44px;height:44px;background-color:#efece4;background-image:radial-gradient(#1a1a1a44 1.4px,transparent 1.5px);background-size:7px 7px;border:1.5px solid #1a1a1a;border-radius:3px;"></div></div>
+              <div style="font-weight:700;font-size:14px;">Illustration(s)</div>
+              <div style="font-size:12px;color:#8a8478;line-height:1.3;margin-top:2px;">Galerie d'images, sans récit.</div>
+            </div>
+            <div style="border:2px solid #1a1a1a;border-radius:8px;padding:12px;background:#fff;">
+              <div style="height:62px;border:1.5px solid #cfc9bd;border-radius:5px;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:9px;background:#faf8f3;"><div data-tone-fill style="width:26px;height:32px;background-color:#efece4;background-image:radial-gradient(#1a1a1a44 1.3px,transparent 1.4px);background-size:6px 6px;border:1.5px solid #1a1a1a;border-radius:2px;"></div><div style="display:flex;flex-direction:column;gap:5px;width:34px;"><div style="height:5px;background:#1a1a1a;border-radius:3px;"></div><div style="height:5px;background:#1a1a1a;border-radius:3px;"></div><div style="height:5px;width:60%;background:#1a1a1a;border-radius:3px;"></div></div></div>
+              <div style="font-weight:700;font-size:14px;">Histoire (illustrée)</div>
+              <div style="font-size:12px;color:#8a8478;line-height:1.3;margin-top:2px;">Récit en texte, avec illustrations d'appui (optionnel).</div>
+            </div>
+            <div style="border:2.5px solid var(--accent,#d62828);border-radius:8px;padding:12px;background:#fdf3f1;position:relative;">
+              <span style="position:absolute;top:-10px;right:-10px;width:24px;height:24px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">✓</span>
+              <div style="height:62px;border:1.5px solid #cfc9bd;border-radius:5px;display:flex;align-items:center;justify-content:center;margin-bottom:9px;background:#fff;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;width:46px;height:46px;"><div style="border:1.5px solid #1a1a1a;border-radius:1px;"></div><div style="border:1.5px solid #1a1a1a;border-radius:1px;"></div><div style="border:1.5px solid #1a1a1a;border-radius:1px;"></div><div style="border:1.5px solid #1a1a1a;border-radius:1px;"></div></div></div>
+              <div style="font-weight:700;font-size:14px;">Manga</div>
+              <div style="font-size:12px;color:#8a8478;line-height:1.3;margin-top:2px;">Récit dessiné : planches &amp; chapitres.</div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:#8a8478;text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;">2 · Détails</div>
+          <div style="border:1.5px solid #cfc9bd;border-radius:8px;background:#f3f1ec;padding:9px 12px;font-size:14px;color:#9a938a;margin-bottom:11px;">Titre du projet…</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:7px;">Genres</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;font-size:13px;margin-bottom:14px;">
+            <span style="background:#1a1a1a;color:#fff;border-radius:13px;padding:3px 11px;">Seinen ✓</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:3px 11px;">Shōnen</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:3px 11px;">Thriller</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:13px;padding:3px 11px;">Fantastique</span>
+            <span style="border:1.5px dashed #1a1a1a;border-radius:13px;padding:3px 11px;">＋ Ajouter</span>
+          </div>
+          <div style="display:flex;gap:30px;font-size:14px;">
+            <div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Je cherche</div><div style="display:flex;flex-direction:column;gap:5px;color:#3a3a3a;"><span>▣ Scénariste</span><span>▢ Dessinateur·rice</span><span>▢ Je travaille seul·e</span></div></div>
+            <div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Visibilité</div><div style="display:flex;flex-direction:column;gap:5px;color:#3a3a3a;"><span>◉ Privé</span><span>○ Sur invitation</span><span>○ Public</span></div></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:9px;padding:13px 16px;border-top:2px solid #ded8cb;background:#faf8f3;">
+          <span style="font-size:14px;border:2px solid #1a1a1a;border-radius:13px;padding:6px 16px;">Annuler</span>
+          <span style="font-size:14px;background:#1a1a1a;color:#fff;border-radius:13px;padding:7px 16px;">Créer le projet</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: PROJECT WORKSPACE -->
+    <div style="flex:none;width:1000px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Espace projet partagé</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ production : scénario → nemu → corrections → au propre → encrage → publié · cartes ajoutables &amp; liées aux fichiers (docs, dessins)</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:2px solid #1a1a1a;display:flex;align-items:center;gap:13px;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:24px;">Projet · « Lames de Brume »</div>
+          <div style="display:flex;align-items:center;margin-left:4px;">
+            <span style="width:30px;height:30px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span>
+            <span style="width:30px;height:30px;border-radius:50%;border:2px solid #1a1a1a;background:#d8d3c8;display:block;margin-left:-9px;"></span>
+            <span style="font-size:13px;color:#8a8478;margin-left:9px;">Camille (✒) &amp; Yuki (🖌)</span>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="font-size:13px;color:#8a8478;">Avancement</div>
+          <div style="width:120px;height:10px;border:1.5px solid #1a1a1a;border-radius:6px;overflow:hidden;"><div style="width:42%;height:100%;background:var(--accent,#d62828);"></div></div>
+          <div style="font-size:13px;">42%</div>
+        </div>
+        <div style="display:flex;gap:18px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#8a8478;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:7px;">Tableau</span><span>Chapitres</span><span>Fichiers</span><span>Discussion</span>
+        </div>
+        <div data-anno-item style="display:flex;align-items:center;gap:7px;padding:10px 16px;border-bottom:2px solid #ded8cb;font-size:13px;flex-wrap:wrap;background:#faf8f3;">
+          <span style="color:#8a8478;">Chapitre à travailler :</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 10px;">Prologue</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 10px;">Ch. 1</span>
+          <span style="background:var(--accent,#d62828);color:#fff;border-radius:11px;padding:3px 10px;">Ch. 2</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 10px;">Ch. 3</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 10px;">Ch. 4</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:2px 10px;">Ch. 5</span>
+          <span style="border:1.5px dashed #1a1a1a;border-radius:11px;padding:2px 9px;">＋</span>
+          <span style="margin-left:auto;color:#8a8478;">↳ sélectionne le chapitre affiché sur le tableau</span>
+        </div>
+        <div style="display:flex;gap:10px;padding:15px 16px;overflow:hidden;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#6f6a5e;">SCÉNARIO ✒</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 5 — Le pacte<div style="height:6px;width:50%;background:#e4e0d6;border-radius:4px;margin-top:6px;"></div><div style="display:inline-flex;align-items:center;gap:4px;margin-top:7px;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 7px;color:#6f6a5e;">📄 doc collaboratif →</div></div>
+              <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 6 — Fuite<div style="height:6px;width:40%;background:#e4e0d6;border-radius:4px;margin-top:6px;"></div></div>
+              <div style="border:1.5px dashed #b3aa97;border-radius:6px;padding:7px;font-size:12px;color:#8a8478;text-align:center;">＋ Ajouter une carte</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#6f6a5e;">NEMU (story-board)</div>
+            <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 4 — Ruelle<div data-tone-fill style="height:34px;margin-top:6px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 7px);border:1px solid #cfc9bd;border-radius:3px;"></div><div style="display:inline-flex;align-items:center;gap:4px;margin-top:7px;font-size:11px;border:1.5px solid #cfc9bd;border-radius:9px;padding:1px 7px;color:#6f6a5e;">🖼 nemu-p4.png →</div></div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--accent,#d62828);">CORRECTIONS</div>
+            <div style="border:2px solid var(--accent,#d62828);border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 3 — nemu<div style="font-size:12px;color:#8a8478;margin-top:3px;">corr. : 2 notes (dessin)</div></div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#6f6a5e;">AU PROPRE</div>
+            <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 2 — crayonné<div data-tone-fill style="height:34px;margin-top:6px;background-color:#efece4;background-image:repeating-linear-gradient(90deg,#1a1a1a1c 0 1px,transparent 1px 6px);border:1px solid #cfc9bd;border-radius:3px;"></div><div style="font-size:11px;color:#8a8478;margin-top:3px;">version propre, avant encrage</div></div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#6f6a5e;">ENCRAGE 🖌</div>
+            <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#fff;">Ch. 1<div data-tone-fill style="height:34px;margin-top:6px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:7px 7px;border:1px solid #cfc9bd;border-radius:3px;"></div></div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--accent,#d62828);">PUBLIÉ ✓</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="border:2px solid #1a1a1a;border-radius:6px;padding:9px;font-size:13px;background:#f4f1ea;">Prologue</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: REALTIME COLLAB EDITOR -->
+    <div style="flex:none;width:1040px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Éditeur collaboratif — temps réel</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ co-écriture en direct façon Google Docs : curseurs nommés, présence, commentaires, sauvegarde cloud</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:11px;padding:10px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:21px;">Lames de Brume — Ch.5 : Le pacte</div>
+          <span style="font-size:12px;color:#6f6a5e;">Enregistré dans le cloud ✓</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex;align-items:center;">
+            <span style="width:28px;height:28px;border-radius:50%;border:2px solid #2a6fdb;background:#e7e2d7;display:block;"></span>
+            <span style="width:28px;height:28px;border-radius:50%;border:2px solid #1f8a5b;background:#d8d3c8;display:block;margin-left:-8px;"></span>
+            <span style="font-size:12px;color:#8a8478;margin-left:8px;">2 en ligne</span>
+          </div>
+          <span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">Partager</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#4a4a4a;">
+          <span style="color:#8a8478;">Style ▾</span><span style="font-weight:700;">B</span><span style="font-style:italic;">I</span><span style="text-decoration:underline;">U</span><span style="color:#cfc9bd;">|</span><span>≣</span><span>• Liste</span><span style="color:#cfc9bd;">|</span><span style="color:var(--accent,#d62828);">＋ Commentaire</span>
+        </div>
+        <div style="display:flex;height:420px;">
+          <div style="flex:1;padding:20px 28px;background:#fdfcf9;font-size:14px;line-height:1.8;">
+            <div style="font-family:'Caveat';font-weight:700;font-size:22px;border-bottom:2px solid #1a1a1a;padding-bottom:5px;margin-bottom:16px;">PLANCHE 5 / 40</div>
+            <div style="margin-bottom:15px;">
+              <div style="font-weight:700;color:var(--accent,#d62828);letter-spacing:.04em;">CASE 1</div>
+              <div style="color:#4a4a4a;"><i>Description —</i> Rin pénètre dans le sanctuaire abandonné<span style="position:relative;display:inline-block;width:2px;height:15px;background:#1f8a5b;vertical-align:text-bottom;margin:0 1px;"><span style="position:absolute;top:-15px;left:0;font-size:10px;background:#1f8a5b;color:#fff;padding:0 5px;border-radius:3px 3px 3px 0;white-space:nowrap;">Yuki</span></span>, la lumière filtre entre les planches.</div>
+            </div>
+            <div style="margin-bottom:15px;">
+              <div style="font-weight:700;color:var(--accent,#d62828);letter-spacing:.04em;">CASE 2</div>
+              <div><b>RIN</b> — « <span style="background:rgba(42,111,219,.22);border-radius:2px;">Tu savais que je viendrais.</span><span style="position:relative;display:inline-block;width:2px;height:15px;background:#2a6fdb;vertical-align:text-bottom;margin:0 1px;"><span style="position:absolute;top:-15px;left:0;font-size:10px;background:#2a6fdb;color:#fff;padding:0 5px;border-radius:3px 3px 3px 0;white-space:nowrap;">Camille</span></span> »</div>
+            </div>
+            <div>
+              <div style="font-weight:700;color:var(--accent,#d62828);letter-spacing:.04em;">CASE 3</div>
+              <div style="color:#4a4a4a;"><i>Description —</i> Gros plan : une main tendue dans l'ombre…</div>
+            </div>
+          </div>
+          <div style="width:252px;border-left:2px solid #ded8cb;padding:13px 14px;background:#faf8f3;display:flex;flex-direction:column;">
+            <div style="font-weight:700;font-size:13px;margin-bottom:9px;">Collaborateurs en ligne</div>
+            <div style="display:flex;flex-direction:column;gap:7px;font-size:13px;margin-bottom:15px;">
+              <span style="display:flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:#2a6fdb;display:block;"></span>Camille (✒)</span>
+              <span style="display:flex;align-items:center;gap:8px;"><span style="width:9px;height:9px;border-radius:50%;background:#1f8a5b;display:block;"></span>Yuki (🖌)</span>
+            </div>
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Commentaires</div>
+            <div style="border:1.5px solid #ded8cb;border-radius:8px;padding:8px 10px;font-size:12px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><span style="width:18px;height:18px;border-radius:50%;border:1.5px solid #1a1a1a;background:#e7e2d7;display:block;"></span><b>Yuki</b><span style="color:#8a8478;">case 2</span></div>
+              <div style="color:#4a4a4a;line-height:1.3;">On raccourcit la réplique ? Trop long pour la bulle.</div>
+            </div>
+            <div style="margin-top:auto;display:flex;align-items:center;gap:7px;font-size:12px;color:#2a6fdb;"><span style="display:flex;gap:3px;"><span style="width:5px;height:5px;border-radius:50%;background:#2a6fdb;display:block;"></span><span style="width:5px;height:5px;border-radius:50%;background:#2a6fdb;display:block;"></span><span style="width:5px;height:5px;border-radius:50%;background:#2a6fdb;display:block;"></span></span>Camille est en train d'écrire…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: IMPORT FILES -->
+    <div style="flex:none;width:860px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Importer dessins &amp; textes</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ importer images (dessins) &amp; textes/scénarios · puis les lier aux cartes du tableau</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/projets/lames-de-brume/fichiers</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#8a8478;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:9px;">Tout</span><span>Dessins</span><span>Textes</span><span>Scénarios</span>
+          <span style="margin-left:auto;font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">＋ Importer</span>
+        </div>
+        <div style="margin:16px;border:2px dashed #b3aa97;border-radius:9px;background:#faf8f3;padding:22px;text-align:center;">
+          <div style="font-size:30px;color:#b3aa97;line-height:1;">⤓</div>
+          <div style="font-family:'Caveat';font-weight:700;font-size:22px;margin-top:5px;">Glissez vos fichiers ici</div>
+          <div style="font-size:13px;color:#8a8478;margin:3px 0 12px;">images (.png .jpg .psd) · textes (.txt .docx) · scénarios</div>
+          <div style="display:flex;gap:8px;justify-content:center;font-size:13px;flex-wrap:wrap;">
+            <span style="border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 13px;">Parcourir…</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:12px;padding:4px 13px;">Tablette</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:12px;padding:4px 13px;">Lien / URL</span>
+            <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:12px;padding:4px 13px;">Cloud</span>
+          </div>
+        </div>
+        <div style="padding:0 16px 16px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:10px;">Importés récemment</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+            <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+              <div data-tone-fill style="height:92px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;border-bottom:2px solid #1a1a1a;"></div>
+              <div style="padding:7px 9px;"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">ruelle-nemu.png</div><div style="font-size:11px;color:#8a8478;display:flex;gap:6px;align-items:center;margin-top:2px;"><span style="border:1px solid #cfc9bd;border-radius:7px;padding:0 6px;">Dessin</span>2,4 Mo</div><div style="font-size:11px;color:var(--accent,#d62828);margin-top:7px;">＋ Lier à une carte</div></div>
+            </div>
+            <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+              <div data-tone-fill style="height:92px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);border-bottom:2px solid #1a1a1a;"></div>
+              <div style="padding:7px 9px;"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">rin-charadesign.jpg</div><div style="font-size:11px;color:#8a8478;display:flex;gap:6px;align-items:center;margin-top:2px;"><span style="border:1px solid #cfc9bd;border-radius:7px;padding:0 6px;">Dessin</span>1,1 Mo</div><div style="font-size:11px;color:var(--accent,#d62828);margin-top:7px;">＋ Lier à une carte</div></div>
+            </div>
+            <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+              <div style="height:92px;background:#f3f1ec;border-bottom:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;"><span style="font-size:32px;">📄</span></div>
+              <div style="padding:7px 9px;"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">scenario-ch5.docx</div><div style="font-size:11px;color:#8a8478;display:flex;gap:6px;align-items:center;margin-top:2px;"><span style="border:1px solid #cfc9bd;border-radius:7px;padding:0 6px;">Texte</span>48 Ko</div><div style="font-size:11px;color:var(--accent,#d62828);margin-top:7px;">＋ Lier à une carte</div></div>
+            </div>
+            <div style="border:2px solid #1a1a1a;border-radius:7px;overflow:hidden;background:#fff;">
+              <div data-tone-fill style="height:92px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);border-bottom:2px solid #1a1a1a;"></div>
+              <div style="padding:7px 9px;"><div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">couverture-test.png</div><div style="font-size:11px;color:#8a8478;display:flex;gap:6px;align-items:center;margin-top:2px;"><span style="border:1px solid #cfc9bd;border-radius:7px;padding:0 6px;">Dessin</span>3,0 Mo</div><div style="font-size:11px;color:var(--accent,#d62828);margin-top:7px;">＋ Lier à une carte</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: NEMU & CORRECTIONS -->
+    <div style="flex:none;width:1000px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Révision de nemu &amp; corrections</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ annoter le nemu (story-board) avec des épingles · demander une correction ciblée : scénario ou dessin</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:22px;">Nemu · « Lames de Brume » — Planche 3</div>
+          <span style="font-size:12px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:11px;padding:2px 9px;">En révision</span>
+          <div style="flex:1;"></div>
+          <div style="display:flex;align-items:center;"><span style="width:28px;height:28px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span><span style="width:28px;height:28px;border-radius:50%;border:2px solid #1a1a1a;background:#d8d3c8;display:block;margin-left:-9px;"></span></div>
+          <span style="font-size:13px;color:#8a8478;">Camille (✒) &amp; Yuki (🖌)</span>
+        </div>
+        <div style="display:flex;height:470px;">
+          <!-- nemu page -->
+          <div style="flex:1;background:#d9d4ca;display:flex;align-items:center;justify-content:center;padding:18px;">
+            <div style="position:relative;width:330px;height:430px;background:#fff;border:2px solid #1a1a1a;box-shadow:4px 4px 0 rgba(0,0,0,.15);padding:11px;display:flex;flex-direction:column;gap:10px;">
+              <div style="position:relative;flex:1.4;border:2px solid #1a1a1a;border-radius:2px;padding:9px;display:flex;flex-direction:column;justify-content:space-between;">
+                <div style="font-family:'Caveat';font-size:15px;color:#8a8478;">case 1 — plan large, ville sous la pluie</div>
+                <div style="display:flex;flex-direction:column;gap:5px;"><div style="height:7px;width:80%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:55%;background:#e4e0d6;border-radius:4px;"></div></div>
+                <span style="position:absolute;top:-12px;left:-12px;width:26px;height:26px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;box-shadow:1px 1px 0 rgba(0,0,0,.3);">1</span>
+              </div>
+              <div style="flex:1;display:flex;gap:10px;">
+                <div style="position:relative;flex:1;border:2px solid #1a1a1a;border-radius:2px;padding:9px;display:flex;align-items:flex-start;">
+                  <div style="width:78px;height:38px;border:1.5px solid #b3aa97;border-radius:50%;"></div>
+                  <span style="position:absolute;top:-12px;right:-12px;width:26px;height:26px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;box-shadow:1px 1px 0 rgba(0,0,0,.3);">2</span>
+                </div>
+                <div style="flex:1;border:2px solid #1a1a1a;border-radius:2px;padding:9px;display:flex;flex-direction:column;justify-content:flex-end;gap:5px;"><div style="height:7px;width:70%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:45%;background:#e4e0d6;border-radius:4px;"></div></div>
+              </div>
+              <div style="position:relative;flex:1.2;border:2px solid #1a1a1a;border-radius:2px;padding:9px;display:flex;flex-direction:column;justify-content:space-between;">
+                <div style="font-family:'Caveat';font-size:15px;color:#8a8478;">case 3 — silhouette au bout de la ruelle</div>
+                <div style="display:flex;flex-direction:column;gap:5px;"><div style="height:7px;width:60%;background:#e4e0d6;border-radius:4px;"></div></div>
+                <span style="position:absolute;bottom:-12px;right:-12px;width:26px;height:26px;border-radius:50%;background:#3f7a52;color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;box-shadow:1px 1px 0 rgba(0,0,0,.3);">3</span>
+              </div>
+            </div>
+          </div>
+          <!-- corrections panel -->
+          <div style="width:330px;border-left:2px solid #ded8cb;flex:none;display:flex;flex-direction:column;">
+            <div style="padding:12px 14px;border-bottom:1.5px solid #ece8de;">
+              <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Demandes de correction</div>
+              <div style="display:flex;border:1.5px solid #1a1a1a;border-radius:12px;overflow:hidden;font-size:12px;">
+                <span style="flex:1;text-align:center;padding:5px;background:#1a1a1a;color:#fff;">Toutes</span>
+                <span style="flex:1;text-align:center;padding:5px;color:#8a8478;">Scénario</span>
+                <span style="flex:1;text-align:center;padding:5px;color:#8a8478;">Dessin</span>
+              </div>
+            </div>
+            <div style="flex:1;padding:13px 14px;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
+              <div style="display:flex;gap:9px;">
+                <span style="width:24px;height:24px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;">1</span>
+                <div style="flex:1;border:1.5px solid #ded8cb;border-radius:8px;padding:8px 10px;">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:12px;"><b>Camille</b><span style="color:#8a8478;">case 1</span><span style="font-size:11px;background:#1a1a1a;color:#fff;border-radius:9px;padding:0 7px;">Dessin</span><span style="margin-left:auto;font-size:11px;color:var(--accent,#d62828);">À corriger</span></div>
+                  <div style="font-size:13px;color:#4a4a4a;margin-top:4px;line-height:1.3;">Agrandir le plan, on perd l'échelle de la ville.</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:9px;">
+                <span style="width:24px;height:24px;border-radius:50%;background:var(--accent,#d62828);color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;">2</span>
+                <div style="flex:1;border:1.5px solid #ded8cb;border-radius:8px;padding:8px 10px;">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:12px;"><b>Yuki</b><span style="color:#8a8478;">case 2</span><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:9px;padding:0 7px;">Scénario</span><span style="margin-left:auto;font-size:11px;color:#8a8478;">En cours</span></div>
+                  <div style="font-size:13px;color:#4a4a4a;margin-top:4px;line-height:1.3;">Le dialogue est trop long pour la bulle, raccourcir ?</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:9px;">
+                <span style="width:24px;height:24px;border-radius:50%;background:#3f7a52;color:#fff;border:2px solid #1a1a1a;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;">3</span>
+                <div style="flex:1;border:1.5px solid #ded8cb;border-radius:8px;padding:8px 10px;opacity:.75;">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:12px;"><b>Camille</b><span style="color:#8a8478;">case 3</span><span style="font-size:11px;background:#1a1a1a;color:#fff;border-radius:9px;padding:0 7px;">Dessin</span><span style="margin-left:auto;font-size:11px;color:#3f7a52;">✓ Corrigé</span></div>
+                  <div style="font-size:13px;color:#4a4a4a;margin-top:4px;line-height:1.3;">Cadrage parfait, on garde.</div>
+                </div>
+              </div>
+            </div>
+            <div style="padding:11px 14px;border-top:1.5px solid #ece8de;">
+              <div style="border:1.5px solid #cfc9bd;border-radius:8px;background:#f3f1ec;padding:8px 10px;font-size:13px;color:#9a938a;">Décrire la correction…</div>
+              <div style="display:flex;align-items:center;gap:9px;margin-top:9px;font-size:13px;">
+                <span style="color:#8a8478;">Type :</span>
+                <span style="border:1.5px solid #cfc9bd;color:#6f6a5e;border-radius:11px;padding:2px 10px;">○ Scénario</span>
+                <span style="background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 10px;">● Dessin</span>
+                <span style="margin-left:auto;background:var(--accent,#d62828);color:#fff;border-radius:11px;padding:5px 12px;">Demander</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: REORDER PAGES / PUBLISH -->
+    <div style="flex:none;width:1000px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Réorganiser les pages avant publication</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ glisser-déposer pour réordonner les planches · définir la couverture · programmer la sortie · puis publier</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:2px solid #1a1a1a;">
+          <div style="font-family:'Caveat';font-weight:700;font-size:22px;">Lames de Brume — Ch.2 : préparer la publication</div>
+          <span style="font-size:13px;color:#8a8478;">18 planches</span>
+          <div style="flex:1;"></div>
+          <span style="font-size:13px;border:2px solid #1a1a1a;border-radius:13px;padding:5px 13px;">Aperçu</span>
+          <span style="font-size:14px;background:var(--accent,#d62828);color:#fff;border-radius:13px;padding:6px 16px;">Publier ▾</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:2px solid #ded8cb;background:#faf8f3;font-size:13px;flex-wrap:wrap;">
+          <span style="font-weight:700;">Publication :</span>
+          <span style="color:#6f6a5e;">○ Maintenant</span>
+          <span style="background:#1a1a1a;color:#fff;border-radius:11px;padding:3px 11px;">● Programmée</span>
+          <span style="border:1.5px solid #1a1a1a;border-radius:11px;padding:3px 11px;">📅 ven. 21 juin · 18:00</span>
+          <span style="color:#cfc9bd;">|</span>
+          <span style="color:#6f6a5e;">Rythme :</span>
+          <span style="border:1.5px solid #cfc9bd;border-radius:11px;padding:3px 11px;color:#6f6a5e;">1 chapitre / semaine ▾</span>
+          <span data-anno-item style="font-family:'Caveat';font-size:15px;color:var(--accent,#d62828);margin-left:6px;">↳ sorties programmées par projet (date + cadence)</span>
+        </div>
+        <div style="display:flex;gap:16px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#8a8478;align-items:center;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:9px;">Ch. 2</span><span>Ch. 1</span><span>Prologue</span>
+          <span style="margin-left:auto;font-size:13px;">↔ glisser pour réordonner</span>
+        </div>
+        <div style="padding:16px;background:#faf8f3;display:grid;grid-template-columns:repeat(6,1fr);gap:13px;">
+          <div style="position:relative;border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;">
+            <span style="position:absolute;top:5px;left:5px;font-size:9px;font-weight:700;letter-spacing:.04em;background:var(--accent,#d62828);color:#fff;border-radius:8px;padding:1px 6px;z-index:1;">COUVERTURE</span>
+            <div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);"></div>
+            <div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 1</span></div>
+          </div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:9px 9px;"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 2</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 3</span></div></div>
+          <!-- dragging insertion gap -->
+          <div style="border:2px dashed var(--accent,#d62828);border-radius:5px;background:#fdf3f1;display:flex;align-items:center;justify-content:center;height:153px;"><span style="font-size:11px;color:var(--accent,#d62828);transform:rotate(-90deg);white-space:nowrap;">déposer ici</span></div>
+          <!-- lifted card being dragged -->
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;transform:rotate(-4deg);box-shadow:5px 7px 0 rgba(0,0,0,.18);"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:7px 7px;"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:var(--accent,#d62828);letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 5</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(0deg,#1a1a1a22 0 2px,transparent 2px 9px);"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 6</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.4px,transparent 1.5px);background-size:11px 11px;"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 7</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(135deg,#1a1a1a22 0 2px,transparent 2px 8px);"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 8</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:radial-gradient(#1a1a1a33 1.5px,transparent 1.6px);background-size:8px 8px;"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 9</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(90deg,#1a1a1a1c 0 1px,transparent 1px 6px);"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 10</span></div></div>
+          <div style="border:2px solid #1a1a1a;border-radius:5px;overflow:hidden;background:#fff;"><div data-tone-fill style="height:120px;background-color:#efece4;background-image:repeating-linear-gradient(45deg,#1a1a1a22 0 2px,transparent 2px 8px);"></div><div style="display:flex;align-items:center;gap:5px;padding:5px 7px;border-top:1.5px solid #ece8de;"><span style="font-size:13px;color:#b3aa97;letter-spacing:-2px;">⠿</span><span style="font-size:12px;font-weight:700;">P. 11</span></div></div>
+          <div style="border:2px dashed #b3aa97;border-radius:5px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:153px;color:#8a8478;"><span style="font-size:22px;">＋</span><span style="font-size:12px;">Ajouter</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: CONTACTS / CONNECTIONS -->
+    <div style="flex:none;width:720px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Contacts &amp; connexions</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ se connecter aux autres auteurs · demandes de connexion · suggestions · démarrer une discussion</div>
+      <div style="background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;background:#efece4;border-bottom:2px solid #1a1a1a;">
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <span style="width:10px;height:10px;border-radius:50%;border:1.5px solid #1a1a1a;display:block;"></span>
+          <div style="flex:1;margin-left:8px;font-size:13px;color:#7a7468;background:#fff;border:1.5px solid #cfc9bd;border-radius:13px;padding:2px 12px;">encre-et-plume.fr/contacts</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;padding:11px 16px;border-bottom:2px solid #ded8cb;font-size:14px;color:#8a8478;">
+          <span style="color:#1a1a1a;border-bottom:2.5px solid var(--accent,#d62828);padding-bottom:9px;">Contacts <span style="font-size:11px;color:#8a8478;">· 48</span></span>
+          <span style="display:flex;align-items:center;gap:5px;">Demandes <span style="font-size:11px;background:var(--accent,#d62828);color:#fff;border-radius:9px;padding:0 6px;">2</span></span>
+          <span>Suggestions</span>
+          <span style="margin-left:auto;font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:5px 13px;">＋ Ajouter un contact</span>
+        </div>
+        <div style="padding:11px 16px;border-bottom:1.5px solid #ece8de;"><div style="font-size:13px;color:#9a938a;background:#f3f1ec;border:1.5px solid #cfc9bd;border-radius:13px;padding:5px 12px;">Rechercher une personne — nom, rôle, genre, région…</div></div>
+        <div style="padding:12px 16px;border-bottom:1.5px solid #ece8de;background:#faf8f3;">
+          <div style="font-size:12px;font-weight:700;color:#6f6a5e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Demandes de connexion (2)</div>
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:10px;">
+            <span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Maya Leroy</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 7px;">✒ Scénariste</span></div><div style="font-size:12px;color:#8a8478;">2 projets en commun · souhaite se connecter</div></div>
+            <div style="display:flex;gap:7px;flex:none;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:4px 13px;">Accepter</span><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 12px;">Refuser</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;">
+            <span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Rin Tanaka</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinateur</span></div><div style="font-size:12px;color:#8a8478;">a aimé 3 de vos planches · souhaite se connecter</div></div>
+            <div style="display:flex;gap:7px;flex:none;"><span style="font-size:13px;background:#1a1a1a;color:#fff;border-radius:12px;padding:4px 13px;">Accepter</span><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 12px;">Refuser</span></div>
+          </div>
+        </div>
+        <div style="padding:6px 16px 8px;">
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="position:relative;flex:none;"><span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span><span style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:#3f7a52;border:2px solid #fff;"></span></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Yuki Moreau</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinateur</span></div><div style="font-size:12px;color:#8a8478;">Lyon · en ligne · 1 projet en commun</div></div>
+            <div style="display:flex;gap:7px;flex:none;align-items:center;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 13px;">Message</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="position:relative;flex:none;"><span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span><span style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:#3f7a52;border:2px solid #fff;"></span></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Camille Roux</b><span style="font-size:11px;border:1.5px solid #1a1a1a;border-radius:10px;padding:1px 7px;">✒ Scénariste</span></div><div style="font-size:12px;color:#8a8478;">Lyon · en ligne · 4 récits complets</div></div>
+            <div style="display:flex;gap:7px;flex:none;align-items:center;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 13px;">Message</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1.5px solid #ece8de;">
+            <span style="position:relative;flex:none;"><span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span><span style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:#cfc9bd;border:2px solid #fff;"></span></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Théo Marchand</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinateur</span></div><div style="font-size:12px;color:#8a8478;">Paris · vu il y a 2 h</div></div>
+            <div style="display:flex;gap:7px;flex:none;align-items:center;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 13px;">Message</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:11px 0;">
+            <span style="position:relative;flex:none;"><span style="width:40px;height:40px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;"></span><span style="position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:#3f7a52;border:2px solid #fff;"></span></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:7px;"><b style="font-size:14px;">Inès Khelifi</b><span style="font-size:11px;border:1.5px solid var(--accent,#d62828);color:var(--accent,#d62828);border-radius:10px;padding:1px 7px;">🖌 Dessinatrice</span></div><div style="font-size:12px;color:#8a8478;">Paris · en ligne · 1 projet en commun</div></div>
+            <div style="display:flex;gap:7px;flex:none;align-items:center;"><span style="font-size:13px;border:1.5px solid #1a1a1a;border-radius:12px;padding:4px 13px;">Message</span><span style="font-size:16px;color:#8a8478;">⋯</span></div>
+          </div>
+        </div>
+        <div style="padding:12px 16px 16px;border-top:1.5px solid #ece8de;background:#faf8f3;">
+          <div style="font-size:12px;font-weight:700;color:#6f6a5e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Suggestions — personnes à connaître</div>
+          <div style="display:flex;gap:12px;">
+            <div style="flex:1;border:1.5px solid #ded8cb;border-radius:8px;padding:10px;display:flex;align-items:center;gap:9px;">
+              <span style="width:34px;height:34px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+              <div style="flex:1;min-width:0;"><b style="font-size:13px;">Hugo Da Silva</b><div style="font-size:11px;color:#8a8478;">🖌 Dessinateur · Seinen</div></div>
+              <span style="font-size:12px;background:var(--accent,#d62828);color:#fff;border-radius:11px;padding:4px 11px;white-space:nowrap;">＋ Se connecter</span>
+            </div>
+            <div style="flex:1;border:1.5px solid #ded8cb;border-radius:8px;padding:10px;display:flex;align-items:center;gap:9px;">
+              <span style="width:34px;height:34px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+              <div style="flex:1;min-width:0;"><b style="font-size:13px;">Léa Bonnet</b><div style="font-size:11px;color:#8a8478;">✒ Scénariste · Josei</div></div>
+              <span style="font-size:12px;background:var(--accent,#d62828);color:#fff;border-radius:11px;padding:4px 11px;white-space:nowrap;">＋ Se connecter</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FRAME: FLOATING MESSAGE MODULE -->
+    <div style="flex:none;width:660px;">
+      <div style="font-family:'Caveat';font-weight:700;font-size:23px;">Messagerie — module flottant</div>
+      <div data-anno-item style="font-family:'Caveat';font-size:18px;color:var(--accent,#d62828);margin:1px 0 9px;">↳ widget superposé à n'importe quelle page (coin bas-droit) : bulle de lancement + panneau · DM &amp; groupes</div>
+      <div style="position:relative;background:#fff;border:2.5px solid #1a1a1a;border-radius:9px;box-shadow:7px 7px 0 rgba(0,0,0,.13);overflow:hidden;height:520px;">
+        <!-- faded page behind, to show the module floats over content -->
+        <div style="position:absolute;inset:0;background:#faf8f3;">
+          <div style="display:flex;align-items:center;gap:14px;padding:11px 16px;border-bottom:2px solid #e4ded2;opacity:.55;">
+            <div style="display:flex;align-items:center;gap:7px;font-family:'Caveat';font-weight:700;font-size:19px;"><span style="width:14px;height:14px;background:var(--accent,#d62828);border-radius:50% 50% 50% 2px;display:inline-block;"></span>Encre &amp; Plume</div>
+            <div style="display:flex;gap:12px;font-size:13px;color:#9a938a;"><span>Accueil</span><span>Découvrir</span><span>Projets</span></div>
+          </div>
+          <div style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:13px;opacity:.4;">
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:70%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:45%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:60%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:50%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:75%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:40%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:55%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:48%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:68%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:42%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+            <div style="border:2px solid #cfc9bd;border-radius:6px;overflow:hidden;background:#fff;"><div style="height:90px;background:#ece8de;"></div><div style="padding:8px;"><div style="height:8px;width:72%;background:#e4e0d6;border-radius:4px;"></div><div style="height:7px;width:46%;background:#ece8de;border-radius:4px;margin-top:6px;"></div></div></div>
+          </div>
+        </div>
+        <!-- floating panel -->
+        <div style="position:absolute;right:22px;bottom:92px;width:316px;background:#fff;border:2.5px solid #1a1a1a;border-radius:12px;box-shadow:5px 8px 0 rgba(0,0,0,.2);overflow:hidden;">
+          <div style="display:flex;align-items:center;gap:8px;padding:11px 13px;background:#1a1a1a;color:#fff;">
+            <b style="font-size:15px;">Messages</b>
+            <span style="font-size:11px;background:var(--accent,#d62828);border-radius:8px;padding:0 7px;">3</span>
+            <div style="flex:1;"></div>
+            <span style="font-size:12px;color:#cfc9bd;">＋ Groupe</span>
+            <span style="font-size:14px;color:#cfc9bd;">▁</span>
+            <span style="font-size:14px;color:#cfc9bd;">✕</span>
+          </div>
+          <div style="padding:8px 11px;border-bottom:1.5px solid #ece8de;"><div style="font-size:12px;color:#9a938a;background:#f3f1ec;border:1.5px solid #cfc9bd;border-radius:12px;padding:4px 11px;">Rechercher…</div></div>
+          <div style="display:flex;gap:9px;padding:9px 12px;border-bottom:1.5px solid #ece8de;background:#f0ede5;">
+            <span style="position:relative;width:34px;height:34px;flex:none;"><span style="position:absolute;top:0;left:0;width:23px;height:23px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;"></span><span style="position:absolute;bottom:0;right:0;width:23px;height:23px;border-radius:50%;border:2px solid #1a1a1a;background:#d8d3c8;"></span></span>
+            <div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:5px;"><b style="font-size:13px;">Projet · Lames de Brume</b><span style="font-size:9px;border:1.5px solid #1a1a1a;border-radius:7px;padding:0 4px;">groupe</span><span style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--accent,#d62828);"></span></div><div style="font-size:11px;color:#8a8478;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Yuki : nemu planche 4 prêt</div></div>
+          </div>
+          <div style="display:flex;gap:9px;padding:9px 12px;border-bottom:1.5px solid #ece8de;">
+            <span style="width:34px;height:34px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;"><b style="font-size:13px;">Yuki Moreau</b><div style="font-size:11px;color:var(--accent,#d62828);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">en train d'écrire…</div></div>
+          </div>
+          <div style="display:flex;gap:9px;padding:9px 12px;">
+            <span style="width:34px;height:34px;border-radius:50%;border:2px solid #1a1a1a;background:#e7e2d7;display:block;flex:none;"></span>
+            <div style="flex:1;min-width:0;"><b style="font-size:13px;">Léa B.</b><div style="font-size:11px;color:#8a8478;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Partante pour le Seinen ?</div></div>
+          </div>
+        </div>
+        <!-- launcher bubble -->
+        <div style="position:absolute;right:22px;bottom:20px;width:56px;height:56px;border-radius:50%;background:var(--accent,#d62828);border:2.5px solid #1a1a1a;box-shadow:4px 5px 0 rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:23px;color:#fff;">✉</span>
+          <span style="position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;border-radius:10px;background:#1a1a1a;color:#fff;border:2px solid #fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 4px;">3</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;accent&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Rouge encre&quot;, &quot;Bleu nuit&quot;, &quot;Aucun (gris)&quot;], &quot;default&quot;: &quot;Rouge encre&quot;, &quot;tsType&quot;: &quot;string&quot;},
+  &quot;annotations&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;},
+  &quot;screentone&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;}
+}">
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? 'Rouge encre';
+    const map = { 'Rouge encre': '#d62828', 'Bleu nuit': '#1d3a8a', 'Aucun (gris)': '#4a4a4a' };
+    const anno = (this.props.annotations ?? true) ? 'on' : 'off';
+    const tone = (this.props.screentone ?? true) ? 'on' : 'off';
+    return {
+      accentVar: map[accent] || '#d62828',
+      annoState: anno,
+      toneState: tone,
+    };
+  }
+}
+</script>
+</body>
+</html>

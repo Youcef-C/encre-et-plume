@@ -8,7 +8,8 @@ Reader (lecteur·rice), Writer (scénariste), Illustrator (dessinateur·rice), P
 ## Tech stack
 - **Web:** Next.js (App Router, React/TypeScript) + Tailwind CSS — `apps/web`.
 - **API:** NestJS (REST + WebSocket gateway) — `apps/api`.
-- **DB:** PostgreSQL via Prisma. **Payments:** Stripe.
+- **DB:** PostgreSQL via Prisma. **Cache / sessions / pub-sub:** Redis (via `ioredis`) — back rate-limiting, token/session denylists, feed & match caches, and WS fan-out here. **Payments:** Stripe.
+- **Local infra:** `docker-compose.yml` at the root runs Postgres + Redis for dev/CI; connection via `DATABASE_URL` / `REDIS_URL`.
 - **Tests:** Jest (API), Vitest + React Testing Library (web units), Playwright (e2e).
 - **Monorepo:** pnpm workspaces + Turborepo; shared TS contracts in `packages/shared`.
 
@@ -55,5 +56,13 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 - **Design system** — manga-zine identity: Anton (display) + Zen Kaku Gothic New (body), ink `#16130f` /
   paper `#f1ece1` / accent red `#e8261c`, halftone textures, bold borders, hard offset shadows. Reuse
   tokens/components in `apps/web`; don't reinvent them. Accessibility basics are required, not optional.
+- **Prototype fidelity** — the frontend must visually match the interactive prototype, not ship bare
+  scaffolding. The source of truth is **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**
+  (plus `Wireframes - Encre et Plume.dc.html` for low-fi layout and `Pitch Maison d'Édition …` for vision).
+  Before building a screen, read the matching section of that prototype (grep it for the screen's French
+  label or `id`) and mirror its layout, components, tokens (`:root` defines `--paper/--card/--ink/--border/
+  --accent/--accent-soft/--tone/--shadow/--dot`, full light+dark palettes), and verbatim French copy.
+  Build real layout/spacing and all states (hover, empty, loading, error). `Explicit` screens should look
+  like the finished prototype page; `Inferred` ones still use the design system. Lean on `frontend-design`.
 - **Handoff discipline** — each agent reads its inputs from `.claude/pipeline/<ID>/` and writes its named
   artifact there; don't skip the artifact.
