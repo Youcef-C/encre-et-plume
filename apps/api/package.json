@@ -4,6 +4,7 @@
   "private": true,
   "description": "NestJS 11 backend (REST + WS, Prisma 6).",
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "nest build",
     "dev": "nest start --watch",
     "lint": "eslint src",
