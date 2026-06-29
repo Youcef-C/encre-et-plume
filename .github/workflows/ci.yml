@@ -34,7 +34,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.detect.outputs.has_app == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node ${{ env.NODE_VERSION }}
         if: steps.detect.outputs.has_app == 'true'
@@ -94,7 +94,7 @@ jobs:
 
       - name: Setup pnpm
         if: steps.webcheck.outputs.ok == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node ${{ env.NODE_VERSION }}
         if: steps.webcheck.outputs.ok == 'true'
