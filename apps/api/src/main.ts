@@ -1,10 +1,22 @@
 import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
-import { resolve } from 'node:path';
-// Local dev: load the monorepo-root .env (cwd is apps/api when run via pnpm), then an optional
-// apps/api/.env. No-op when absent (prod/CI inject env directly); never overrides already-set vars.
-loadEnv({ path: resolve(process.cwd(), '../../.env') });
-loadEnv();
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+// Local dev: find and load the nearest .env walking up from cwd, then __dirname (cwd varies between
+// `pnpm --filter` and `turbo run dev`). No-op in prod/CI where env is injected; never overrides set vars.
+function findEnv(start: string): string | undefined {
+  let dir = start;
+  for (let i = 0; i < 6; i++) {
+    const candidate = resolve(dir, '.env');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+const envPath = findEnv(process.cwd()) ?? findEnv(__dirname);
+if (envPath) loadEnv({ path: envPath });
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
