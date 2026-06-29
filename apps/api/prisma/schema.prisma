@@ -22,6 +22,7 @@ model Account {
   email        String   @unique
   passwordHash String
   role         Role     @default(utilisateur)
+  verified     Boolean  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
   profileSlug  String   @unique
   avatar       String?
   createdAt    DateTime @default(now())

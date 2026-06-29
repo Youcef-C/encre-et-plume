@@ -6,6 +6,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "build": "nest build",
+    "start": "node dist/apps/api/src/main.js",
     "dev": "nest start --watch",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",

@@ -89,6 +89,7 @@ export class AuthService {
       displayName: account.displayName,
       email: account.email,
       role: account.role as AccountSummary['role'],
+      verified: account.verified,
       slug: account.profileSlug,
       avatar: account.avatar,
       createdAt: account.createdAt.toISOString(),

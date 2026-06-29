@@ -29,7 +29,11 @@ story's acceptance criteria are met. You do not pass anything you have not actua
   (+ the `Wireframes …` board). Grep it for the screen's French label / `id` to find the reference design.
 
 ## What to do
-1. Run the existing suites: Jest (`apps/api`), Vitest+RTL (`apps/web`). Capture output.
+0. **Run the full CI command set first**, on **Node 24** (`nvm use` reads `.nvmrc`=24): `pnpm lint`,
+   `pnpm typecheck`, `pnpm build`, `pnpm test`. These are exactly what CI runs — any failure here is a
+   FAIL, even if the feature behaves. Capture each command's exit code in the report (CI lint/build gaps
+   have slipped through before when only `test` was run).
+1. Run the per-package suites for detail: Jest (`apps/api`), Vitest+RTL (`apps/web`). Capture output.
 2. Add the missing coverage, especially a **Playwright e2e** that walks the story's acceptance flow
    end-to-end against the running stack. Cover error/empty/role-gated paths the story specifies.
 3. Start the app (`run`) and verify (`verify`) the behavior for criteria that need a live check.

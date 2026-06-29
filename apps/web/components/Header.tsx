@@ -1,10 +1,13 @@
 'use client';
 
 // F-1 slice of the header: logo + "Se connecter" (logged-out) | avatar + "Se déconnecter" (logged-in).
+// F-2 adds: role-gated dropdown links, editor banner anchor, demo role switcher.
 // F-4 will add full nav links, search, and the complete avatar dropdown.
 import Link from 'next/link';
 import { useState, useRef, useEffect } from 'react';
 import { useSession } from '../lib/session';
+import { useEffectiveRole } from '../lib/role';
+import type { UserRole } from '@encre-et-plume/shared';
 
 // Avatar initials fallback (halftone-dot texture matches prototype avatar placeholder)
 function AvatarFallback({ name }: { name: string }) {
@@ -39,8 +42,24 @@ function AvatarFallback({ name }: { name: string }) {
   );
 }
 
+// ponytail: config array keeps role-gating in one place, no per-link copy/paste
+const ROLE_LINKS: { role: UserRole; href: string; label: string; icon: string }[] = [
+  { role: 'maintainer', href: '/espace-redaction', label: 'Espace rédaction', icon: '✍' },
+  { role: 'editor',     href: '/espace-editeur',   label: 'Espace éditeur',   icon: '◆' },
+  { role: 'admin',      href: '/admin',             label: 'Panneau admin',    icon: '⚙' },
+];
+
+// Demo role labels matching prototype copy verbatim
+const DEMO_ROLES: { role: UserRole; label: string }[] = [
+  { role: 'utilisateur', label: 'Lecteur' },
+  { role: 'maintainer',  label: 'Rédacteur' },
+  { role: 'editor',      label: 'Éditeur' },
+  { role: 'admin',       label: 'Admin' },
+];
+
 export default function Header() {
   const { account, loading, logout } = useSession();
+  const { effectiveRole, setSimulatedRole } = useEffectiveRole();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +74,8 @@ export default function Header() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
+
+  const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
 
   return (
     <header
@@ -169,7 +190,7 @@ export default function Header() {
                 top: 50,
                 right: 0,
                 zIndex: 50,
-                width: 200,
+                width: 220,
                 background: 'var(--card)',
                 border: '3px solid var(--ink)',
                 borderRadius: 8,
@@ -193,6 +214,91 @@ export default function Header() {
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{account.displayName}</div>
                   <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{account.role}</div>
                 </div>
+              </div>
+
+              {/* Role-gated links — hidden (not disabled) when role lacks access */}
+              {gatedLinks.map(({ href, label, icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 9,
+                    padding: '10px 13px',
+                    borderBottom: '1.5px solid var(--border)',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    background: 'var(--accent-soft)',
+                    color: 'var(--ink)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span style={{ width: 18, textAlign: 'center' }}>{icon}</span>
+                  {label}
+                </Link>
+              ))}
+
+              {/* Demo role switcher */}
+              <div
+                style={{
+                  padding: '10px 13px',
+                  borderBottom: '2px solid var(--border)',
+                  background: 'var(--paper)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    color: 'var(--ink2)',
+                    marginBottom: 7,
+                  }}
+                >
+                  MODE DÉMO · RÔLE{' '}
+                  <strong style={{ color: 'var(--accent)' }}>
+                    {DEMO_ROLES.find((r) => r.role === effectiveRole)?.label ?? effectiveRole}
+                  </strong>
+                </div>
+                <fieldset
+                  role="group"
+                  aria-label="Changer de rôle (démo)"
+                  style={{
+                    border: 'none',
+                    padding: 0,
+                    margin: 0,
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 5,
+                  }}
+                >
+                  {DEMO_ROLES.map(({ role, label }) => (
+                    <button
+                      key={role}
+                      type="button"
+                      aria-label={label}
+                      aria-pressed={effectiveRole === role}
+                      onClick={() => setSimulatedRole(role === effectiveRole ? null : role)}
+                      style={{
+                        textAlign: 'center',
+                        border: `2px solid ${effectiveRole === role ? 'var(--accent)' : 'var(--ink)'}`,
+                        borderRadius: 6,
+                        padding: '5px 4px',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: effectiveRole === role ? 'var(--accent-soft)' : 'var(--card)',
+                        color: 'var(--ink)',
+                        fontFamily: 'var(--font-body)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </fieldset>
               </div>
 
               {/* Logout action */}

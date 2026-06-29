@@ -14,8 +14,13 @@ async function bootstrap() {
   // Input validation at trust boundary — never trust client data
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false }));
 
-  // CORS: web origin only, cookies included (D3)
-  const webOrigin = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3000';
+  // CORS: allow the web app origin(s) with credentials so the httpOnly session cookie flows (D3).
+  // Must be the WEB origin (e.g. http://localhost:3000), NOT the API URL. Comma-separated WEB_ORIGIN
+  // supports multiple origins (e.g. local + preview deploys).
+  const webOrigin = (process.env['WEB_ORIGIN'] ?? 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.enableCors({ origin: webOrigin, credentials: true });
 
   const port = Number(process.env['API_PORT'] ?? 3001);

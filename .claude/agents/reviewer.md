@@ -33,7 +33,10 @@ write a verdict that either ships the story or sends it back to the Manager with
 - The QA report shows a FAIL/BLOCKED, or its PASS claims aren't backed by real evidence.
 - A blocking correctness or **security** issue exists (broken authz, missing validation at a trust
   boundary, leaked secret, money-path error).
-- The build, typecheck, lint, or tests don't actually pass.
+- The build, typecheck, lint, or tests don't actually pass. **Run the full CI command set yourself on
+  Node 24** (`nvm use` → `.nvmrc`=24): `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test` — these are
+  what CI runs; a non-zero exit in ANY is blocking (don't trust QA's prose; re-run). A green `pnpm test`
+  with a red `pnpm lint`/`pnpm build` is still a FAIL.
 - **Design fidelity:** the frontend doesn't match the prototype — wrong/absent design tokens or fonts,
   unstyled "scaffold"-looking UI, layout that materially diverges from the prototype, or non-verbatim
   French copy. Treat a material divergence on an `Explicit` screen as **blocking**; minor polish gaps on

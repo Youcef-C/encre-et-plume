@@ -20,11 +20,18 @@ export interface AccountSummary {
   displayName: string;
   email: string;
   role: UserRole;
+  /** Admin-set editor verification flag (F-2/AD-3). Always present; only meaningful when role === 'editor'. */
+  verified: boolean;
   /** Unique profile slug minted from displayName at sign-up; routes use it (e.g. /yuki-moreau). */
   slug: string;
   /** Avatar URL or null when none is set yet. */
   avatar: string | null;
   createdAt: string; // ISO 8601
+}
+
+/** PATCH /accounts/{id}/role body — admin-only role change (F-2). */
+export interface UpdateRoleRequest {
+  role: UserRole;
 }
 
 /** POST /auth/signup body. Credential confirmed as email/password (see plan decision D1). */

@@ -28,10 +28,15 @@ Manager on a blocking FAIL, capped at 3 rounds. Announce each story as you start
 "[3/65] DR-3 — Work page…").
 
 Then record the outcome in `_batch.json`:
-- **PASS** → `passed`. **Commit & push the completed feature** before moving on: stage the story's work,
-  commit on the current branch (`develop`) with a message like `feat(<ID>): <story title>` (English, ending
-  with the standard `Co-Authored-By` trailer), and `git push origin <branch>`. If the push fails (no
-  network/auth), report it and keep going — don't block the batch. Then continue to the next story.
+- **PASS** → `passed`. **Commit & push the completed feature** before moving on. FIRST, run the full CI
+  command set yourself on Node 24 and confirm every one is green — **never push red**:
+  `pnpm lint && pnpm typecheck && pnpm build && pnpm test` (these are exactly what CI runs; `pnpm test`
+  passing is NOT enough — lint/typecheck/build have each broken CI on their own). Only when all pass: stage
+  the story's work, commit on `develop` with `feat(<ID>): <story title>` (English, standard `Co-Authored-By`
+  trailer), and `git push origin develop`. If any CI command is red, treat it like a reviewer blocker (fix
+  it or loop back) rather than pushing. If the push itself fails (network/auth), report and keep going.
+  Then continue to the next story. (Clear a stale `apps/web/.next` before `pnpm build` if it errors on
+  `/_not-found` — that's a local cache artifact, not a code failure.)
 - **FAIL after 3 rounds** → `failed`. Do **not** halt the whole batch. Mark every not-yet-built story
   that lists this story in its `[[dependencies]]` (directly or transitively) as `skipped` — they can't
   be built on a broken dependency — and continue with the rest. (Don't commit a failed story's WIP.)

@@ -11,6 +11,7 @@ const MOCK_ACCOUNT = {
   email: 'yuki@test.com',
   passwordHash: '',
   role: 'utilisateur' as const,
+  verified: false,
   profileSlug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date('2026-01-01'),
@@ -160,6 +161,12 @@ describe('AuthService', () => {
       expect(result.id).toBe('cuid-1');
       expect(result.slug).toBe('yuki-moreau');
       expect(result.role).toBe('utilisateur');
+    });
+
+    it('surfaces verified:false on a fresh account (BE-AC2)', async () => {
+      prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);
+      const result = await service.me('cuid-1');
+      expect(result.verified).toBe(false);
     });
 
     it('throws 401 if account not found', async () => {
