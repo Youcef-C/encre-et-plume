@@ -16,7 +16,16 @@
     },
     "e2e": {
       "dependsOn": ["^build"],
-      "outputs": ["playwright-report/**"]
+      "outputs": ["playwright-report/**"],
+      "passThroughEnv": [
+        "CI",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "JWT_SECRET",
+        "API_PORT",
+        "WEB_ORIGIN",
+        "NEXT_PUBLIC_API_URL"
+      ]
     },
     "dev": {
       "cache": false,

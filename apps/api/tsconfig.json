@@ -12,10 +12,7 @@
     "declaration": true,
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "baseUrl": ".",
-    "paths": {
-      "@encre-et-plume/shared": ["../../packages/shared/src/index.ts"]
-    }
+    "rootDir": "./src"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

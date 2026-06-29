@@ -84,6 +84,8 @@ export class AuthController {
   }
 
   private async rateLimit(key: string): Promise<void> {
+    // ponytail: skip in e2e so auth.spec.ts doesn't exhaust the 10/15-min limit across runs
+    if (process.env['DISABLE_RATE_LIMIT'] === 'true') return;
     const count = await this.redis.incr(`rl:${key}`);
     if (count === 1) await this.redis.expire(`rl:${key}`, RL_WINDOW_SECS);
     if (count > RL_LIMIT) {

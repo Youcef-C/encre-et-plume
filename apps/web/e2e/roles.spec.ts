@@ -6,37 +6,30 @@
  *   FE-AC4/6        — editor banner + verified pill (pill absent for new account verified=false)
  *   BE-AC2/3/4/5/6/7 — /auth/me verified field, PATCH /accounts/:id/role authz
  *
- * Both the API (port 3001) and Next.js (port 3000) must already be running.
- * DB: postgresql://postgres:postgres@localhost:5433/encre_et_plume
- *
- * Note on rate limiting: POST /auth/signup is rate-limited (10/15 min per IP).
- * BE tests use login with seeded accounts; FE tests mock GET /auth/me via page.route().
+ * Accounts are seeded in beforeAll via global-setup.ts (Prisma, no signup rate-limit hit).
+ * DB connection and API base come from env vars — no hardcoded hosts/ports.
  */
 
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
-const API = 'http://localhost:3001';
-const DB = 'postgresql://postgres:postgres@localhost:5433/encre_et_plume';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const PASSWORD = 'password123';
 
-/**
- * Seeded test accounts — created in prior test runs, password: 'password123'.
- * Using fixed DB rows avoids the signup rate limit.
- */
-const ACCOUNTS = {
-  UTILISATEUR: { email: 'qa_f2_1782771320430_2xwji@test.com', id: 'cmqzs0jdt000kz4mwqwhj3vt3' },
-  TARGET:      { email: 'qa_f2_1782771321534_e2xkz@test.com', id: 'cmqzs0jvf000mz4mwu91qk53l' },
-  ADMIN:       { email: 'qa_f2_1782771322131_5umwz@test.com', id: 'cmqzs0kbv000oz4mwm2fipeaj' },
-  EDITOR:      { email: 'qa_f2_1782771322865_vcpwl@test.com', id: 'cmqzs0kz0000qz4mw5qzse1ff' },
-  ADMIN2:      { email: 'qa_f2_1782771323639_bqxwr@test.com', id: 'cmqzs0lje000sz4mwv2op5kbl' },
-  ADMIN3:      { email: 'qa_f2_1782771324416_0aqe0@test.com', id: 'cmqzs0m33000uz4mw2lmu8by2' },
-  FRESH:       { email: 'qa_f2_1782771325098_v16s4@test.com', id: 'cmqzs0mme000wz4mwds1b09u2' },
-};
+// Loaded at module scope after globalSetup has written the file.
+const ACCOUNTS: Record<string, { email: string; id: string }> = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '.e2e-accounts.json'), 'utf8'),
+);
 
-/** Direct DB role elevation — simulates the privileged bootstrapping path for test seeding */
+// Path to the Prisma-based role-setter script (no psql, no hardcoded DB URL).
+const SET_ROLE_SCRIPT = path.join(__dirname, '../../api/prisma/e2e-set-role.js');
+
+/** Update an account's role directly via Prisma. Synchronous (execFileSync waits for exit). */
 function dbSetRole(id: string, role: string) {
-  execSync(`psql "${DB}" -c "UPDATE \\"Account\\" SET role='${role}' WHERE id='${id}'"`, {
+  execFileSync('node', [SET_ROLE_SCRIPT, id, role], {
+    env: { ...process.env },
     stdio: 'ignore',
   });
 }

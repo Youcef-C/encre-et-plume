@@ -18,6 +18,8 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
+# E2e seed data written by global-setup.ts — must not be committed
+apps/web/e2e/.e2e-accounts.json
 
 # Prisma
 prisma/*.db
@@ -41,6 +43,10 @@ pnpm-debug.log*
 
 # Claude pipeline scratch (per-story working artifacts: plan/notes/qa/review/state/ledger)
 .claude/pipeline/
+
+# Stray compiled output must never land in shared/src — build emits to packages/shared/dist/
+packages/shared/src/*.js
+packages/shared/src/*.d.ts
 
 # Design prototype — keep the .dc.html design references in repo; drop heavy editor artifacts
 Manga creator collaboration platform/Encre et Plume.html
