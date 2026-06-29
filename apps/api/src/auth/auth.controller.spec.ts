@@ -3,7 +3,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 // TypeScript-idiomatic CommonJS import that preserves the call signature
 import request = require('supertest');
 // ponytail: require() avoids the CommonJS/ESM default-import TS mismatch for cookie-parser
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const cookieParser = require('cookie-parser') as typeof import('cookie-parser');
 import { JwtService } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
