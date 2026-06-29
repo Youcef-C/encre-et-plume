@@ -1,4 +1,10 @@
 import 'reflect-metadata';
+import { config as loadEnv } from 'dotenv';
+import { resolve } from 'node:path';
+// Local dev: load the monorepo-root .env (cwd is apps/api when run via pnpm), then an optional
+// apps/api/.env. No-op when absent (prod/CI inject env directly); never overrides already-set vars.
+loadEnv({ path: resolve(process.cwd(), '../../.env') });
+loadEnv();
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
