@@ -83,3 +83,9 @@ export const search = (q: string, scope?: SearchResultType): Promise<SearchRespo
   request<SearchResponse>(
     `/search?q=${encodeURIComponent(q)}${scope ? `&scope=${scope}` : ''}`,
   );
+
+// ─── Queue health (F-8, admin only) ──────────────────────────────────────────
+import type { QueueHealthResponse } from '@encre-et-plume/shared';
+
+export const getQueueHealth = (): Promise<QueueHealthResponse> =>
+  request<QueueHealthResponse>('/admin/queues/health');
