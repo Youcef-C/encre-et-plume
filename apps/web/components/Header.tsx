@@ -1,9 +1,10 @@
 'use client';
 
-// F-1 slice: logo + "Se connecter" / avatar + "Se déconnecter"
+// F-1 slice: logo + "Se connecter" / avatar + "Déconnexion"
 // F-2 adds: role-gated dropdown links, demo role switcher
 // F-4 adds: primary nav, search entry point, full avatar dropdown, unread badge,
 //           contextual "＋ Poster" button, keyboard a11y
+// Header structure mirrors prototype TOP NAV section exactly.
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -11,14 +12,14 @@ import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
 import { useUnreadCount, useUnreadCounts } from '../lib/unread';
 import { useTheme } from '../lib/theme';
-import PosterButton from './PosterButton';
 import CountBadge from './CountBadge';
 import SearchOverlay from './SearchOverlay';
 // ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
 import type { UserRole } from '@encre-et-plume/shared';
 
-// Avatar initials fallback (halftone-dot texture matches prototype avatar placeholder)
-function AvatarFallback({ name }: { name: string }) {
+// Avatar initials fallback with halftone-dot texture.
+// size prop lets the dropdown header reuse it at 34px vs nav button at 40px.
+function AvatarFallback({ name, size = 40 }: { name: string; size?: number }) {
   const initials = name
     .split(' ')
     .map((w) => w[0] ?? '')
@@ -29,10 +30,10 @@ function AvatarFallback({ name }: { name: string }) {
     <span
       aria-hidden="true"
       style={{
-        width: 38,
-        height: 38,
+        width: size,
+        height: size,
         borderRadius: '50%',
-        border: '2px solid #fff',
+        border: size >= 40 ? '3px solid #fff' : '2px solid var(--ink)',
         background: 'var(--tone)',
         backgroundImage: 'radial-gradient(var(--ink) 1.4px, transparent 1.5px)',
         backgroundSize: '5px 5px',
@@ -40,7 +41,7 @@ function AvatarFallback({ name }: { name: string }) {
         alignItems: 'center',
         justifyContent: 'center',
         fontFamily: 'var(--font-display)',
-        fontSize: 14,
+        fontSize: size >= 40 ? 14 : 12,
         color: 'var(--ink)',
         flexShrink: 0,
       }}
@@ -65,18 +66,19 @@ const DEMO_ROLES: { role: UserRole; label: string }[] = [
   { role: 'admin',       label: 'Admin' },
 ];
 
-// §5 locked route map — DO NOT invent routes
+// §prototype TOP NAV: seven primary nav links in exact order.
+// Galerie/Actualités/Trouver/Calendrier 404 until their epics land — render anyway per replica.
 const NAV_LINKS = [
-  { href: '/',              label: 'Accueil'   },
-  { href: '/decouvrir',     label: 'Découvrir' },
-  { href: '/lire',          label: 'Lire'      },
-  { href: '/ecrire',        label: 'Écrire'    },
-  { href: '/tableau-de-bord', label: 'Projets' },
-  { href: '/contacts',      label: 'Messages'  },
+  { href: '/',           label: 'Accueil'    },
+  { href: '/decouvrir',  label: 'Découvrir'  },
+  { href: '/galerie',    label: 'Galerie'    },
+  { href: '/actualites', label: 'Actualités' },
+  { href: '/lire',       label: 'Lire'       },
+  { href: '/trouver',    label: 'Trouver'    },
+  { href: '/calendrier', label: 'Calendrier' },
 ] as const;
 
-// Contextual "＋ Poster" button shown only on these paths
-const POSTER_PAGES = new Set(['/decouvrir']);
+// ponytail: POSTER_PAGES / PosterButton removed — user confirmed no poster button in nav
 
 // Shared menuitem link style (avoids repetition inside the large render)
 const menuItemStyle: React.CSSProperties = {
@@ -86,9 +88,12 @@ const menuItemStyle: React.CSSProperties = {
   padding: '10px 13px',
   borderBottom: '1.5px solid var(--border)',
   fontSize: 14,
+  fontWeight: 500,
   color: 'var(--ink)',
   textDecoration: 'none',
 };
+
+const iconStyle: React.CSSProperties = { width: 18, textAlign: 'center' };
 
 export default function Header() {
   const { account, loading, logout } = useSession();
@@ -99,11 +104,16 @@ export default function Header() {
   const { counts } = useUnreadCounts();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
 
   const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
+
+  // Role display for dropdown user-info header (real account role, not simulated)
+  const roleIcon  = account ? (ROLE_LINKS.find(l => l.role === account.role)?.icon ?? '☆') : '';
+  const roleLabel = account ? (DEMO_ROLES.find(r => r.role === account.role)?.label ?? account.role) : '';
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -153,33 +163,31 @@ export default function Header() {
 
   return (
     <header
+      className="ep-header"
       style={{
         position: 'sticky',
         top: 0,
         zIndex: 30,
         display: 'flex',
         alignItems: 'center',
-        gap: 22,
-        padding: '12px 28px',
         backgroundColor: 'var(--card)',
         backgroundImage: 'linear-gradient(112deg, transparent 73%, var(--ink) 73%)',
         backgroundSize: '100% 100%',
         borderBottom: '3px solid var(--ink)',
       }}
     >
-      {/* Logo */}
+      {/* Logo — font-size 27px, gap 9px per prototype */}
       <Link
         href="/"
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: 9,
           textDecoration: 'none',
           color: 'var(--ink)',
           flexShrink: 0,
         }}
       >
-        {/* Accent-filled icon blob matching prototype logo */}
         <span
           style={{
             width: 30,
@@ -192,10 +200,10 @@ export default function Header() {
           }}
         />
         <span
+          className="ep-logo-text"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 22,
-            letterSpacing: '0.06em',
+            letterSpacing: '0.02em',
             textTransform: 'uppercase',
           }}
         >
@@ -203,8 +211,31 @@ export default function Header() {
         </span>
       </Link>
 
-      {/* Primary nav — F-4 Task 1 */}
-      <nav aria-label="Navigation principale" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {/* Mobile hamburger — shown only ≤1024px via CSS (.ep-hamburger) */}
+      <button
+        type="button"
+        className="ep-hamburger"
+        aria-label="Ouvrir la navigation"
+        aria-expanded={mobileNavOpen}
+        aria-controls="ep-mobile-nav"
+        onClick={() => setMobileNavOpen((o) => !o)}
+        style={{
+          width: 40,
+          height: 40,
+          border: '2px solid var(--ink)',
+          borderRadius: 6,
+          background: 'var(--card)',
+          color: 'var(--ink)',
+          fontSize: 18,
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        {mobileNavOpen ? '✕' : '☰'}
+      </button>
+
+      {/* Primary nav — 7 items per prototype TOP NAV (desktop; hidden ≤1024px) */}
+      <nav aria-label="Navigation principale" className="ep-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 700 }}>
         {NAV_LINKS.map(({ href, label }) => {
           const isActive = pathname === href;
           return (
@@ -212,74 +243,78 @@ export default function Header() {
               key={href}
               href={href}
               aria-current={isActive ? 'page' : undefined}
+              className="ep-nav-link"
               style={{
-                padding: '6px 10px',
+                padding: '8px 14px',
                 borderRadius: 6,
-                fontSize: 14,
-                fontWeight: 700,
-                color: 'var(--ink)',
                 textDecoration: 'none',
-                letterSpacing: '0.02em',
-                borderBottom: isActive ? '2.5px solid var(--accent)' : '2.5px solid transparent',
-                transition: 'background 0.1s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
               }}
             >
               {label}
-              {href === '/contacts' && (
-                <CountBadge
-                  count={counts.messages}
-                  label={`${counts.messages} messages non lus`}
-                />
-              )}
             </Link>
           );
         })}
       </nav>
 
+      {/* Mobile nav drawer — shown ≤1024px when toggled; replicates the same 7 links + search */}
+      {mobileNavOpen && (
+        <nav id="ep-mobile-nav" className="ep-mobile-nav" aria-label="Navigation principale (mobile)">
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={pathname === href ? 'page' : undefined}
+              className="ep-mobile-nav-link"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              {label}
+            </Link>
+          ))}
+          <button
+            type="button"
+            className="ep-mobile-nav-link"
+            onClick={() => {
+              setMobileNavOpen(false);
+              setSearchOpen(true);
+            }}
+          >
+            ⌕ Rechercher…
+          </button>
+        </nav>
+      )}
+
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Search entry point — F-7 wires the overlay */}
+      {/* Search — full pill with placeholder text per prototype; clicks open F-7 overlay */}
       <button
         ref={searchButtonRef}
         aria-label="Rechercher"
         aria-haspopup="dialog"
         aria-expanded={searchOpen}
         onClick={() => setSearchOpen(true)}
+        className="ep-search-btn ep-search-desktop"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 7,
-          padding: '7px 12px',
+          padding: '7px 14px',
           border: '2px solid var(--ink)',
           borderRadius: 6,
-          background: 'var(--card)',
           color: 'var(--ink2)',
           fontSize: 13,
-          cursor: 'pointer',
+          fontWeight: 500,
+          cursor: 'text',
           fontFamily: 'var(--font-body)',
           flexShrink: 0,
+          minWidth: 210,
         }}
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        Rechercher…
+        <span>⌕</span>
+        Rechercher un titre, un·e auteur·rice…
       </button>
 
-      {/* F-7 search overlay — rendered at header level so it overlays the full viewport */}
+      {/* F-7 search overlay */}
       <SearchOverlay
         open={searchOpen}
         onClose={() => {
@@ -288,17 +323,56 @@ export default function Header() {
         }}
       />
 
-      {/* Contextual "＋ Poster" button — F-4 Task 6 */}
-      {POSTER_PAGES.has(pathname) && <PosterButton />}
+      {/* ♥ Ma liste + Projets — logged-in only per user requirement */}
+      {account && (
+        <>
+          <Link
+            href="/ma-liste"
+            aria-label="Ma liste"
+            aria-current={pathname === '/ma-liste' ? 'page' : undefined}
+            title="Ma liste &amp; coups de cœur"
+            className="ep-pill-btn ep-pill-desktop"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 6,
+              border: '2px solid #fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 16,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            ♥
+          </Link>
+          <Link
+            href="/tableau-de-bord"
+            aria-current={pathname === '/tableau-de-bord' ? 'page' : undefined}
+            className="ep-pill-btn ep-pill-desktop"
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              padding: '9px 16px',
+              border: '2px solid #fff',
+              borderRadius: 6,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            Projets
+          </Link>
+        </>
+      )}
 
       {/* Auth surface */}
       {loading ? (
-        // Skeleton placeholder while session loads
         <div
           aria-hidden="true"
           style={{
-            width: 38,
-            height: 38,
+            width: 40,
+            height: 40,
             borderRadius: '50%',
             background: 'var(--tone)',
             border: '2px solid var(--border)',
@@ -333,26 +407,25 @@ export default function Header() {
               <img
                 src={account.avatar}
                 alt={account.displayName}
-                width={38}
-                height={38}
+                width={40}
+                height={40}
                 style={{
                   borderRadius: '50%',
-                  border: '2px solid #fff',
+                  border: '3px solid #fff',
                   objectFit: 'cover',
                 }}
               />
             ) : (
-              <AvatarFallback name={account.displayName} />
+              <AvatarFallback name={account.displayName} size={40} />
             )}
-            {/* Unread badge on avatar — F-4 Task 4
-                ponytail: stub 0; F-5 replaces via UnreadContext */}
+            {/* Unread badge on avatar — F-4 Task 4 / F-5 real count */}
             {unreadCount > 0 && (
               <span
                 aria-hidden="true"
                 style={{
                   position: 'absolute',
-                  top: -3,
-                  right: -3,
+                  top: -6,
+                  right: -6,
                   minWidth: 18,
                   height: 18,
                   borderRadius: 9,
@@ -364,7 +437,7 @@ export default function Header() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '0 3px',
-                  border: '2px solid var(--card)',
+                  border: '2px solid #fff',
                   lineHeight: 1,
                 }}
               >
@@ -382,7 +455,7 @@ export default function Header() {
                 top: 50,
                 right: 0,
                 zIndex: 50,
-                width: 240,
+                width: 236,
                 background: 'var(--card)',
                 border: '3px solid var(--ink)',
                 borderRadius: 8,
@@ -390,7 +463,7 @@ export default function Header() {
                 overflow: 'hidden',
               }}
             >
-              {/* User info */}
+              {/* User info header */}
               <div
                 style={{
                   display: 'flex',
@@ -401,38 +474,40 @@ export default function Header() {
                   background: 'var(--paper)',
                 }}
               >
-                <AvatarFallback name={account.displayName} />
+                <AvatarFallback name={account.displayName} size={34} />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{account.displayName}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{account.role}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{roleIcon} {roleLabel}</div>
                 </div>
               </div>
 
-              {/* Standard account actions — F-4 Task 3 */}
-
-              {/* Notifications (badge from F-4 Task 4) */}
+              {/* Notifications */}
               <Link
                 href="/notifications"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
                 style={{ ...menuItemStyle, justifyContent: 'space-between' }}
               >
-                <span>Notifications</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={iconStyle}>✉</span>
+                  Notifications
+                </span>
                 {unreadCount > 0 && (
                   <span
                     aria-hidden="true"
                     style={{
-                      minWidth: 20,
-                      height: 20,
-                      borderRadius: 10,
+                      minWidth: 18,
+                      height: 18,
+                      borderRadius: 9,
                       background: 'var(--accent)',
                       color: '#fff',
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 700,
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '0 4px',
+                      padding: '0 3px',
                     }}
                   >
                     {unreadCount}
@@ -445,18 +520,24 @@ export default function Header() {
                 href={`/${account.slug}`}
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
                 style={menuItemStyle}
               >
+                <span style={iconStyle}>◷</span>
                 Mon profil
               </Link>
+
+              {/* ponytail: Revenus item omitted — MR-* monetization not built; add when MR-2 lands */}
 
               {/* Likes & ma liste */}
               <Link
                 href="/ma-liste"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
                 style={menuItemStyle}
               >
+                <span style={{ ...iconStyle, color: 'var(--accent)' }}>♥</span>
                 Likes &amp; ma liste
               </Link>
 
@@ -465,8 +546,10 @@ export default function Header() {
                 href="/mes-candidatures"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
                 style={menuItemStyle}
               >
+                <span style={iconStyle}>✎</span>
                 Mes candidatures
               </Link>
 
@@ -475,9 +558,13 @@ export default function Header() {
                 href="/candidatures-recues"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
-                style={{ ...menuItemStyle, justifyContent: 'space-between' }}
+                className="ep-menu-item"
+                style={{ ...menuItemStyle, borderBottom: '2px solid var(--border)', justifyContent: 'space-between' }}
               >
-                Candidatures reçues
+                <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <span style={iconStyle}>↧</span>
+                  Candidatures reçues
+                </span>
                 <CountBadge
                   count={counts.demandes}
                   label={`${counts.demandes} demandes en attente`}
@@ -506,10 +593,9 @@ export default function Header() {
                   }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <span style={{ width: 18, textAlign: 'center' }}>{icon}</span>
+                    <span style={iconStyle}>{icon}</span>
                     {label}
                   </span>
-                  {/* Signalements badge: only for admin/maintainer (already gated by effectiveRole) */}
                   {href === '/admin' && (
                     <CountBadge
                       count={counts.signalements}
@@ -519,72 +605,10 @@ export default function Header() {
                 </Link>
               ))}
 
-              {/* Theme toggle — F-6: ☀ Clair / ☾ Sombre */}
+              {/* MODE DÉMO · RÔLE switcher */}
               <div
                 style={{
-                  padding: '10px 13px',
-                  borderBottom: '1.5px solid var(--border)',
-                  fontSize: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ color: 'var(--ink2)', fontSize: 13 }}>Thème</span>
-                <fieldset
-                  role="group"
-                  aria-label="Thème"
-                  style={{
-                    border: 'none',
-                    padding: 0,
-                    margin: 0,
-                    display: 'flex',
-                    gap: 4,
-                  }}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={theme === 'light'}
-                    onClick={() => setTheme('light')}
-                    style={{
-                      padding: '4px 8px',
-                      border: `2px solid ${theme === 'light' ? 'var(--accent)' : 'var(--ink)'}`,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      background: theme === 'light' ? 'var(--accent)' : 'var(--card)',
-                      color: theme === 'light' ? '#fff' : 'var(--ink)',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    &#9728; Clair
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={theme === 'dark'}
-                    onClick={() => setTheme('dark')}
-                    style={{
-                      padding: '4px 8px',
-                      border: `2px solid ${theme === 'dark' ? 'var(--accent)' : 'var(--ink)'}`,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      background: theme === 'dark' ? 'var(--accent)' : 'var(--card)',
-                      color: theme === 'dark' ? '#fff' : 'var(--ink)',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    &#9790; Sombre
-                  </button>
-                </fieldset>
-              </div>
-
-              {/* Demo role switcher */}
-              <div
-                style={{
-                  padding: '10px 13px',
+                  padding: '9px 13px',
                   borderBottom: '2px solid var(--border)',
                   background: 'var(--paper)',
                 }}
@@ -622,6 +646,7 @@ export default function Header() {
                       aria-label={label}
                       aria-pressed={effectiveRole === role}
                       onClick={() => setSimulatedRole(role === effectiveRole ? null : role)}
+                      className="ep-toggle-btn"
                       style={{
                         textAlign: 'center',
                         border: `2px solid ${effectiveRole === role ? 'var(--accent)' : 'var(--ink)'}`,
@@ -641,19 +666,93 @@ export default function Header() {
                 </fieldset>
               </div>
 
-              {/* Logout action */}
+              {/* PARAMÈTRES · THÈME — grouped pill per prototype */}
+              <div
+                style={{
+                  padding: '9px 13px',
+                  borderBottom: '2px solid var(--border)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    color: 'var(--ink2)',
+                    marginBottom: 7,
+                  }}
+                >
+                  PARAMÈTRES · THÈME
+                </div>
+                <fieldset
+                  role="group"
+                  aria-label="Thème"
+                  style={{
+                    border: '2px solid var(--ink)',
+                    borderRadius: 6,
+                    overflow: 'hidden',
+                    padding: 0,
+                    margin: 0,
+                    display: 'flex',
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={theme === 'light'}
+                    onClick={() => setTheme('light')}
+                    className="ep-toggle-btn"
+                    style={{
+                      flex: 1,
+                      textAlign: 'center',
+                      padding: '5px',
+                      border: 'none',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: theme === 'light' ? 'var(--accent)' : 'var(--card)',
+                      color: theme === 'light' ? '#fff' : 'var(--ink)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    &#9728; Clair
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={theme === 'dark'}
+                    onClick={() => setTheme('dark')}
+                    className="ep-toggle-btn"
+                    style={{
+                      flex: 1,
+                      textAlign: 'center',
+                      padding: '5px',
+                      border: 'none',
+                      borderLeft: '1px solid var(--ink)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: theme === 'dark' ? 'var(--accent)' : 'var(--card)',
+                      color: theme === 'dark' ? '#fff' : 'var(--ink)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    &#9790; Sombre
+                  </button>
+                </fieldset>
+              </div>
+
+              {/* Déconnexion — prototype text; hover via ep-menu-item CSS class */}
               <button
                 role="menuitem"
                 onClick={async () => {
                   setMenuOpen(false);
                   await logout();
                 }}
+                className="ep-menu-item"
                 style={{
                   display: 'block',
                   width: '100%',
                   textAlign: 'left',
                   padding: '10px 13px',
-                  background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   fontSize: 13,
@@ -661,14 +760,8 @@ export default function Header() {
                   color: 'var(--ink2)',
                   fontFamily: 'var(--font-body)',
                 }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLButtonElement).style.background = 'var(--accent-soft)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLButtonElement).style.background = 'none';
-                }}
               >
-                Se d&eacute;connecter
+                Déconnexion
               </button>
             </div>
           )}
@@ -677,17 +770,16 @@ export default function Header() {
         // Logged-out: sign-in link
         <Link
           href="/connexion"
+          className="ep-connect-btn"
           style={{
             fontSize: 14,
             fontWeight: 700,
             padding: '9px 16px',
             border: '2px solid var(--ink)',
-            background: 'var(--card)',
             color: 'var(--ink)',
             borderRadius: 6,
             textDecoration: 'none',
             boxShadow: '2px 2px 0 var(--shadow)',
-            transition: 'background 0.12s',
           }}
         >
           Se connecter

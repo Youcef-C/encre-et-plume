@@ -90,22 +90,22 @@ describe('Header', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens dropdown with "Se déconnecter" button when avatar clicked', async () => {
+  it('opens dropdown with "Déconnexion" button when avatar clicked', async () => {
     const user = userEvent.setup();
     renderHeader({ account: mockAccount });
 
     await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /se déconnecter/i })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: /déconnexion/i })).toBeInTheDocument();
   });
 
-  it('calls logout and closes menu when "Se déconnecter" clicked', async () => {
+  it('calls logout and closes menu when "Déconnexion" clicked', async () => {
     const mockLogout = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     renderHeader({ account: mockAccount, logout: mockLogout });
 
     await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
-    await user.click(await screen.findByRole('menuitem', { name: /se déconnecter/i }));
+    await user.click(await screen.findByRole('menuitem', { name: /déconnexion/i }));
 
     await waitFor(() => expect(mockLogout).toHaveBeenCalledOnce());
     // Menu should be closed
@@ -233,19 +233,23 @@ describe('Header — primary nav', () => {
     expect(screen.getByRole('navigation', { name: /navigation principale/i })).toBeInTheDocument();
   });
 
-  it('renders all six nav links with correct hrefs', () => {
+  it('renders seven prototype nav links with correct hrefs', () => {
     renderHeader({ account: null });
     const expected = [
-      { label: /accueil/i, href: '/' },
-      { label: /découvrir/i, href: '/decouvrir' },
-      { label: /lire/i, href: '/lire' },
-      { label: /écrire/i, href: '/ecrire' },
-      { label: /projets/i, href: '/tableau-de-bord' },
-      { label: /messages/i, href: '/contacts' },
+      { label: /accueil/i,    href: '/'           },
+      { label: /découvrir/i,  href: '/decouvrir'  },
+      { label: /galerie/i,    href: '/galerie'     },
+      { label: /actualités/i, href: '/actualites'  },
+      { label: /lire/i,       href: '/lire'        },
+      { label: /trouver/i,    href: '/trouver'     },
+      { label: /calendrier/i, href: '/calendrier'  },
     ];
     for (const { label, href } of expected) {
       expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href);
     }
+    // Projets and Ma liste are auth-gated — must not appear when logged out
+    expect(screen.queryByRole('link', { name: /^projets$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^ma liste$/i })).not.toBeInTheDocument();
   });
 
   it('marks the active route with aria-current="page" and others without it', () => {
@@ -254,6 +258,73 @@ describe('Header — primary nav', () => {
     expect(screen.getByRole('link', { name: /découvrir/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: /accueil/i })).not.toHaveAttribute('aria-current');
     expect(screen.getByRole('link', { name: /lire/i })).not.toHaveAttribute('aria-current');
+  });
+});
+
+describe('Header — auth-gated nav items (Projets + Ma liste)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows Projets link when logged in', () => {
+    renderHeader({ account: mockAccount });
+    const link = screen.getByRole('link', { name: /^projets$/i });
+    expect(link).toHaveAttribute('href', '/tableau-de-bord');
+  });
+
+  it('does not show Projets link when logged out', () => {
+    renderHeader({ account: null });
+    expect(screen.queryByRole('link', { name: /^projets$/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Ma liste button when logged in', () => {
+    renderHeader({ account: mockAccount });
+    const link = screen.getByRole('link', { name: /ma liste/i });
+    expect(link).toHaveAttribute('href', '/ma-liste');
+  });
+
+  it('does not show Ma liste button when logged out', () => {
+    renderHeader({ account: null });
+    expect(screen.queryByRole('link', { name: /ma liste/i })).not.toBeInTheDocument();
+  });
+
+  it('Projets link has aria-current="page" on /tableau-de-bord', () => {
+    vi.mocked(usePathname).mockReturnValue('/tableau-de-bord');
+    renderHeader({ account: mockAccount });
+    expect(screen.getByRole('link', { name: /^projets$/i })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('Ma liste link has aria-current="page" on /ma-liste', () => {
+    vi.mocked(usePathname).mockReturnValue('/ma-liste');
+    renderHeader({ account: mockAccount });
+    expect(screen.getByRole('link', { name: /ma liste/i })).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+describe('Header — hover/design class hooks', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('header element has ep-header class (constant height hook)', () => {
+    renderHeader({ account: null });
+    expect(screen.getByRole('banner')).toHaveClass('ep-header');
+  });
+
+  it('nav links have ep-nav-link class (accent hover hook)', () => {
+    renderHeader({ account: null });
+    expect(screen.getByRole('link', { name: /accueil/i })).toHaveClass('ep-nav-link');
+    expect(screen.getByRole('link', { name: /découvrir/i })).toHaveClass('ep-nav-link');
+  });
+
+  it('logout button has ep-menu-item class (hover hook)', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    const logoutBtn = await screen.findByRole('menuitem', { name: /déconnexion/i });
+    expect(logoutBtn).toHaveClass('ep-menu-item');
+  });
+
+  it('auth-gated pill buttons have ep-pill-btn class', () => {
+    renderHeader({ account: mockAccount });
+    expect(screen.getByRole('link', { name: /ma liste/i })).toHaveClass('ep-pill-btn');
+    expect(screen.getByRole('link', { name: /^projets$/i })).toHaveClass('ep-pill-btn');
   });
 });
 
@@ -349,21 +420,7 @@ describe('Header — unread badge', () => {
   });
 });
 
-describe('Header — contextual Poster button', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('shows poster button on /decouvrir', () => {
-    vi.mocked(usePathname).mockReturnValue('/decouvrir');
-    renderHeader({ account: mockAccount });
-    expect(screen.getByRole('link', { name: /poster/i })).toBeInTheDocument();
-  });
-
-  it('does not show poster button on /', () => {
-    vi.mocked(usePathname).mockReturnValue('/');
-    renderHeader({ account: mockAccount });
-    expect(screen.queryByRole('link', { name: /poster/i })).not.toBeInTheDocument();
-  });
-});
+// PosterButton removed from nav per user request — no poster button on any page
 
 describe('Header — keyboard a11y', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -440,15 +497,12 @@ function renderHeaderWithCounts(
 describe('Header — F-5 area badges', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('shows Messages badge on the Messages nav link with correct aria-label', () => {
-    renderHeaderWithCounts(mockAccount, { messages: 3 });
-    // Badge is inside the "Messages" nav link; look for the img role with the label
-    expect(screen.getByRole('img', { name: /3 messages non lus/i })).toBeInTheDocument();
-  });
-
-  it('Messages badge not shown when messages count is 0', () => {
-    renderHeaderWithCounts(mockAccount, { messages: 0 });
-    expect(screen.queryByRole('img', { name: /messages non lus/i })).not.toBeInTheDocument();
+  // Messages link removed from primary nav per prototype TOP NAV replica.
+  // Messages count is surfaced via the avatar total-unread badge (counts.total).
+  it('messages count contributes to avatar unread badge', () => {
+    renderHeaderWithCounts(mockAccount, { messages: 3, total: 3 });
+    // Total unread shows on avatar aria-label
+    expect(screen.getByRole('button', { name: /3 notifications non lues/i })).toBeInTheDocument();
   });
 
   it('shows Demandes badge on Candidatures reçues dropdown entry', async () => {
@@ -627,5 +681,35 @@ describe('Header — F-6 theme toggle', () => {
     clairBtn.focus();
     await user.keyboard('{Enter}');
     expect(mockSetTheme).toHaveBeenCalledWith('light');
+  });
+});
+
+describe('Header — responsive mobile nav', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const NAV = ['Accueil', 'Découvrir', 'Galerie', 'Actualités', 'Lire', 'Trouver', 'Calendrier'];
+
+  it('hamburger toggle opens a mobile nav with the 7 prototype links and closes on selection', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+
+    const burger = screen.getByRole('button', { name: /ouvrir la navigation/i });
+    expect(burger).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('navigation', { name: /navigation principale \(mobile\)/i })
+    ).toBeNull();
+
+    await user.click(burger);
+    const mobileNav = screen.getByRole('navigation', {
+      name: /navigation principale \(mobile\)/i,
+    });
+    for (const label of NAV) {
+      expect(within(mobileNav).getByRole('link', { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(within(mobileNav).getByRole('link', { name: 'Accueil' }));
+    expect(
+      screen.queryByRole('navigation', { name: /navigation principale \(mobile\)/i })
+    ).toBeNull();
   });
 });

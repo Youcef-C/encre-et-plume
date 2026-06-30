@@ -26,6 +26,7 @@ export default function PortfolioGrid({ slug }: Props) {
       <div
         role="status"
         aria-label="Chargement du portfolio…"
+        className="ep-skeleton-delayed"
         style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}
       >
         {[0, 1, 2].map((i) => (

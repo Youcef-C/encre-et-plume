@@ -14,7 +14,7 @@ import { NOTIF_LABEL, NOTIF_ICON, notificationHref, relativeTime } from '../lib/
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function Skeleton() {
   return (
-    <div role="status" aria-label="Chargement des notifications" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div role="status" aria-label="Chargement des notifications" className="ep-skeleton-delayed" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {[1, 2, 3].map((i) => (
         <div
           key={i}

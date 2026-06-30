@@ -25,8 +25,9 @@ write a verdict that either ships the story or sends it back to the Manager with
 - `.claude/pipeline/<ID>/plan.md` (the **Acceptance checklist** is the contract),
   `qa-report.md`, `backend-notes.md`, `frontend-notes.md`.
 - The story file. The working diff (`git diff`, `git status`); build/lint/test output (re-run if in doubt).
-- The **prototype** (design source of truth): `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`
-  (+ `Wireframes …`). Grep it for the screen's French label / `id` to compare the built UI against it.
+- The **prototype** = the ONLY replica source of truth: `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`.
+  Grep it for the screen's banner `<!-- ============ NAME ============ -->` / `data-screen` (header = `TOP NAV`)
+  and compare structurally. Do NOT use the Wireframes file for fidelity — it's low-fi only.
 
 ## How to judge — FAIL the gate if ANY of:
 - An acceptance criterion is unmet or only partially met.
@@ -37,11 +38,16 @@ write a verdict that either ships the story or sends it back to the Manager with
   Node 24** (`nvm use` → `.nvmrc`=24): `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test` — these are
   what CI runs; a non-zero exit in ANY is blocking (don't trust QA's prose; re-run). A green `pnpm test`
   with a red `pnpm lint`/`pnpm build` is still a FAIL.
-- **Design fidelity:** the frontend doesn't match the prototype — wrong/absent design tokens or fonts,
-  unstyled "scaffold"-looking UI, layout that materially diverges from the prototype, or non-verbatim
-  French copy. Treat a material divergence on an `Explicit` screen as **blocking**; minor polish gaps on
-  `Inferred` screens are non-blocking nits. Confirm QA actually checked fidelity (its Design-fidelity row);
-  if QA didn't, verify it yourself against the prototype.
+- **Prototype replica:** the screen is not a faithful replica of its prototype section. Grep the prototype
+  for the screen's banner `<!-- ============ NAME ============ -->` / `data-screen` (header = `TOP NAV`),
+  read it, and compare structurally to the built UI. Treat as **blocking** on an `Explicit` screen: wrong/
+  missing/extra nav items or controls, invented labels the prototype doesn't draw, restructured layout,
+  wrong icons/glyphs, absent hover states (`style-hover` in the prototype), wrong tokens/fonts, or
+  non-verbatim French copy. Minor pixel nits on `Inferred` screens are non-blocking. Confirm QA actually ran
+  its replica check; if not, do the structural diff yourself against the prototype section.
+- **Responsive:** the screen breaks at ~375px (mobile) or ~768px (tablet) — horizontal overflow,
+  overlapping/cut-off content, an unusable mobile nav, or too-small tap targets. Blocking for an `Explicit`
+  screen. Confirm QA ran its Responsive check; if not, spot-check it yourself.
 
 Non-blocking nits (style, minor simplifications, follow-ups) do NOT fail the gate — list them separately.
 

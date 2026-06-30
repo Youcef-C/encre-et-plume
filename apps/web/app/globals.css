@@ -68,9 +68,28 @@
 /* ─── Base reset / body ─────────────────────────────────────────────── */
 body {
   font-family: var(--font-body);
-  background-color: var(--paper);
+  /* prototype: #fbfaf6 + halftone dots (not --paper #f1ece1 — body bg is lighter than the paper token) */
+  background-color: #fbfaf6;
+  background-image:
+    radial-gradient(rgba(22, 19, 15, 0.04) 1.2px, transparent 1.3px),
+    radial-gradient(rgba(22, 19, 15, 0.028) 1.2px, transparent 1.3px);
+  background-size: 12px 12px, 12px 12px;
+  background-position: 0 0, 6px 6px;
   color: var(--ink);
   min-height: 100dvh;
+}
+
+/* Dark mode: solid very-dark background, no halftone dots */
+:root[data-theme="dark"] body {
+  background-color: #161310;
+  background-image: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] body {
+    background-color: #161310;
+    background-image: none;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -180,4 +199,196 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--ink);
   margin-bottom: 6px;
   display: block;
+}
+
+/* ─── Header polish ─────────────────────────────────────────────────────────
+   Issue 1: fixed height prevents layout jump when PosterButton appears/disappears.
+   With border-bottom:3px + padding:12px top+bottom, content area = 68-3-24 = 41px.
+   Avatar (40px) fits; PosterButton constrained to 36px via .ep-poster-link. */
+.ep-header {
+  height: 68px;
+}
+
+/* Issue 2: 150ms delay before skeleton appears — fast loads see no flash at all;
+   slow loads (>150ms) still get the skeleton. ponytail: CSS-only, no JS timer. */
+@keyframes ep-skeleton-appear {
+  from { opacity: 0; }
+}
+.ep-skeleton-delayed {
+  animation: ep-skeleton-appear 0s 0.15s both;
+}
+
+/* Issue 3 + prototype match: nav link active/hover = accent fill + white text */
+.ep-nav-link {
+  color: var(--ink);
+  transition: background 0.12s, color 0.12s;
+}
+.ep-nav-link:hover,
+.ep-nav-link[aria-current="page"] {
+  background: var(--accent);
+  color: #fff;
+}
+.ep-nav-link:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Auth-gated nav pill buttons (♥ Ma liste, Projets): card bg → accent on hover/active */
+.ep-pill-btn {
+  background: var(--card);
+  color: var(--ink);
+  transition: background 0.12s, color 0.12s;
+}
+.ep-pill-btn:hover,
+.ep-pill-btn[aria-current="page"] {
+  background: var(--accent);
+  color: #fff;
+}
+.ep-pill-btn:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Search button: subtle tone hover (not accent — search is a utility, not a destination) */
+.ep-search-btn {
+  background: var(--card);
+  transition: background 0.1s;
+}
+.ep-search-btn:hover {
+  background: var(--tone);
+}
+.ep-search-btn:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* "Se connecter" link */
+.ep-connect-btn {
+  background: var(--card);
+  transition: background 0.12s;
+}
+.ep-connect-btn:hover {
+  background: var(--accent-soft);
+}
+.ep-connect-btn:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Dropdown menu items: accent-soft hover, matching prototype §dropdown */
+.ep-menu-item {
+  transition: background 0.08s;
+}
+.ep-menu-item:hover,
+.ep-menu-item:focus-visible {
+  background: var(--accent-soft);
+}
+.ep-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Theme/role switcher toggle buttons: brightness dim on hover */
+.ep-toggle-btn {
+  transition: filter 0.08s;
+}
+.ep-toggle-btn:hover {
+  filter: brightness(0.92);
+}
+.ep-toggle-btn:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Responsive header ─────────────────────────────────────────────────────
+   Desktop (>1024px) is the exact prototype TOP NAV replica. At ≤1024px the
+   inline 7-item nav, the wide search field, and the ♥/Projets pills collapse
+   into a hamburger drawer so nothing overflows down to 375px.
+   gap/padding/logo-size live here (not inline) so the query can override them. */
+.ep-header {
+  gap: 22px;
+  padding: 12px 28px;
+  position: relative; /* anchor the mobile drawer */
+}
+.ep-logo-text {
+  font-size: 27px;
+}
+.ep-hamburger {
+  display: none; /* desktop: hidden */
+  align-items: center;
+  justify-content: center;
+}
+.ep-hamburger:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.ep-hamburger:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+.ep-mobile-nav {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--card);
+  border-bottom: 3px solid var(--ink);
+  box-shadow: 0 6px 0 var(--shadow);
+}
+.ep-mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 13px 18px;
+  border: none;
+  border-bottom: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.ep-mobile-nav-link:hover,
+.ep-mobile-nav-link[aria-current='page'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+@media (max-width: 1024px) {
+  .ep-header {
+    gap: 12px;
+    padding: 10px 16px;
+  }
+  .ep-logo-text {
+    font-size: 21px;
+  }
+  /* !important overrides the inline display:flex on these elements */
+  .ep-nav-desktop,
+  .ep-search-desktop,
+  .ep-pill-desktop {
+    display: none !important;
+  }
+  .ep-hamburger {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 380px) {
+  .ep-header {
+    gap: 8px;
+    padding: 9px 12px;
+  }
+  .ep-logo-text {
+    font-size: 18px;
+  }
 }

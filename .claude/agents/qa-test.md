@@ -25,8 +25,9 @@ story's acceptance criteria are met. You do not pass anything you have not actua
 - `.claude/pipeline/<ID>/plan.md` (the **Acceptance checklist** is your grading rubric),
   `backend-notes.md`, `frontend-notes.md`.
 - The story file. `CLAUDE.md` for how to run/test the apps.
-- The **prototype** (design source of truth): `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`
-  (+ the `Wireframes …` board). Grep it for the screen's French label / `id` to find the reference design.
+- The **prototype** = the ONLY replica source of truth: `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`.
+  Grep it for the screen's banner `<!-- ============ NAME ============ -->` / `data-screen` (header = `TOP NAV`).
+  Do NOT use the Wireframes file for fidelity — it's low-fi only; replicate the Prototype.
 
 ## What to do
 0. **Run the full CI command set first**, on **Node 24** (`nvm use` reads `.nvmrc`=24): `pnpm lint`,
@@ -37,11 +38,17 @@ story's acceptance criteria are met. You do not pass anything you have not actua
 2. Add the missing coverage, especially a **Playwright e2e** that walks the story's acceptance flow
    end-to-end against the running stack. Cover error/empty/role-gated paths the story specifies.
 3. Start the app (`run`) and verify (`verify`) the behavior for criteria that need a live check.
-4. **Design fidelity vs prototype** — open the story's screen(s) in the running app and compare against the
-   matching prototype section: design tokens (paper/ink/accent/border/shadow), Anton+Zen Kaku fonts, layout
-   & components (bold borders, hard offset shadows, halftone), and verbatim French copy. Take a screenshot
-   where useful. Grade a **Design fidelity** row PASS/FAIL: FAIL if an `Explicit` screen materially diverges
-   from the prototype or ships unstyled/scaffold-looking UI; note minor polish gaps without failing.
+4. **Prototype REPLICA check** — the screen must be a faithful replica, not an approximation. Grep the
+   prototype for the screen's banner `<!-- ============ NAME ============ -->` / `data-screen` (header =
+   `TOP NAV`), read that section, open the screen in the running app, and compare STRUCTURALLY: same nav
+   items / controls / sections in the same order, same components, icons/glyphs, borders/shadows/spacing,
+   and verbatim French copy. Screenshot it. Grade a **Design fidelity (replica)** row PASS/FAIL: **FAIL** if
+   an `Explicit` screen diverges from its prototype section — wrong/missing/extra nav items or controls,
+   invented labels, restructured layout, absent hover states, or scaffold-looking UI. List each divergence
+   with the prototype line vs the app. Minor pixel nits don't fail; structural/content divergence does.
+5. **Responsive check** — load the screen at ~375px (mobile), ~768px (tablet), ~1280px (desktop) (Playwright
+   `viewport` or browser devtools). Grade a **Responsive** row PASS/FAIL: **FAIL** on horizontal overflow,
+   overlapping/cut-off content, an unusable mobile nav, or tap targets too small. Screenshot mobile.
 5. Grade EVERY item on the acceptance checklist.
 
 ## Output — write `.claude/pipeline/<ID>/qa-report.md`

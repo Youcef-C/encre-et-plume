@@ -86,6 +86,7 @@ export default function ProfilePageClient({ slug }: Props) {
       <div
         role="status"
         aria-label="Chargement du profil…"
+        className="ep-skeleton-delayed"
         style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 28px' }}
       >
         {/* Skeleton */}

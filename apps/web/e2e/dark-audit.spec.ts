@@ -5,8 +5,12 @@
  */
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { mkdirSync } from 'node:fs';
 
-const SCRATCHPAD = '/private/tmp/claude-501/-Users-youcef-Projects-encre-et-plume/2740af18-3b1d-4d22-a93f-8ebcbb1364a2/scratchpad/screenshots';
+// Write screenshots into the gitignored test-results dir (relative to apps/web cwd) so this
+// works in CI — was hardcoded to a local scratchpad path that doesn't exist on the runner.
+const SCRATCHPAD = path.resolve('test-results', 'dark-audit');
+mkdirSync(SCRATCHPAD, { recursive: true });
 
 async function mockDarkLogin(page: import('@playwright/test').Page) {
   await page.route('**/auth/me', async (route) => {

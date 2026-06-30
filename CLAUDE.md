@@ -56,13 +56,29 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 - **Design system** — manga-zine identity: Anton (display) + Zen Kaku Gothic New (body), ink `#16130f` /
   paper `#f1ece1` / accent red `#e8261c`, halftone textures, bold borders, hard offset shadows. Reuse
   tokens/components in `apps/web`; don't reinvent them. Accessibility basics are required, not optional.
-- **Prototype fidelity** — the frontend must visually match the interactive prototype, not ship bare
-  scaffolding. The source of truth is **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**
-  (plus `Wireframes - Encre et Plume.dc.html` for low-fi layout and `Pitch Maison d'Édition …` for vision).
-  Before building a screen, read the matching section of that prototype (grep it for the screen's French
-  label or `id`) and mirror its layout, components, tokens (`:root` defines `--paper/--card/--ink/--border/
-  --accent/--accent-soft/--tone/--shadow/--dot`, full light+dark palettes), and verbatim French copy.
-  Build real layout/spacing and all states (hover, empty, loading, error). `Explicit` screens should look
-  like the finished prototype page; `Inferred` ones still use the design system. Lean on `frontend-design`.
+- **Prototype REPLICA (not approximation)** — the UI must be a faithful **replica** of the interactive
+  prototype, the single source of truth: **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**.
+  Do NOT invent layouts, nav items, controls, icons, or copy — reproduce what the prototype draws.
+  - **Finding the right section:** the prototype is one HTML file where every screen is delimited by a
+    banner comment `<!-- ============ NAME ============ -->` and carries `data-screen="<key>"` /
+    `data-page="<key>"`; sub-components inside a screen use inner `<!-- comment -->` markers, and the global
+    header is the **`<!-- ============ TOP NAV ============ -->`** section. To build/verify a screen: grep the
+    file for its banner (e.g. `PROFIL`, `GALERIE`, `ŒUVRE`, `CLASSEMENT`, `MESSAGES`) or its `data-screen`
+    key, read that whole section, and replicate it: same structure/DOM order, same components, the exact
+    inline-style values (padding, borders `3px solid var(--ink)`, `border-radius`, hard offset shadows like
+    `5px 5px 0 var(--shadow)`, halftone dot avatars `radial-gradient(var(--ink) 1.4px,transparent 1.5px)`),
+    the same tokens, the same icons/glyphs, and **verbatim French copy**. Hover states come from the
+    prototype's `style-hover="…"` attributes (e.g. nav links fill `background:var(--accent);color:#fff`).
+  - Keep the real wiring (auth, routes, session, live data) but the **markup + styling must match the
+    prototype section**. Translate the prototype's `{{ handlers }}` to real behavior; don't change its look.
+  - `Explicit` screens must be a visual replica of their section. `Inferred` screens (no drawn frame) still
+    use the same tokens/components and the nearest analogous prototype patterns. Lean on `frontend-design`.
+- **Responsive** — every screen must work on mobile, tablet, and desktop. The prototype defines the
+  **desktop** replica; you must also adapt it down gracefully (the prototype itself is desktop-only — don't
+  expect mobile markup in it). Targets ~**375px** (mobile), ~**768px** (tablet), ~**1280px+** (desktop):
+  no horizontal overflow, fluid/wrapping layouts, multi-column grids reflow to fewer columns, the primary
+  nav collapses into a menu/hamburger on narrow widths, tap targets ≥ ~44px, modals/overlays usable on
+  mobile. Build mobile-first with CSS (media queries / clamp / flex-wrap / grid auto-fit) — don't ship a
+  desktop-only fixed-width layout. QA and the reviewer test all three breakpoints.
 - **Handoff discipline** — each agent reads its inputs from `.claude/pipeline/<ID>/` and writes its named
   artifact there; don't skip the artifact.
