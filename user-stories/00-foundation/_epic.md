@@ -18,6 +18,9 @@
 - F-5 — Notifications & unread badges
 - F-6 — Light/Dark theme
 - F-7 — Global search
+- F-8 — Background job queue & reliable processing *(technical / infra)*
+- F-9 — Observability: metrics, error tracking & alerts *(technical / infra)*
+- F-10 — Media storage, uploads & delivery (object storage + CDN) *(technical / infra)*
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.

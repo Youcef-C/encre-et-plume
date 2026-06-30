@@ -30,6 +30,7 @@
 - [[MR-5]] — "Versements" is a Revenus tab; "prochain versement" displayed there.
 - [[MR-1]] / [[MR-3]] — subscriptions and donations build the balance.
 - [[CS-10]] — only the creator's own split share is withdrawable.
+- [[F-8]] — payouts run as idempotent, retryable queue jobs (Stripe transfers + webhook confirmation), with dead-letter on permanent failure.
 
 ## Notes
 - Explicit: "Solde disponible 1 240 €", "Retirer maintenant", "Calendrier", "Méthode de versement" with masked IBAN "····4471" and "Modifier", "commission 8 % + TVA", and the history table (Période / Brut / Net versé / Statut: À venir / Versé) are in the prototype.

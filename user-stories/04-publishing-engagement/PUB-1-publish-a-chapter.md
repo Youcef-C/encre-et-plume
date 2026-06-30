@@ -40,6 +40,7 @@
 - [[F-5]] — publish notifications.
 - [[DR-1]] — scheduled chapters surface in "Sorties programmées".
 - [[DR-3]], [[DR-4]] — published chapter appears on work page and is readable.
+- [[F-10]] — chapter page images + cover are stored/served via the media system (uploads + CDN; premium pages via signed URLs).
 
 ## Notes
 - Explicit: "Publier ▾" in workspace + publish bar, "Sorties programmées" on home, premium/locked "verrouillé ★" in reader. Scheduling cadence detail inherited from [[CS-9]].

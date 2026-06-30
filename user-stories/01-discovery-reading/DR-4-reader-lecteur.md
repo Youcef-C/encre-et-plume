@@ -32,6 +32,7 @@
 - [[MR-1]] / [[MR-4]] — locked premium chapters.
 - [[DR-8]] — reading progress consumed by Ma liste.
 - [[F-1]] — auth for reactions/comments and favorites switcher.
+- [[F-10]] — chapter page images served via the media system / CDN (responsive variants; premium pages via signed URLs).
 
 ## Notes
 - Explicit from prototype, including "verrouillé ★", read-mode and spread toggles, slider 1–40, and "◳ Studio" entry. [[MR-4]] referenced by design as subscription source though not in the global index — treat as the subscription/access concept under monetization.

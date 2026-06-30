@@ -19,6 +19,8 @@ This epic covers the platform's trust-and-safety and operations console: the rol
 - [[AD-7]] — Platform stats
 - [[AD-8]] — Article / news management
 - [[AD-9]] — Contest administration
+- [[AD-10]] — User action log "Journal d'activité"
+- [[AD-11]] — Message oversight (private messages & salon chat)
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-5]] Notifications
@@ -29,3 +31,5 @@ This epic covers the platform's trust-and-safety and operations console: the rol
 ## Notes
 - Explicit: AD-1 through AD-6 are anchored on drawn surfaces — the console tabs ("Signalements [4] · Utilisateurs · Comptes éditeurs · Contenus"), the reports table, the "comptes éditeurs en attente" callout, the inline admin bars/visibility filter, the contextual `data-adminctl` controls, and the "⛔ Bannir l'auteur·rice" affordance.
 - Inferred: AD-7 (stats), AD-8 (articles), AD-9 (contests) exist only as prototype tab CSS / modal hooks (`data-adminview=stats`, `data-article-modal`/`data-artedit`, `concours` tab) with no rendered frames — kept deliberately conservative.
+- Inferred: AD-10 (user action log) has no drawn frame — it's a new "Journal d'activité" tab inside the PANNEAU ADMIN console plus a user-facing "Mon activité" self view; it generalises the narrow per-action audits (AD-1 role changes, AD-5 moderation, AD-6 bans) into one queryable per-user timeline.
+- Inferred: AD-11 (message oversight) has no drawn frame — a read-only staff surface giving admins/maintainers access to private DMs and salon/project chats ([[MC-9]], [[CS-8]]), a deliberate role-gated exception to the participant-only read rule; every access is logged via [[AD-10]].

@@ -28,7 +28,7 @@
 - Entities: `Conversation` (`id`, `type`, `name?`, `participants[]`, `projectId?`); `Message` (`id`, `conversationId`, `senderId`, `body`, `attachments[]`, `createdAt`, `readBy[]`).
 - Business rules: a project group chat is linked to its project ([[CS-8]]) and shares messages with the embedded workspace chat; unread counts per user; only participants may read/post.
 - Validation: body or attachment required; attachment type/size limits; group needs a name and ≥2 participants.
-- Authorization: participants only; banned users ([[AD-6]]) cannot send.
+- Authorization: participants only (read + post); banned users ([[AD-6]]) cannot send. Exception: admins/maintainers may READ any conversation for trust-&-safety oversight ([[AD-11]]) — a role-gated, logged exception to participant-only access.
 - Side effects: new messages bump unread counts / launcher badge and may notify offline recipients ([[F-5]]); typing and presence broadcast to participants.
 - Rendering: widget mounts on every page (depends on session [[F-1]] and the global app shell [[F-4]]).
 
@@ -38,6 +38,7 @@
 - [[MC-8]] — "Message" / `openMsg` launches conversations; shared presence.
 - [[CS-8]] — project group chat embedded in the workspace shares messages.
 - [[F-5]] — unread/notification counts for offline recipients.
+- [[F-10]] — message attachments stored/served via the media system (private attachments via signed URLs).
 
 ## Notes
 - Explicit: launcher bubble (red ✉, unread "3"), header "Messages [3] · ＋ Groupe · minimize ▁ · close ✕", conversation search, the three sample rows (group + two DMs with typing/preview), the `openMsg` per-recipient modal, the shared project group chat ([[CS-8]]), realtime messaging/typing/presence + group creation + history + attachments, and that it renders on every page (depends [[F-1]], [[F-4]]).

@@ -21,12 +21,13 @@
 - Cloud / Tablet connectors — import from external source (tech-agnostic).
 - **GET /projects/{slug}/assets?type=dessin|texte|scenario** — list, filterable by type.
 - **POST /assets/{id}/link** — associate asset → card. Request `{ pageId }`.
-- Entity **Asset**: `{ id, projectId, type: "dessin"|"texte"|"scenario", filename, size, thumbnailUrl, sourceUrl?, linkedPageId? }`.
+- Entity **Asset**: `{ id, projectId, type: "dessin"|"texte"|"scenario", filename, size, thumbnailUrl, sourceUrl?, linkedPageId?, mediaId }` — the bytes/thumbnail are a `Media` blob from [[F-10]] (presigned upload → image-processing variants); `thumbnailUrl` comes from F-10's variants. Don't reinvent storage.
 - Business rules: validate extension/type and size on upload; type chip derived from file kind; an asset may link to one card (re-link replaces).
 - Authorization: project members only.
 - Side effects: linked asset surfaces as a file-type tag on the page card ([[CS-2]]) and in the editor file dropdown ([[CS-4]]).
 
 ## Dependencies
+- [[F-10]] — media storage: presigned direct-to-storage uploads, image processing, and CDN delivery back the asset bytes & thumbnails (Asset references `Media`).
 - [[CS-2]] — linking attaches assets to kanban cards.
 - [[CS-4]] — imported files appear in the editor "Ouvrir un fichier" dropdown.
 

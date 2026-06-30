@@ -40,6 +40,9 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-5](00-foundation/F-5-notifications-and-unread-badges.md) — Notifications & unread badges
 - [F-6](00-foundation/F-6-light-dark-theme.md) — Light / Dark theme
 - [F-7](00-foundation/F-7-global-search.md) — Global search
+- [F-8](00-foundation/F-8-background-job-queue.md) — Background job queue & reliable processing *(technical / inferred)*
+- [F-9](00-foundation/F-9-observability-metrics-errors-alerts.md) — Observability: metrics, error tracking & alerts *(technical / inferred)*
+- [F-10](00-foundation/F-10-media-storage-uploads.md) — Media storage, uploads & delivery (object storage + CDN) *(technical / inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
@@ -119,6 +122,8 @@ Admin console: reports, editor verification, content/comment moderation, users, 
 - [AD-7](07-admin-moderation/AD-7-platform-stats.md) — Platform stats *(inferred)*
 - [AD-8](07-admin-moderation/AD-8-article-news-management.md) — Article / news management *(inferred)*
 - [AD-9](07-admin-moderation/AD-9-contest-administration.md) — Contest administration *(inferred)*
+- [AD-10](07-admin-moderation/AD-10-user-action-log.md) — User action log "Journal d'activité" *(inferred)*
+- [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages & salon chat) *(inferred)*
 
 ## Dependency spine
 Most stories depend on **F-1** (account) and **F-2** (roles). Creation depends on **CS-1** (project

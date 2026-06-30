@@ -34,6 +34,7 @@
 - [[MR-4]] — managing/cancelling a subscription.
 - [[MR-5]] — subscriptions feed the revenue dashboard.
 - [[F-1]] — auth required before payment.
+- [[F-8]] — Stripe webhooks / subscription side-effects run through the job queue with idempotent, transactional handling (fast 200 ack → enqueue → ACID worker).
 
 ## Notes
 - Explicit: tier cards, the four named tiers/prices, "à partir de X €/mois", subscriber counts, perks, "POPULAIRE" badge, the two scopes, and "★ Soutenir" are all in the prototype.

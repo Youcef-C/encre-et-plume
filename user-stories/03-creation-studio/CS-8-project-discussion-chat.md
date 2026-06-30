@@ -20,7 +20,7 @@
 - **POST /projects/{slug}/messages** — `{ text?, attachments[] }`.
 - Entity **Message** (project-scoped) `{ id, projectId, senderId, text, attachments[], createdAt }`.
 - Business rules: member-only thread; one thread per project.
-- Authorization: project members only (non-members blocked).
+- Authorization: project members only (non-members blocked). Exception: admins/maintainers may READ the thread for trust-&-safety oversight ([[AD-11]]) — a role-gated, logged exception.
 - Side effects: new message may notify offline members ([[F-5]]).
 
 ## Dependencies

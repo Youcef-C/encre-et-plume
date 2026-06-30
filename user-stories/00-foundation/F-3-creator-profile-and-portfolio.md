@@ -32,6 +32,7 @@
 - [[MC-2]] — consumes "Genres & affinités" tags + seeking status.
 - [[PUB-4]], [[MC-8]], [[MR-1]], [[MC-3]] — action buttons.
 - [[DR-9]] — likes counter; [[DR-3]] — published works tab.
+- [[F-10]] — avatar, cover banner, and portfolio images are stored/served via the media system (uploads + CDN).
 
 ## Notes
 - Explicit: layout, tags, status banner, stats, tabs, portfolio grid, and action buttons all appear in the prototype.

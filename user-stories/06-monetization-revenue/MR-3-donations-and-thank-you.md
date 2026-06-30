@@ -30,6 +30,7 @@
 - [[MR-5]] — donations feed the revenue dashboard ("Dons" is a Revenus tab).
 - [[MR-6]] — donations add to payout balance.
 - [[F-1]] — auth for donating.
+- [[F-8]] — donation/Stripe webhook side-effects run through the job queue with idempotent, transactional handling.
 
 ## Notes
 - Explicit: "Dons" tab, the four stat cards with sample values, "Derniers dons" list fields, and "Remercier" are in the prototype.

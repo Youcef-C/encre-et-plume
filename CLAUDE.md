@@ -13,6 +13,30 @@ Reader (lecteur·rice), Writer (scénariste), Illustrator (dessinateur·rice), P
 - **Tests:** Jest (API), Vitest + React Testing Library (web units), Playwright (e2e).
 - **Monorepo:** pnpm workspaces + Turborepo; shared TS contracts in `packages/shared`.
 
+## Scaling & reliability (target: tens of thousands of users — see `ARCHITECTURE.md`)
+- **Modular monolith, NOT microservices.** Keep clean module boundaries per domain; scale by running N
+  stateless instances behind a load balancer. Don't split services preemptively — only if a measured
+  bottleneck forces it.
+- **Stateless app servers.** No in-process session/state (JWT in cookie; sessions/denylist/rate-limit/cache
+  in Redis). The **WebSocket gateway MUST use the Redis adapter** so realtime fans out across instances.
+- **Background queue (`F-8`, BullMQ on Redis):** slow / bursty / money work runs OFF the request path —
+  email, notification fan-out, image processing, **Stripe webhooks**, **payouts**. A worker is a second
+  entrypoint into THIS monolith (shared modules), not a service. Provide a `QueueService.enqueue()` seam.
+- **Payments are queue + DB-transaction + idempotent** (`MR-*`): the webhook verifies the signature,
+  persists the raw event (dedup on Stripe `event.id`), returns 200 fast, then enqueues; the worker does the
+  money write inside an **ACID Postgres transaction** with an idempotency key; a reconciliation job catches
+  drift. The queue does NOT replace the DB transaction — both are required.
+- **Database:** index + **paginate every list**, avoid N+1, use a connection pooler (PgBouncer); read
+  replicas only later if reads dominate.
+- **Media/images (`F-10`):** bytes live in S3-compatible object storage (never Postgres / the app server);
+  uploads go **direct-to-storage via presigned URLs** (the API never proxies bytes), derivatives via the
+  `image-processing` queue, delivery via **CDN** (public URLs) or short-lived **signed URLs** (private:
+  premium chapters, private attachments). Allowlist content types, cap size/dimensions, strip EXIF. Keep
+  plain `<img>` + CDN `srcset` (no `next/image`).
+- **Observability is required (`F-9`):** Sentry error tracking, structured logs with a request/correlation
+  id, `/health` + readiness, metrics (RED + queue depth + DB pool), and actionable alerts. Never log
+  secrets/PII (RGPD).
+
 ## Repo layout
 ```
 apps/web/        # Next.js frontend

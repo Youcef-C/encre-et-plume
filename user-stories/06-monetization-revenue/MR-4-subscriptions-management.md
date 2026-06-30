@@ -30,6 +30,7 @@
 - [[MR-1]] — tiers and subscription creation/upgrade.
 - [[MR-5]] — subscriber counts and per-tier breakdown feed the dashboard.
 - [[CS-10]] — co-author roles may scope who can view a project's roster.
+- [[F-8]] — subscription lifecycle Stripe webhooks (renewal, cancel, payment-failed) run through the job queue with idempotent, transactional handling.
 
 ## Notes
 - Explicit: roster columns, the four filters, sort by contribution, per-tier distribution, "rétention 96,6 % / churn 3,4 %", and supporter cancel are in the prototype.
