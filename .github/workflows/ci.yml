@@ -91,18 +91,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+      # MinIO is NOT a service container: the official minio/minio image needs `server /data`
+      # (a command), which GH service containers can't pass. It's started via `docker run` below.
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public
       REDIS_URL: redis://localhost:6379
@@ -138,12 +128,21 @@ jobs:
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Create MinIO bucket
+      - name: Start MinIO + create bucket
         if: steps.webcheck.outputs.ok == 'true'
         run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
           curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
           chmod +x /usr/local/bin/mc
-          mc alias set local http://localhost:9000 minioadmin minioadmin
+          # Wait until MinIO is reachable (alias set succeeds), then create the public-read bucket.
+          for i in $(seq 1 30); do
+            if mc alias set local http://localhost:9000 minioadmin minioadmin >/dev/null 2>&1; then
+              echo "MinIO ready"; break
+            fi
+            echo "waiting for MinIO… ($i)"; sleep 2
+          done
           mc mb --ignore-existing local/encre-et-plume-media
           mc anonymous set download local/encre-et-plume-media
 
