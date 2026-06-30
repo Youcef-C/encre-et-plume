@@ -30,6 +30,14 @@ export class RedisService implements OnModuleDestroy {
     await this.client.expire(key, ttl).catch(() => {}); // fail-open
   }
 
+  /**
+   * F-9 readiness probe: let it REJECT on failure so HealthService sees the error.
+   * ponytail: unlike other methods, NOT fail-open — readiness must detect a down Redis.
+   */
+  async ping(): Promise<void> {
+    await this.client.ping();
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.client.quit().catch(() => {});
   }

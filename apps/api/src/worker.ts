@@ -25,14 +25,18 @@ function findEnv(start: string): string | undefined {
 }
 const envPath = findEnv(process.cwd()) ?? findEnv(__dirname);
 if (envPath) loadEnv({ path: envPath });
-
+// F-9: init Sentry before NestFactory so job errors are captured
+import { initSentry } from './observability/sentry';
+initSentry();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { WorkerRunner } from './queue/worker-runner';
+import { AppLoggerService } from './observability/app-logger.service';
 
 async function bootstrap() {
   // createApplicationContext: no HTTP listener; shares all modules/providers
-  const app = await NestFactory.createApplicationContext(AppModule, { logger: ['log', 'warn', 'error'] });
+  const app = await NestFactory.createApplicationContext(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(AppLoggerService));
   app.get(WorkerRunner).run();
 
   // Graceful shutdown: drain in-flight jobs before exit

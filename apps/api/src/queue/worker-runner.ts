@@ -1,10 +1,12 @@
 import { Injectable, Logger, OnModuleDestroy, Inject } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Worker } from 'bullmq';
 import type { Job } from 'bullmq';
 import { QueueService } from './queue.service';
 import { JobMetrics } from './job-metrics';
 import { QUEUE_PROCESSORS } from './job-processor';
 import type { JobProcessor } from './job-processor';
+import { requestContext } from '../observability/request-context';
 
 /** Parse REDIS_URL into plain BullMQ connection opts (same helper pattern as QueueService). */
 function parseBullmqOpts(url: string): { host: string; port: number; password?: string; db?: number; maxRetriesPerRequest: null } {
@@ -48,17 +50,20 @@ export class WorkerRunner implements OnModuleDestroy {
       const worker = new Worker(
         processor.queue,
         async (job: Job) => {
-          const key =
-            (job.opts.jobId as string | undefined) ??
-            (job.data as { idempotencyKey?: string })?.idempotencyKey;
-          // Redis-backed idempotency: re-delivered succeeded job → no-op
-          if (key && (await this.queueService.isProcessed(key))) {
-            this.logger.debug(`idempotent skip queue=${processor.queue} jobId=${job.id} key=${key}`);
-            return;
-          }
-          await processor.process(job.data as never, job);
-          // Mark only after success; failed retries must re-run
-          if (key) await this.queueService.markProcessed(key);
+          // F-9: propagate job id as correlation id so job logs carry a traceable requestId
+          return requestContext.run({ requestId: job.id ?? randomUUID() }, async () => {
+            const key =
+              (job.opts.jobId as string | undefined) ??
+              (job.data as { idempotencyKey?: string })?.idempotencyKey;
+            // Redis-backed idempotency: re-delivered succeeded job → no-op
+            if (key && (await this.queueService.isProcessed(key))) {
+              this.logger.debug(`idempotent skip queue=${processor.queue} jobId=${job.id} key=${key}`);
+              return;
+            }
+            await processor.process(job.data as never, job);
+            // Mark only after success; failed retries must re-run
+            if (key) await this.queueService.markProcessed(key);
+          });
         },
         {
           connection: connectionOpts,

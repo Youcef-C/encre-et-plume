@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'; // stdlib — no dep needed
 import {
   ConflictException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -9,6 +10,7 @@ import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on N
 import type { AccountSummary, AccountPreferences, ThemePreference } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
+import { MetricsService } from '../observability/metrics.service';
 import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { Account } from '@prisma/client';
@@ -29,6 +31,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly slugService: SlugService,
     private readonly jwt: JwtService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async signup(dto: SignupDto): Promise<{ account: AccountSummary; token: string }> {
@@ -55,6 +58,7 @@ export class AuthService {
       },
     });
 
+    this.metrics?.incSignup(); // F-9: business counter
     return { account: this.toSummary(account), token: this.signToken(account.id) };
   }
 
