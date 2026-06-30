@@ -14,6 +14,7 @@ const base: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
+  preferences: { theme: 'system' },
 };
 
 // Minimal consumer to expose context values in tests

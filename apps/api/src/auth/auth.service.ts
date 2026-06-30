@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on Node version change
-import type { AccountSummary } from '@encre-et-plume/shared';
+import type { AccountSummary, AccountPreferences, ThemePreference } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import type { SignupDto } from './dto/signup.dto';
@@ -14,6 +14,14 @@ import type { LoginDto } from './dto/login.dto';
 import type { Account } from '@prisma/client';
 
 const BCRYPT_ROUNDS = 10;
+
+const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
+
+// ponytail: duplicated in accounts.service.ts — a 3-line coercion is cheaper than a shared util that ties auth↔accounts
+function readPreferences(raw: unknown): AccountPreferences {
+  const theme = (raw as Record<string, unknown> | null | undefined)?.['theme'];
+  return { theme: VALID_THEMES.includes(theme as ThemePreference) ? (theme as ThemePreference) : 'system' };
+}
 
 @Injectable()
 export class AuthService {
@@ -93,6 +101,7 @@ export class AuthService {
       slug: account.profileSlug,
       avatar: account.avatar,
       createdAt: account.createdAt.toISOString(),
+      preferences: readPreferences(account.preferences),
     };
   }
 }

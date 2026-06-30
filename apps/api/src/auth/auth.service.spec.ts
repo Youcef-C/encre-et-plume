@@ -174,5 +174,23 @@ describe('AuthService', () => {
 
       await expect(service.me('missing')).rejects.toBeInstanceOf(UnauthorizedException);
     });
+
+    it('F-6: includes preferences.theme with system default when column absent', async () => {
+      prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT); // no preferences field
+      const result = await service.me('cuid-1');
+      expect(result.preferences).toEqual({ theme: 'system' });
+    });
+
+    it('F-6: coerces garbage preferences value to system', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, preferences: { theme: 'bogus' } });
+      const result = await service.me('cuid-1');
+      expect(result.preferences).toEqual({ theme: 'system' });
+    });
+
+    it('F-6: preserves explicit dark preference from stored column', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, preferences: { theme: 'dark' } });
+      const result = await service.me('cuid-1');
+      expect(result.preferences).toEqual({ theme: 'dark' });
+    });
   });
 });

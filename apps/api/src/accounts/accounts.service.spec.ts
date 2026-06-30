@@ -11,6 +11,7 @@ const BASE_ACCOUNT = {
   verified: false,
   profileSlug: 'yuki-moreau',
   avatar: null,
+  preferences: { theme: 'system' },
   createdAt: new Date('2026-01-01'),
 };
 
@@ -41,5 +42,29 @@ describe('AccountsService', () => {
   it('throws NotFoundException for unknown account id (BE-AC5 404 branch)', async () => {
     prisma.account.findUnique.mockResolvedValue(null);
     await expect(service.updateRole('bad-id', 'admin')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('F-6: updatePreferences', () => {
+    it('persists theme and returns AccountSummary with updated preference', async () => {
+      const updated = { ...BASE_ACCOUNT, preferences: { theme: 'dark' } };
+      prisma.account.update.mockResolvedValue(updated);
+
+      const result = await service.updatePreferences('cuid-1', 'dark');
+
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 'cuid-1' },
+        data: { preferences: { theme: 'dark' } },
+      });
+      expect(result.preferences).toEqual({ theme: 'dark' });
+      expect(result.id).toBe('cuid-1');
+    });
+
+    it('handles absent preferences column gracefully (defaults to system)', async () => {
+      const updated = { ...BASE_ACCOUNT, preferences: undefined };
+      prisma.account.update.mockResolvedValue(updated);
+
+      const result = await service.updatePreferences('cuid-1', 'system');
+      expect(result.preferences).toEqual({ theme: 'system' });
+    });
   });
 });

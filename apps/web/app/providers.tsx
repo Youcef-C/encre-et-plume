@@ -4,3 +4,4 @@
 export { SessionProvider } from '../lib/session';
 export { RoleSimulationProvider } from '../lib/role';
 export { UnreadProvider } from '../lib/unread';
+export { ThemeProvider } from '../lib/theme';

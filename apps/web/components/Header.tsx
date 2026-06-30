@@ -10,6 +10,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
 import { useUnreadCount, useUnreadCounts } from '../lib/unread';
+import { useTheme } from '../lib/theme';
 import PosterButton from './PosterButton';
 import CountBadge from './CountBadge';
 // ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
@@ -91,6 +92,7 @@ const menuItemStyle: React.CSSProperties = {
 export default function Header() {
   const { account, loading, logout } = useSession();
   const { effectiveRole, setSimulatedRole } = useEffectiveRole();
+  const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
   const { counts } = useUnreadCounts();
@@ -157,7 +159,7 @@ export default function Header() {
         gap: 22,
         padding: '12px 28px',
         backgroundColor: 'var(--card)',
-        backgroundImage: 'linear-gradient(112deg, transparent 73%, #16130f 73%)',
+        backgroundImage: 'linear-gradient(112deg, transparent 73%, var(--ink) 73%)',
         backgroundSize: '100% 100%',
         borderBottom: '3px solid var(--ink)',
       }}
@@ -503,23 +505,66 @@ export default function Header() {
                 </Link>
               ))}
 
-              {/* Theme toggle slot — F-4 Task 5 seam; F-6 wires Clair/Sombre switching */}
+              {/* Theme toggle — F-6: ☀ Clair / ☾ Sombre */}
               <div
                 style={{
                   padding: '10px 13px',
                   borderBottom: '1.5px solid var(--border)',
                   fontSize: 14,
-                  color: 'var(--ink2)',
-                  cursor: 'default',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                 }}
-                aria-disabled="true"
               >
-                <span>Thème</span>
-                {/* ponytail: toggle control deferred to F-6 */}
-                <span style={{ fontSize: 11, color: 'var(--ink2)' }}>bientôt</span>
+                <span style={{ color: 'var(--ink2)', fontSize: 13 }}>Thème</span>
+                <fieldset
+                  role="group"
+                  aria-label="Thème"
+                  style={{
+                    border: 'none',
+                    padding: 0,
+                    margin: 0,
+                    display: 'flex',
+                    gap: 4,
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-pressed={theme === 'light'}
+                    onClick={() => setTheme('light')}
+                    style={{
+                      padding: '4px 8px',
+                      border: `2px solid ${theme === 'light' ? 'var(--accent)' : 'var(--ink)'}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: theme === 'light' ? 'var(--accent)' : 'var(--card)',
+                      color: theme === 'light' ? '#fff' : 'var(--ink)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    &#9728; Clair
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={theme === 'dark'}
+                    onClick={() => setTheme('dark')}
+                    style={{
+                      padding: '4px 8px',
+                      border: `2px solid ${theme === 'dark' ? 'var(--accent)' : 'var(--ink)'}`,
+                      borderRadius: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      background: theme === 'dark' ? 'var(--accent)' : 'var(--card)',
+                      color: theme === 'dark' ? '#fff' : 'var(--ink)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    &#9790; Sombre
+                  </button>
+                </fieldset>
               </div>
 
               {/* Demo role switcher */}

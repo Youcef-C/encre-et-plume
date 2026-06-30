@@ -14,6 +14,21 @@ export const USER_ROLES: readonly UserRole[] = [
   'admin',
 ] as const;
 
+/** F-6: persisted theme choice. 'system' = follow OS (default until user picks). */
+export type ThemePreference = 'light' | 'dark' | 'system';
+
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'] as const;
+
+/** Per-account UI preferences (extensible JSON column). */
+export interface AccountPreferences {
+  theme: ThemePreference;
+}
+
+/** PATCH /accounts/me/preferences body (F-6). */
+export interface UpdatePreferencesRequest {
+  theme: ThemePreference;
+}
+
 /** Public shape of the current account, returned by GET /auth/me, signup, and login. */
 export interface AccountSummary {
   id: string;
@@ -27,6 +42,8 @@ export interface AccountSummary {
   /** Avatar URL or null when none is set yet. */
   avatar: string | null;
   createdAt: string; // ISO 8601
+  /** F-6: persisted UI preferences; theme defaults to 'system'. */
+  preferences: AccountPreferences;
 }
 
 /** PATCH /accounts/{id}/role body — admin-only role change (F-2). */

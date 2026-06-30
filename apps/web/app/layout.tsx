@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import { Anton, Zen_Kaku_Gothic_New } from 'next/font/google';
+import { cookies } from 'next/headers';
+import type { ThemePreference } from '@encre-et-plume/shared';
+import { THEME_PREFERENCES } from '@encre-et-plume/shared';
 import './globals.css';
-import { SessionProvider, RoleSimulationProvider, UnreadProvider } from './providers';
+import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider } from './providers';
 import Header from '../components/Header';
 import RoleBanner from '../components/RoleBanner';
 
@@ -24,18 +27,26 @@ export const metadata: Metadata = {
   description: 'Plateforme française de collaboration manga',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Async server component: read the ep_theme cookie to paint the correct theme
+// on first SSR without any inline blocking script. The CSS [data-theme] rules do the rest.
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get('ep_theme')?.value as ThemePreference | undefined;
+  const theme: ThemePreference = raw && THEME_PREFERENCES.includes(raw) ? raw : 'system';
+
   return (
-    <html lang="fr" className={`${anton.variable} ${zenKaku.variable}`}>
+    <html lang="fr" data-theme={theme} className={`${anton.variable} ${zenKaku.variable}`}>
       <body>
         <SessionProvider>
-          <UnreadProvider>
-            <RoleSimulationProvider>
-              <Header />
-              <RoleBanner />
-              <main>{children}</main>
-            </RoleSimulationProvider>
-          </UnreadProvider>
+          <ThemeProvider>
+            <UnreadProvider>
+              <RoleSimulationProvider>
+                <Header />
+                <RoleBanner />
+                <main>{children}</main>
+              </RoleSimulationProvider>
+            </UnreadProvider>
+          </ThemeProvider>
         </SessionProvider>
       </body>
     </html>

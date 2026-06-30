@@ -25,6 +25,7 @@ const mockAccount: AccountSummary = {
   slug: 'yuki',
   avatar: null,
   createdAt: new Date().toISOString(),
+  preferences: { theme: 'system' },
 };
 
 const mockCounts: UnreadCounts = { total: 5, messages: 3, demandes: 2, signalements: 0 };

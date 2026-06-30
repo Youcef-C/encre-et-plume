@@ -52,6 +52,7 @@ const mockAccount: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
+  preferences: { theme: 'system' },
 };
 
 function renderProfile(slug: string, account: AccountSummary | null = null) {

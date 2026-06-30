@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionContext } from '../lib/session';
-import type { AccountSummary } from '@encre-et-plume/shared';
+import type { AccountSummary, ThemePreference } from '@encre-et-plume/shared';
 import type { UnreadCounts } from '@encre-et-plume/shared';
 import { RoleSimulationProvider } from '../lib/role';
 import { UnreadContext, UnreadCountsContext } from '../lib/unread';
+import { ThemeContext } from '../lib/theme';
 import Header from '../components/Header';
 import { usePathname } from 'next/navigation';
 
@@ -30,30 +31,35 @@ const mockAccount: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
+  preferences: { theme: 'system' },
 };
 
 function renderHeader(
   opts: { account: AccountSummary | null; loading?: boolean; logout?: () => Promise<void> } = {
     account: null,
   },
-  unreadCount = 0
+  unreadCount = 0,
+  themeCtx?: { theme: ThemePreference; setTheme: (t: ThemePreference) => void }
 ) {
   const mockLogout = opts.logout ?? vi.fn().mockResolvedValue(undefined);
+  const ctx = themeCtx ?? { theme: 'system' as ThemePreference, setTheme: vi.fn() };
   return render(
-    <UnreadContext.Provider value={unreadCount}>
-      <SessionContext.Provider
-        value={{
-          account: opts.account,
-          loading: opts.loading ?? false,
-          refresh: vi.fn(),
-          logout: mockLogout,
-        }}
-      >
-        <RoleSimulationProvider>
-          <Header />
-        </RoleSimulationProvider>
-      </SessionContext.Provider>
-    </UnreadContext.Provider>
+    <ThemeContext.Provider value={ctx}>
+      <UnreadContext.Provider value={unreadCount}>
+        <SessionContext.Provider
+          value={{
+            account: opts.account,
+            loading: opts.loading ?? false,
+            refresh: vi.fn(),
+            logout: mockLogout,
+          }}
+        >
+          <RoleSimulationProvider>
+            <Header />
+          </RoleSimulationProvider>
+        </SessionContext.Provider>
+      </UnreadContext.Provider>
+    </ThemeContext.Provider>
   );
 }
 
@@ -481,5 +487,110 @@ describe('Header — F-5 area badges', () => {
     await user.click(screen.getByRole('button', { name: /menu de/i }));
     await screen.findByRole('menuitem', { name: /espace rédaction/i });
     expect(screen.queryByRole('img', { name: /signalements/i })).not.toBeInTheDocument();
+  });
+});
+
+// ─── F-6: Theme toggle ───────────────────────────────────────────────────────
+
+describe('Header — F-6 theme toggle', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+  }
+
+  it('renders Clair and Sombre buttons in the dropdown', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    expect(await screen.findByRole('button', { name: /clair/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sombre/i })).toBeInTheDocument();
+  });
+
+  it('toggle group has accessible label "Thème"', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    await screen.findByRole('group', { name: /thème/i });
+    expect(screen.getByRole('group', { name: /thème/i })).toBeInTheDocument();
+  });
+
+  it('Clair button is aria-pressed when theme is light', async () => {
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'light', setTheme: vi.fn() }
+    );
+    await openMenu(user);
+    const clairBtn = await screen.findByRole('button', { name: /clair/i });
+    expect(clairBtn).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('Sombre button is aria-pressed when theme is dark', async () => {
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'dark', setTheme: vi.fn() }
+    );
+    await openMenu(user);
+    const sombreBtn = await screen.findByRole('button', { name: /sombre/i });
+    expect(sombreBtn).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('neither button is aria-pressed when theme is system', async () => {
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'system', setTheme: vi.fn() }
+    );
+    await openMenu(user);
+    const clairBtn = await screen.findByRole('button', { name: /clair/i });
+    const sombreBtn = screen.getByRole('button', { name: /sombre/i });
+    expect(clairBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(sombreBtn).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('clicking Clair calls setTheme("light")', async () => {
+    const mockSetTheme = vi.fn();
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'system', setTheme: mockSetTheme }
+    );
+    await openMenu(user);
+    await user.click(await screen.findByRole('button', { name: /clair/i }));
+    expect(mockSetTheme).toHaveBeenCalledWith('light');
+  });
+
+  it('clicking Sombre calls setTheme("dark")', async () => {
+    const mockSetTheme = vi.fn();
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'system', setTheme: mockSetTheme }
+    );
+    await openMenu(user);
+    await user.click(await screen.findByRole('button', { name: /sombre/i }));
+    expect(mockSetTheme).toHaveBeenCalledWith('dark');
+  });
+
+  it('theme toggle buttons are keyboard-operable (focus + Enter)', async () => {
+    const mockSetTheme = vi.fn();
+    const user = userEvent.setup();
+    renderHeader(
+      { account: mockAccount },
+      0,
+      { theme: 'system', setTheme: mockSetTheme }
+    );
+    await openMenu(user);
+    const clairBtn = await screen.findByRole('button', { name: /clair/i });
+    clairBtn.focus();
+    await user.keyboard('{Enter}');
+    expect(mockSetTheme).toHaveBeenCalledWith('light');
   });
 });

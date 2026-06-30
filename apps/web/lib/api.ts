@@ -8,6 +8,7 @@ import type {
   ProfileResponse,
   PortfolioItemResponse,
   UpdateProfileRequest,
+  UpdatePreferencesRequest,
   NotificationItem,
   UnreadCounts,
   MarkAllReadResponse,
@@ -54,6 +55,11 @@ export const getProfilePortfolio = (slug: string): Promise<PortfolioItemResponse
 
 export const updateMyProfile = (body: UpdateProfileRequest): Promise<ProfileResponse> =>
   request<ProfileResponse>('/profiles/me', { method: 'PATCH', body: JSON.stringify(body) });
+
+// ─── Preferences (F-6) ───────────────────────────────────────────────────────
+
+export const updateMyPreferences = (body: UpdatePreferencesRequest): Promise<AccountSummary> =>
+  request<AccountSummary>('/accounts/me/preferences', { method: 'PATCH', body: JSON.stringify(body) });
 
 // ─── Notifications (F-5) ─────────────────────────────────────────────────────
 

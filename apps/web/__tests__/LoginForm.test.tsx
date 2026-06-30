@@ -96,6 +96,7 @@ describe('LoginForm', () => {
         slug: 'yuki',
         avatar: null,
         createdAt: new Date().toISOString(),
+        preferences: { theme: 'system' as const },
       },
     });
     mockRefresh.mockResolvedValue(undefined);

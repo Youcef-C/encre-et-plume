@@ -19,9 +19,25 @@
   --dot: 6px;
 }
 
-/* Dark mode palette (matches prototype [data-theme="dark"]) */
+/* Explicit dark: user chose dark regardless of OS setting */
+:root[data-theme="dark"] {
+  --paper: #1d1813;
+  --card: #26211b;
+  --ink: #f1ece1;
+  --ink2: #b0a596;
+  --border: #43392f;
+  --tone: #4a4239;
+  --shadow: #0b0907;
+  --accent-soft: #3a2a26;
+  /* --accent stays red in dark mode */
+}
+
+/* System: follow OS only while no explicit choice is set.
+   ponytail: the dark token block is duplicated once (explicit selector + media-query selector)
+   because CSS cannot share custom-property values across a bare selector and a media-query
+   selector without a build step. Eight lines; not worth it. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme="system"] {
     --paper: #1d1813;
     --card: #26211b;
     --ink: #f1ece1;
@@ -30,7 +46,6 @@
     --tone: #4a4239;
     --shadow: #0b0907;
     --accent-soft: #3a2a26;
-    /* --accent stays red in dark mode */
   }
 }
 
