@@ -5,6 +5,9 @@ import type {
   AuthResponse,
   AccountSummary,
   ApiError,
+  ProfileResponse,
+  PortfolioItemResponse,
+  UpdateProfileRequest,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -39,3 +42,12 @@ export const logout = (): Promise<void> =>
 
 export const getMe = (): Promise<AccountSummary> =>
   request<AccountSummary>('/auth/me');
+
+export const getProfile = (slug: string): Promise<ProfileResponse> =>
+  request<ProfileResponse>(`/profiles/${slug}`);
+
+export const getProfilePortfolio = (slug: string): Promise<PortfolioItemResponse[]> =>
+  request<PortfolioItemResponse[]>(`/profiles/${slug}/portfolio`);
+
+export const updateMyProfile = (body: UpdateProfileRequest): Promise<ProfileResponse> =>
+  request<ProfileResponse>('/profiles/me', { method: 'PATCH', body: JSON.stringify(body) });

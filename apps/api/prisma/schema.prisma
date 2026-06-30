@@ -30,8 +30,28 @@ model Account {
 }
 
 model Profile {
+  id                   String          @id @default(cuid())
+  accountId            String          @unique
+  account              Account         @relation(fields: [accountId], references: [id])
+  coverImage           String?
+  specialty            String?
+  city                 String?
+  bio                  String?
+  seekingActive        Boolean         @default(false)
+  seekingTargetRole    String?
+  seekingGenres        String[]        @default([])
+  seekingProjectLength String?
+  tags                 String[]        @default([])
+  portfolio            PortfolioItem[]
+  createdAt            DateTime        @default(now())
+}
+
+model PortfolioItem {
   id        String   @id @default(cuid())
-  accountId String   @unique
-  account   Account  @relation(fields: [accountId], references: [id])
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id])
+  image     String
+  caption   String?
+  order     Int      @default(0)
   createdAt DateTime @default(now())
 }
