@@ -13,6 +13,7 @@ import { useUnreadCount, useUnreadCounts } from '../lib/unread';
 import { useTheme } from '../lib/theme';
 import PosterButton from './PosterButton';
 import CountBadge from './CountBadge';
+import SearchOverlay from './SearchOverlay';
 // ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
 import type { UserRole } from '@encre-et-plume/shared';
 
@@ -97,8 +98,10 @@ export default function Header() {
   const unreadCount = useUnreadCount();
   const { counts } = useUnreadCounts();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
 
   const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
 
@@ -239,17 +242,19 @@ export default function Header() {
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Search entry point — F-4 Task 2
-          ponytail: no-op; F-7 wires global search behavior */}
+      {/* Search entry point — F-7 wires the overlay */}
       <button
+        ref={searchButtonRef}
         aria-label="Rechercher"
-        onClick={() => { /* ponytail: search entry point only; F-7 wires global search */ }}
+        aria-haspopup="dialog"
+        aria-expanded={searchOpen}
+        onClick={() => setSearchOpen(true)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 7,
           padding: '7px 12px',
-          border: '2px solid var(--border)',
+          border: '2px solid var(--ink)',
           borderRadius: 6,
           background: 'var(--card)',
           color: 'var(--ink2)',
@@ -273,6 +278,15 @@ export default function Header() {
         </svg>
         Rechercher…
       </button>
+
+      {/* F-7 search overlay — rendered at header level so it overlays the full viewport */}
+      <SearchOverlay
+        open={searchOpen}
+        onClose={() => {
+          setSearchOpen(false);
+          searchButtonRef.current?.focus();
+        }}
+      />
 
       {/* Contextual "＋ Poster" button — F-4 Task 6 */}
       {POSTER_PAGES.has(pathname) && <PosterButton />}

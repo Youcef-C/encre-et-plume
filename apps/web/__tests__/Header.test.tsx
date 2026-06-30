@@ -490,6 +490,41 @@ describe('Header — F-5 area badges', () => {
   });
 });
 
+// ─── F-7: Search overlay ─────────────────────────────────────────────────────
+
+// Mock SearchOverlay so Header tests don't need to stub useSearch / fetchSearch
+vi.mock('../components/SearchOverlay', () => ({
+  default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? (
+      <div role="dialog" aria-label="Rechercher" aria-modal="true">
+        <input aria-label="Rechercher" role="combobox" readOnly />
+        <button onClick={onClose} aria-label="Fermer la recherche">Échap</button>
+      </div>
+    ) : null,
+}));
+
+describe('Header — F-7 search overlay', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('clicking the search button opens the overlay', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await user.click(screen.getByRole('button', { name: /rechercher/i }));
+    expect(screen.getByRole('dialog', { name: /rechercher/i })).toBeInTheDocument();
+  });
+
+  it('search button has aria-expanded=false when overlay is closed', () => {
+    renderHeader({ account: mockAccount });
+    const btn = screen.getByRole('button', { name: /rechercher/i });
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('search button shows when logged out', () => {
+    renderHeader({ account: null });
+    expect(screen.getByRole('button', { name: /rechercher/i })).toBeInTheDocument();
+  });
+});
+
 // ─── F-6: Theme toggle ───────────────────────────────────────────────────────
 
 describe('Header — F-6 theme toggle', () => {

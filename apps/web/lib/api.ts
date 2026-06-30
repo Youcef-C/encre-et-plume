@@ -12,6 +12,8 @@ import type {
   NotificationItem,
   UnreadCounts,
   MarkAllReadResponse,
+  SearchResponse,
+  SearchResultType,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -74,3 +76,10 @@ export const markNotificationRead = (id: string): Promise<void> =>
 
 export const markAllNotificationsRead = (): Promise<MarkAllReadResponse> =>
   request<MarkAllReadResponse>('/notifications/read-all', { method: 'POST' });
+
+// ─── Search (F-7) ────────────────────────────────────────────────────────────
+
+export const search = (q: string, scope?: SearchResultType): Promise<SearchResponse> =>
+  request<SearchResponse>(
+    `/search?q=${encodeURIComponent(q)}${scope ? `&scope=${scope}` : ''}`,
+  );
