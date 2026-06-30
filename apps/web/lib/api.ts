@@ -8,6 +8,9 @@ import type {
   ProfileResponse,
   PortfolioItemResponse,
   UpdateProfileRequest,
+  NotificationItem,
+  UnreadCounts,
+  MarkAllReadResponse,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -51,3 +54,17 @@ export const getProfilePortfolio = (slug: string): Promise<PortfolioItemResponse
 
 export const updateMyProfile = (body: UpdateProfileRequest): Promise<ProfileResponse> =>
   request<ProfileResponse>('/profiles/me', { method: 'PATCH', body: JSON.stringify(body) });
+
+// ─── Notifications (F-5) ─────────────────────────────────────────────────────
+
+export const getNotifications = (): Promise<NotificationItem[]> =>
+  request<NotificationItem[]>('/notifications');
+
+export const getUnreadCounts = (): Promise<UnreadCounts> =>
+  request<UnreadCounts>('/notifications/unread-counts');
+
+export const markNotificationRead = (id: string): Promise<void> =>
+  request<void>(`/notifications/${id}/read`, { method: 'POST' });
+
+export const markAllNotificationsRead = (): Promise<MarkAllReadResponse> =>
+  request<MarkAllReadResponse>('/notifications/read-all', { method: 'POST' });

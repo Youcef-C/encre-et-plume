@@ -3,8 +3,9 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionContext } from '../lib/session';
 import type { AccountSummary } from '@encre-et-plume/shared';
+import type { UnreadCounts } from '@encre-et-plume/shared';
 import { RoleSimulationProvider } from '../lib/role';
-import { UnreadContext } from '../lib/unread';
+import { UnreadContext, UnreadCountsContext } from '../lib/unread';
 import Header from '../components/Header';
 import { usePathname } from 'next/navigation';
 
@@ -393,5 +394,92 @@ describe('Header — keyboard a11y', () => {
     expect(menuitems[1]).toHaveFocus();
     await user.keyboard('{ArrowUp}');
     expect(menuitems[0]).toHaveFocus();
+  });
+});
+
+// ─── F-5: Area badges (Messages, Demandes, Signalements) ────────────────────
+
+const mockCounts: UnreadCounts = {
+  total: 7,
+  messages: 3,
+  demandes: 2,
+  signalements: 4,
+};
+
+function renderHeaderWithCounts(
+  account: AccountSummary | null,
+  counts: Partial<UnreadCounts> = {}
+) {
+  const fullCounts: UnreadCounts = { total: 0, messages: 0, demandes: 0, signalements: 0, ...counts };
+  return render(
+    <UnreadCountsContext.Provider value={{ counts: fullCounts, refresh: vi.fn() }}>
+      <UnreadContext.Provider value={fullCounts.total}>
+        <SessionContext.Provider
+          value={{
+            account,
+            loading: false,
+            refresh: vi.fn(),
+            logout: vi.fn().mockResolvedValue(undefined),
+          }}
+        >
+          <RoleSimulationProvider>
+            <Header />
+          </RoleSimulationProvider>
+        </SessionContext.Provider>
+      </UnreadContext.Provider>
+    </UnreadCountsContext.Provider>
+  );
+}
+
+describe('Header — F-5 area badges', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows Messages badge on the Messages nav link with correct aria-label', () => {
+    renderHeaderWithCounts(mockAccount, { messages: 3 });
+    // Badge is inside the "Messages" nav link; look for the img role with the label
+    expect(screen.getByRole('img', { name: /3 messages non lus/i })).toBeInTheDocument();
+  });
+
+  it('Messages badge not shown when messages count is 0', () => {
+    renderHeaderWithCounts(mockAccount, { messages: 0 });
+    expect(screen.queryByRole('img', { name: /messages non lus/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Demandes badge on Candidatures reçues dropdown entry', async () => {
+    const user = userEvent.setup();
+    renderHeaderWithCounts(mockAccount, { demandes: 2 });
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    expect(await screen.findByRole('img', { name: /2 demandes en attente/i })).toBeInTheDocument();
+  });
+
+  it('Demandes badge not shown when demandes count is 0', async () => {
+    const user = userEvent.setup();
+    renderHeaderWithCounts(mockAccount, { demandes: 0 });
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    expect(screen.queryByRole('img', { name: /demandes en attente/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Signalements badge for admin role', async () => {
+    const user = userEvent.setup();
+    renderHeaderWithCounts({ ...mockAccount, role: 'admin' }, { signalements: 4 });
+    await user.click(screen.getByRole('button', { name: /menu de/i }));
+    expect(await screen.findByRole('img', { name: /4 signalements/i })).toBeInTheDocument();
+  });
+
+  it('Signalements badge hidden for utilisateur even if count > 0', () => {
+    renderHeaderWithCounts(mockAccount, { signalements: 4 });
+    expect(screen.queryByRole('img', { name: /signalements/i })).not.toBeInTheDocument();
+  });
+
+  it('Signalements badge not shown for maintainer (no "Panneau admin" link host)', async () => {
+    // Maintainer has "Espace rédaction" link, not "Panneau admin".
+    // The signalements badge lives on the admin link, so no badge surface exists for maintainer.
+    // The backend already gates signalements=0 for non-admin/maintainer; the nav badge
+    // upgrade path is to add a dedicated signalements entry when the admin surface expands.
+    const user = userEvent.setup();
+    renderHeaderWithCounts({ ...mockAccount, role: 'maintainer' }, { signalements: 2 });
+    await user.click(screen.getByRole('button', { name: /menu de/i }));
+    await screen.findByRole('menuitem', { name: /espace rédaction/i });
+    expect(screen.queryByRole('img', { name: /signalements/i })).not.toBeInTheDocument();
   });
 });

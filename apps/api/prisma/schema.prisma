@@ -1,4 +1,4 @@
-// F-1: account sign-up & login. F-3 extends Profile via its own migration.
+// F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,17 +16,30 @@ enum Role {
   admin
 }
 
+enum NotifType {
+  message
+  application
+  report
+  invitation
+  project_activity
+  release
+  like
+  comment
+}
+
 model Account {
-  id           String   @id @default(cuid())
-  displayName  String
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(utilisateur)
-  verified     Boolean  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
-  profileSlug  String   @unique
-  avatar       String?
-  createdAt    DateTime @default(now())
-  profile      Profile?
+  id                    String         @id @default(cuid())
+  displayName           String
+  email                 String         @unique
+  passwordHash          String
+  role                  Role           @default(utilisateur)
+  verified              Boolean        @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
+  profileSlug           String         @unique
+  avatar                String?
+  createdAt             DateTime       @default(now())
+  profile               Profile?
+  notificationsReceived Notification[] @relation("NotifRecipient")
+  notificationsSent     Notification[] @relation("NotifSource")
 }
 
 model Profile {
@@ -54,4 +67,19 @@ model PortfolioItem {
   caption   String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+model Notification {
+  id           String    @id @default(cuid())
+  recipientId  String
+  recipient    Account   @relation("NotifRecipient", fields: [recipientId], references: [id])
+  type         NotifType
+  refId        String?
+  sourceUserId String?
+  sourceUser   Account?  @relation("NotifSource", fields: [sourceUserId], references: [id])
+  createdAt    DateTime  @default(now())
+  readAt       DateTime?
+
+  @@index([recipientId, readAt])
+  @@index([recipientId, createdAt])
 }

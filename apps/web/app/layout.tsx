@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Anton, Zen_Kaku_Gothic_New } from 'next/font/google';
 import './globals.css';
-import { SessionProvider, RoleSimulationProvider } from './providers';
+import { SessionProvider, RoleSimulationProvider, UnreadProvider } from './providers';
 import Header from '../components/Header';
 import RoleBanner from '../components/RoleBanner';
 
@@ -29,11 +29,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={`${anton.variable} ${zenKaku.variable}`}>
       <body>
         <SessionProvider>
-          <RoleSimulationProvider>
-            <Header />
-            <RoleBanner />
-            <main>{children}</main>
-          </RoleSimulationProvider>
+          <UnreadProvider>
+            <RoleSimulationProvider>
+              <Header />
+              <RoleBanner />
+              <main>{children}</main>
+            </RoleSimulationProvider>
+          </UnreadProvider>
         </SessionProvider>
       </body>
     </html>

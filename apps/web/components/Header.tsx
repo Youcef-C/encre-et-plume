@@ -9,8 +9,10 @@ import { usePathname } from 'next/navigation';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
-import { useUnreadCount } from '../lib/unread';
+import { useUnreadCount, useUnreadCounts } from '../lib/unread';
 import PosterButton from './PosterButton';
+import CountBadge from './CountBadge';
+// ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
 import type { UserRole } from '@encre-et-plume/shared';
 
 // Avatar initials fallback (halftone-dot texture matches prototype avatar placeholder)
@@ -91,6 +93,7 @@ export default function Header() {
   const { effectiveRole, setSimulatedRole } = useEffectiveRole();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
+  const { counts } = useUnreadCounts();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
@@ -214,9 +217,18 @@ export default function Header() {
                 letterSpacing: '0.02em',
                 borderBottom: isActive ? '2.5px solid var(--accent)' : '2.5px solid transparent',
                 transition: 'background 0.1s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
               }}
             >
               {label}
+              {href === '/contacts' && (
+                <CountBadge
+                  count={counts.messages}
+                  label={`${counts.messages} messages non lus`}
+                />
+              )}
             </Link>
           );
         })}
@@ -447,9 +459,13 @@ export default function Header() {
                 href="/candidatures-recues"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
-                style={menuItemStyle}
+                style={{ ...menuItemStyle, justifyContent: 'space-between' }}
               >
                 Candidatures reçues
+                <CountBadge
+                  count={counts.demandes}
+                  label={`${counts.demandes} demandes en attente`}
+                />
               </Link>
 
               {/* Role-gated links — hidden (not disabled) when role lacks access */}
@@ -470,10 +486,20 @@ export default function Header() {
                     background: 'var(--accent-soft)',
                     color: 'var(--ink)',
                     textDecoration: 'none',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <span style={{ width: 18, textAlign: 'center' }}>{icon}</span>
-                  {label}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <span style={{ width: 18, textAlign: 'center' }}>{icon}</span>
+                    {label}
+                  </span>
+                  {/* Signalements badge: only for admin/maintainer (already gated by effectiveRole) */}
+                  {href === '/admin' && (
+                    <CountBadge
+                      count={counts.signalements}
+                      label={`${counts.signalements} signalements à traiter`}
+                    />
+                  )}
                 </Link>
               ))}
 

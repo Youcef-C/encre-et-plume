@@ -1,7 +1,7 @@
 'use strict';
 /**
  * E2E teardown — removes all seeded qa_e2e_* accounts (and their profiles + portfolio items).
- * Deletes in FK-dependency order: PortfolioItem → Profile → Account.
+ * Deletes in FK-dependency order: PortfolioItem → Profile → Notification → Account.
  * Called by apps/web/e2e/global-teardown.ts after each e2e run.
  */
 const { PrismaClient } = require('@prisma/client');
@@ -27,7 +27,16 @@ async function main() {
     await prisma.profile.deleteMany({ where: { accountId: { in: accountIds } } });
   }
 
-  // 3. Delete accounts
+  // 3. Delete notifications referencing those accounts (recipient or source)
+  if (accountIds.length > 0) {
+    await prisma.notification.deleteMany({
+      where: {
+        OR: [{ recipientId: { in: accountIds } }, { sourceUserId: { in: accountIds } }],
+      },
+    });
+  }
+
+  // 4. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },
   });
