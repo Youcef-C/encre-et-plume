@@ -12,6 +12,39 @@ vi.mock('../lib/api', () => ({
   login: vi.fn(),
   logout: vi.fn(),
   getMe: vi.fn(),
+  // F-10 media functions (used by UploadControl + ProfilePageClient avatar flow)
+  requestUpload: vi.fn(),
+  finalizeMedia: vi.fn(),
+  getMedia: vi.fn(),
+  setAvatar: vi.fn().mockResolvedValue({}),
+  buildSrcSet: vi.fn().mockReturnValue(''),
+  // F-10 delete avatar
+  deleteAvatar: vi.fn().mockResolvedValue({ avatar: null }),
+}));
+
+// Stub AvatarCropModal so no canvas/react-easy-crop needed here
+vi.mock('../components/AvatarCropModal', () => ({
+  default: () => <div data-testid="avatar-crop-modal" />,
+}));
+
+// Stub UploadControl — captures onBusyChange for save-button tests
+let capturedOnBusyChange: ((busy: boolean) => void) | undefined;
+vi.mock('../components/UploadControl', () => ({
+  default: ({
+    label,
+    onBusyChange,
+  }: {
+    label: string;
+    onBusyChange?: (busy: boolean) => void;
+  }) => {
+    capturedOnBusyChange = onBusyChange;
+    return (
+      <div>
+        <div>{label}</div>
+        <div>Glissez une image ou cliquez pour choisir</div>
+      </div>
+    );
+  },
 }));
 
 vi.mock('next/link', () => ({
@@ -20,7 +53,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-import { getProfile, updateMyProfile } from '../lib/api';
+import { getProfile, updateMyProfile, deleteAvatar } from '../lib/api';
 import ProfilePageClient from '../components/ProfilePageClient';
 
 const mockProfile: ProfileResponse = {
@@ -64,6 +97,10 @@ function renderProfile(slug: string, account: AccountSummary | null = null) {
     </SessionContext.Provider>
   );
 }
+
+beforeEach(() => {
+  capturedOnBusyChange = undefined;
+});
 
 describe('ProfilePageClient — loading', () => {
   it('shows loading state initially', () => {
@@ -188,6 +225,16 @@ describe('ProfilePageClient — owner view', () => {
     expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument();
   });
 
+  it('shows UploadControl for avatar when edit mode is active (F-10)', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    // The UploadControl drop zone should appear with its label
+    expect(screen.getByText('Photo de profil')).toBeInTheDocument();
+    expect(screen.getByText(/Glissez une image/i)).toBeInTheDocument();
+  });
+
   it('"Enregistrer" calls updateMyProfile and exits edit mode', async () => {
     const user = userEvent.setup();
     renderProfile('yuki-moreau', mockAccount);
@@ -210,5 +257,218 @@ describe('ProfilePageClient — error state', () => {
     });
     renderProfile('inconnu');
     expect(await screen.findByText(/profil introuvable/i)).toBeInTheDocument();
+  });
+});
+
+describe('ProfilePageClient — avatar delete (F-10 enhancement)', () => {
+  const mockRefresh = vi.fn().mockResolvedValue(undefined);
+
+  function renderOwnerWithAvatar() {
+    const profileWithAvatar: ProfileResponse = {
+      ...mockProfile,
+      avatar: 'https://cdn/avatar/web.webp',
+    };
+    vi.mocked(getProfile).mockResolvedValue(profileWithAvatar);
+    return render(
+      <SessionContext.Provider
+        value={{ account: mockAccount, loading: false, refresh: mockRefresh, logout: vi.fn() }}
+      >
+        <ProfilePageClient slug="yuki-moreau" />
+      </SessionContext.Provider>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(deleteAvatar).mockResolvedValue({
+      ...mockAccount,
+      avatar: null,
+    });
+    // jsdom stubs for URL blob APIs (used by UploadControl crop flow inside edit panel)
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url') as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it('does not show "Supprimer la photo" when avatar is null', async () => {
+    vi.mocked(getProfile).mockResolvedValue({ ...mockProfile, avatar: null });
+    renderProfile('yuki-moreau', mockAccount);
+    const user = userEvent.setup();
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    expect(screen.queryByRole('button', { name: /supprimer la photo/i })).not.toBeInTheDocument();
+  });
+
+  it('shows "Supprimer la photo" button in edit mode when owner has avatar', async () => {
+    renderOwnerWithAvatar();
+    const user = userEvent.setup();
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    expect(screen.getByRole('button', { name: /supprimer la photo/i })).toBeInTheDocument();
+  });
+
+  it('clicking "Supprimer la photo" shows confirm dialog', async () => {
+    renderOwnerWithAvatar();
+    const user = userEvent.setup();
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByRole('button', { name: /supprimer la photo/i }));
+    expect(screen.getByText(/supprimer la photo de profil/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /oui, supprimer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Non$/i })).toBeInTheDocument();
+  });
+
+  it('"Non" cancels and restores delete button', async () => {
+    renderOwnerWithAvatar();
+    const user = userEvent.setup();
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByRole('button', { name: /supprimer la photo/i }));
+    await user.click(screen.getByRole('button', { name: /^Non$/i }));
+    expect(screen.getByRole('button', { name: /supprimer la photo/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /oui, supprimer/i })).not.toBeInTheDocument();
+    expect(deleteAvatar).not.toHaveBeenCalled();
+  });
+
+  it('"Oui, supprimer" calls deleteAvatar, clears avatar, and refreshes session', async () => {
+    renderOwnerWithAvatar();
+    const user = userEvent.setup();
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByRole('button', { name: /supprimer la photo/i }));
+    await user.click(screen.getByRole('button', { name: /oui, supprimer/i }));
+
+    await waitFor(() => expect(deleteAvatar).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
+
+    // After deletion, "Supprimer la photo" button should disappear (avatar is null now)
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /supprimer la photo/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('avatar img has object-fit cover style', async () => {
+    renderOwnerWithAvatar();
+    await screen.findByText('Yuki Moreau');
+    // Avatar now has role="button" for lightbox trigger; query by alt text instead
+    const img = screen.getByAltText('Yuki Moreau');
+    expect(img).toHaveStyle({ objectFit: 'cover' });
+  });
+});
+
+describe('ProfilePageClient — save button disabled while upload is busy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(mockProfile);
+    vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
+  });
+
+  it('Enregistrer is enabled initially in edit mode', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    const btn = screen.getByRole('button', { name: /enregistrer/i });
+    expect(btn).not.toBeDisabled();
+  });
+
+  it('Enregistrer is disabled and shows hint when upload is busy', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+
+    // Simulate UploadControl reporting busy
+    expect(capturedOnBusyChange).toBeDefined();
+    capturedOnBusyChange!(true);
+
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: /optimisation en cours/i });
+      expect(btn).toBeDisabled();
+    });
+  });
+
+  it('Enregistrer is re-enabled when upload finishes', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+
+    capturedOnBusyChange!(true);
+    await waitFor(() => expect(screen.getByRole('button', { name: /optimisation en cours/i })).toBeDisabled());
+
+    capturedOnBusyChange!(false);
+    await waitFor(() => expect(screen.getByRole('button', { name: /enregistrer/i })).not.toBeDisabled());
+  });
+});
+
+describe('ProfilePageClient — avatar fullscreen lightbox', () => {
+  const profileWithAvatar: ProfileResponse = {
+    ...mockProfile,
+    avatar: 'https://cdn/avatar/web.webp',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(profileWithAvatar);
+  });
+
+  it('clicking the avatar img opens the fullscreen lightbox dialog', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', null);
+    await screen.findByText('Yuki Moreau');
+
+    // Avatar now has role="button" for lightbox; query by its aria-label
+    const avatarBtn = screen.getByRole('button', { name: /voir la photo de profil/i });
+    await user.click(avatarBtn);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('✕ button closes the lightbox', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', null);
+    await screen.findByText('Yuki Moreau');
+
+    await user.click(screen.getByRole('button', { name: /voir la photo de profil/i }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /fermer/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('clicking the backdrop closes the lightbox', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', null);
+    await screen.findByText('Yuki Moreau');
+
+    await user.click(screen.getByRole('button', { name: /voir la photo de profil/i }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+    // Click directly on the dialog backdrop (the dialog element itself)
+    await user.click(screen.getByRole('dialog'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('Escape key closes the lightbox', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', null);
+    await screen.findByText('Yuki Moreau');
+
+    await user.click(screen.getByRole('button', { name: /voir la photo de profil/i }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('halftone fallback (no avatar) renders no clickable lightbox trigger', async () => {
+    vi.mocked(getProfile).mockResolvedValue({ ...mockProfile, avatar: null });
+    renderProfile('yuki-moreau', null);
+    await screen.findByText('Yuki Moreau');
+
+    // No img with button role (halftone is aria-hidden)
+    expect(screen.queryByRole('img', { name: /yuki moreau/i })).not.toBeInTheDocument();
+    // No lightbox trigger button
+    expect(screen.queryByRole('button', { name: /voir la photo/i })).not.toBeInTheDocument();
   });
 });

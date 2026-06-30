@@ -10,6 +10,7 @@ import { QueueModule } from './queue/queue.module';
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
   // before QueueModule's JobMetrics (which injects MetricsService) initialises.
+  // QueueModule imports MediaModule (ImageProcessingProcessor); MediaModule is transitively loaded.
   imports: [ObservabilityModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule],
 })
 export class AppModule {}

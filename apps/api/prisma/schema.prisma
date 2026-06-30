@@ -1,4 +1,4 @@
-// F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification.
+// F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification. F-10 adds Media.
 
 generator client {
   provider = "prisma-client-js"
@@ -27,6 +27,30 @@ enum NotifType {
   comment
 }
 
+// ── F-10 Media enums ──────────────────────────────────────────────────────────
+
+enum MediaKind {
+  avatar
+  cover
+  portfolio
+  chapter_page
+  illustration
+  attachment
+  article
+  contest
+}
+
+enum MediaStatus {
+  pending
+  ready
+  failed
+}
+
+enum MediaVisibility {
+  public
+  private
+}
+
 model Account {
   id                    String         @id @default(cuid())
   displayName           String
@@ -41,6 +65,31 @@ model Account {
   profile               Profile?
   notificationsReceived Notification[] @relation("NotifRecipient")
   notificationsSent     Notification[] @relation("NotifSource")
+  media                 Media[]
+}
+
+// ── F-10 Media model ──────────────────────────────────────────────────────────
+// CS-3's per-project Asset will reference Media.id; existing URL columns
+// (Account.avatar / Profile.coverImage / PortfolioItem.image) keep storing the
+// ready public URL — mediaId references are the long-term form.
+
+model Media {
+  id          String          @id @default(cuid())
+  ownerId     String
+  owner       Account         @relation(fields: [ownerId], references: [id])
+  kind        MediaKind
+  bucketKey   String
+  contentType String
+  size        Int
+  width       Int?
+  height      Int?
+  status      MediaStatus     @default(pending)
+  variants    Json            @default("{}")
+  visibility  MediaVisibility @default(public)
+  createdAt   DateTime        @default(now())
+
+  @@index([ownerId])
+  @@index([status, createdAt])
 }
 
 model Profile {

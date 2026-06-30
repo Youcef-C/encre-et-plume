@@ -89,3 +89,42 @@ import type { QueueHealthResponse } from '@encre-et-plume/shared';
 
 export const getQueueHealth = (): Promise<QueueHealthResponse> =>
   request<QueueHealthResponse>('/admin/queues/health');
+
+// ─── Media (F-10) ─────────────────────────────────────────────────────────────
+import type {
+  RequestUploadRequest,
+  RequestUploadResponse,
+  MediaResponse,
+  SignedUrlResponse,
+  MediaVariants,
+  SetAvatarRequest,
+} from '@encre-et-plume/shared';
+
+export const requestUpload = (body: RequestUploadRequest): Promise<RequestUploadResponse> =>
+  request<RequestUploadResponse>('/media/uploads', { method: 'POST', body: JSON.stringify(body) });
+
+export const finalizeMedia = (id: string): Promise<MediaResponse> =>
+  request<MediaResponse>(`/media/${id}/finalize`, { method: 'POST' });
+
+export const getMedia = (id: string): Promise<MediaResponse> =>
+  request<MediaResponse>(`/media/${id}`);
+
+export const getMediaSignedUrl = (id: string): Promise<SignedUrlResponse> =>
+  request<SignedUrlResponse>(`/media/${id}/url`);
+
+export const setAvatar = (mediaId: string): Promise<AccountSummary> =>
+  request<AccountSummary>('/accounts/me/avatar', {
+    method: 'PATCH',
+    body: JSON.stringify({ mediaId } satisfies SetAvatarRequest),
+  });
+
+export const deleteAvatar = (): Promise<AccountSummary> =>
+  request<AccountSummary>('/accounts/me/avatar', { method: 'DELETE' });
+
+/** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
+export function buildSrcSet(variants: MediaVariants): string {
+  const parts: string[] = [];
+  if (variants.thumb) parts.push(`${variants.thumb} 320w`);
+  if (variants.web) parts.push(`${variants.web} 1280w`);
+  return parts.join(', ');
+}

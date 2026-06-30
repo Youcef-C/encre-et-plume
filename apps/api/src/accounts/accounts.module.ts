@@ -6,9 +6,11 @@ import { SessionGuard } from '../auth/guards/session.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
+    MediaModule, // exports MediaService → AccountsService.setAvatar
     JwtModule.register({
       secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
       signOptions: { expiresIn: '7d' },

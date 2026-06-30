@@ -26,6 +26,7 @@ import { ValidationPipe } from '@nestjs/common';
 const cookieParser = require('cookie-parser') as typeof import('cookie-parser');
 import { AppModule } from './app.module';
 import { AppLoggerService } from './observability/app-logger.service';
+import { WorkerRunner } from './queue/worker-runner';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -45,6 +46,14 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter(Boolean);
   app.enableCors({ origin: webOrigin, credentials: true });
+
+  // Local-dev convenience: run the BullMQ job workers IN this API process so `pnpm dev` processes
+  // jobs (e.g. F-10 image-processing → Media.status `ready`) without a separate worker. In prod leave
+  // WORKER_INLINE unset and run a dedicated worker (`node dist/worker.js`); don't run both at once.
+  if (process.env['WORKER_INLINE'] === 'true') {
+    app.get(WorkerRunner).run();
+    console.log('Job workers running inline (WORKER_INLINE=true)');
+  }
 
   const port = Number(process.env['API_PORT'] ?? 3001);
   await app.listen(port);

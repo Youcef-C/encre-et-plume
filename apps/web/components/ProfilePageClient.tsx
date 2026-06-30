@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { ProfileResponse, ApiError, SeekingTargetRole } from '@encre-et-plume/shared';
+import { useState, useEffect, useRef } from 'react';
+import type { ProfileResponse, ApiError, SeekingTargetRole, MediaResponse, MediaVariants } from '@encre-et-plume/shared';
 import { SEEKING_TARGET_ROLES } from '@encre-et-plume/shared';
-import { getProfile, updateMyProfile } from '../lib/api';
+import { getProfile, updateMyProfile, setAvatar, buildSrcSet, deleteAvatar } from '../lib/api';
 import { useSession } from '../lib/session';
 import ProfileTags from './ProfileTags';
 import ProfileTabs from './ProfileTabs';
 import ProfileActions from './ProfileActions';
+import UploadControl from './UploadControl';
 
 // F-2 — Public profile page client component.
 // Props receive the resolved slug from the server-component wrapper.
@@ -59,8 +60,106 @@ function HalftoneAvatar({ displayName }: { displayName: string }) {
   );
 }
 
+/**
+ * Fullscreen lightbox for viewing a profile avatar at full size.
+ * Opens when the user clicks the avatar image; closeable via ✕, Escape, or backdrop click.
+ */
+function AvatarLightbox({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      prevFocus?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    /* Backdrop — click to close */
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Photo de profil de ${alt}`}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 300,
+        background: 'rgba(22,19,15,0.92)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        cursor: 'zoom-out',
+      }}
+    >
+      {/* ✕ close button — top-right corner */}
+      <button
+        ref={closeRef}
+        type="button"
+        aria-label="Fermer"
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          background: 'var(--paper)',
+          border: '2px solid var(--ink)',
+          borderRadius: 6,
+          width: 40,
+          height: 40,
+          fontSize: 18,
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--ink)',
+          boxShadow: '2px 2px 0 var(--shadow)',
+          fontFamily: 'inherit',
+          flexShrink: 0,
+        }}
+      >
+        ✕
+      </button>
+      {/* Full-size image — object-fit:contain, no crop/distortion */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '90dvh',
+          objectFit: 'contain',
+          border: '3px solid var(--ink)',
+          borderRadius: 8,
+          boxShadow: '5px 5px 0 var(--shadow)',
+          cursor: 'default',
+        }}
+      />
+    </div>
+  );
+}
+
 export default function ProfilePageClient({ slug }: Props) {
-  const { account } = useSession();
+  const session = useSession();
+  const { account } = session;
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<ApiError | null>(null);
@@ -69,6 +168,17 @@ export default function ProfilePageClient({ slug }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<EditData | null>(null);
   const [saving, setSaving] = useState(false);
+  // Avatar variants (F-10) — populated after a successful upload in this session
+  const [avatarVariants, setAvatarVariants] = useState<MediaVariants | null>(null);
+  // Whether UploadControl is currently in a busy phase (blocks save)
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  // Fullscreen lightbox open state (avatar click)
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Delete avatar confirm/loading states
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Key to reset UploadControl internal state after avatar delete
+  const [uploadKey, setUploadKey] = useState(0);
 
   const isOwner = !!account && account.slug === slug;
 
@@ -164,6 +274,31 @@ export default function ProfilePageClient({ slug }: Props) {
     setEditData(null);
   }
 
+  async function handleAvatarUploaded(media: MediaResponse) {
+    const v = media.variants as MediaVariants;
+    await setAvatar(media.id);
+    setAvatarVariants(v);
+    setProfile((p) => (p ? { ...p, avatar: v.web } : p));
+    // Refresh session so Header avatar updates too
+    await session.refresh();
+  }
+
+  async function handleDeleteAvatar() {
+    setDeleting(true);
+    try {
+      await deleteAvatar();
+      setProfile((p) => (p ? { ...p, avatar: null } : p));
+      setAvatarVariants(null);
+      setDeleteConfirm(false);
+      setUploadKey((k) => k + 1); // Reset UploadControl to idle
+      await session.refresh();
+    } catch {
+      // ponytail: swallow; profile.avatar will re-sync on next session.refresh
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function handleSave() {
     if (!editData) return;
     setSaving(true);
@@ -208,23 +343,42 @@ export default function ProfilePageClient({ slug }: Props) {
 
         {/* Profile body */}
         <div style={{ padding: '0 22px 22px' }}>
-          {/* Avatar */}
+          {/* Avatar — click to view fullscreen (only when a real image exists) */}
           {profile.avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.avatar}
-              alt={profile.displayName}
-              width={96}
-              height={96}
-              style={{
-                borderRadius: '50%',
-                border: '3px solid var(--ink)',
-                boxShadow: '4px 4px 0 var(--shadow)',
-                objectFit: 'cover',
-                display: 'block',
-                marginTop: -46,
-              }}
-            />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={profile.avatar}
+                srcSet={avatarVariants ? buildSrcSet(avatarVariants) : undefined}
+                sizes="96px"
+                alt={profile.displayName}
+                width={96}
+                height={96}
+                role="button"
+                tabIndex={0}
+                aria-label={`Voir la photo de profil de ${profile.displayName} en grand`}
+                onClick={() => setLightboxOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setLightboxOpen(true);
+                }}
+                style={{
+                  borderRadius: '50%',
+                  border: '3px solid var(--ink)',
+                  boxShadow: '4px 4px 0 var(--shadow)',
+                  objectFit: 'cover',
+                  display: 'block',
+                  marginTop: -46,
+                  cursor: 'zoom-in',
+                }}
+              />
+              {lightboxOpen && (
+                <AvatarLightbox
+                  src={profile.avatar}
+                  alt={profile.displayName}
+                  onClose={() => setLightboxOpen(false)}
+                />
+              )}
+            </>
           ) : (
             <HalftoneAvatar displayName={profile.displayName} />
           )}
@@ -294,11 +448,16 @@ export default function ProfilePageClient({ slug }: Props) {
                   <button
                     type="button"
                     onClick={() => void handleSave()}
-                    disabled={saving}
+                    disabled={saving || avatarBusy}
+                    aria-busy={avatarBusy}
                     className="ep-btn-primary"
                     style={{ fontSize: 13, padding: '7px 18px' }}
                   >
-                    {saving ? 'Enregistrement…' : 'Enregistrer'}
+                    {saving
+                      ? 'Enregistrement…'
+                      : avatarBusy
+                        ? 'Optimisation en cours…'
+                        : 'Enregistrer'}
                   </button>
                 </div>
               )
@@ -336,7 +495,7 @@ export default function ProfilePageClient({ slug }: Props) {
             </div>
           )}
 
-          {/* Edit form (F-6) — owner only, when isEditing */}
+          {/* Edit form (F-6 + F-10) — owner only, when isEditing */}
           {isOwner && isEditing && editData && (
             <div
               style={{
@@ -347,6 +506,80 @@ export default function ProfilePageClient({ slug }: Props) {
                 background: 'var(--paper)',
               }}
             >
+              {/* Avatar upload (F-10) — key resets internal state after delete */}
+              <UploadControl
+                key={uploadKey}
+                kind="avatar"
+                label="Photo de profil"
+                currentUrl={profile.avatar}
+                onUploaded={(media) => void handleAvatarUploaded(media)}
+                onBusyChange={setAvatarBusy}
+              />
+
+              {/* Delete avatar — only when currently has one */}
+              {profile.avatar && !deleteConfirm && (
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(true)}
+                  className="ep-btn-secondary"
+                  style={{
+                    fontSize: 13,
+                    padding: '6px 14px',
+                    marginBottom: 10,
+                    color: 'var(--accent)',
+                    borderColor: 'var(--accent)',
+                  }}
+                >
+                  Supprimer la photo
+                </button>
+              )}
+
+              {/* Inline confirm step for delete */}
+              {deleteConfirm && (
+                <div
+                  style={{
+                    marginBottom: 10,
+                    padding: '10px 12px',
+                    border: '2px solid var(--accent)',
+                    borderRadius: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    background: 'var(--card)',
+                  }}
+                >
+                  <span style={{ fontSize: 13, flex: 1 }}>
+                    Supprimer la photo de profil ?
+                  </span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(false)}
+                      disabled={deleting}
+                      className="ep-btn-secondary"
+                      style={{ fontSize: 13, padding: '5px 12px' }}
+                    >
+                      Non
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteAvatar()}
+                      disabled={deleting}
+                      className="ep-btn-primary"
+                      style={{
+                        fontSize: 13,
+                        padding: '5px 14px',
+                        background: 'var(--accent)',
+                        borderColor: 'var(--accent)',
+                      }}
+                    >
+                      {deleting ? 'Suppression…' : 'Oui, supprimer'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div style={{ marginBottom: 12 }}>
                 <label className="ep-label" htmlFor="edit-specialty">
                   Spécialité

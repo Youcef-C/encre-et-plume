@@ -16,8 +16,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  // Start the real stack for e2e: the NestJS API (3001) and the Next.js web app (3000).
-  // Locally a dev server already on those ports is reused; in CI both start fresh.
+  // Start the real stack for e2e: the NestJS API (3001), the Next.js web app (3000),
+  // and the image-processing worker (no HTTP port — Playwright polls until the process
+  // starts; we use port 3002 as a dummy sentinel that never binds, so reuseExistingServer
+  // must be true locally or we skip the worker check via the command itself).
   // The API reads DATABASE_URL + REDIS_URL from its env (.env locally / the CI job env).
   webServer: [
     {
@@ -38,6 +40,20 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
+    },
+    // F-10: image-processing worker — must run for Media.status to reach 'ready'.
+    // The worker has no HTTP port; we mark reuseExistingServer=true so a locally-running
+    // worker is reused, and in CI a fresh process is always started (CI=1).
+    {
+      command: 'pnpm --filter @encre-et-plume/api start:worker',
+      // The worker doesn't bind an HTTP port.  Playwright will wait for the process
+      // to start and then proceed without a port health-check when `port` is omitted.
+      // We set reuseExistingServer=true so local dev doesn't double-start the worker.
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { DISABLE_RATE_LIMIT: 'true' },
     },
   ],
 });

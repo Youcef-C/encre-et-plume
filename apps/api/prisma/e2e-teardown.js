@@ -1,7 +1,8 @@
 'use strict';
 /**
  * E2E teardown — removes all seeded qa_e2e_* accounts (and their profiles + portfolio items).
- * Deletes in FK-dependency order: PortfolioItem → Profile → Notification → Account.
+ * Deletes in FK-dependency order:
+ *   Media → PortfolioItem → Profile → Notification → Account.
  * Called by apps/web/e2e/global-teardown.ts after each e2e run.
  */
 const { PrismaClient } = require('@prisma/client');
@@ -15,6 +16,12 @@ async function main() {
     include: { profile: { select: { id: true } } },
   });
   const profileIds = accounts.map((a) => a.profile?.id).filter(Boolean);
+  const accountIds = accounts.map((a) => a.id);
+
+  // 0. Delete Media owned by those accounts (F-10 — added before Account deletion)
+  if (accountIds.length > 0) {
+    await prisma.media.deleteMany({ where: { ownerId: { in: accountIds } } });
+  }
 
   // 1. Delete portfolio items for those profiles
   if (profileIds.length > 0) {
@@ -22,7 +29,6 @@ async function main() {
   }
 
   // 2. Delete profiles
-  const accountIds = accounts.map((a) => a.id);
   if (accountIds.length > 0) {
     await prisma.profile.deleteMany({ where: { accountId: { in: accountIds } } });
   }
