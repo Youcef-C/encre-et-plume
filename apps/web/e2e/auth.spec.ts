@@ -130,11 +130,11 @@ test('FE-3 + FE-6: logout via avatar dropdown → header shows "Se connecter"', 
   // Open avatar dropdown
   await page.getByRole('button', { name: /menu de logout test/i }).click();
 
-  // Dropdown should appear with "Se déconnecter"
-  await expect(page.getByRole('menuitem', { name: /se déconnecter/i })).toBeVisible();
+  // Dropdown should appear with "Déconnexion" (prototype TOP NAV label)
+  await expect(page.getByRole('menuitem', { name: /déconnexion/i })).toBeVisible();
 
   // Logout
-  await page.getByRole('menuitem', { name: /se déconnecter/i }).click();
+  await page.getByRole('menuitem', { name: /déconnexion/i }).click();
 
   // Header reverts to logged-out state (FE-6)
   await expect(page.getByRole('link', { name: /se connecter/i })).toBeVisible({ timeout: 6_000 });
@@ -158,7 +158,7 @@ test('FE-2 full: login with valid credentials → home → avatar visible', asyn
 
   // Logout
   await page.getByRole('button', { name: /menu de login flow/i }).click();
-  await page.getByRole('menuitem', { name: /se déconnecter/i }).click();
+  await page.getByRole('menuitem', { name: /déconnexion/i }).click();
   await expect(page.getByRole('link', { name: /se connecter/i })).toBeVisible({ timeout: 6_000 });
 
   // Now login at /connexion

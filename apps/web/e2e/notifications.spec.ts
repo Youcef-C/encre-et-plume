@@ -122,21 +122,19 @@ test('F5-E2E-1: /notifications lists seeded notifications newest-first with unre
 });
 
 // ---------------------------------------------------------------------------
-// F5-E2E-2: Header badge counts for Messages and Demandes are shown; no Signalements for utilisateur
+// F5-E2E-2: Header dropdown shows the Demandes badge; no Signalements for utilisateur.
+// (The prototype TOP NAV has no "Messages" nav item — the per-area Messages badge is deferred to
+//  the MC-9 messaging widget; messages still count toward the avatar's total-unread badge.)
 // ---------------------------------------------------------------------------
 
-test('F5-E2E-2: header Messages=3 and Demandes=2 badges; no Signalements badge for utilisateur', async ({ page }) => {
+test('F5-E2E-2: dropdown shows Demandes=2 badge; no Signalements badge for utilisateur', async ({ page }) => {
   await loginViaCookie(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
 
-  // Wait for UnreadProvider to fetch counts
-  // Messages badge (aria-label on CountBadge role="img")
-  await expect(page.getByRole('img', { name: /3 messages non lus/i })).toBeVisible({ timeout: 10_000 });
-
-  // Open dropdown to see Demandes badge
+  // Open dropdown to see the Demandes badge on "Candidatures reçues"
   await page.getByRole('button', { name: /menu de e2e utilisateur/i }).click();
   await expect(page.getByRole('img', { name: /2 demandes en attente/i })).toBeVisible({ timeout: 6_000 });
 
-  // No Signalements badge for utilisateur — menu is open but Panneau admin not shown for utilisateur
+  // No Signalements badge for utilisateur — Panneau admin not shown for utilisateur
   await expect(page.getByRole('img', { name: /signalements/i })).not.toBeVisible();
 });
 

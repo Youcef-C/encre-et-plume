@@ -45,8 +45,8 @@ test('dark-audit: home in dark mode — background and ink tokens correct', asyn
   await page.screenshot({ path: path.join(SCRATCHPAD, 'dark-home.png') });
 
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  // dark --paper = #1d1813 → rgb(29, 24, 19)
-  expect(bodyBg).toBe('rgb(29, 24, 19)');
+  // app background (prototype .ep[data-theme="dark"]) = #161310 → rgb(22, 19, 16)
+  expect(bodyBg).toBe('rgb(22, 19, 16)');
 
   const tokens = await page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -91,7 +91,7 @@ test('dark-audit: /connexion in dark mode — no light colors bleeding', async (
   await page.screenshot({ path: path.join(SCRATCHPAD, 'dark-connexion.png') });
 
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bodyBg).toBe('rgb(29, 24, 19)');
+  expect(bodyBg).toBe('rgb(22, 19, 16)');
 });
 
 test('dark-audit: /inscription in dark mode — no light colors bleeding', async ({ page }) => {
@@ -101,7 +101,7 @@ test('dark-audit: /inscription in dark mode — no light colors bleeding', async
   await page.screenshot({ path: path.join(SCRATCHPAD, 'dark-inscription.png') });
 
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bodyBg).toBe('rgb(29, 24, 19)');
+  expect(bodyBg).toBe('rgb(22, 19, 16)');
 });
 
 test('dark-audit: /notifications in dark mode — data-theme="dark" + screenshot', async ({ page }) => {
@@ -165,6 +165,6 @@ test('dark-audit: light mode tokens on /connexion', async ({ page }) => {
   await page.screenshot({ path: path.join(SCRATCHPAD, 'light-connexion.png') });
 
   const bodyBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  // light --paper = #f1ece1 → rgb(241, 236, 225)
-  expect(bodyBg).toBe('rgb(241, 236, 225)');
+  // app background (prototype .ep light) = #fbfaf6 → rgb(251, 250, 246)
+  expect(bodyBg).toBe('rgb(251, 250, 246)');
 });

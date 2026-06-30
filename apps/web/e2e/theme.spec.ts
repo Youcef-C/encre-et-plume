@@ -131,12 +131,11 @@ test('F6-E2E-4: switching to dark mode changes the computed --paper background t
   await openAvatarMenu(page, 'Theme Token');
   await page.getByRole('button', { name: /sombre/i }).click();
 
-  // Dark paper = #1d1813 → rgb(29, 24, 19)
+  // Dark app background (prototype .ep[data-theme="dark"]) = #161310 → rgb(22, 19, 16)
   const darkBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
   expect(lightBg).not.toBe(darkBg);
-  // Dark mode paper is #1d1813 → rgb(29, 24, 19)
-  expect(darkBg).toBe('rgb(29, 24, 19)');
+  expect(darkBg).toBe('rgb(22, 19, 16)');
 });
 
 // ---------------------------------------------------------------------------
@@ -393,9 +392,9 @@ test('F6-E2E-13: clicking Clair switches back to light theme from dark', async (
   await page.getByRole('button', { name: /clair/i }).click();
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('light');
 
-  // Light background: --paper #f1ece1 → rgb(241, 236, 225)
+  // Light app background (prototype .ep) = #fbfaf6 → rgb(251, 250, 246)
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).toBe('rgb(241, 236, 225)');
+  expect(bg).toBe('rgb(251, 250, 246)');
 });
 
 // ---------------------------------------------------------------------------

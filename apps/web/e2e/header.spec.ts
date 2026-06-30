@@ -103,21 +103,23 @@ test('F4-E2E-3: header persists when navigating to /connexion', async ({ page })
 // Primary nav links — labels + hrefs + active state
 // ---------------------------------------------------------------------------
 
-test('F4-E2E-4: primary nav renders all 6 links with correct hrefs', async ({ page }) => {
+test('F4-E2E-4: primary nav renders the 7 prototype links with correct hrefs', async ({ page }) => {
   await page.goto('/');
-  const nav = page.getByRole('navigation', { name: /navigation principale/i });
+  const nav = page.getByRole('navigation', { name: 'Navigation principale', exact: true });
   await expect(nav).toBeVisible();
 
+  // Prototype TOP NAV: Accueil · Découvrir · Galerie · Actualités · Lire · Trouver · Calendrier
   const links = [
-    { label: /accueil/i, href: '/' },
-    { label: /découvrir/i, href: '/decouvrir' },
-    { label: /lire/i, href: '/lire' },
-    { label: /écrire/i, href: '/ecrire' },
-    { label: /projets/i, href: '/tableau-de-bord' },
-    { label: /messages/i, href: '/contacts' },
+    { label: 'Accueil', href: '/' },
+    { label: 'Découvrir', href: '/decouvrir' },
+    { label: 'Galerie', href: '/galerie' },
+    { label: 'Actualités', href: '/actualites' },
+    { label: 'Lire', href: '/lire' },
+    { label: 'Trouver', href: '/trouver' },
+    { label: 'Calendrier', href: '/calendrier' },
   ];
   for (const { label, href } of links) {
-    const link = nav.getByRole('link', { name: label });
+    const link = nav.getByRole('link', { name: label, exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', href);
   }
@@ -131,17 +133,15 @@ test('F4-E2E-5: active nav link has aria-current="page" on home route', async ({
   await expect(nav.getByRole('link', { name: /découvrir/i })).not.toHaveAttribute('aria-current');
 });
 
-test('F4-E2E-6: active nav link red underline on /decouvrir (aria-current + border-bottom)', async ({ page }) => {
+test('F4-E2E-6: active nav link has accent fill on /decouvrir (aria-current + accent background)', async ({ page }) => {
   await page.goto('/decouvrir');
-  const nav = page.getByRole('navigation', { name: /navigation principale/i });
-  const decouvrir = nav.getByRole('link', { name: /découvrir/i });
+  const nav = page.getByRole('navigation', { name: 'Navigation principale', exact: true });
+  const decouvrir = nav.getByRole('link', { name: 'Découvrir', exact: true });
   await expect(decouvrir).toHaveAttribute('aria-current', 'page');
-  // Check the link has an accent-colored bottom border (active indicator)
-  const borderBottom = await decouvrir.evaluate(
-    (el) => getComputedStyle(el).borderBottomColor,
-  );
-  // The accent color is #e8261c — browsers compute to rgb(232, 38, 28)
-  expect(borderBottom).toBe('rgb(232, 38, 28)');
+  // Prototype active/hover style fills the link with the accent (background), not an underline.
+  const bg = await decouvrir.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // accent #e8261c → rgb(232, 38, 28)
+  expect(bg).toBe('rgb(232, 38, 28)');
 });
 
 // ---------------------------------------------------------------------------
@@ -195,16 +195,16 @@ test('F4-E2E-12: avatar menu shows Mes candidatures + Candidatures reçues', asy
   await expect(page.getByRole('menuitem', { name: /candidatures reçues/i })).toBeVisible();
 });
 
-test('F4-E2E-13: avatar menu shows Se déconnecter (F-1 regression)', async ({ page }) => {
+test('F4-E2E-13: avatar menu shows Déconnexion (F-1 regression)', async ({ page }) => {
   await mockLoginAndLandHome(page, { displayName: 'Logout F4' });
   await page.getByRole('button', { name: /menu de logout f4/i }).click();
-  await expect(page.getByRole('menuitem', { name: /se déconnecter/i })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /déconnexion/i })).toBeVisible();
 });
 
-test('F4-E2E-14: clicking Se déconnecter closes menu and reverts to logged-out header', async ({ page }) => {
+test('F4-E2E-14: clicking Déconnexion closes menu and reverts to logged-out header', async ({ page }) => {
   await mockLoginAndLandHome(page, { displayName: 'Logout Test F4' });
   await page.getByRole('button', { name: /menu de logout test f4/i }).click();
-  await page.getByRole('menuitem', { name: /se déconnecter/i }).click();
+  await page.getByRole('menuitem', { name: /déconnexion/i }).click();
   // Header reverts
   await expect(page.getByRole('link', { name: /se connecter/i })).toBeVisible({ timeout: 6_000 });
   await expect(page.getByRole('button', { name: /menu de logout test f4/i })).not.toBeVisible();
@@ -248,18 +248,7 @@ test('F4-E2E-18: demo switcher Éditeur reveals Espace éditeur', async ({ page 
   await expect(page.getByRole('menuitem', { name: /panneau admin/i })).not.toBeVisible();
 });
 
-// ---------------------------------------------------------------------------
-// Contextual "＋ Poster" button
-// ---------------------------------------------------------------------------
-
-test('F4-E2E-19: "＋ Poster" button visible on /decouvrir', async ({ page }) => {
-  await mockLoginAndLandHome(page, { displayName: 'Poster User' });
-  await page.goto('/decouvrir');
-  // The PosterButton is a Link rendered in the header
-  const posterLink = page.getByRole('link', { name: /poster/i });
-  await expect(posterLink).toBeVisible();
-  await expect(posterLink).toHaveAttribute('href', '/publier');
-});
+// (F4-E2E-19 "＋ Poster" removed — the prototype TOP NAV has no Poster button.)
 
 test('F4-E2E-20: "＋ Poster" button NOT visible on / (home)', async ({ page }) => {
   await mockLoginAndLandHome(page, { displayName: 'No Poster User' });
