@@ -1,16 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SessionContext } from '../lib/session';
 import type { AccountSummary } from '@encre-et-plume/shared';
 import { RoleSimulationProvider } from '../lib/role';
+import { UnreadContext } from '../lib/unread';
 import Header from '../components/Header';
+import { usePathname } from 'next/navigation';
 
 // next/link renders as an anchor in test env (jsdom)
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={href} {...rest}>{children}</a>
   ),
+}));
+
+// next/navigation: usePathname defaults to '/'
+vi.mock('next/navigation', () => ({
+  usePathname: vi.fn(() => '/'),
 }));
 
 const mockAccount: AccountSummary = {
@@ -27,24 +34,32 @@ const mockAccount: AccountSummary = {
 function renderHeader(
   opts: { account: AccountSummary | null; loading?: boolean; logout?: () => Promise<void> } = {
     account: null,
-  }
+  },
+  unreadCount = 0
 ) {
   const mockLogout = opts.logout ?? vi.fn().mockResolvedValue(undefined);
   return render(
-    <SessionContext.Provider
-      value={{
-        account: opts.account,
-        loading: opts.loading ?? false,
-        refresh: vi.fn(),
-        logout: mockLogout,
-      }}
-    >
-      <RoleSimulationProvider>
-        <Header />
-      </RoleSimulationProvider>
-    </SessionContext.Provider>
+    <UnreadContext.Provider value={unreadCount}>
+      <SessionContext.Provider
+        value={{
+          account: opts.account,
+          loading: opts.loading ?? false,
+          refresh: vi.fn(),
+          logout: mockLogout,
+        }}
+      >
+        <RoleSimulationProvider>
+          <Header />
+        </RoleSimulationProvider>
+      </SessionContext.Provider>
+    </UnreadContext.Provider>
   );
 }
+
+// Reset pathname mock before each test so test isolation is maintained
+beforeEach(() => {
+  vi.mocked(usePathname).mockReturnValue('/');
+});
 
 describe('Header', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -200,5 +215,183 @@ describe('Header — demo role switcher', () => {
     await user.keyboard('{Tab}'); // to admin
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('menuitem', { name: /panneau admin/i })).toBeInTheDocument();
+  });
+});
+
+describe('Header — primary nav', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('renders a nav landmark', () => {
+    renderHeader({ account: null });
+    expect(screen.getByRole('navigation', { name: /navigation principale/i })).toBeInTheDocument();
+  });
+
+  it('renders all six nav links with correct hrefs', () => {
+    renderHeader({ account: null });
+    const expected = [
+      { label: /accueil/i, href: '/' },
+      { label: /découvrir/i, href: '/decouvrir' },
+      { label: /lire/i, href: '/lire' },
+      { label: /écrire/i, href: '/ecrire' },
+      { label: /projets/i, href: '/tableau-de-bord' },
+      { label: /messages/i, href: '/contacts' },
+    ];
+    for (const { label, href } of expected) {
+      expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href);
+    }
+  });
+
+  it('marks the active route with aria-current="page" and others without it', () => {
+    vi.mocked(usePathname).mockReturnValue('/decouvrir');
+    renderHeader({ account: null });
+    expect(screen.getByRole('link', { name: /découvrir/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /accueil/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /lire/i })).not.toHaveAttribute('aria-current');
+  });
+});
+
+describe('Header — search', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('renders search control when logged out', () => {
+    renderHeader({ account: null });
+    expect(screen.getByRole('button', { name: /rechercher/i })).toBeInTheDocument();
+  });
+
+  it('renders search control when logged in', () => {
+    renderHeader({ account: mockAccount });
+    expect(screen.getByRole('button', { name: /rechercher/i })).toBeInTheDocument();
+  });
+});
+
+describe('Header — dropdown entries', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+  }
+
+  it('shows Mon profil link to user slug', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /mon profil/i });
+    expect(item).toHaveAttribute('href', '/yuki-moreau');
+  });
+
+  it('shows Likes & ma liste link', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /likes & ma liste/i });
+    expect(item).toHaveAttribute('href', '/ma-liste');
+  });
+
+  it('shows Notifications link', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /notifications/i });
+    expect(item).toHaveAttribute('href', '/notifications');
+  });
+
+  it('shows Mes candidatures link', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /mes candidatures/i });
+    expect(item).toHaveAttribute('href', '/mes-candidatures');
+  });
+
+  it('shows Candidatures reçues link', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /candidatures reçues/i });
+    expect(item).toHaveAttribute('href', '/candidatures-recues');
+  });
+
+  it('closes menu when a dropdown item is clicked', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: /mon profil/i }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+});
+
+describe('Header — unread badge', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows no badge text when count is 0', () => {
+    renderHeader({ account: mockAccount }, 0);
+    expect(screen.queryByRole('button', { name: /notifications non lues/i })).not.toBeInTheDocument();
+  });
+
+  it('includes unread count in avatar button label when count > 0', () => {
+    renderHeader({ account: mockAccount }, 5);
+    expect(screen.getByRole('button', { name: /5 notifications non lues/i })).toBeInTheDocument();
+  });
+
+  it('shows count badge on Notifications dropdown item when count > 0', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount }, 5);
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    const notifItem = await screen.findByRole('menuitem', { name: /notifications/i });
+    expect(within(notifItem).getByText('5')).toBeInTheDocument();
+  });
+});
+
+describe('Header — contextual Poster button', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows poster button on /decouvrir', () => {
+    vi.mocked(usePathname).mockReturnValue('/decouvrir');
+    renderHeader({ account: mockAccount });
+    expect(screen.getByRole('link', { name: /poster/i })).toBeInTheDocument();
+  });
+
+  it('does not show poster button on /', () => {
+    vi.mocked(usePathname).mockReturnValue('/');
+    renderHeader({ account: mockAccount });
+    expect(screen.queryByRole('link', { name: /poster/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('Header — keyboard a11y', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('closes menu on Escape and returns focus to avatar button', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    const avatarBtn = screen.getByRole('button', { name: /menu de yuki moreau/i });
+    await user.click(avatarBtn);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(avatarBtn).toHaveFocus();
+  });
+
+  it('moves focus with ArrowDown among menuitems', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    await user.keyboard('{ArrowDown}');
+    const menuitems = screen.getAllByRole('menuitem');
+    expect(menuitems[0]).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(menuitems[1]).toHaveFocus();
+  });
+
+  it('moves focus with ArrowUp among menuitems', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    const menuitems = screen.getAllByRole('menuitem');
+    expect(menuitems[1]).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(menuitems[0]).toHaveFocus();
   });
 });

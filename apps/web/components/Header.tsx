@@ -1,12 +1,16 @@
 'use client';
 
-// F-1 slice of the header: logo + "Se connecter" (logged-out) | avatar + "Se déconnecter" (logged-in).
-// F-2 adds: role-gated dropdown links, editor banner anchor, demo role switcher.
-// F-4 will add full nav links, search, and the complete avatar dropdown.
+// F-1 slice: logo + "Se connecter" / avatar + "Se déconnecter"
+// F-2 adds: role-gated dropdown links, demo role switcher
+// F-4 adds: primary nav, search entry point, full avatar dropdown, unread badge,
+//           contextual "＋ Poster" button, keyboard a11y
 import Link from 'next/link';
-import { useState, useRef, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
+import { useUnreadCount } from '../lib/unread';
+import PosterButton from './PosterButton';
 import type { UserRole } from '@encre-et-plume/shared';
 
 // Avatar initials fallback (halftone-dot texture matches prototype avatar placeholder)
@@ -57,11 +61,41 @@ const DEMO_ROLES: { role: UserRole; label: string }[] = [
   { role: 'admin',       label: 'Admin' },
 ];
 
+// §5 locked route map — DO NOT invent routes
+const NAV_LINKS = [
+  { href: '/',              label: 'Accueil'   },
+  { href: '/decouvrir',     label: 'Découvrir' },
+  { href: '/lire',          label: 'Lire'      },
+  { href: '/ecrire',        label: 'Écrire'    },
+  { href: '/tableau-de-bord', label: 'Projets' },
+  { href: '/contacts',      label: 'Messages'  },
+] as const;
+
+// Contextual "＋ Poster" button shown only on these paths
+const POSTER_PAGES = new Set(['/decouvrir']);
+
+// Shared menuitem link style (avoids repetition inside the large render)
+const menuItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 9,
+  padding: '10px 13px',
+  borderBottom: '1.5px solid var(--border)',
+  fontSize: 14,
+  color: 'var(--ink)',
+  textDecoration: 'none',
+};
+
 export default function Header() {
   const { account, loading, logout } = useSession();
   const { effectiveRole, setSimulatedRole } = useEffectiveRole();
+  const pathname = usePathname();
+  const unreadCount = useUnreadCount();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+
+  const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -75,7 +109,39 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
-  const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
+  // Keyboard nav: Escape closes + focuses avatar; ArrowDown/ArrowUp roving focus among menuitems
+  const handleContainerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!menuOpen) return;
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMenuOpen(false);
+        avatarButtonRef.current?.focus();
+        return;
+      }
+
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+
+      const focused = document.activeElement as HTMLElement;
+      const isAvatarBtn = focused === avatarButtonRef.current;
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+      );
+      if (!items.length) return;
+      const isMenuItem = items.includes(focused);
+      if (!isAvatarBtn && !isMenuItem) return;
+
+      e.preventDefault();
+      const idx = items.indexOf(focused);
+      if (e.key === 'ArrowDown') {
+        items[(idx + 1) % items.length]?.focus();
+      } else {
+        items[(idx - 1 + items.length) % items.length]?.focus();
+      }
+    },
+    [menuOpen]
+  );
 
   return (
     <header
@@ -129,8 +195,73 @@ export default function Header() {
         </span>
       </Link>
 
+      {/* Primary nav — F-4 Task 1 */}
+      <nav aria-label="Navigation principale" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {NAV_LINKS.map(({ href, label }) => {
+          const isActive = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={isActive ? 'page' : undefined}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 700,
+                color: 'var(--ink)',
+                textDecoration: 'none',
+                letterSpacing: '0.02em',
+                borderBottom: isActive ? '2.5px solid var(--accent)' : '2.5px solid transparent',
+                transition: 'background 0.1s',
+              }}
+            >
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
+
       {/* Spacer */}
       <div style={{ flex: 1 }} />
+
+      {/* Search entry point — F-4 Task 2
+          ponytail: no-op; F-7 wires global search behavior */}
+      <button
+        aria-label="Rechercher"
+        onClick={() => { /* ponytail: search entry point only; F-7 wires global search */ }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 7,
+          padding: '7px 12px',
+          border: '2px solid var(--border)',
+          borderRadius: 6,
+          background: 'var(--card)',
+          color: 'var(--ink2)',
+          fontSize: 13,
+          cursor: 'pointer',
+          fontFamily: 'var(--font-body)',
+          flexShrink: 0,
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        Rechercher…
+      </button>
+
+      {/* Contextual "＋ Poster" button — F-4 Task 6 */}
+      {POSTER_PAGES.has(pathname) && <PosterButton />}
 
       {/* Auth surface */}
       {loading ? (
@@ -148,10 +279,15 @@ export default function Header() {
         />
       ) : account ? (
         // Logged-in: avatar button + dropdown
-        <div ref={menuRef} style={{ position: 'relative' }}>
+        <div
+          ref={menuRef}
+          style={{ position: 'relative' }}
+          onKeyDown={handleContainerKeyDown}
+        >
           <button
+            ref={avatarButtonRef}
             onClick={() => setMenuOpen((o) => !o)}
-            aria-label={`Menu de ${account.displayName}`}
+            aria-label={`Menu de ${account.displayName}${unreadCount > 0 ? `, ${unreadCount} notifications non lues` : ''}`}
             aria-expanded={menuOpen}
             aria-haspopup="true"
             style={{
@@ -161,6 +297,7 @@ export default function Header() {
               padding: 0,
               display: 'flex',
               alignItems: 'center',
+              position: 'relative',
             }}
           >
             {account.avatar ? (
@@ -179,6 +316,33 @@ export default function Header() {
             ) : (
               <AvatarFallback name={account.displayName} />
             )}
+            {/* Unread badge on avatar — F-4 Task 4
+                ponytail: stub 0; F-5 replaces via UnreadContext */}
+            {unreadCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: -3,
+                  right: -3,
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  background: 'var(--accent)',
+                  color: '#fff',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 3px',
+                  border: '2px solid var(--card)',
+                  lineHeight: 1,
+                }}
+              >
+                {unreadCount}
+              </span>
+            )}
           </button>
 
           {menuOpen && (
@@ -190,7 +354,7 @@ export default function Header() {
                 top: 50,
                 right: 0,
                 zIndex: 50,
-                width: 220,
+                width: 240,
                 background: 'var(--card)',
                 border: '3px solid var(--ink)',
                 borderRadius: 8,
@@ -216,6 +380,78 @@ export default function Header() {
                 </div>
               </div>
 
+              {/* Standard account actions — F-4 Task 3 */}
+
+              {/* Notifications (badge from F-4 Task 4) */}
+              <Link
+                href="/notifications"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                style={{ ...menuItemStyle, justifyContent: 'space-between' }}
+              >
+                <span>Notifications</span>
+                {unreadCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      minWidth: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      background: 'var(--accent)',
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '0 4px',
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </Link>
+
+              {/* Mon profil */}
+              <Link
+                href={`/${account.slug}`}
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                style={menuItemStyle}
+              >
+                Mon profil
+              </Link>
+
+              {/* Likes & ma liste */}
+              <Link
+                href="/ma-liste"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                style={menuItemStyle}
+              >
+                Likes &amp; ma liste
+              </Link>
+
+              {/* Mes candidatures */}
+              <Link
+                href="/mes-candidatures"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                style={menuItemStyle}
+              >
+                Mes candidatures
+              </Link>
+
+              {/* Candidatures reçues */}
+              <Link
+                href="/candidatures-recues"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                style={menuItemStyle}
+              >
+                Candidatures reçues
+              </Link>
+
               {/* Role-gated links — hidden (not disabled) when role lacks access */}
               {gatedLinks.map(({ href, label, icon }) => (
                 <Link
@@ -240,6 +476,25 @@ export default function Header() {
                   {label}
                 </Link>
               ))}
+
+              {/* Theme toggle slot — F-4 Task 5 seam; F-6 wires Clair/Sombre switching */}
+              <div
+                style={{
+                  padding: '10px 13px',
+                  borderBottom: '1.5px solid var(--border)',
+                  fontSize: 14,
+                  color: 'var(--ink2)',
+                  cursor: 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+                aria-disabled="true"
+              >
+                <span>Thème</span>
+                {/* ponytail: toggle control deferred to F-6 */}
+                <span style={{ fontSize: 11, color: 'var(--ink2)' }}>bientôt</span>
+              </div>
 
               {/* Demo role switcher */}
               <div
