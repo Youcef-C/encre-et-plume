@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ApiError } from '@encre-et-plume/shared';
 import { login } from '../lib/api';
@@ -130,6 +131,16 @@ export default function LoginForm() {
             {fieldErrors.password}
           </span>
         )}
+      </div>
+
+      {/* Forgot password */}
+      <div style={{ textAlign: 'right', marginTop: -10, marginBottom: 18 }}>
+        <Link
+          href="/mot-de-passe-oublie"
+          style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
+        >
+          Mot de passe oublié ?
+        </Link>
       </div>
 
       {/* Remember me */}

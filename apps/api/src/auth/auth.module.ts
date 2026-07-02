@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 import { EmailVerifiedGuard } from './guards/email-verified.guard';
 import { SessionGuard } from './guards/session.guard';
 import { SlugService } from '../slug/slug.service';
@@ -21,6 +22,7 @@ import { RedisService } from '../redis/redis.service';
   providers: [
     AuthService,
     EmailVerificationService,
+    PasswordResetService,
     EmailVerifiedGuard,
     SessionGuard,
     SlugService,

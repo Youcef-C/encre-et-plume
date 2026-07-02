@@ -1,5 +1,10 @@
 import type { Job } from 'bullmq';
-import { EmailProcessor, renderVerificationEmail } from './email.processor';
+import {
+  EmailProcessor,
+  renderVerificationEmail,
+  renderPasswordResetEmail,
+  renderPasswordChangedEmail,
+} from './email.processor';
 import type { EmailJob } from '@encre-et-plume/shared';
 
 const VERIFY_JOB: EmailJob = {
@@ -60,5 +65,104 @@ describe('EmailProcessor', () => {
     // Must NOT log the verifyUrl/token (security: raw token is a credential)
     expect(allLogs).not.toContain('abc123');
     expect(allLogs).not.toContain('verifier-email');
+  });
+});
+
+// ── F-12: Password reset email templates ──────────────────────────────────────
+
+const RESET_PARAMS = {
+  resetUrl: 'http://localhost:3000/reinitialiser-mot-de-passe?token=secret-token-xyz',
+  displayName: 'Yuki Moreau',
+};
+
+describe('renderPasswordResetEmail', () => {
+  it('returns a French subject containing "Réinitialisation" and "Encre & Plume"', () => {
+    const { subject } = renderPasswordResetEmail(RESET_PARAMS);
+    expect(subject).toContain('Réinitialisation');
+    expect(subject).toContain('Encre & Plume');
+  });
+
+  it('body contains the displayName', () => {
+    const { text } = renderPasswordResetEmail(RESET_PARAMS);
+    expect(text).toContain('Yuki Moreau');
+  });
+
+  it('body contains the resetUrl', () => {
+    const { text } = renderPasswordResetEmail(RESET_PARAMS);
+    expect(text).toContain(RESET_PARAMS.resetUrl);
+  });
+
+  it('body warns that the link expires in 1 hour', () => {
+    const { text } = renderPasswordResetEmail(RESET_PARAMS);
+    expect(text).toContain('1 heure');
+  });
+
+  it('body includes a "not you" reassurance line', () => {
+    const { text } = renderPasswordResetEmail(RESET_PARAMS);
+    expect(text.toLowerCase()).toContain('ignorez');
+  });
+});
+
+describe('renderPasswordChangedEmail', () => {
+  it('returns a French subject indicating password was changed and mentions "Encre & Plume"', () => {
+    const { subject } = renderPasswordChangedEmail({ displayName: 'Yuki Moreau' });
+    expect(subject).toContain('modifié');
+    expect(subject).toContain('Encre & Plume');
+  });
+
+  it('body contains the displayName', () => {
+    const { text } = renderPasswordChangedEmail({ displayName: 'Yuki Moreau' });
+    expect(text).toContain('Yuki Moreau');
+  });
+});
+
+describe('EmailProcessor — password_reset and password_changed dispatch', () => {
+  let processor: EmailProcessor;
+  let logger: { log: jest.Mock; warn: jest.Mock };
+
+  beforeEach(() => {
+    logger = { log: jest.fn(), warn: jest.fn() };
+    processor = new EmailProcessor();
+    (processor as unknown as { logger: typeof logger }).logger = logger;
+  });
+
+  const RESET_JOB: EmailJob = {
+    to: 'yuki@test.com',
+    template: 'password_reset',
+    params: RESET_PARAMS,
+  };
+
+  const CHANGED_JOB: EmailJob = {
+    to: 'yuki@test.com',
+    template: 'password_changed',
+    params: { displayName: 'Yuki Moreau' },
+  };
+
+  it('process() resolves for password_reset without throwing', async () => {
+    const job = { name: 'password_reset' } as unknown as Job;
+    await expect(processor.process(RESET_JOB, job)).resolves.toBeUndefined();
+  });
+
+  it('process() resolves for password_changed without throwing', async () => {
+    const job = { name: 'password_changed' } as unknown as Job;
+    await expect(processor.process(CHANGED_JOB, job)).resolves.toBeUndefined();
+  });
+
+  it('processor does NOT log resetUrl for password_reset (raw token is a credential)', async () => {
+    const job = { name: 'password_reset' } as unknown as Job;
+    await processor.process(RESET_JOB, job);
+
+    const allLogs = (logger.log.mock.calls as [string][]).map(([msg]) => msg).join(' ');
+    expect(allLogs).not.toContain('secret-token-xyz');
+    expect(allLogs).not.toContain('reinitialiser-mot-de-passe');
+  });
+
+  it('processor logs recipient and template for password_reset', async () => {
+    const job = { name: 'password_reset' } as unknown as Job;
+    await processor.process(RESET_JOB, job);
+
+    const allLogs = (logger.log.mock.calls as [string][]).map(([msg]) => msg).join(' ');
+    expect(allLogs).toContain('yuki@test.com');
+    expect(allLogs).toContain('password_reset');
   });
 });

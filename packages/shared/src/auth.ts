@@ -99,3 +99,19 @@ export const EMAIL_TOKEN_INVALID = 'EMAIL_TOKEN_INVALID'; // unknown / malformed
 export const EMAIL_TOKEN_EXPIRED = 'EMAIL_TOKEN_EXPIRED'; // past expiresAt
 export const EMAIL_NOT_VERIFIED  = 'EMAIL_NOT_VERIFIED';  // guard rejection
 // RATE_LIMITED reused from F-1.
+
+// ── F-12: Password reset contracts ───────────────────────────────────────────
+
+/** POST /auth/password-reset/request body (public; non-enumerating). */
+export interface RequestPasswordResetRequest { email: string; }
+/** POST /auth/password-reset/request success body — identical regardless of account existence. */
+export interface RequestPasswordResetResponse { ok: true; }
+/** POST /auth/password-reset/confirm body (public; token is the credential). */
+export interface ConfirmPasswordResetRequest { token: string; newPassword: string; }
+/** POST /auth/password-reset/confirm success body. */
+export interface ConfirmPasswordResetResponse { reset: true; }
+
+/** Stable machine-readable error codes — both map to "Lien invalide ou expiré." UI copy. */
+export const PASSWORD_RESET_TOKEN_INVALID = 'PASSWORD_RESET_TOKEN_INVALID'; // unknown / consumed
+export const PASSWORD_RESET_TOKEN_EXPIRED = 'PASSWORD_RESET_TOKEN_EXPIRED'; // past expiresAt
+// RATE_LIMITED reused from F-1.

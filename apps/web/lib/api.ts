@@ -16,6 +16,10 @@ import type {
   SearchResultType,
   VerifyEmailConfirmRequest,
   VerifyEmailConfirmResponse,
+  RequestPasswordResetRequest,
+  RequestPasswordResetResponse,
+  ConfirmPasswordResetRequest,
+  ConfirmPasswordResetResponse,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -95,6 +99,20 @@ export const confirmEmail = (token: string): Promise<VerifyEmailConfirmResponse>
   request<VerifyEmailConfirmResponse>('/auth/verify-email/confirm', {
     method: 'POST',
     body: JSON.stringify({ token } satisfies VerifyEmailConfirmRequest),
+  });
+
+// ─── Password reset (F-12) ───────────────────────────────────────────────────
+
+export const requestPasswordReset = (body: RequestPasswordResetRequest): Promise<RequestPasswordResetResponse> =>
+  request<RequestPasswordResetResponse>('/auth/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const confirmPasswordReset = (body: ConfirmPasswordResetRequest): Promise<ConfirmPasswordResetResponse> =>
+  request<ConfirmPasswordResetResponse>('/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 
 // ─── Queue health (F-8, admin only) ──────────────────────────────────────────

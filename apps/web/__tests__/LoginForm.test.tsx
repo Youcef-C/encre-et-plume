@@ -85,6 +85,13 @@ describe('LoginForm', () => {
     expect(await screen.findByText('Mot de passe requis')).toBeInTheDocument();
   });
 
+  it('renders "Mot de passe oublié ?" link to /mot-de-passe-oublie', () => {
+    renderForm();
+    const link = screen.getByRole('link', { name: /mot de passe oublié/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/mot-de-passe-oublie');
+  });
+
   it('passes rememberMe=true when checkbox is checked', async () => {
     vi.mocked(api.login).mockResolvedValueOnce({
       account: {

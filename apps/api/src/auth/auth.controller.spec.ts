@@ -10,6 +10,7 @@ import { AuthService } from './auth.service';
 import { SessionGuard } from './guards/session.guard';
 import { RedisService } from '../redis/redis.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 
 const JWT_SECRET = 'test-secret';
 
@@ -36,6 +37,7 @@ describe('Auth API (e2e)', () => {
   let app: INestApplication;
   let authService: jest.Mocked<Partial<AuthService>>;
   let emailVerificationServiceMock: { issueToken: jest.Mock; confirm: jest.Mock };
+  let passwordResetServiceMock: { requestReset: jest.Mock; confirm: jest.Mock; issueToken: jest.Mock };
   let jwtService: JwtService;
   let redisMock: ReturnType<typeof makeRedisMock>;
 
@@ -49,6 +51,11 @@ describe('Auth API (e2e)', () => {
       issueToken: jest.fn().mockResolvedValue(undefined),
       confirm: jest.fn().mockResolvedValue(undefined),
     };
+    passwordResetServiceMock = {
+      requestReset: jest.fn().mockResolvedValue(undefined),
+      confirm: jest.fn().mockResolvedValue(undefined),
+      issueToken: jest.fn().mockResolvedValue(undefined),
+    };
     redisMock = makeRedisMock();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -61,6 +68,7 @@ describe('Auth API (e2e)', () => {
         },
         { provide: RedisService, useValue: redisMock },
         { provide: EmailVerificationService, useValue: emailVerificationServiceMock },
+        { provide: PasswordResetService, useValue: passwordResetServiceMock },
         SessionGuard,
       ],
     }).compile();
@@ -83,6 +91,8 @@ describe('Auth API (e2e)', () => {
     redisMock.expire.mockResolvedValue(1);
     emailVerificationServiceMock.issueToken.mockResolvedValue(undefined);
     emailVerificationServiceMock.confirm.mockResolvedValue(undefined);
+    passwordResetServiceMock.requestReset.mockResolvedValue(undefined);
+    passwordResetServiceMock.confirm.mockResolvedValue(undefined);
   });
 
   // Include jti + expiresIn so SessionGuard populates req.jti and req.tokenExp
@@ -359,6 +369,121 @@ describe('Auth API (e2e)', () => {
 
       await request(app.getHttpServer())
         .get('/auth/verify-email/dev-latest?email=nobody@test.com')
+        .expect(404);
+    });
+  });
+
+  // ── F-12: Password reset endpoints ─────────────────────────────────────────
+
+  describe('POST /auth/password-reset/request', () => {
+    it('200 { ok: true } for any email (non-enumeration)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/password-reset/request')
+        .send({ email: 'yuki@test.com' })
+        .expect(200);
+
+      expect(res.body).toEqual({ ok: true });
+    });
+
+    it('200 { ok: true } even when account does not exist (non-enumeration)', async () => {
+      passwordResetServiceMock.requestReset.mockResolvedValue(undefined); // no-op for unknown email
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/password-reset/request')
+        .send({ email: 'nobody@test.com' })
+        .expect(200);
+
+      expect(res.body).toEqual({ ok: true });
+    });
+
+    it('400 on invalid email format', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/password-reset/request')
+        .send({ email: 'not-an-email' })
+        .expect(400);
+    });
+
+    it('429 RATE_LIMITED when IP rate limit exceeded', async () => {
+      redisMock.incr.mockResolvedValueOnce(11); // over limit
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/password-reset/request')
+        .send({ email: 'yuki@test.com' })
+        .expect(429);
+
+      expect(res.body.error).toBe('RATE_LIMITED');
+    });
+
+    it('calls requestReset on the service', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/password-reset/request')
+        .send({ email: 'yuki@test.com' })
+        .expect(200);
+
+      expect(passwordResetServiceMock.requestReset).toHaveBeenCalledWith('yuki@test.com');
+    });
+  });
+
+  describe('POST /auth/password-reset/confirm', () => {
+    it('200 { reset: true } on valid token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/password-reset/confirm')
+        .send({ token: 'valid-reset-token', newPassword: 'newpassword123' })
+        .expect(200);
+
+      expect(res.body).toEqual({ reset: true });
+      expect(passwordResetServiceMock.confirm).toHaveBeenCalledWith('valid-reset-token', 'newpassword123');
+    });
+
+    it('400 on missing token field', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/password-reset/confirm')
+        .send({ newPassword: 'password123' })
+        .expect(400);
+    });
+
+    it('400 on missing newPassword field', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/password-reset/confirm')
+        .send({ token: 'some-token' })
+        .expect(400);
+    });
+
+    it('400 PASSWORD_RESET_TOKEN_INVALID when service throws', async () => {
+      const { BadRequestException } = await import('@nestjs/common');
+      passwordResetServiceMock.confirm.mockRejectedValue(
+        new BadRequestException({
+          statusCode: 400,
+          message: 'Lien invalide ou expiré.',
+          error: 'PASSWORD_RESET_TOKEN_INVALID',
+        }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/password-reset/confirm')
+        .send({ token: 'bad-token', newPassword: 'password123' })
+        .expect(400);
+
+      expect(res.body.error).toBe('PASSWORD_RESET_TOKEN_INVALID');
+    });
+  });
+
+  describe('GET /auth/password-reset/dev-latest', () => {
+    it('returns { token } when stash exists (non-prod)', async () => {
+      redisMock.get.mockResolvedValueOnce('raw-reset-stash');
+
+      const res = await request(app.getHttpServer())
+        .get('/auth/password-reset/dev-latest?email=yuki@test.com')
+        .expect(200);
+
+      expect(res.body.token).toBe('raw-reset-stash');
+    });
+
+    it('404 when no stash found', async () => {
+      redisMock.get.mockResolvedValueOnce(null);
+
+      await request(app.getHttpServer())
+        .get('/auth/password-reset/dev-latest?email=nobody@test.com')
         .expect(404);
     });
   });

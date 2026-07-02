@@ -68,6 +68,7 @@ model Account {
   notificationsSent        Notification[]           @relation("NotifSource")
   media                    Media[]
   emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -130,6 +131,20 @@ model EmailVerificationToken {
   tokenHash  String    @unique      // sha256(raw); raw is never stored
   expiresAt  DateTime               // createdAt + 24h
   consumedAt DateTime?              // single-use: non-null once confirmed
+  createdAt  DateTime  @default(now())
+
+  @@index([accountId])
+}
+
+// ── F-12: Password reset token (mirrors F-11 EmailVerificationToken; TTL 1h) ──
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id])
+  tokenHash  String    @unique   // sha256(raw); raw is never stored
+  expiresAt  DateTime            // createdAt + 1h
+  consumedAt DateTime?           // single-use: non-null once used
   createdAt  DateTime  @default(now())
 
   @@index([accountId])

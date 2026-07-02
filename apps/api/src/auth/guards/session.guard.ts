@@ -26,9 +26,9 @@ export class SessionGuard implements CanActivate {
     const token = req.cookies?.['ep_session'] as string | undefined;
     if (!token) throw new UnauthorizedException();
 
-    let payload: { sub: string; jti?: string; exp?: number };
+    let payload: { sub: string; jti?: string; exp?: number; iat?: number };
     try {
-      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number }>(token);
+      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number }>(token);
     } catch {
       throw new UnauthorizedException();
     }
@@ -37,6 +37,13 @@ export class SessionGuard implements CanActivate {
     if (payload.jti) {
       const denied = await this.redis.get(`denylist:${payload.jti}`);
       if (denied) throw new UnauthorizedException();
+    }
+
+    // F-12: per-account session epoch — reject JWTs issued before the last password reset.
+    // ponytail: session epoch; PasswordResetService.confirm() writes `session-epoch:<accountId>`.
+    const epochStr = await this.redis.get(`session-epoch:${payload.sub}`);
+    if (payload.iat !== undefined && epochStr !== null && payload.iat < parseInt(epochStr, 10)) {
+      throw new UnauthorizedException();
     }
 
     req.accountId = payload.sub;

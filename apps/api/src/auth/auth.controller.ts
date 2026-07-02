@@ -12,13 +12,21 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { AuthResponse, AccountSummary, VerifyEmailConfirmResponse } from '@encre-et-plume/shared';
+import type {
+  AuthResponse,
+  AccountSummary,
+  VerifyEmailConfirmResponse,
+  RequestPasswordResetResponse,
+  ConfirmPasswordResetResponse,
+} from '@encre-et-plume/shared';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 import { SessionGuard, type AuthRequest } from './guards/session.guard';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailConfirmDto } from './dto/verify-email.dto';
+import { PasswordResetRequestDto, PasswordResetConfirmDto } from './dto/password-reset.dto';
 import { RedisService } from '../redis/redis.service';
 
 const COOKIE_NAME = 'ep_session';
@@ -39,6 +47,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly redis: RedisService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly passwordResetService: PasswordResetService,
   ) {}
 
   @Post('signup')
@@ -123,6 +132,43 @@ export class AuthController {
   async devLatestToken(@Query('email') email: string): Promise<{ token: string }> {
     if (process.env['NODE_ENV'] === 'production') throw new NotFoundException();
     const token = await this.redis.get(`dev-email-verify:${email}`);
+    if (!token) throw new NotFoundException();
+    return { token };
+  }
+
+  // ── F-12: Password reset endpoints ──────────────────────────────────────────
+
+  /** POST /auth/password-reset/request — public; rate-limited per IP + per email; non-enumerating. */
+  @Post('password-reset/request')
+  @HttpCode(200)
+  async requestPasswordReset(
+    @Body() dto: PasswordResetRequestDto,
+    @Req() req: AuthRequest,
+  ): Promise<RequestPasswordResetResponse> {
+    await this.rateLimit(`pwreset-req-ip:${req.ip ?? 'unknown'}`, 10, 900);
+    await this.rateLimit(`pwreset-req-email:${dto.email}`, 5, 3600);
+    await this.passwordResetService.requestReset(dto.email);
+    return { ok: true }; // identical body regardless of account existence (AC-B2)
+  }
+
+  /** POST /auth/password-reset/confirm — public; token is the credential. */
+  @Post('password-reset/confirm')
+  @HttpCode(200)
+  async confirmPasswordReset(
+    @Body() dto: PasswordResetConfirmDto,
+  ): Promise<ConfirmPasswordResetResponse> {
+    await this.passwordResetService.confirm(dto.token, dto.newPassword);
+    return { reset: true };
+  }
+
+  /**
+   * GET /auth/password-reset/dev-latest — non-prod only; hermetic e2e seam.
+   * ponytail: non-prod test seam ONLY — never exists in prod.
+   */
+  @Get('password-reset/dev-latest')
+  async devLatestResetToken(@Query('email') email: string): Promise<{ token: string }> {
+    if (process.env['NODE_ENV'] === 'production') throw new NotFoundException();
+    const token = await this.redis.get(`dev-password-reset:${email}`);
     if (!token) throw new NotFoundException();
     return { token };
   }
