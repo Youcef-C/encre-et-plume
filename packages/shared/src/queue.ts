@@ -8,6 +8,8 @@ export const QUEUE_NAMES = [
   'email',
   'notifications-fanout',
   'image-processing',
+  'data-export',     // F-14: packages user data into a zip archive
+  'account-erasure', // F-14: RGPD art. 17 erasure flow
 ] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
@@ -51,6 +53,16 @@ export interface EmailJob {
   /** Template params (stringy wire payload; EmailService.send() takes typed data). */
   params: Record<string, string>;
   idempotencyKey?: string;
+}
+
+// F-14: job payload types
+export interface DataExportJob {
+  accountId: string;
+  exportId: string;
+}
+
+export interface AccountErasureJob {
+  accountId: string;
 }
 
 export interface QueueHealthCounts {

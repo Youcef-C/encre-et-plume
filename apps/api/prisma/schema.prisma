@@ -1,5 +1,6 @@
 // F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification. F-10 adds Media.
 // F-11 adds EmailVerificationToken. F-12 adds PasswordResetToken. F-13 adds LegalDocument + ConsentRecord.
+// F-14 adds DataExport + Account.deletedAt + NotifType.system.
 
 generator client {
   provider = "prisma-client-js"
@@ -26,6 +27,16 @@ enum NotifType {
   release
   like
   comment
+  system // F-14: system notifications (data export ready, etc.)
+}
+
+// ── F-14 DataExport enum ──────────────────────────────────────────────────────
+
+enum DataExportStatus {
+  pending
+  ready
+  failed
+  expired
 }
 
 // ── F-10 Media enums ──────────────────────────────────────────────────────────
@@ -77,6 +88,7 @@ model Account {
   preferences              Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
   createdAt                DateTime                 @default(now())
   emailVerifiedAt          DateTime?                // F-11: null = unverified; set on confirmation
+  deletedAt                DateTime?                // F-14: null = active; non-null = tombstoned (RGPD erasure)
   profile                  Profile?
   notificationsReceived    Notification[]           @relation("NotifRecipient")
   notificationsSent        Notification[]           @relation("NotifSource")
@@ -84,6 +96,7 @@ model Account {
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
   consents                 ConsentRecord[]          // F-13: append-only acceptance log
+  dataExports              DataExport[]             // F-14: export requests
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -102,9 +115,27 @@ model Media {
   variants    Json            @default("{}")
   visibility  MediaVisibility @default(public)
   createdAt   DateTime        @default(now())
+  dataExport  DataExport?     // F-14: back-relation (one archive per export)
 
   @@index([ownerId])
   @@index([status, createdAt])
+}
+
+// ── F-14: DataExport ──────────────────────────────────────────────────────────
+
+model DataExport {
+  id          String           @id @default(cuid())
+  accountId   String
+  account     Account          @relation(fields: [accountId], references: [id])
+  status      DataExportStatus @default(pending)
+  mediaId     String?          @unique
+  media       Media?           @relation(fields: [mediaId], references: [id])
+  requestedAt DateTime         @default(now())
+  readyAt     DateTime?
+  expiresAt   DateTime?
+
+  @@index([accountId, status])
+  @@index([status, expiresAt]) // purge sweep
 }
 
 model Profile {

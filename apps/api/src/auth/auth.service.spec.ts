@@ -410,6 +410,31 @@ describe('AuthService', () => {
     });
   });
 
+  describe('login (F-14: deleted account guard)', () => {
+    it('F-14: throws 401 INVALID_CREDENTIALS when account.deletedAt is set (indistinguishable from wrong password)', async () => {
+      const bcrypt = await import('bcryptjs');
+      const hash = await bcrypt.hash('password123', 10);
+      prisma.account.findUnique.mockResolvedValue({
+        ...MOCK_ACCOUNT,
+        passwordHash: hash,
+        emailVerifiedAt: new Date(),
+        deletedAt: new Date(), // account is tombstoned
+      });
+
+      await expect(
+        service.login({ email: 'yuki@test.com', password: 'password123' }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      try {
+        await service.login({ email: 'yuki@test.com', password: 'password123' });
+      } catch (err) {
+        expect((err as UnauthorizedException).getResponse()).toMatchObject({
+          error: 'INVALID_CREDENTIALS',
+        });
+      }
+    });
+  });
+
   describe('me', () => {
     it('returns AccountSummary for existing account', async () => {
       prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);

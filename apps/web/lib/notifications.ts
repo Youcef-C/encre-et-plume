@@ -10,6 +10,8 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   release:          ()  => 'Nouveau chapitre disponible',
   like:             (n) => `${n} a aimé votre planche`,
   comment:          (n) => `${n} a commenté votre œuvre`,
+  // F-14: system notification (e.g. export ready)
+  system:           ()  => 'Notification système',
 };
 
 // Icon per notification type (prototype unicode symbols)
@@ -22,6 +24,7 @@ export const NOTIF_ICON: Record<NotifType, string> = {
   release:          '⚑',
   like:             '♥',
   comment:          '✎',
+  system:           '◉',
 };
 
 // ponytail: closest existing route per type until target surfaces are built (MC-7, MC-9, etc.)
@@ -34,6 +37,8 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   release:          '/lire',
   like:             '/notifications',
   comment:          '/notifications',
+  // F-14: system (export ready) → parametres for download link
+  system:           '/parametres',
 };
 
 export function notificationHref(type: NotifType, _refId: string | null): string {

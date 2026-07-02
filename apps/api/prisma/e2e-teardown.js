@@ -2,7 +2,7 @@
 /**
  * E2E teardown — removes all seeded qa_e2e_* accounts (and their profiles + portfolio items).
  * Deletes in FK-dependency order:
- *   Media → PortfolioItem → Profile → Notification → ConsentRecord → Account.
+ *   DataExport → Media → PortfolioItem → Profile → Notification → ConsentRecord → Account.
  * Called by apps/web/e2e/global-teardown.ts after each e2e run.
  */
 const { PrismaClient } = require('@prisma/client');
@@ -12,13 +12,18 @@ async function main() {
 
   // Find all qa_e2e_ accounts and their profile ids (for cascade-safe deletion)
   const accounts = await prisma.account.findMany({
-    where: { email: { startsWith: 'qa_e2e_' } },
+    where: { OR: [{ email: { startsWith: 'qa_e2e_' } }, { email: { startsWith: 'deleted+' } }] },
     include: { profile: { select: { id: true } } },
   });
   const profileIds = accounts.map((a) => a.profile?.id).filter(Boolean);
   const accountIds = accounts.map((a) => a.id);
 
-  // 0. Delete Media owned by those accounts (F-10 — added before Account deletion)
+  // 0a. Delete DataExport rows for those accounts (F-14 — FK to Account + Media)
+  if (accountIds.length > 0) {
+    await prisma.dataExport.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
+  // 0b. Delete Media owned by those accounts (F-10 — added before Account deletion)
   if (accountIds.length > 0) {
     await prisma.media.deleteMany({ where: { ownerId: { in: accountIds } } });
   }

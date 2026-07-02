@@ -19,6 +19,7 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   release: 'autres',
   like: 'autres',
   comment: 'autres',
+  system: 'autres', // F-14: system notifications (data export ready, etc.)
 };
 
 type SourceUserRow = { displayName: string; profileSlug: string; avatar: string | null } | null;

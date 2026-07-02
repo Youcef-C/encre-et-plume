@@ -546,6 +546,33 @@ describe('Header — F-5 area badges', () => {
   });
 });
 
+// ─── F-14: Paramètres menu item ──────────────────────────────────────────────
+
+describe('Header — F-14 Paramètres entry', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));
+  }
+
+  it('shows "Paramètres" menuitem in dropdown when logged in', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /paramètres/i });
+    expect(item).toBeInTheDocument();
+    expect(item).toHaveAttribute('href', '/parametres');
+  });
+
+  it('closes menu when Paramètres is clicked', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    await user.click(await screen.findByRole('menuitem', { name: /paramètres/i }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+});
+
 // ─── F-7: Search overlay ─────────────────────────────────────────────────────
 
 // Mock SearchOverlay so Header tests don't need to stub useSearch / fetchSearch

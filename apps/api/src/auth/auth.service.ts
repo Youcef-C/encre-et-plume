@@ -163,6 +163,16 @@ export class AuthService {
       });
     }
 
+    // F-14: reject tombstoned accounts — indistinguishable from wrong password (don't leak deletion)
+    const row = account as unknown as Record<string, unknown>;
+    if (row['deletedAt'] !== null && row['deletedAt'] !== undefined) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: 'Identifiants invalides',
+        error: 'INVALID_CREDENTIALS',
+      });
+    }
+
     // BE-2 R2: bcrypt compare runs first (above) so we don't leak which check failed
     if (!account.emailVerifiedAt) {
       throw new ForbiddenException({

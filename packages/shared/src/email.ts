@@ -10,7 +10,8 @@ export type EmailTemplateKey =
   | 'email_verification'
   | 'password_reset'
   | 'password_changed'
-  | 'welcome';
+  | 'welcome'
+  | 'data_export_ready'; // F-14: notifies when a data export archive is ready
 
 export interface EmailCatalogEntry {
   key: EmailTemplateKey;
@@ -27,6 +28,7 @@ export const EMAIL_TEMPLATES: Record<EmailTemplateKey, EmailCatalogEntry> = {
   password_reset: { key: 'password_reset', group: 'compte', mandatory: true },
   password_changed: { key: 'password_changed', group: 'compte', mandatory: true },
   welcome: { key: 'welcome', group: 'compte', mandatory: true },
+  data_export_ready: { key: 'data_export_ready', group: 'compte', mandatory: true }, // F-14
 };
 
 // ── Per-template typed payload shapes ────────────────────────────────────────
@@ -49,6 +51,10 @@ export interface PasswordChangedEmailData {
   displayName: string;
 }
 
+export interface DataExportReadyEmailData {
+  displayName: string;
+}
+
 /**
  * Map from EmailTemplateKey → its typed params.
  * Used by EmailService.send<K>(template: K, to, data: EmailDataByTemplate[K]).
@@ -58,4 +64,5 @@ export type EmailDataByTemplate = {
   password_reset: PasswordResetEmailData;
   password_changed: PasswordChangedEmailData;
   welcome: WelcomeEmailData;
+  data_export_ready: DataExportReadyEmailData; // F-14
 };

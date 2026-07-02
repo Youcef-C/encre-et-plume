@@ -7,3 +7,4 @@ export * from './queue.js';
 export * from './email.js';
 export * from './observability.js';
 export * from './media.js';
+export * from './privacy.js';

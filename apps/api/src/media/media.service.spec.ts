@@ -369,6 +369,98 @@ describe('MediaService', () => {
     });
   });
 
+  // ── F-14: createPrivateArchive ────────────────────────────────────────────
+
+  describe('createPrivateArchive() [F-14]', () => {
+    it('putObject to S3 and creates a private ready Media row, returns { mediaId }', async () => {
+      const buf = Buffer.from('zip-content');
+      prisma.media.create.mockResolvedValue(makeMedia({ id: 'archive-1', kind: 'attachment', visibility: 'private', status: 'ready' }));
+      s3.putObject.mockResolvedValue(undefined);
+
+      const result = await service.createPrivateArchive('acc-1', buf, 'export.zip');
+
+      expect(s3.putObject).toHaveBeenCalledWith(
+        expect.stringContaining('attachment/acc-1/'),
+        buf,
+        'application/zip',
+      );
+      expect(prisma.media.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ownerId: 'acc-1',
+            kind: 'attachment',
+            visibility: 'private',
+            status: 'ready',
+            contentType: 'application/zip',
+            size: buf.length,
+          }),
+        }),
+      );
+      expect(result).toEqual({ mediaId: 'archive-1' });
+    });
+  });
+
+  // ── F-14: deleteMediaById ─────────────────────────────────────────────────
+
+  describe('deleteMediaById() [F-14]', () => {
+    it('deletes S3 object (main + variants) and DB row', async () => {
+      prisma.media.findUnique.mockResolvedValue(makeMedia({ id: 'media-1', kind: 'attachment', ownerId: 'acc-1', bucketKey: 'attachment/acc-1/media-1.zip' }));
+      prisma.media.deleteMany.mockResolvedValue({ count: 1 });
+
+      await service.deleteMediaById('media-1');
+
+      expect(s3.deleteObject).toHaveBeenCalledWith('attachment/acc-1/media-1.zip');
+      expect(prisma.media.deleteMany).toHaveBeenCalledWith({ where: { id: 'media-1' } });
+    });
+
+    it('no-ops when mediaId is not found', async () => {
+      prisma.media.findUnique.mockResolvedValue(null);
+
+      await service.deleteMediaById('missing');
+
+      expect(s3.deleteObject).not.toHaveBeenCalled();
+      expect(prisma.media.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('still deletes DB row if S3 delete fails (best-effort)', async () => {
+      prisma.media.findUnique.mockResolvedValue(makeMedia({ id: 'media-1', bucketKey: 'attachment/acc-1/media-1.zip' }));
+      prisma.media.deleteMany.mockResolvedValue({ count: 1 });
+      s3.deleteObject.mockRejectedValue(new Error('S3 error'));
+
+      await expect(service.deleteMediaById('media-1')).resolves.toBeUndefined();
+      expect(prisma.media.deleteMany).toHaveBeenCalledWith({ where: { id: 'media-1' } });
+    });
+  });
+
+  // ── F-14: deleteAllOwnerMedia ─────────────────────────────────────────────
+
+  describe('deleteAllOwnerMedia() [F-14]', () => {
+    it('deletes all media for owner across all kinds, S3 best-effort + DB deleteMany', async () => {
+      const m1 = makeMedia({ id: 'm1', kind: 'avatar', bucketKey: 'avatar/acc-1/m1.jpg', ownerId: 'acc-1' });
+      const m2 = makeMedia({ id: 'm2', kind: 'attachment', bucketKey: 'attachment/acc-1/m2.zip', ownerId: 'acc-1' });
+      prisma.media.findMany.mockResolvedValue([m1, m2]);
+      prisma.media.deleteMany.mockResolvedValue({ count: 2 });
+
+      await service.deleteAllOwnerMedia('acc-1');
+
+      expect(prisma.media.findMany).toHaveBeenCalledWith({ where: { ownerId: 'acc-1' } });
+      expect(s3.deleteObject).toHaveBeenCalledWith('avatar/acc-1/m1.jpg');
+      expect(s3.deleteObject).toHaveBeenCalledWith('attachment/acc-1/m2.zip');
+      expect(prisma.media.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['m1', 'm2'] } },
+      });
+    });
+
+    it('no-ops when owner has no media', async () => {
+      prisma.media.findMany.mockResolvedValue([]);
+
+      await service.deleteAllOwnerMedia('acc-1');
+
+      expect(s3.deleteObject).not.toHaveBeenCalled();
+      expect(prisma.media.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
   // ── cleanupOrphans ────────────────────────────────────────────────────────
 
   describe('cleanupOrphans()', () => {

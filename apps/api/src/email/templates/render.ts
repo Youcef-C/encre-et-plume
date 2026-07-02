@@ -77,6 +77,23 @@ export function renderWelcomeEmail(params: Record<string, string>): { subject: s
   };
 }
 
+export function renderDataExportReadyEmail(params: Record<string, string>): { subject: string; text: string } {
+  return {
+    subject: `Vos données sont prêtes à télécharger — Encre & Plume`,
+    text: [
+      `Bonjour ${params['displayName'] ?? ''},`,
+      ``,
+      `L'export de vos données est prêt.`,
+      `Connectez-vous à votre compte et rendez-vous dans Paramètres > Mes données pour télécharger votre archive.`,
+      ``,
+      `Le lien de téléchargement est valable quelques minutes.`,
+      ``,
+      `À bientôt,`,
+      `L'équipe Encre & Plume`,
+    ].join('\n'),
+  };
+}
+
 // ── html helper ───────────────────────────────────────────────────────────────
 
 /** Convert newline-delimited plain text to simple HTML paragraphs (e-mail-safe). */
@@ -110,6 +127,9 @@ export function renderEmail(
       break;
     case 'welcome':
       raw = renderWelcomeEmail(params);
+      break;
+    case 'data_export_ready': // F-14
+      raw = renderDataExportReadyEmail(params);
       break;
     default:
       raw = renderVerificationEmail(params);

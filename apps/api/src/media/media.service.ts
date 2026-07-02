@@ -278,6 +278,88 @@ export class MediaService {
     });
   }
 
+  // ── F-14: RGPD helpers ────────────────────────────────────────────────────
+
+  /**
+   * Create a private archive Media row + upload buffer to S3.
+   * Used by DataExportProcessor to store the user's .zip.
+   * Bypasses image pipeline — server-side write, UPLOAD_ALLOWED_CONTENT_TYPES does not apply.
+   */
+  async createPrivateArchive(
+    ownerId: string,
+    buffer: Buffer,
+    filename: string,
+  ): Promise<{ mediaId: string }> {
+    const mediaId = randomUUID().replace(/-/g, '');
+    const bucketKey = `attachment/${ownerId}/${mediaId}.zip`;
+
+    await this.s3.putObject(bucketKey, buffer, 'application/zip');
+
+    const media = await this.prisma.media.create({
+      data: {
+        id: mediaId,
+        ownerId,
+        kind: 'attachment' as never,
+        bucketKey,
+        contentType: 'application/zip',
+        size: buffer.length,
+        status: 'ready' as never,
+        visibility: 'private' as never,
+        variants: {},
+      },
+    });
+
+    void filename; // ponytail: filename is in the zip itself; bucket key carries the id
+    return { mediaId: (media as unknown as Record<string, unknown>)['id'] as string };
+  }
+
+  /**
+   * Delete a single Media row: best-effort S3 delete (main + variant keys) + DB row delete.
+   * Used by export purge (PrivacyService.getExport lazy-expire + purgeExpiredExports).
+   */
+  async deleteMediaById(mediaId: string): Promise<void> {
+    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+    if (!media) return;
+
+    const row = media as unknown as Record<string, unknown>;
+    const bucketKey = row['bucketKey'] as string;
+    const kind = row['kind'] as string;
+    const ownerId = row['ownerId'] as string;
+
+    // Best-effort: main key + image variant keys (may not exist for non-image kinds)
+    await this.s3.deleteObject(bucketKey).catch(() => {});
+    await this.s3.deleteObject(`${kind}/${ownerId}/${mediaId}/thumb.webp`).catch(() => {});
+    await this.s3.deleteObject(`${kind}/${ownerId}/${mediaId}/web.webp`).catch(() => {});
+    await this.s3.deleteObject(`${kind}/${ownerId}/${mediaId}/web.avif`).catch(() => {});
+
+    await this.prisma.media.deleteMany({ where: { id: mediaId } });
+  }
+
+  /**
+   * Delete ALL Media rows for an owner across all kinds.
+   * Used by AccountErasureProcessor as the S3 best-effort step before the DB transaction.
+   */
+  async deleteAllOwnerMedia(ownerId: string): Promise<void> {
+    const rows = await this.prisma.media.findMany({ where: { ownerId } });
+    if (rows.length === 0) return;
+
+    for (const row of rows) {
+      const r = row as unknown as Record<string, unknown>;
+      const key = r['bucketKey'] as string;
+      const id = r['id'] as string;
+      const kind = r['kind'] as string;
+      // main + known variant keys — best-effort
+      await this.s3.deleteObject(key).catch(() => {});
+      await this.s3.deleteObject(`${kind}/${ownerId}/${id}/thumb.webp`).catch(() => {});
+      await this.s3.deleteObject(`${kind}/${ownerId}/${id}/web.webp`).catch(() => {});
+      await this.s3.deleteObject(`${kind}/${ownerId}/${id}/web.avif`).catch(() => {});
+    }
+
+    await this.prisma.media.deleteMany({
+      where: { id: { in: rows.map((r) => (r as unknown as Record<string, unknown>)['id'] as string) } },
+    });
+  }
+
   /**
    * Delete all avatar Media rows for an owner, plus their S3 objects (main + variant keys).
    * Pass exceptId to skip the newly-set media when called from setAvatar.

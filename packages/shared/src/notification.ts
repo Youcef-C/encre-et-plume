@@ -8,7 +8,8 @@ export type NotifType =
   | 'project_activity'
   | 'release'
   | 'like'
-  | 'comment';
+  | 'comment'
+  | 'system'; // F-14: system notifications (data export ready, etc.)
 
 export type NotifArea = 'messages' | 'demandes' | 'signalements' | 'autres';
 

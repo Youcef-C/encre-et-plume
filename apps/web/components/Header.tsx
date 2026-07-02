@@ -668,6 +668,18 @@ export default function Header() {
                 </fieldset>
               </div>
 
+              {/* F-14: Paramètres → /parametres */}
+              <Link
+                href="/parametres"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
+                style={menuItemStyle}
+              >
+                <span style={iconStyle}>⚙</span>
+                Paramètres
+              </Link>
+
               {/* PARAMÈTRES · THÈME — grouped pill per prototype */}
               <div
                 style={{

@@ -162,6 +162,21 @@ export const setAvatar = (mediaId: string): Promise<AccountSummary> =>
 export const deleteAvatar = (): Promise<AccountSummary> =>
   request<AccountSummary>('/accounts/me/avatar', { method: 'DELETE' });
 
+// ─── Privacy / RGPD (F-14) ───────────────────────────────────────────────────
+import type { DataExportDto, DeleteAccountRequest, DeleteAccountResponse } from '@encre-et-plume/shared';
+
+export const requestDataExport = (): Promise<DataExportDto> =>
+  request<DataExportDto>('/me/data-export', { method: 'POST' });
+
+export const getDataExport = (): Promise<DataExportDto> =>
+  request<DataExportDto>('/me/data-export');
+
+export const deleteAccount = (password: string): Promise<DeleteAccountResponse> =>
+  request<DeleteAccountResponse>('/me/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ password } satisfies DeleteAccountRequest),
+  });
+
 // ─── Legal (F-13) ────────────────────────────────────────────────────────────
 
 export const getLegalDocument = (kind: LegalKind): Promise<LegalDocumentDto> =>
