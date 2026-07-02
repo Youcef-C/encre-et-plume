@@ -132,6 +132,7 @@ describe('LoginForm', () => {
         createdAt: new Date().toISOString(),
         preferences: { theme: 'system' as const },
         needsCguReconsent: false,
+  onboarded: false,
       },
     });
     mockRefresh.mockResolvedValue(undefined);

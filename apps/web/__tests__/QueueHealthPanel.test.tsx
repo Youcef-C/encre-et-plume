@@ -28,6 +28,7 @@ const adminAccount: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 const mockHealth: QueueHealthResponse = {

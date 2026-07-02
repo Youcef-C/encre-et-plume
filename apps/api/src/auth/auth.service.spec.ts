@@ -506,5 +506,17 @@ describe('AuthService', () => {
 
       expect(result.needsCguReconsent).toBe(true);
     });
+
+    it('F-17: toSummary returns onboarded:false when onboardedAt is null', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, onboardedAt: null });
+      const result = await service.me('cuid-1');
+      expect(result.onboarded).toBe(false);
+    });
+
+    it('F-17: toSummary returns onboarded:true when onboardedAt is set', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, onboardedAt: new Date() });
+      const result = await service.me('cuid-1');
+      expect(result.onboarded).toBe(true);
+    });
   });
 });

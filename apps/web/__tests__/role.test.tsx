@@ -17,6 +17,7 @@ const base: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 // Minimal consumer to expose context values in tests

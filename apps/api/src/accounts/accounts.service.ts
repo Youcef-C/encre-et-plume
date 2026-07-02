@@ -25,6 +25,7 @@ function toSummary(account: Account): AccountSummary {
     preferences: readPreferences(account.preferences),
     emailVerified: account.emailVerifiedAt !== null, // F-11
     needsCguReconsent: false, // F-13: accounts endpoints don't compute the live flag; /auth/me does
+    onboarded: false, // F-17: ponytail: hardcoded like needsCguReconsent; accounts endpoints don't need live onboarding state
   };
 }
 

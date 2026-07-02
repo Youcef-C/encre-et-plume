@@ -60,12 +60,14 @@ async function main() {
         role: 'utilisateur',
         verified: false,
         emailVerifiedAt: new Date(), // F-11 R2: seeded accounts must be loginable
+        onboardedAt: new Date(),     // F-17: seeded accounts are pre-onboarded so e2e suites don't get redirected
       },
       update: {
         passwordHash: hash,
         role: 'utilisateur',
         verified: false,
         emailVerifiedAt: new Date(), // F-11 R2: ensure existing seeded accounts are verified
+        onboardedAt: new Date(),     // F-17: seeded accounts are pre-onboarded so e2e suites don't get redirected
       },
     });
     accounts[spec.key] = { email: account.email, id: account.id };

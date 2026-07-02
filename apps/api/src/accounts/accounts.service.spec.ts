@@ -38,6 +38,13 @@ describe('AccountsService', () => {
     service = new AccountsService(prisma as unknown as PrismaService, media as unknown as MediaService);
   });
 
+  it('F-17: toSummary includes onboarded:false (hardcoded like needsCguReconsent)', async () => {
+    prisma.account.findUnique.mockResolvedValue(BASE_ACCOUNT);
+    prisma.account.update.mockResolvedValue(BASE_ACCOUNT);
+    const result = await service.updateRole('cuid-1', 'utilisateur');
+    expect(result.onboarded).toBe(false);
+  });
+
   it('updates role and returns AccountSummary (BE-AC4, BE-AC7)', async () => {
     const updated = { ...BASE_ACCOUNT, role: 'editor' as const, verified: false };
     prisma.account.findUnique.mockResolvedValue(BASE_ACCOUNT);

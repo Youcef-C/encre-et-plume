@@ -36,6 +36,7 @@ const mockAccount: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 const mockRefresh = vi.fn();
@@ -70,7 +71,7 @@ describe('VerifierEmailClient', () => {
     await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
   });
 
-  it('announces success FIRST, then redirects to POST_VERIFICATION_REDIRECT ("/") after a short delay', async () => {
+  it('announces success FIRST, then redirects to POST_VERIFICATION_REDIRECT ("/onboarding") after a short delay', async () => {
     vi.mocked(api.confirmEmail).mockResolvedValueOnce({ emailVerified: true });
     renderPage();
     // The success message must be visible BEFORE the redirect fires (announced delay ~1.5s)
@@ -78,7 +79,7 @@ describe('VerifierEmailClient', () => {
       expect(screen.getByText(/Adresse e-mail vérifiée/)).toBeInTheDocument(),
     );
     expect(mockReplace).not.toHaveBeenCalled();
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'), { timeout: 3000 });
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/onboarding'), { timeout: 3000 });
   });
 
   it('shows error "Lien invalide ou expiré." when confirmEmail rejects', async () => {

@@ -97,6 +97,13 @@ export const search = (q: string, scope?: SearchResultType): Promise<SearchRespo
     `/search?q=${encodeURIComponent(q)}${scope ? `&scope=${scope}` : ''}`,
   );
 
+// ─── Onboarding (F-17) ───────────────────────────────────────────────────────
+
+import type { OnboardingRequest } from '@encre-et-plume/shared';
+
+export const completeOnboarding = (body: OnboardingRequest): Promise<AccountSummary> =>
+  request<AccountSummary>('/me/onboarding', { method: 'POST', body: JSON.stringify(body) });
+
 // ─── Email verification (F-11) ───────────────────────────────────────────────
 
 export const resendVerificationEmail = (email: string): Promise<RequestVerificationEmailResponse> =>

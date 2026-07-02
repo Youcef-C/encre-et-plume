@@ -109,8 +109,8 @@ test('F-11: confirm valid token → "Adresse e-mail vérifiée !" → redirect t
   // Success region is a role=status (a11y)
   await expect(page.getByRole('status')).toBeVisible();
 
-  // Redirect to POST_VERIFICATION_REDIRECT (currently '/')
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Redirect to POST_VERIFICATION_REDIRECT (now '/onboarding')
+  await expect(page).toHaveURL('/onboarding', { timeout: 10_000 });
 
   // Session is live: header shows avatar (display name is "API Vérif")
   await expect(page.getByRole('button', { name: /menu de api vérif/i })).toBeVisible({ timeout: 6_000 });

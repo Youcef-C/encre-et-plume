@@ -32,6 +32,7 @@ const mockAccount: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 // Minimal session context provider for tests

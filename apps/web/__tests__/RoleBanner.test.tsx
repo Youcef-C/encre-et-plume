@@ -17,6 +17,7 @@ const base: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 function wrap(account: AccountSummary | null) {

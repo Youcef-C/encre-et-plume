@@ -31,6 +31,7 @@ const baseAccount: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 function renderModal(needsReconsent: boolean) {

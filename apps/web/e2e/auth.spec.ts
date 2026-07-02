@@ -52,7 +52,11 @@ async function signUpAndVerify(
   // Verify via dev-latest → confirms and sets session cookie in the browser
   const token = await fetchVerifyToken(request, email);
   await page.goto(`/verifier-email?token=${encodeURIComponent(token)}`);
-  // Wait for redirect to / (POST_VERIFICATION_REDIRECT)
+  // POST_VERIFICATION_REDIRECT is now '/onboarding'; skip the wizard to reach /
+  await expect(page).toHaveURL('/onboarding', { timeout: 10_000 });
+  // Skip through onboarding (2-step reader path: Passer × 2 → submits empty → /)
+  await page.getByRole('button', { name: /passer/i }).click();
+  await page.getByRole('button', { name: /passer/i }).click();
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 }
 

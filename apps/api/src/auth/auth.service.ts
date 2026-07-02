@@ -225,6 +225,7 @@ export class AuthService {
       preferences: readPreferences(account.preferences),
       emailVerified: account.emailVerifiedAt !== null, // F-11
       needsCguReconsent: false, // F-13: default for signup/login; me() overrides with live value
+      onboarded: account.onboardedAt !== null, // F-17
     };
   }
 }

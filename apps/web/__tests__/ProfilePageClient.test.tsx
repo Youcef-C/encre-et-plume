@@ -88,6 +88,7 @@ const mockAccount: AccountSummary = {
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
   needsCguReconsent: false,
+  onboarded: false,
 };
 
 function renderProfile(slug: string, account: AccountSummary | null = null) {

@@ -48,6 +48,8 @@ export interface AccountSummary {
   emailVerified: boolean;
   /** F-13: true when the account has no ConsentRecord for the current CGU version. */
   needsCguReconsent: boolean;
+  /** F-17: true once the onboarding wizard was completed or skipped (Account.onboardedAt != null). */
+  onboarded: boolean;
 }
 
 /** PATCH /accounts/{id}/role body — admin-only role change (F-2). */
@@ -99,9 +101,9 @@ export interface RequestVerificationEmailResponse { ok: true; }
 
 /**
  * Where the FE redirects after email confirmation (POST /auth/verify-email/confirm).
- * ponytail: F-17 flips this to '/onboarding' once onboarding lands.
+ * F-17: flipped from '/' to '/onboarding' — new users land on the wizard.
  */
-export const POST_VERIFICATION_REDIRECT = '/';
+export const POST_VERIFICATION_REDIRECT = '/onboarding';
 
 /** Stable API error payload for inline French messages (e.g. "Identifiants invalides"). */
 export interface ApiError {

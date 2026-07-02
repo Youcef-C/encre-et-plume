@@ -1,7 +1,7 @@
 // F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification. F-10 adds Media.
 // F-11 adds EmailVerificationToken. F-12 adds PasswordResetToken. F-13 adds LegalDocument + ConsentRecord.
 // F-14 adds DataExport + Account.deletedAt + NotifType.system.
-// F-15 adds NotificationPreference.
+// F-15 adds NotificationPreference. F-17 adds Account.onboardedAt + Profile.creatorRoles.
 
 generator client {
   provider = "prisma-client-js"
@@ -90,6 +90,7 @@ model Account {
   createdAt                DateTime                 @default(now())
   emailVerifiedAt          DateTime?                // F-11: null = unverified; set on confirmation
   deletedAt                DateTime?                // F-14: null = active; non-null = tombstoned (RGPD erasure)
+  onboardedAt              DateTime?                // F-17: null = show onboarding wizard; set on completion/skip
   profile                  Profile?
   notificationsReceived    Notification[]           @relation("NotifRecipient")
   notificationsSent        Notification[]           @relation("NotifSource")
@@ -148,6 +149,7 @@ model Profile {
   specialty            String?
   city                 String?
   bio                  String?
+  creatorRoles         String[]        @default([])  // F-17: onboarding Step 1 sub-roles (NOT authz role)
   seekingActive        Boolean         @default(false)
   seekingTargetRole    String?
   seekingGenres        String[]        @default([])
