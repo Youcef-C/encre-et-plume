@@ -299,3 +299,25 @@ test('F4-E2E-24: logo "Encre & Plume" links to /', async ({ page }) => {
   await expect(logo).toBeVisible();
   await expect(logo).toHaveAttribute('href', '/');
 });
+
+// ---------------------------------------------------------------------------
+// Responsive regression: logged-in header must never overflow horizontally.
+// The 1025–1279px band shows the full 7-item nav (no hamburger) in compact
+// form; 1280px+ is the desktop replica with the elastic search pill.
+// ---------------------------------------------------------------------------
+
+for (const width of [1025, 1150, 1280] as const) {
+  test(`F4-E2E-25: logged-in header has no horizontal overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await mockLoginAndLandHome(page, { displayName: 'Yuki Moreau' });
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    // The full prototype nav must still be visible in this range (no hamburger).
+    await expect(page.getByRole('navigation', { name: 'Navigation principale' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ouvrir la navigation' })).toBeHidden();
+  });
+}

@@ -306,12 +306,14 @@ export default function Header() {
           fontWeight: 500,
           cursor: 'text',
           fontFamily: 'var(--font-body)',
-          flexShrink: 0,
-          minWidth: 210,
+          // Elastic: the search pill is the header's only shrinkable element — it absorbs
+          // the 1025–1280px band so the nav/pills never overflow (label truncates via CSS).
+          flexShrink: 1,
+          minWidth: 0,
         }}
       >
-        <span>⌕</span>
-        Rechercher un titre, un·e auteur·rice…
+        <span aria-hidden="true">⌕</span>
+        <span className="ep-search-label">Rechercher un titre, un·e auteur·rice…</span>
       </button>
 
       {/* F-7 search overlay */}

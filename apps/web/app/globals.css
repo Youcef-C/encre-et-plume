@@ -364,6 +364,38 @@ h1, h2, h3, h4, h5, h6 {
   color: #fff;
 }
 
+/* Elastic search pill: absorbs shrinking widths so the fixed nav/pills never overflow.
+   Full placeholder at ≥1440px; the label truncates, then hides, before anything clips. */
+.ep-search-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Narrow-desktop band (1025–1279px): the full 7-item nav still renders (no hamburger yet)
+   but space is tight — compact gaps/paddings and an icon-only search keep every element
+   on one row with zero horizontal overflow. !important overrides the inline styles. */
+@media (min-width: 1025px) and (max-width: 1279px) {
+  .ep-header {
+    gap: 8px;
+    padding: 12px 16px;
+  }
+  .ep-logo-text {
+    font-size: 21px;
+  }
+  .ep-nav-link {
+    padding: 8px 8px !important;
+    font-size: 13px;
+  }
+  .ep-search-label {
+    display: none; /* icon-only search; aria-label "Rechercher" keeps it accessible */
+  }
+  .ep-search-desktop {
+    padding: 9px 12px !important;
+    cursor: pointer !important;
+  }
+}
+
 @media (max-width: 1024px) {
   .ep-header {
     gap: 12px;
