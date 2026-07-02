@@ -1,7 +1,8 @@
 /**
- * AccountErasureProcessor unit tests (F-14).
+ * AccountErasureProcessor unit tests (F-14 + F-15).
  * Core RGPD safety net: asserts EVERY Account FK relation is handled.
- * FK erasure order: DataExport → PortfolioItem → Profile → Notifications → Media → Tokens → tombstone Account.
+ * FK erasure order: DataExport → PortfolioItem → Profile → Notifications → Media →
+ *                   NotificationPreference → Tokens → tombstone Account.
  * ConsentRecord: KEPT (legal proof).
  */
 
@@ -45,6 +46,7 @@ function makePrisma() {
     profile: makeTxModel('profile'),
     notification: makeTxModel('notification'),
     media: makeTxModel('media'),
+    notificationPreference: makeTxModel('notificationPreference'), // F-15
     emailVerificationToken: makeTxModel('emailVerificationToken'),
     passwordResetToken: makeTxModel('passwordResetToken'),
     account: makeTxModel('account'),
@@ -190,6 +192,14 @@ describe('AccountErasureProcessor', () => {
     await processor.process({ accountId: ACCOUNT_ID }, {} as never);
 
     expect(prisma._tx.passwordResetToken.deleteMany).toHaveBeenCalledWith({
+      where: { accountId: ACCOUNT_ID },
+    });
+  });
+
+  it('CHECKLIST: NotificationPreference rows deleted (F-15 RGPD)', async () => {
+    await processor.process({ accountId: ACCOUNT_ID }, {} as never);
+
+    expect(prisma._tx.notificationPreference.deleteMany).toHaveBeenCalledWith({
       where: { accountId: ACCOUNT_ID },
     });
   });

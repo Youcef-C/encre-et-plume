@@ -1,6 +1,7 @@
 // F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification. F-10 adds Media.
 // F-11 adds EmailVerificationToken. F-12 adds PasswordResetToken. F-13 adds LegalDocument + ConsentRecord.
 // F-14 adds DataExport + Account.deletedAt + NotifType.system.
+// F-15 adds NotificationPreference.
 
 generator client {
   provider = "prisma-client-js"
@@ -92,6 +93,7 @@ model Account {
   profile                  Profile?
   notificationsReceived    Notification[]           @relation("NotifRecipient")
   notificationsSent        Notification[]           @relation("NotifSource")
+  notificationPreferences  NotificationPreference[]
   media                    Media[]
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
@@ -209,6 +211,20 @@ model Notification {
 }
 
 // ── F-13: Legal documents & consent records ───────────────────────────────────
+
+// ── F-15: Notification & e-mail preferences ──────────────────────────────────
+
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+  type      String  // NotificationPrefType (string — forward-compatible with new categories)
+  channel   String  // 'in_app' | 'email'
+  enabled   Boolean
+
+  @@unique([accountId, type, channel])
+  @@index([accountId])
+}
 
 model LegalDocument {
   id          String    @id @default(cuid())

@@ -177,6 +177,30 @@ export const deleteAccount = (password: string): Promise<DeleteAccountResponse> 
     body: JSON.stringify({ password } satisfies DeleteAccountRequest),
   });
 
+// ─── Notification preferences (F-15) ─────────────────────────────────────────
+import type {
+  NotificationPreferencesResponse,
+  UpdateNotificationPreferencesRequest,
+  UpdateNotificationPreferencesResponse,
+  UnsubscribeRequest,
+  UnsubscribeResponse,
+} from '@encre-et-plume/shared';
+
+export const getNotificationPreferences = (): Promise<NotificationPreferencesResponse> =>
+  request<NotificationPreferencesResponse>('/me/notification-preferences');
+
+export const updateNotificationPreferences = (changes: UpdateNotificationPreferencesRequest['changes']): Promise<UpdateNotificationPreferencesResponse> =>
+  request<UpdateNotificationPreferencesResponse>('/me/notification-preferences', {
+    method: 'PATCH',
+    body: JSON.stringify({ changes } satisfies UpdateNotificationPreferencesRequest),
+  });
+
+export const unsubscribe = (token: string): Promise<UnsubscribeResponse> =>
+  request<UnsubscribeResponse>('/unsubscribe', {
+    method: 'POST',
+    body: JSON.stringify({ token } satisfies UnsubscribeRequest),
+  });
+
 // ─── Legal (F-13) ────────────────────────────────────────────────────────────
 
 export const getLegalDocument = (kind: LegalKind): Promise<LegalDocumentDto> =>

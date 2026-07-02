@@ -53,7 +53,7 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
     //   DataExport → PortfolioItem → Profile → Notifications → Media rows →
     //   EmailVerificationToken → PasswordResetToken → tombstone Account
     //
-    // F-14 FK checklist — every Account relation in schema.prisma is handled:
+    // FK checklist — every Account relation in schema.prisma is handled:
     // ✓ DataExport (accountId, required) — deleteMany
     // ✓ PortfolioItem (profileId → Profile → accountId) — deleteMany (child of Profile)
     // ✓ Profile (accountId, 1-1) — deleteMany
@@ -62,6 +62,7 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
     // ✓ Media (ownerId, required) — deleteMany (S3 done above)
     // ✓ EmailVerificationToken (accountId) — deleteMany
     // ✓ PasswordResetToken (accountId) — deleteMany
+    // ✓ NotificationPreference (accountId, required) — deleteMany (F-15)
     // ✓ ConsentRecord (accountId) — KEPT (legal proof)
     // ✓ Account — TOMBSTONE (keep row so ConsentRecord FK is valid; free email+slug for re-signup)
 
@@ -87,7 +88,11 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
       // 5. Media rows (S3 bytes already deleted above)
       await p.media.deleteMany({ where: { ownerId: accountId } });
 
-      // 6. Tokens
+      // 6. NotificationPreference (F-15)
+      await (p as never as { notificationPreference: { deleteMany: (q: unknown) => Promise<unknown> } })
+        .notificationPreference.deleteMany({ where: { accountId } });
+
+      // 7. Tokens
       await p.emailVerificationToken.deleteMany({ where: { accountId } });
       await p.passwordResetToken.deleteMany({ where: { accountId } });
 

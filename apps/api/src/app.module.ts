@@ -9,6 +9,7 @@ import { QueueModule } from './queue/queue.module';
 import { EmailModule } from './email/email.module';
 import { LegalModule } from './legal/legal.module';
 import { PrivacyModule } from './privacy/privacy.module';
+import { PreferencesModule } from './preferences/preferences.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -17,6 +18,7 @@ import { PrivacyModule } from './privacy/privacy.module';
   // LegalModule before AuthModule: AuthModule imports LegalModule → LegalService.
   // QueueModule imports MediaModule (ImageProcessingProcessor); MediaModule is transitively loaded.
   // PrivacyModule (F-14): RGPD deletion + data export; imports MediaModule/NotificationsModule/EmailModule.
-  imports: [ObservabilityModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule],
+  // PreferencesModule before EmailModule and NotificationsModule: both import PreferencesModule.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule],
 })
 export class AppModule {}

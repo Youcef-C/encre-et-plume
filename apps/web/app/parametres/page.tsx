@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '../../lib/session';
 import MesDonnees from '../../components/MesDonnees';
+import PreferencesNotifications from '../../components/PreferencesNotifications';
 import SupprimerCompteModal from '../../components/SupprimerCompteModal';
 
 export default function ParametresPage() {
@@ -57,6 +58,30 @@ export default function ParametresPage() {
       >
         Paramètres
       </h1>
+
+      {/* Notification preferences section */}
+      <section
+        aria-labelledby="preferences-notif-heading"
+        className="ep-card"
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <h2
+          id="preferences-notif-heading"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 20,
+            margin: '0 0 24px',
+            color: 'var(--ink)',
+            letterSpacing: '0.02em',
+            textTransform: 'uppercase',
+            paddingBottom: 14,
+            borderBottom: '2px solid var(--border)',
+          }}
+        >
+          Préférences de notification
+        </h2>
+        <PreferencesNotifications />
+      </section>
 
       {/* Mes données section */}
       <section

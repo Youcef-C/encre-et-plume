@@ -18,12 +18,14 @@ import { SessionGuard } from '../auth/guards/session.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { EMAIL_TRANSPORT, createEmailTransport } from '../email/email-transport';
 import { EmailService } from '../email/email.service';
+import { PreferencesModule } from '../preferences/preferences.module';
 
 @Global()
 @Module({
   imports: [
     NotificationsModule, // exports NotificationsService → injected into NotificationsFanoutProcessor + DataExportProcessor
     MediaModule,         // exports MediaService → injected into ImageProcessingProcessor + DataExportProcessor + AccountErasureProcessor
+    PreferencesModule,   // F-15: exports NotificationPreferencesService → EmailService's opt-out check (no circular dep: PreferencesModule imports nothing from here)
     JwtModule.register({
       secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
       signOptions: { expiresIn: '7d' },

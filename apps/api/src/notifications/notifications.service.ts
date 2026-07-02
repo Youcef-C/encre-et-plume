@@ -8,6 +8,7 @@ import type {
 } from '@encre-et-plume/shared';
 import type { UserRole } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationPreferencesService } from '../preferences/preferences.service';
 
 // ponytail: single source of truth for area grouping; WS/Redis fan-out upgrade path lands in MC-9
 const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
@@ -35,18 +36,26 @@ type NotifRow = {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly preferences: NotificationPreferencesService,
+  ) {}
 
   /**
    * BE-8 seam: other stories (MC-9 messages, MC-7 applications, AD-2 reports) call this to emit
-   * notifications. F-5 ships only the seam; domain emitters land with their own stories.
+   * notifications. F-15 wires opt-out check: returns null when recipient opted out of in-app
+   * for this notification type. Mandatory types (system, report) always create.
    */
   async create(input: {
     recipientId: string;
     type: NotifType;
     refId?: string | null;
     sourceUserId?: string | null;
-  }): Promise<NotificationItem> {
+  }): Promise<NotificationItem | null> {
+    // F-15: skip if recipient opted out of in-app for this type
+    const allowed = await this.preferences.isInAppAllowed(input.recipientId, input.type);
+    if (!allowed) return null;
+
     const row = await this.prisma.notification.create({
       data: {
         recipientId: input.recipientId,
