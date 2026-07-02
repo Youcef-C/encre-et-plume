@@ -4,8 +4,55 @@
  * Requires the API (port 3001) and Next.js web (port 3000) to be running before
  * this suite executes. Each test that creates an account uses a unique email so
  * tests can run in any order without collisions.
+ *
+ * F-11 blocking model: signup no longer returns a session. Tests that previously
+ * relied on signup → immediate session now sign up → verify via dev-latest → confirm.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+
+const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
+
+/** Fetch the email-verification token from the dev seam. */
+async function fetchVerifyToken(request: APIRequestContext, email: string): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const res = await request.get(
+      `${API}/auth/verify-email/dev-latest?email=${encodeURIComponent(email)}`,
+    );
+    if (res.ok()) {
+      const body = (await res.json()) as { token: string };
+      return body.token;
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  throw new Error(`dev-latest verify token not found for ${email}`);
+}
+
+/**
+ * Sign up via UI then verify via dev-latest so the browser lands on / with a live session.
+ * Use this whenever a test needs a logged-in user after signup.
+ */
+async function signUpAndVerify(
+  page: Page,
+  request: APIRequestContext,
+  email: string,
+  displayName: string,
+): Promise<void> {
+  await page.goto('/inscription');
+  await page.getByLabel(/nom d'affichage/i).fill(displayName);
+  await page.getByLabel(/e-mail/i).fill(email);
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByRole('button', { name: /créer mon compte/i }).click();
+  // Blocking model: signup lands on /verifier-email/envoye
+  await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
+
+  // Verify via dev-latest → confirms and sets session cookie in the browser
+  const token = await fetchVerifyToken(request, email);
+  await page.goto(`/verifier-email?token=${encodeURIComponent(token)}`);
+  // Wait for redirect to / (POST_VERIFICATION_REDIRECT)
+  await expect(page).toHaveURL('/', { timeout: 10_000 });
+}
 
 function uniqueEmail(): string {
   return `qa_${Date.now()}_${Math.random().toString(36).slice(2, 7)}@test.com`;
@@ -83,7 +130,7 @@ test('FE-4c: /connexion shows French required errors on empty submit', async ({ 
 test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate email', async ({ page }) => {
   const email = uniqueEmail();
 
-  // First signup succeeds
+  // First signup — lands on /verifier-email/envoye (no session in blocking model)
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Yuki Moreau');
   await page.getByLabel(/e-mail/i).fill(email);
@@ -91,27 +138,26 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
-  // Wait for redirect to home
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Blocking model: lands on /verifier-email/envoye, not /
+  await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
 
-  // Second signup with same email in a fresh page context.
-  // After the first signup the user is logged-in (unverified) so VerificationBanner renders on
-  // /inscription, adding an aria-label containing "e-mail". Use role-based locators scoped to the
-  // form's textbox so the banner's status region does not cause strict-mode violations.
+  // Second signup with the same email — account already created; this should 409
   await page.goto('/inscription');
-  await page.getByRole('textbox', { name: /nom d'affichage/i }).fill('Copie Moreau');
-  await page.getByRole('textbox', { name: 'E-mail' }).fill(email);
-  await page.getByRole('textbox', { name: /^mot de passe$/i }).fill('password456');
-  await page.getByRole('textbox', { name: /confirmer le mot de passe/i }).fill('password456');
+  await page.getByLabel(/nom d'affichage/i).fill('Copie Moreau');
+  await page.getByLabel(/e-mail/i).fill(email);
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email) + '-2');
+  await page.getByLabel(/^mot de passe$/i).fill('password456');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password456');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('Cet e-mail est déjà utilisé')).toBeVisible({ timeout: 8_000 });
 });
 
 // ---------------------------------------------------------------------------
-// FE-5b + FE-6: Happy path — sign up → redirect to home → avatar visible
+// FE-5b + FE-6: Happy path — sign up lands on link-sent page (no session)
+// The logged-in header assertion is covered in email-verification.spec.ts (confirm flow).
 // ---------------------------------------------------------------------------
-test('FE-5b + FE-6: sign up → redirect to / → header shows avatar initials', async ({ page }) => {
+test('FE-5b + FE-6: sign up → lands on /verifier-email/envoye, header shows "Se connecter" (no session)', async ({ page }) => {
   const email = uniqueEmail();
 
   await page.goto('/inscription');
@@ -122,33 +168,26 @@ test('FE-5b + FE-6: sign up → redirect to / → header shows avatar initials',
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
-  // Redirects to home
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Blocking model: lands on /verifier-email/envoye, not home
+  await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
 
-  // Header shows avatar button (logged-in state, FE-6)
-  await expect(page.getByRole('button', { name: /menu de test user/i })).toBeVisible({ timeout: 6_000 });
-
-  // "Se connecter" link should NOT be visible
-  await expect(page.getByRole('link', { name: /^se connecter$/i })).not.toBeVisible();
+  // No session: header shows "Se connecter"
+  await expect(page.getByRole('link', { name: /se connecter/i })).toBeVisible({ timeout: 6_000 });
+  // No avatar
+  await expect(page.getByRole('button', { name: /menu de test user/i })).not.toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
 // FE-3: Logout via avatar dropdown → header reverts to "Se connecter"
+// F-11 blocking model: must verify account before getting a session.
 // ---------------------------------------------------------------------------
-test('FE-3 + FE-6: logout via avatar dropdown → header shows "Se connecter"', async ({ page }) => {
+test('FE-3 + FE-6: logout via avatar dropdown → header shows "Se connecter"', async ({ page, request }) => {
   const email = uniqueEmail();
 
-  // Sign up first
-  await page.goto('/inscription');
-  await page.getByLabel(/nom d'affichage/i).fill('Logout Test');
-  await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
-  await page.getByLabel(/^mot de passe$/i).fill('password123');
-  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
-  await page.getByRole('button', { name: /créer mon compte/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Sign up → verify via dev-latest to obtain a session
+  await signUpAndVerify(page, request, email, 'Logout Test');
 
-  // Open avatar dropdown
+  // Now logged in: open avatar dropdown
   await page.getByRole('button', { name: /menu de logout test/i }).click();
 
   // Dropdown should appear with "Déconnexion" (prototype TOP NAV label)
@@ -164,27 +203,21 @@ test('FE-3 + FE-6: logout via avatar dropdown → header shows "Se connecter"', 
 
 // ---------------------------------------------------------------------------
 // FE-2 + FE-5 + FE-6: Login → redirect to home → avatar visible
+// F-11 blocking model: must verify account before login works.
 // ---------------------------------------------------------------------------
-test('FE-2 full: login with valid credentials → home → avatar visible', async ({ page }) => {
+test('FE-2 full: login with valid credentials → home → avatar visible', async ({ page, request }) => {
   const email = uniqueEmail();
   const displayName = 'Login Flow';
 
-  // Create account
-  await page.goto('/inscription');
-  await page.getByLabel(/nom d'affichage/i).fill(displayName);
-  await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
-  await page.getByLabel(/^mot de passe$/i).fill('password123');
-  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
-  await page.getByRole('button', { name: /créer mon compte/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Create and verify account → now logged in at /
+  await signUpAndVerify(page, request, email, displayName);
 
   // Logout
   await page.getByRole('button', { name: /menu de login flow/i }).click();
   await page.getByRole('menuitem', { name: /déconnexion/i }).click();
   await expect(page.getByRole('link', { name: /se connecter/i })).toBeVisible({ timeout: 6_000 });
 
-  // Now login at /connexion
+  // Now login at /connexion (account is verified, so login succeeds)
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/mot de passe/i).fill('password123');
@@ -219,6 +252,7 @@ test('FE-6 logged-out: header shows "Se connecter" link to /connexion', async ({
 
 // ---------------------------------------------------------------------------
 // FE-7 Accessibility: keyboard-only form submit on /inscription
+// F-11 blocking model: signup lands on /verifier-email/envoye, not /
 // ---------------------------------------------------------------------------
 test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
   const email = uniqueEmail();
@@ -239,8 +273,10 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
   await page.keyboard.type('password123');
   await page.keyboard.press('Enter');
 
-  // Should redirect to home on success
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Blocking model: successful signup lands on the link-sent page
+  await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
+  // Confirm the link-sent page copy is shown
+  await expect(page.getByText(/Un lien de confirmation vous a été envoyé à/i)).toBeVisible({ timeout: 6_000 });
 });
 
 // ---------------------------------------------------------------------------

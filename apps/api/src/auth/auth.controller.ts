@@ -18,6 +18,8 @@ import type {
   VerifyEmailConfirmResponse,
   RequestPasswordResetResponse,
   ConfirmPasswordResetResponse,
+  SignupResponse,
+  RequestVerificationEmailResponse,
 } from '@encre-et-plume/shared';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -25,7 +27,7 @@ import { PasswordResetService } from './password-reset.service';
 import { SessionGuard, type AuthRequest } from './guards/session.guard';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
-import { VerifyEmailConfirmDto } from './dto/verify-email.dto';
+import { VerifyEmailConfirmDto, RequestVerificationEmailDto } from './dto/verify-email.dto';
 import { PasswordResetRequestDto, PasswordResetConfirmDto } from './dto/password-reset.dto';
 import { RedisService } from '../redis/redis.service';
 
@@ -54,12 +56,11 @@ export class AuthController {
   async signup(
     @Body() dto: SignupDto,
     @Req() req: AuthRequest,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthResponse> {
+  ): Promise<SignupResponse> {
     await this.rateLimit(`signup:${req.ip ?? 'unknown'}`);
-    const { account, token } = await this.authService.signup(dto);
-    this.setCookie(res, token);
-    return { account };
+    const { account } = await this.authService.signup(dto);
+    // BE-1 R2: no session at signup — the verification e-mail is the credential
+    return { verificationRequired: true, email: account.email };
   }
 
   @Post('login')
@@ -99,28 +100,35 @@ export class AuthController {
 
   // ── F-11: Email verification endpoints ──────────────────────────────────────
 
-  /** POST /auth/verify-email/request — authenticated; rate-limited 1/min + 5/day per account. */
-  @UseGuards(SessionGuard)
+  /**
+   * POST /auth/verify-email/request — public; rate-limited per IP + per email; non-enumerating.
+   * BE-3 R2: mirrors password-reset/request — always 200, never reveals account existence.
+   */
   @Post('verify-email/request')
-  @HttpCode(204)
-  async requestVerification(@Req() req: AuthRequest): Promise<void> {
-    await this.rateLimit(`verify-req-min:${req.accountId}`, 1, 60);
-    await this.rateLimit(`verify-req-day:${req.accountId}`, 5, 86400);
-    const account = await this.authService.me(req.accountId);
-    await this.emailVerificationService.issueToken({
-      id: req.accountId,
-      email: account.email,
-      displayName: account.displayName,
-    });
+  @HttpCode(200)
+  async requestVerification(
+    @Body() dto: RequestVerificationEmailDto,
+    @Req() req: AuthRequest,
+  ): Promise<RequestVerificationEmailResponse> {
+    await this.rateLimit(`verify-req-ip:${req.ip ?? 'unknown'}`, 10, 900);
+    await this.rateLimit(`verify-req-email:${dto.email}`, 5, 3600);
+    await this.emailVerificationService.requestByEmail(dto.email);
+    return { ok: true }; // identical body regardless of account existence
   }
 
-  /** POST /auth/verify-email/confirm — public; token is the credential. */
+  /**
+   * POST /auth/verify-email/confirm — public; token is the credential.
+   * BE-4 R2: sets ep_session cookie so the FE enters onboarding directly.
+   */
   @Post('verify-email/confirm')
   @HttpCode(200)
   async confirmVerification(
     @Body() dto: VerifyEmailConfirmDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<VerifyEmailConfirmResponse> {
-    await this.emailVerificationService.confirm(dto.token);
+    const { accountId } = await this.emailVerificationService.confirm(dto.token);
+    const token = this.authService.issueSessionToken(accountId);
+    this.setCookie(res, token);
     return { emailVerified: true };
   }
 

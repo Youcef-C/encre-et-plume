@@ -1,6 +1,7 @@
 // Thin fetch wrapper — all requests use credentials:'include' for the ep_session cookie (D3).
 import type {
   SignupRequest,
+  SignupResponse,
   LoginRequest,
   AuthResponse,
   AccountSummary,
@@ -16,6 +17,8 @@ import type {
   SearchResultType,
   VerifyEmailConfirmRequest,
   VerifyEmailConfirmResponse,
+  RequestVerificationEmailRequest,
+  RequestVerificationEmailResponse,
   RequestPasswordResetRequest,
   RequestPasswordResetResponse,
   ConfirmPasswordResetRequest,
@@ -43,8 +46,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const signup = (body: SignupRequest): Promise<AuthResponse> =>
-  request<AuthResponse>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
+export const signup = (body: SignupRequest): Promise<SignupResponse> =>
+  request<SignupResponse>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
 
 export const login = (body: LoginRequest): Promise<AuthResponse> =>
   request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) });
@@ -92,8 +95,11 @@ export const search = (q: string, scope?: SearchResultType): Promise<SearchRespo
 
 // ─── Email verification (F-11) ───────────────────────────────────────────────
 
-export const resendVerificationEmail = (): Promise<void> =>
-  request<void>('/auth/verify-email/request', { method: 'POST' });
+export const resendVerificationEmail = (email: string): Promise<RequestVerificationEmailResponse> =>
+  request<RequestVerificationEmailResponse>('/auth/verify-email/request', {
+    method: 'POST',
+    body: JSON.stringify({ email } satisfies RequestVerificationEmailRequest),
+  });
 
 export const confirmEmail = (token: string): Promise<VerifyEmailConfirmResponse> =>
   request<VerifyEmailConfirmResponse>('/auth/verify-email/confirm', {

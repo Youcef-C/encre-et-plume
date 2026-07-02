@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from '../../lib/session';
 import { confirmEmail, resendVerificationEmail } from '../../lib/api';
+import { POST_VERIFICATION_REDIRECT } from '@encre-et-plume/shared';
 import type { ApiError } from '@encre-et-plume/shared';
 
 type PageState = 'loading' | 'success' | 'error';
@@ -12,10 +13,14 @@ type ResendStatus = 'idle' | 'pending' | 'sent' | 'rate-limited';
 export default function VerifierEmailClient() {
   const params = useSearchParams();
   const token = params.get('token');
-  const { account, refresh } = useSession();
+  const { refresh } = useSession();
+  const router = useRouter();
 
   const [state, setState] = useState<PageState>('loading');
   const [resend, setResend] = useState<ResendStatus>('idle');
+  const [resendEmail, setResendEmail] = useState('');
+  // used to populate the email input from the session if available
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -26,15 +31,22 @@ export default function VerifierEmailClient() {
       .then(async () => {
         await refresh();
         setState('success');
+        // Announce BEFORE redirecting (US: "the redirect is announced before it happens"):
+        // hold the success message ~1.5s so it is actually readable/announced, then leave.
+        if (!hasRedirected.current) {
+          hasRedirected.current = true;
+          setTimeout(() => router.replace(POST_VERIFICATION_REDIRECT), 1500);
+        }
       })
       .catch(() => setState('error'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function handleResend() {
+    if (!resendEmail.trim()) return;
     setResend('pending');
     try {
-      await resendVerificationEmail();
+      await resendVerificationEmail(resendEmail.trim());
       setResend('sent');
     } catch (err) {
       const apiErr = err as ApiError;
@@ -85,7 +97,7 @@ export default function VerifierEmailClient() {
               Adresse e-mail vérifiée !
             </h1>
             <p style={{ color: 'var(--ink2)', fontSize: 14 }}>
-              Votre adresse e-mail a bien été confirmée.
+              Vous allez être redirigé(e)…
             </p>
           </div>
         )}
@@ -108,23 +120,44 @@ export default function VerifierEmailClient() {
               Ce lien de vérification n&apos;est plus valide ou a déjà été utilisé.
             </p>
 
-            {account && resend === 'idle' && (
-              <button onClick={handleResend} className="ep-btn" style={{ minHeight: 44 }}>
-                Renvoyer l&apos;e-mail
-              </button>
-            )}
-            {account && resend === 'pending' && (
-              <button disabled className="ep-btn" style={{ minHeight: 44, cursor: 'not-allowed' }}>
-                Renvoyer l&apos;e-mail
-              </button>
-            )}
             {resend === 'sent' && (
-              <p style={{ fontWeight: 700, color: 'var(--ink)' }}>E-mail envoyé.</p>
+              <p style={{ fontWeight: 700, color: 'var(--ink)', marginBottom: 16 }}>
+                E-mail envoyé.
+              </p>
             )}
             {resend === 'rate-limited' && (
-              <p style={{ fontWeight: 700, color: 'var(--ink)' }}>
+              <p style={{ fontWeight: 700, color: 'var(--ink)', marginBottom: 16 }}>
                 Veuillez patienter avant de renvoyer l&apos;e-mail.
               </p>
+            )}
+
+            {resend !== 'sent' && resend !== 'rate-limited' && (
+              <div style={{ textAlign: 'left' }}>
+                <label
+                  htmlFor="resend-email"
+                  className="ep-label"
+                  style={{ display: 'block', marginBottom: 8 }}
+                >
+                  E-mail
+                </label>
+                <input
+                  id="resend-email"
+                  type="email"
+                  autoComplete="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  className="ep-input"
+                  style={{ marginBottom: 12 }}
+                />
+                <button
+                  onClick={handleResend}
+                  disabled={resend === 'pending' || !resendEmail.trim()}
+                  className="ep-btn"
+                  style={{ minHeight: 44, width: '100%' }}
+                >
+                  Renvoyer l&apos;e-mail
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -11,6 +11,7 @@ import { SessionGuard } from './guards/session.guard';
 import { RedisService } from '../redis/redis.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
+import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
 
 const JWT_SECRET = 'test-secret';
 
@@ -36,7 +37,7 @@ const makeRedisMock = () => ({
 describe('Auth API (e2e)', () => {
   let app: INestApplication;
   let authService: jest.Mocked<Partial<AuthService>>;
-  let emailVerificationServiceMock: { issueToken: jest.Mock; confirm: jest.Mock };
+  let emailVerificationServiceMock: { issueToken: jest.Mock; confirm: jest.Mock; requestByEmail: jest.Mock };
   let passwordResetServiceMock: { requestReset: jest.Mock; confirm: jest.Mock; issueToken: jest.Mock };
   let jwtService: JwtService;
   let redisMock: ReturnType<typeof makeRedisMock>;
@@ -46,10 +47,12 @@ describe('Auth API (e2e)', () => {
       signup: jest.fn(),
       login: jest.fn(),
       me: jest.fn(),
+      issueSessionToken: jest.fn().mockReturnValue('signed-session-token'), // BE-4
     };
     emailVerificationServiceMock = {
       issueToken: jest.fn().mockResolvedValue(undefined),
-      confirm: jest.fn().mockResolvedValue(undefined),
+      confirm: jest.fn().mockResolvedValue({ accountId: 'cuid-1' }), // BE-4: confirm returns { accountId }
+      requestByEmail: jest.fn().mockResolvedValue(undefined), // BE-3: public resend
     };
     passwordResetServiceMock = {
       requestReset: jest.fn().mockResolvedValue(undefined),
@@ -90,9 +93,11 @@ describe('Auth API (e2e)', () => {
     redisMock.set.mockResolvedValue('OK');
     redisMock.expire.mockResolvedValue(1);
     emailVerificationServiceMock.issueToken.mockResolvedValue(undefined);
-    emailVerificationServiceMock.confirm.mockResolvedValue(undefined);
+    emailVerificationServiceMock.confirm.mockResolvedValue({ accountId: 'cuid-1' }); // BE-4
+    emailVerificationServiceMock.requestByEmail.mockResolvedValue(undefined); // BE-3
     passwordResetServiceMock.requestReset.mockResolvedValue(undefined);
     passwordResetServiceMock.confirm.mockResolvedValue(undefined);
+    (authService.issueSessionToken as jest.Mock).mockReturnValue('signed-session-token'); // BE-4
   });
 
   // Include jti + expiresIn so SessionGuard populates req.jti and req.tokenExp
@@ -101,22 +106,21 @@ describe('Auth API (e2e)', () => {
   }
 
   describe('POST /auth/signup', () => {
-    it('201 + sets ep_session cookie + returns AuthResponse shape', async () => {
-      (authService.signup as jest.Mock).mockResolvedValue({ account: MOCK_ACCOUNT, token: 'signed-jwt' });
+    it('BE-1 R2: 201 + NO ep_session cookie + returns { verificationRequired: true, email }', async () => {
+      (authService.signup as jest.Mock).mockResolvedValue({ account: MOCK_ACCOUNT }); // no token
 
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
         .send({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' })
         .expect(201);
 
-      expect(res.headers['set-cookie']).toBeDefined();
-      const cookies: string[] = Array.isArray(res.headers['set-cookie'])
-        ? res.headers['set-cookie']
-        : [res.headers['set-cookie']];
-      expect(cookies.some((c: string) => c.startsWith('ep_session='))).toBe(true);
-      expect(cookies.some((c: string) => c.includes('HttpOnly'))).toBe(true);
+      // No session cookie set at signup
+      const setCookieHeader = (res.headers['set-cookie'] as unknown) as string[] | undefined;
+      const hasCookie = setCookieHeader?.some((c: string) => c.startsWith('ep_session='));
+      expect(hasCookie).toBeFalsy();
 
-      expect(res.body).toEqual({ account: MOCK_ACCOUNT });
+      // Returns verificationRequired shape
+      expect(res.body).toEqual({ verificationRequired: true, email: 'yuki@test.com' });
     });
 
     it('409 EMAIL_TAKEN + French message on duplicate email', async () => {
@@ -195,6 +199,25 @@ describe('Auth API (e2e)', () => {
         .expect(401);
 
       expect(res.body.error).toBe('INVALID_CREDENTIALS');
+    });
+
+    it('BE-2: 403 EMAIL_NOT_VERIFIED when service throws ForbiddenException', async () => {
+      const { ForbiddenException } = await import('@nestjs/common');
+      (authService.login as jest.Mock).mockRejectedValue(
+        new ForbiddenException({
+          statusCode: 403,
+          message: 'Confirmez votre e-mail pour continuer.',
+          error: EMAIL_NOT_VERIFIED,
+        }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'yuki@test.com', password: 'password123' })
+        .expect(403);
+
+      expect(res.body.error).toBe(EMAIL_NOT_VERIFIED);
+      expect(res.body.message).toBe('Confirmez votre e-mail pour continuer.');
     });
 
     it('429 when rate limit exceeded', async () => {
@@ -287,33 +310,40 @@ describe('Auth API (e2e)', () => {
   // ── F-11: Email verification endpoints ──────────────────────────────────────
 
   describe('POST /auth/verify-email/request', () => {
-    it('401 without session cookie (authenticated endpoint)', async () => {
-      await request(app.getHttpServer())
+    it('BE-3: 200 { ok: true } — public, no cookie needed', async () => {
+      const res = await request(app.getHttpServer())
         .post('/auth/verify-email/request')
-        .expect(401);
+        .send({ email: 'yuki@test.com' })
+        .expect(200);
+
+      expect(res.body).toEqual({ ok: true });
+      expect(emailVerificationServiceMock.requestByEmail).toHaveBeenCalledWith('yuki@test.com');
     });
 
-    it('204 on success — enqueues email and returns no body', async () => {
-      (authService.me as jest.Mock).mockResolvedValue(MOCK_ACCOUNT);
-      const token = validCookie('cuid-1');
-
-      await request(app.getHttpServer())
-        .post('/auth/verify-email/request')
-        .set('Cookie', `ep_session=${token}`)
-        .expect(204);
-
-      expect(emailVerificationServiceMock.issueToken).toHaveBeenCalled();
-    });
-
-    it('429 RATE_LIMITED when per-minute limit breached', async () => {
-      (authService.me as jest.Mock).mockResolvedValue(MOCK_ACCOUNT);
-      // First incr call (per-minute counter) returns over limit 1
-      redisMock.incr.mockResolvedValueOnce(2);
-      const token = validCookie('cuid-1');
+    it('BE-3: 200 { ok: true } for unknown email (non-enumerating)', async () => {
+      emailVerificationServiceMock.requestByEmail.mockResolvedValue(undefined); // no-op inside service
 
       const res = await request(app.getHttpServer())
         .post('/auth/verify-email/request')
-        .set('Cookie', `ep_session=${token}`)
+        .send({ email: 'nobody@test.com' })
+        .expect(200);
+
+      expect(res.body).toEqual({ ok: true });
+    });
+
+    it('BE-3: 400 on invalid email format', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/verify-email/request')
+        .send({ email: 'not-an-email' })
+        .expect(400);
+    });
+
+    it('BE-3: 429 RATE_LIMITED when IP rate limit exceeded', async () => {
+      redisMock.incr.mockResolvedValueOnce(11); // over 10/900s limit
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-email/request')
+        .send({ email: 'yuki@test.com' })
         .expect(429);
 
       expect(res.body.error).toBe('RATE_LIMITED');
@@ -321,7 +351,10 @@ describe('Auth API (e2e)', () => {
   });
 
   describe('POST /auth/verify-email/confirm', () => {
-    it('200 { emailVerified: true } — public (no cookie needed)', async () => {
+    it('BE-4: 200 { emailVerified: true } + sets ep_session cookie (token is the credential)', async () => {
+      emailVerificationServiceMock.confirm.mockResolvedValue({ accountId: 'cuid-1' });
+      (authService.issueSessionToken as jest.Mock).mockReturnValue('signed-session-token');
+
       const res = await request(app.getHttpServer())
         .post('/auth/verify-email/confirm')
         .send({ token: 'valid-raw-token' })
@@ -329,6 +362,14 @@ describe('Auth API (e2e)', () => {
 
       expect(res.body).toEqual({ emailVerified: true });
       expect(emailVerificationServiceMock.confirm).toHaveBeenCalledWith('valid-raw-token');
+      expect(authService.issueSessionToken).toHaveBeenCalledWith('cuid-1');
+
+      // Session cookie must be set so the FE can enter onboarding
+      const cookies: string[] = Array.isArray(res.headers['set-cookie'])
+        ? res.headers['set-cookie']
+        : [res.headers['set-cookie']];
+      expect(cookies.some((c: string) => c.startsWith('ep_session='))).toBe(true);
+      expect(cookies.some((c: string) => c.includes('HttpOnly'))).toBe(true);
     });
 
     it('400 on missing token field', async () => {

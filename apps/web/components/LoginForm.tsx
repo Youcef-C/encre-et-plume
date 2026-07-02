@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
 import type { ApiError } from '@encre-et-plume/shared';
 import { login } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -57,7 +58,15 @@ export default function LoginForm() {
       router.push('/');
     } catch (err) {
       const apiErr = err as ApiError;
-      setServerError(apiErr.message ?? 'Une erreur est survenue');
+      if (apiErr.error === EMAIL_NOT_VERIFIED) {
+        router.push(
+          '/verifier-email/envoye?email=' +
+            encodeURIComponent(email) +
+            '&reason=login',
+        );
+      } else {
+        setServerError(apiErr.message ?? 'Une erreur est survenue');
+      }
     } finally {
       setLoading(false);
     }

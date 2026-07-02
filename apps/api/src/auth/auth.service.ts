@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'; // stdlib — no dep needed
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   Optional,
@@ -9,6 +10,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on Node version change
 import type { AccountSummary, AccountPreferences, ThemePreference } from '@encre-et-plume/shared';
+import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
@@ -72,7 +74,7 @@ export class AuthService {
     @Optional() private readonly emailService?: EmailService,
   ) {}
 
-  async signup(dto: SignupDto): Promise<{ account: AccountSummary; token: string }> {
+  async signup(dto: SignupDto): Promise<{ account: AccountSummary }> {
     // Fast-path check for good UX; the unique constraint below is the actual guarantee.
     const exists = await this.prisma.account.findUnique({ where: { email: dto.email } });
     if (exists) throw emailTakenException();
@@ -133,7 +135,7 @@ export class AuthService {
         );
     }
 
-    return { account: this.toSummary(account), token: this.signToken(account.id) };
+    return { account: this.toSummary(account) }; // BE-1 R2: no session at signup
   }
 
   async login(dto: LoginDto): Promise<{ account: AccountSummary; token: string }> {
@@ -149,11 +151,25 @@ export class AuthService {
       });
     }
 
+    // BE-2 R2: bcrypt compare runs first (above) so we don't leak which check failed
+    if (!account.emailVerifiedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message: 'Confirmez votre e-mail pour continuer.',
+        error: EMAIL_NOT_VERIFIED,
+      });
+    }
+
     const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 : undefined; // seconds; undefined → session
     return {
       account: this.toSummary(account),
       token: this.signToken(account.id, maxAge),
     };
+  }
+
+  /** BE-4 R2: public seam so AuthController can issue a session token after email confirm. */
+  issueSessionToken(accountId: string): string {
+    return this.signToken(accountId);
   }
 
   async me(accountId: string): Promise<AccountSummary> {

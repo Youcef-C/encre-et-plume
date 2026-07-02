@@ -4,8 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { SessionContext } from '../lib/session';
 import LoginForm from '../components/LoginForm';
 
+// Stable router reference for routing assertions
+const mockPush = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('../lib/api', () => ({
@@ -90,6 +93,29 @@ describe('LoginForm', () => {
     const link = screen.getByRole('link', { name: /mot de passe oublié/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href', '/mot-de-passe-oublie');
+  });
+
+  it('routes to /verifier-email/envoye?...reason=login on 403 EMAIL_NOT_VERIFIED', async () => {
+    vi.mocked(api.login).mockRejectedValueOnce({
+      statusCode: 403,
+      message: 'Confirmez votre e-mail pour continuer.',
+      error: 'EMAIL_NOT_VERIFIED',
+    });
+
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText(/e-mail/i), 'yuki@example.com');
+    await user.type(screen.getByLabelText(/mot de passe/i), 'password123');
+    await user.click(screen.getByRole('button', { name: /se connecter/i }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/verifier-email/envoye?email=yuki%40example.com&reason=login',
+      );
+    });
+    // No inline server error shown
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('passes rememberMe=true when checkbox is checked', async () => {

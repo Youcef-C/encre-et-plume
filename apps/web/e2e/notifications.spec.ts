@@ -96,10 +96,9 @@ test.beforeAll(() => {
   // EDITOR gets no notifications (for empty state + isolation tests)
 });
 
-test.afterAll(() => {
-  // Reset ADMIN to utilisateur role to not break other suites
-  dbSetRole(ACCOUNTS.ADMIN.id, 'utilisateur');
-});
+// No afterAll role reset: spec files run in PARALLEL, and demoting the shared ADMIN account
+// here raced roles.spec's promote-then-PATCH (intermittent 403). Suites that need ADMIN
+// promote it themselves, and the e2e seed resets every role at the start of each run.
 
 // ---------------------------------------------------------------------------
 // F5-E2E-1: UTILISATEUR inbox lists notifications newest-first with unread styling

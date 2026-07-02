@@ -21,7 +21,7 @@ describe('EmailVerificationService', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
-    account: { update: jest.Mock };
+    account: { update: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let emailService: { send: jest.Mock };
@@ -36,7 +36,7 @@ describe('EmailVerificationService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
-      account: { update: jest.fn() },
+      account: { update: jest.fn(), findUnique: jest.fn() },
       $transaction: jest.fn(),
     };
     emailService = { send: jest.fn().mockResolvedValue(undefined) };
@@ -165,14 +165,17 @@ describe('EmailVerificationService', () => {
       };
     }
 
-    it('sets emailVerifiedAt and consumedAt on a valid token', async () => {
+    it('BE-4: resolves { accountId } and sets emailVerifiedAt + consumedAt on a valid token', async () => {
       const { raw, row } = makeToken();
       prisma.emailVerificationToken.findUnique.mockResolvedValue(row);
       prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => Promise<void>) => fn(prisma));
       prisma.emailVerificationToken.update.mockResolvedValue({});
       prisma.account.update.mockResolvedValue({});
 
-      await service.confirm(raw);
+      const result = await service.confirm(raw);
+
+      // BE-4: confirm now returns { accountId } so the controller can mint a session
+      expect(result).toEqual({ accountId: 'acc-1' });
 
       expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.emailVerificationToken.update).toHaveBeenCalledWith(
@@ -229,6 +232,40 @@ describe('EmailVerificationService', () => {
       await expect(service.confirm(raw)).rejects.toMatchObject({
         response: expect.objectContaining({ error: EMAIL_TOKEN_EXPIRED }),
       });
+    });
+  });
+
+  describe('requestByEmail', () => {
+    it('BE-3: issues a token for an existing unverified account', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        id: ACCOUNT.id,
+        email: ACCOUNT.email,
+        displayName: ACCOUNT.displayName,
+        emailVerifiedAt: null, // unverified
+      });
+
+      await service.requestByEmail(ACCOUNT.email);
+
+      expect(prisma.emailVerificationToken.create).toHaveBeenCalled();
+    });
+
+    it('BE-3: no-ops for an unknown email (non-enumerating, always resolves)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+
+      await expect(service.requestByEmail('nobody@test.com')).resolves.toBeUndefined();
+      expect(prisma.emailVerificationToken.create).not.toHaveBeenCalled();
+    });
+
+    it('BE-3: no-ops for an already-verified account (non-enumerating)', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        id: ACCOUNT.id,
+        email: ACCOUNT.email,
+        displayName: ACCOUNT.displayName,
+        emailVerifiedAt: new Date(), // already verified
+      });
+
+      await expect(service.requestByEmail(ACCOUNT.email)).resolves.toBeUndefined();
+      expect(prisma.emailVerificationToken.create).not.toHaveBeenCalled();
     });
   });
 });

@@ -27,22 +27,52 @@ function uniqueEmail(tag = 'f12'): string {
   return `qa_${tag}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}@test.com`;
 }
 
-/** Sign up via API; returns the Set-Cookie header value (session cookie). */
+/** Fetch the email-verification token from the dev seam. */
+async function fetchEmailVerifyToken(request: APIRequestContext, email: string): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const res = await request.get(
+      `${API}/auth/verify-email/dev-latest?email=${encodeURIComponent(email)}`,
+    );
+    if (res.ok()) {
+      const body = (await res.json()) as { token: string };
+      return body.token;
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  throw new Error(`dev-latest verify token not found for ${email}`);
+}
+
+/**
+ * Sign up via API, then verify the account via dev-latest so it becomes loginable.
+ * Returns the Set-Cookie header value from the confirm step (an active session).
+ * F-11 blocking model: signup no longer returns a session; confirm does.
+ */
 async function signUpViaApi(
   request: APIRequestContext,
   email: string,
   password: string,
 ): Promise<string> {
-  const res = await request.post(`${API}/auth/signup`, {
+  const signupRes = await request.post(`${API}/auth/signup`, {
     data: { displayName: 'Reset User', email, password },
   });
-  expect(res.status()).toBe(201);
-  const setCookie = res.headers()['set-cookie'] ?? '';
+  expect(signupRes.status()).toBe(201);
+  // No session cookie from signup (blocking model)
+
+  // Verify via dev-latest to make the account loginable
+  const verifyToken = await fetchEmailVerifyToken(request, email);
+  const confirmRes = await request.post(`${API}/auth/verify-email/confirm`, {
+    data: { token: verifyToken },
+  });
+  expect(confirmRes.status()).toBe(200);
+  const setCookie = confirmRes.headers()['set-cookie'] ?? '';
   expect(setCookie).toContain('ep_session');
   return setCookie;
 }
 
-/** Sign up via browser UI and land on home page. */
+/**
+ * Sign up via browser UI — F-11 blocking model: lands on /verifier-email/envoye.
+ * Callers that need a live session must verify separately.
+ */
 async function signUpViaUI(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Reset User');
@@ -52,7 +82,8 @@ async function signUpViaUI(page: Page, email: string, password: string): Promise
   await page.getByLabel(/^mot de passe$/i).fill(password);
   await page.getByLabel(/confirmer le mot de passe/i).fill(password);
   await page.getByRole('button', { name: /créer mon compte/i }).click();
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Blocking model: lands on /verifier-email/envoye, not /
+  await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
 }
 
 /** Logout via UI (navigates to / then clicks the logout link/button). */
@@ -271,13 +302,8 @@ test('F-12 AC-B4 (happy path): signup → request → confirm → new password w
   const oldPassword = 'oldpassword789';
   const newPassword = 'newpassword456';
 
-  // 1. Signup and capture session cookie
-  const signupRes = await request.post(`${API}/auth/signup`, {
-    data: { displayName: 'Session Test', email, password: oldPassword },
-  });
-  expect(signupRes.status()).toBe(201);
-  const sessionCookie = signupRes.headers()['set-cookie'] ?? '';
-  expect(sessionCookie).toContain('ep_session');
+  // 1. Signup + verify (F-11 blocking model) and capture session cookie from confirm step
+  const sessionCookie = await signUpViaApi(request, email, oldPassword);
 
   // 2. Verify pre-reset session is valid
   const cookieValue = sessionCookie.split(';')[0]; // "ep_session=<value>"

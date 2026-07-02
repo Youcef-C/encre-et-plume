@@ -52,11 +52,13 @@ async function main() {
         profileSlug: spec.slug,
         role: 'utilisateur',
         verified: false,
+        emailVerifiedAt: new Date(), // F-11 R2: seeded accounts must be loginable
       },
       update: {
         passwordHash: hash,
         role: 'utilisateur',
         verified: false,
+        emailVerifiedAt: new Date(), // F-11 R2: ensure existing seeded accounts are verified
       },
     });
     accounts[spec.key] = { email: account.email, id: account.id };

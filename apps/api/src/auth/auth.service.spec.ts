@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
@@ -252,7 +253,7 @@ describe('AuthService', () => {
       expect(prisma.account.create).toHaveBeenCalledTimes(1); // never retried with a regenerated slug
     });
 
-    it('returns { account: AccountSummary, token: string }', async () => {
+    it('BE-1 R2: signup returns { account } only — no token (sessionless)', async () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
 
@@ -263,7 +264,7 @@ describe('AuthService', () => {
       });
 
       expect(result).toHaveProperty('account');
-      expect(result).toHaveProperty('token');
+      expect(result).not.toHaveProperty('token'); // BE-1: no session at signup
       expect(result.account.slug).toBe('yuki-moreau');
       expect(result.account.id).toBe('cuid-1');
     });
@@ -274,12 +275,34 @@ describe('AuthService', () => {
       // pre-hash a known password
       const bcrypt = await import('bcryptjs');
       const hash = await bcrypt.hash('password123', 10);
-      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash });
+      // BE-2: emailVerifiedAt must be set or login will 403
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash, emailVerifiedAt: new Date() });
 
       const result = await service.login({ email: 'yuki@test.com', password: 'password123' });
 
       expect(result.account.email).toBe('yuki@test.com');
       expect(result.token).toBe('jwt-token');
+    });
+
+    it('BE-2: throws 403 ForbiddenException EMAIL_NOT_VERIFIED when emailVerifiedAt is null', async () => {
+      const bcrypt = await import('bcryptjs');
+      const hash = await bcrypt.hash('password123', 10);
+      // Valid credentials but unverified account (emailVerifiedAt: null)
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash, emailVerifiedAt: null });
+
+      await expect(
+        service.login({ email: 'yuki@test.com', password: 'password123' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      try {
+        await service.login({ email: 'yuki@test.com', password: 'password123' });
+      } catch (err) {
+        expect((err as ForbiddenException).getResponse()).toMatchObject({
+          error: EMAIL_NOT_VERIFIED,
+          statusCode: 403,
+          message: 'Confirmez votre e-mail pour continuer.',
+        });
+      }
     });
 
     it('throws 401 UnauthorizedException on wrong password', async () => {
@@ -298,6 +321,12 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'ghost@test.com', password: 'any' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('BE-4: issueSessionToken returns a signed JWT string', () => {
+      const token = (service as unknown as { issueSessionToken: (id: string) => string }).issueSessionToken('cuid-1');
+      expect(typeof token).toBe('string');
+      expect(token).toBe('jwt-token'); // matches jwtService.sign mock
     });
   });
 

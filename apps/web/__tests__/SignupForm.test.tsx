@@ -5,9 +5,11 @@ import { SessionContext } from '../lib/session';
 import type { AccountSummary } from '@encre-et-plume/shared';
 import SignupForm from '../components/SignupForm';
 
-// Mock next/navigation (router.push)
+// Stable router reference so we can assert routing behavior
+const mockPush = vi.hoisted(() => vi.fn());
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 // Mock the API module — tests control what signup resolves/rejects
@@ -167,7 +169,8 @@ describe('SignupForm', () => {
   });
 
   it('sends the chosen username with the signup request (and never the confirm password)', async () => {
-    vi.mocked(api.signup).mockResolvedValueOnce({ account: mockAccount });
+    // signup now returns SignupResponse (no session)
+    vi.mocked(api.signup).mockResolvedValueOnce({ verificationRequired: true, email: 'yuki@example.com' });
     const user = userEvent.setup();
     renderForm();
 
@@ -184,6 +187,26 @@ describe('SignupForm', () => {
         password: 'password123',
         username: 'yuki-moreau',
       });
+    });
+  });
+
+  it('routes to /verifier-email/envoye?email=… after successful signup (no refresh)', async () => {
+    vi.mocked(api.signup).mockResolvedValueOnce({ verificationRequired: true, email: 'yuki@example.com' });
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(
+        '/verifier-email/envoye?email=yuki%40example.com',
+      );
+      // No session refresh — signup is now sessionless
+      expect(mockRefresh).not.toHaveBeenCalled();
     });
   });
 

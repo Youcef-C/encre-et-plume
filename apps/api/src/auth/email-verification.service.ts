@@ -50,7 +50,17 @@ export class EmailVerificationService {
     }
   }
 
-  async confirm(token: string): Promise<void> {
+  /** BE-3: public resend — non-enumerating like PasswordResetService.requestReset. */
+  async requestByEmail(email: string): Promise<void> {
+    const account = await this.prisma.account.findUnique({
+      where: { email },
+      select: { id: true, email: true, displayName: true, emailVerifiedAt: true },
+    });
+    if (!account || account.emailVerifiedAt !== null) return; // ponytail: non-enumeration — silently return
+    await this.issueToken(account);
+  }
+
+  async confirm(token: string): Promise<{ accountId: string }> {
     const tokenHash = sha256(token);
     const row = await this.prisma.emailVerificationToken.findUnique({ where: { tokenHash } });
 
@@ -92,5 +102,7 @@ export class EmailVerificationService {
 
     // ponytail: AD-10 ActionLog emit('email_verified') here when the service lands
     this.logger.log(`Email verified for accountId=${row.accountId}`);
+
+    return { accountId: row.accountId }; // BE-4 R2: controller uses this to mint the session token
   }
 }

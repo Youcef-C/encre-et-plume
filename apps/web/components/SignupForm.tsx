@@ -4,7 +4,6 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ApiError } from '@encre-et-plume/shared';
 import { signup } from '../lib/api';
-import { useSession } from '../lib/session';
 
 interface FieldErrors {
   displayName?: string;
@@ -58,7 +57,6 @@ function validate(
 
 export default function SignupForm() {
   const router = useRouter();
-  const { refresh } = useSession();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -108,14 +106,14 @@ export default function SignupForm() {
     setLoading(true);
     try {
       // Only the password is sent — the confirmation is a client-side check.
+      // signup returns SignupResponse (no session) — route to the link-sent page.
       await signup({
         displayName,
         email,
         password,
         ...(username ? { username } : {}),
       });
-      await refresh();
-      router.push('/');
+      router.push('/verifier-email/envoye?email=' + encodeURIComponent(email));
     } catch (err) {
       const apiErr = err as ApiError;
       if (apiErr.error === 'USERNAME_TAKEN') {

@@ -78,6 +78,27 @@ export interface AuthResponse {
   account: AccountSummary;
 }
 
+/**
+ * F-11 R2: POST /auth/signup response — sessionless; FE routes to the "check your e-mail" page.
+ * No Set-Cookie: the emailed token is the credential that signs the user in (via /confirm).
+ */
+export interface SignupResponse {
+  verificationRequired: true;
+  email: string;
+}
+
+/** POST /auth/verify-email/request body — public, non-enumerating (mirrors password-reset request). */
+export interface RequestVerificationEmailRequest { email: string; }
+
+/** POST /auth/verify-email/request success body — identical regardless of account existence. */
+export interface RequestVerificationEmailResponse { ok: true; }
+
+/**
+ * Where the FE redirects after email confirmation (POST /auth/verify-email/confirm).
+ * ponytail: F-17 flips this to '/onboarding' once onboarding lands.
+ */
+export const POST_VERIFICATION_REDIRECT = '/';
+
 /** Stable API error payload for inline French messages (e.g. "Identifiants invalides"). */
 export interface ApiError {
   statusCode: number;
