@@ -103,6 +103,64 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
+    // ── ACID: concurrent-signup races surface as P2002 from the DB unique constraints ──
+
+    it('maps a P2002 unique violation on email to 409 EMAIL_TAKEN (concurrent signup race)', async () => {
+      const { Prisma } = await import('@prisma/client');
+      prisma.account.findUnique.mockResolvedValue(null); // pre-check passed (TOCTOU window)
+      prisma.account.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['email'] },
+        }),
+      );
+
+      await expect(
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.account.create).toHaveBeenCalledTimes(1); // no pointless retry on email
+    });
+
+    it('retries with a fresh slug on a P2002 profileSlug collision', async () => {
+      const { Prisma } = await import('@prisma/client');
+      prisma.account.findUnique.mockResolvedValue(null);
+      slugService.ensureUniqueSlug
+        .mockResolvedValueOnce('yuki-moreau')
+        .mockResolvedValueOnce('yuki-moreau-2');
+      prisma.account.create
+        .mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: 'test',
+            meta: { target: ['profileSlug'] },
+          }),
+        )
+        .mockResolvedValueOnce({ ...MOCK_ACCOUNT, profileSlug: 'yuki-moreau-2' });
+
+      const result = await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+      });
+
+      expect(prisma.account.create).toHaveBeenCalledTimes(2);
+      expect(slugService.ensureUniqueSlug).toHaveBeenCalledTimes(2);
+      const retryArg = prisma.account.create.mock.calls[1]?.[0] as { data: { profileSlug: string } };
+      expect(retryArg.data.profileSlug).toBe('yuki-moreau-2');
+      expect(result.account.slug).toBe('yuki-moreau-2');
+    });
+
+    it('rethrows non-P2002 errors from create untouched', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      const dbDown = new Error('connection refused');
+      prisma.account.create.mockRejectedValue(dbDown);
+
+      await expect(
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123' }),
+      ).rejects.toBe(dbDown);
+    });
+
     it('returns { account: AccountSummary, token: string }', async () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);

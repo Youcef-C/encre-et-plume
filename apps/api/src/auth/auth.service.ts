@@ -13,9 +13,32 @@ import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
 import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
+import { Prisma } from '@prisma/client';
 import type { Account } from '@prisma/client';
 
 const BCRYPT_ROUNDS = 10;
+// ACID: the DB unique constraints are the real concurrency control for email/slug —
+// check-then-insert has a TOCTOU window, so P2002 must be handled, not 500.
+const SLUG_CREATE_RETRIES = 3;
+
+/** Columns named in a P2002 unique-constraint violation (target is string[] or string per connector). */
+function uniqueViolationTarget(err: unknown): string[] | undefined {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+    const target = (err.meta as { target?: unknown } | undefined)?.target;
+    if (Array.isArray(target)) return target as string[];
+    if (typeof target === 'string') return [target];
+    return [];
+  }
+  return undefined;
+}
+
+function emailTakenException(): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    message: 'Cet e-mail est déjà utilisé',
+    error: 'EMAIL_TAKEN',
+  });
+}
 
 const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
@@ -35,28 +58,35 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{ account: AccountSummary; token: string }> {
+    // Fast-path check for good UX; the unique constraint below is the actual guarantee.
     const exists = await this.prisma.account.findUnique({ where: { email: dto.email } });
-    if (exists) {
-      throw new ConflictException({
-        statusCode: 409,
-        message: 'Cet e-mail est déjà utilisé',
-        error: 'EMAIL_TAKEN',
-      });
-    }
+    if (exists) throw emailTakenException();
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const baseSlug = this.slugService.slugify(dto.displayName);
-    const profileSlug = await this.slugService.ensureUniqueSlug(baseSlug);
 
-    const account = await this.prisma.account.create({
-      data: {
-        displayName: dto.displayName,
-        email: dto.email,
-        passwordHash,
-        profileSlug,
-        profile: { create: {} }, // BE-9: backing Profile row for F-3
-      },
-    });
+    let account: Account | undefined;
+    for (let attempt = 0; account === undefined; attempt++) {
+      const profileSlug = await this.slugService.ensureUniqueSlug(baseSlug);
+      try {
+        account = await this.prisma.account.create({
+          data: {
+            displayName: dto.displayName,
+            email: dto.email,
+            passwordHash,
+            profileSlug,
+            profile: { create: {} }, // BE-9: backing Profile row for F-3
+          },
+        });
+      } catch (err) {
+        const target = uniqueViolationTarget(err);
+        // Concurrent signup won the race on the same email → same 409 as the pre-check.
+        if (target?.includes('email')) throw emailTakenException();
+        // Slug collision → recompute against the now-committed row and retry (bounded).
+        if (target?.includes('profileSlug') && attempt < SLUG_CREATE_RETRIES) continue;
+        throw err;
+      }
+    }
 
     this.metrics?.incSignup(); // F-9: business counter
     return { account: this.toSummary(account), token: this.signToken(account.id) };

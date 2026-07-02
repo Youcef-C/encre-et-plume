@@ -154,5 +154,28 @@ describe('AccountsService', () => {
       const result = await service.deleteAvatar('cuid-1');
       expect(result.avatar).toBeNull();
     });
+
+    // ── ACID: null the column BEFORE deleting bytes — a crash in between must never
+    //    leave Account.avatar pointing at a deleted S3 object ──
+
+    it('nulls Account.avatar BEFORE deleting the media (no dangling URL on mid-crash)', async () => {
+      const updated = { ...BASE_ACCOUNT, avatar: null };
+      prisma.account.update.mockResolvedValue(updated);
+
+      await service.deleteAvatar('cuid-1');
+
+      const updateOrder = prisma.account.update.mock.invocationCallOrder[0];
+      const deleteOrder = media.deleteOwnerAvatarMedia.mock.invocationCallOrder[0];
+      expect(updateOrder).toBeLessThan(deleteOrder!);
+    });
+
+    it('still returns avatar=null when media cleanup fails (best-effort, like setAvatar)', async () => {
+      const updated = { ...BASE_ACCOUNT, avatar: null };
+      prisma.account.update.mockResolvedValue(updated);
+      media.deleteOwnerAvatarMedia.mockRejectedValue(new Error('s3 down'));
+
+      const result = await service.deleteAvatar('cuid-1');
+      expect(result.avatar).toBeNull();
+    });
   });
 });

@@ -82,14 +82,18 @@ export class AccountsService {
 
   /**
    * DELETE /accounts/me/avatar — clears avatar and deletes all owner avatar Media + S3 objects.
+   * Order matters (ACID): null the column FIRST so a mid-crash never leaves Account.avatar
+   * pointing at deleted S3 bytes; leftover media is swept by the orphan cleanup, a dangling
+   * URL is not.
    */
   async deleteAvatar(accountId: string): Promise<AccountSummary> {
-    await this.media.deleteOwnerAvatarMedia(accountId);
-
     const account = await this.prisma.account.update({
       where: { id: accountId },
       data: { avatar: null },
     });
+
+    // Best-effort cleanup, like setAvatar — don't fail the request once the column is cleared.
+    await this.media.deleteOwnerAvatarMedia(accountId).catch(() => {});
 
     return toSummary(account);
   }
