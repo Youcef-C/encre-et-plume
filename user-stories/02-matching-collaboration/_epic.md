@@ -23,6 +23,7 @@ Help "Encre & Plume" creators find the right collaborators and work together. Th
 7. [[MC-7]] — Received applicants "Candidatures reçues"
 8. [[MC-8]] — Contacts & connexions
 9. [[MC-9]] — Messaging (floating widget)
+10. [[MC-10]] — Block & mute users
 
 ## Key cross-epic dependencies
 

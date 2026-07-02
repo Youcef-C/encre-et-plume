@@ -35,3 +35,5 @@
 ## Notes
 - Explicit: "⛔ Bannir l'auteur·rice", the ban modal trigger (`openBan`), the "Utilisateurs" tab, and the profil/œuvre/illustration context.
 - Inferred: ban modal body fields, scope/duration, unban, content cascade, search/filter params.
+- The "optional scope/duration" hint is generalised by [[AD-13]] into graduated sanctions (warning / temporary suspension / ban) with a user-facing appeal flow; ban here = the top level.
+- Ban ≠ erasure: user-initiated RGPD account deletion is [[F-14]].

@@ -37,3 +37,4 @@
 ## Notes
 - Explicit: "⚑ Signaler" on work & illustration; `openReport` modal trigger; reasons (Spam, Contenu sensible, Usurpation) seen in admin.
 - Inferred: full modal body, "Détails" field, de-dup/rate-limit, already-reported indication.
+- [[MC-10]] extends `targetType` with `"message"` so private messages are reportable; staff review those via [[AD-11]].

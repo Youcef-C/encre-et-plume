@@ -34,3 +34,4 @@
 ## Notes
 - Explicit: "Panneau admin" link (admin-only), "Administration & modération" console, the four tabs with the "[4]" badge, and the four role values.
 - Inferred: last-admin lockout guard, role-change audit, pagination/search params.
+- Later stories add inferred tabs to this console: [[AD-7]] stats, [[AD-10]] "Journal d'activité", and [[AD-12]] "Finances" (the Finances tab is `admin`-only — hidden from `maintainer`).

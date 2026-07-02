@@ -15,6 +15,7 @@
 - MR-4 — Subscriptions management
 - MR-5 — Revenue dashboard "Revenus"
 - MR-6 — Payouts "Versements"
+- MR-7 — Refunds & receipts "Reçus & remboursements"
 
 ## Key cross-epic dependencies
 - [[CS-10]] — Permissions & revenue split: co-author shares drive per-project revenue allocation in MR-5/MR-6.

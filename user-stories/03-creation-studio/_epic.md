@@ -19,6 +19,7 @@ The Creation Studio is where Creators, Writers, and Illustrators turn an idea in
 - [[CS-8]] — Project discussion chat (Discussion tab)
 - [[CS-9]] — Publish scheduling & cadence (publish bar)
 - [[CS-10]] — Co-author permissions & revenue split "Gérer le groupe"
+- [[CS-11]] — Collaboration rights & licensing agreement "Droits & licence"
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-3]] Profile, [[F-5]] Notifications

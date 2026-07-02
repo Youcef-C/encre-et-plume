@@ -35,3 +35,4 @@
 ## Notes
 - Explicit: "Solde disponible 1 240 €", "Retirer maintenant", "Calendrier", "Méthode de versement" with masked IBAN "····4471" and "Modifier", "commission 8 % + TVA", and the history table (Période / Brut / Net versé / Statut: À venir / Versé) are in the prototype.
 - Inferred: minimum payout threshold, IBAN verification flow, double-withdrawal guard, and exact VAT base need designer/finance confirmation.
+- Admin oversight — payout freeze/release, balance clawback on refunds/chargebacks ([[MR-7]]), and manual adjustments — is [[AD-12]]; withdraw must honour an admin freeze.

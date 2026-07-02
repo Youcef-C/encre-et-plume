@@ -32,4 +32,4 @@
 ## Notes
 - Inferred: no auth/onboarding screen exists in the prototype or wireframes; the whole app assumes a logged-in user with an avatar.
 - Open decision for designers: auth method — email/password vs OAuth/social (or magic link). Credential fields above are deliberately left abstract until confirmed.
-- Keep scope minimal: no email verification, password reset, or 2FA specified here unless the team requests it.
+- Keep scope minimal here: email verification is [[F-11]], password reset is [[F-12]], 2FA/session management is [[F-18]], first-run onboarding is [[F-17]], and the CGU-acceptance checkbox is [[F-13]] — this story ships bare signup/login/logout.

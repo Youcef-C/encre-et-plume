@@ -35,3 +35,4 @@
 ## Notes
 - Explicit: roster columns, the four filters, sort by contribution, per-tier distribution, "rétention 96,6 % / churn 3,4 %", and supporter cancel are in the prototype.
 - Inferred: precise "à risque" heuristic, "Nouveaux" window, and retention/churn calculation periods.
+- Cancel stops future billing but refunds nothing — refunds/receipts are [[MR-7]]; admin-side cancel/comp on a user's behalf is [[AD-12]].

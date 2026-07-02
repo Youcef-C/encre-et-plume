@@ -31,3 +31,4 @@
 
 ## Notes
 - Inferred: derived from `goPermissions` nav and revoke/share modal CSS — no dedicated wireframe frame. Criteria kept conservative (member roles, invite/revoke, revenue split). Revenue-split feeds the Soutien tab (MR epic).
+- The revenue split covers money only — IP ownership, publication licence, and per-member publish consent are [[CS-11]] ("Droits & licence", hosted in this same "Gérer le groupe" surface).

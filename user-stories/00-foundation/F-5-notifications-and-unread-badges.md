@@ -29,3 +29,4 @@
 ## Notes
 - Explicit: badges and counts are shown in the prototype; theme/layout known.
 - Inferred: the "Notifications" entry is nav-wired (`goInvitations`) but the inbox body was a stub — treat the inbox list UI and the endpoints above as partly inferred; designers must confirm notification types and grouping.
+- Per-type/per-channel opt-outs live in [[F-15]] (notification & e-mail preferences); fan-out must consult them.

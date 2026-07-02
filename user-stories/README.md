@@ -43,6 +43,14 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-8](00-foundation/F-8-background-job-queue.md) — Background job queue & reliable processing *(technical / inferred)*
 - [F-9](00-foundation/F-9-observability-metrics-errors-alerts.md) — Observability: metrics, error tracking & alerts *(technical / inferred)*
 - [F-10](00-foundation/F-10-media-storage-uploads.md) — Media storage, uploads & delivery (object storage + CDN) *(technical / inferred)*
+- [F-11](00-foundation/F-11-email-verification.md) — Email verification *(inferred)*
+- [F-12](00-foundation/F-12-password-reset.md) — Password reset "Mot de passe oublié" *(inferred)*
+- [F-13](00-foundation/F-13-legal-consent-and-pages.md) — Legal consent & pages (CGU, confidentialité, cookies) *(inferred)*
+- [F-14](00-foundation/F-14-rgpd-account-deletion-data-export.md) — RGPD: account deletion & data export *(inferred)*
+- [F-15](00-foundation/F-15-notification-email-preferences.md) — Notification & e-mail preferences *(inferred)*
+- [F-16](00-foundation/F-16-transactional-email-catalog.md) — Transactional e-mail catalog & delivery *(technical / inferred)*
+- [F-17](00-foundation/F-17-onboarding-flow.md) — Onboarding flow (first run) *(inferred)*
+- [F-18](00-foundation/F-18-account-security.md) — Account security (credentials, sessions, 2FA) *(inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
@@ -55,6 +63,7 @@ Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
 - [DR-7](01-discovery-reading/DR-7-ranking-classement.md) — Ranking "Classement"
 - [DR-8](01-discovery-reading/DR-8-ma-liste-coups-de-coeur.md) — "Ma liste & coups de cœur"
 - [DR-9](01-discovery-reading/DR-9-like-favorite.md) — Like / favorite
+- [DR-10](01-discovery-reading/DR-10-age-verification-18-plus-gating.md) — Age verification & 18+ content gating *(inferred)*
 
 ### [02 · Matching & Collaboration](02-matching-collaboration/_epic.md) — `MC`
 Find a partner, calls, applications, contacts, messaging.
@@ -67,6 +76,7 @@ Find a partner, calls, applications, contacts, messaging.
 - [MC-7](02-matching-collaboration/MC-7-received-applicants.md) — Received applicants "Candidatures reçues" *(inferred)*
 - [MC-8](02-matching-collaboration/MC-8-contacts-connexions.md) — Contacts & connexions
 - [MC-9](02-matching-collaboration/MC-9-messaging-widget.md) — Messaging (floating widget)
+- [MC-10](02-matching-collaboration/MC-10-block-mute-users.md) — Block & mute users *(inferred)*
 
 ### [03 · Creation Studio](03-creation-studio/_epic.md) — `CS`
 Project creation, workspace, files, collaborative editor, nemu, arrangement, publishing prep.
@@ -80,6 +90,7 @@ Project creation, workspace, files, collaborative editor, nemu, arrangement, pub
 - [CS-8](03-creation-studio/CS-8-project-discussion-chat.md) — Project discussion chat
 - [CS-9](03-creation-studio/CS-9-publish-scheduling-cadence.md) — Publish scheduling & cadence
 - [CS-10](03-creation-studio/CS-10-coauthor-permissions-revenue.md) — Co-author permissions & revenue split *(inferred)*
+- [CS-11](03-creation-studio/CS-11-collaboration-rights-licensing.md) — Collaboration rights & licensing agreement *(inferred)*
 
 ### [04 · Publishing & Engagement](04-publishing-engagement/_epic.md) — `PUB`
 Publish chapters, comments, reviews, follow, share, report, contests, news.
@@ -110,6 +121,7 @@ Support tiers, funding goals, donations, subscriptions, revenue dashboard, payou
 - [MR-4](06-monetization-revenue/MR-4-subscriptions-management.md) — Subscriptions management
 - [MR-5](06-monetization-revenue/MR-5-revenue-dashboard.md) — Revenue dashboard "Revenus"
 - [MR-6](06-monetization-revenue/MR-6-payouts.md) — Payouts "Versements"
+- [MR-7](06-monetization-revenue/MR-7-refunds-receipts.md) — Refunds & receipts "Reçus & remboursements" *(inferred)*
 
 ### [07 · Admin & Moderation](07-admin-moderation/_epic.md) — `AD`
 Admin console: reports, editor verification, content/comment moderation, users, stats, articles, contests.
@@ -124,6 +136,8 @@ Admin console: reports, editor verification, content/comment moderation, users, 
 - [AD-9](07-admin-moderation/AD-9-contest-administration.md) — Contest administration *(inferred)*
 - [AD-10](07-admin-moderation/AD-10-user-action-log.md) — User action log "Journal d'activité" *(inferred)*
 - [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages & salon chat) *(inferred)*
+- [AD-12](07-admin-moderation/AD-12-financial-administration.md) — Financial administration "Finances" *(inferred)*
+- [AD-13](07-admin-moderation/AD-13-sanctions-appeals.md) — Graduated sanctions & appeals *(inferred)*
 
 ## Dependency spine
 Most stories depend on **F-1** (account) and **F-2** (roles). Creation depends on **CS-1** (project

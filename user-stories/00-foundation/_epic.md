@@ -21,6 +21,14 @@
 - F-8 — Background job queue & reliable processing *(technical / infra)*
 - F-9 — Observability: metrics, error tracking & alerts *(technical / infra)*
 - F-10 — Media storage, uploads & delivery (object storage + CDN) *(technical / infra)*
+- F-11 — Email verification
+- F-12 — Password reset "Mot de passe oublié"
+- F-13 — Legal consent & pages (CGU, confidentialité, cookies)
+- F-14 — RGPD: account deletion & data export
+- F-15 — Notification & e-mail preferences
+- F-16 — Transactional e-mail catalog & delivery *(technical / infra)*
+- F-17 — Onboarding flow (first run)
+- F-18 — Account security (credentials, sessions, 2FA)
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.
