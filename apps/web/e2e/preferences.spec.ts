@@ -403,7 +403,7 @@ test('F15-E2E-8a: responsive 375px — no horizontal overflow; matrix visible', 
 
   // Screenshot for evidence
   await page.screenshot({
-    path: '/private/tmp/claude-501/-Users-youcef-Projects-encre-et-plume/2740af18-3b1d-4d22-a93f-8ebcbb1364a2/scratchpad/f15-375.png',
+    path: 'test-results/f15-375.png', // relative, gitignored — never an absolute local path (breaks CI)
   });
 });
 
@@ -424,7 +424,7 @@ test('F15-E2E-8b: responsive 768px — no horizontal overflow; matrix usable', a
   await expect(section.getByRole('group').first()).toBeVisible();
 
   await page.screenshot({
-    path: '/private/tmp/claude-501/-Users-youcef-Projects-encre-et-plume/2740af18-3b1d-4d22-a93f-8ebcbb1364a2/scratchpad/f15-768.png',
+    path: 'test-results/f15-768.png', // relative, gitignored — never an absolute local path (breaks CI)
   });
 });
 
@@ -445,6 +445,6 @@ test('F15-E2E-8c: responsive 1280px — desktop; no horizontal overflow', async 
   await expect(section.getByRole('group').first()).toBeVisible();
 
   await page.screenshot({
-    path: '/private/tmp/claude-501/-Users-youcef-Projects-encre-et-plume/2740af18-3b1d-4d22-a93f-8ebcbb1364a2/scratchpad/f15-1280.png',
+    path: 'test-results/f15-1280.png', // relative, gitignored — never an absolute local path (breaks CI)
   });
 });
