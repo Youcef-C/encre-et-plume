@@ -11,15 +11,25 @@ function uniqueEmail(): string {
   return `qa_${Date.now()}_${Math.random().toString(36).slice(2, 7)}@test.com`;
 }
 
+/**
+ * Unique @handle derived from the unique email. UI-signup accounts are not torn down between
+ * runs, so a fixed suggested handle (e.g. "test-user") would 409 USERNAME_TAKEN on re-runs.
+ */
+function uniqueUsername(email: string): string {
+  return email.split('@')[0].replace(/[^a-z0-9-]/g, '-');
+}
+
 // ---------------------------------------------------------------------------
 // FE-1 Sign-up form renders required fields
 // ---------------------------------------------------------------------------
-test('FE-1: /inscription shows displayName + email + password fields', async ({ page }) => {
+test('FE-1: /inscription shows displayName + email + username + password + confirm fields', async ({ page }) => {
   await page.goto('/inscription');
 
   await expect(page.getByLabel(/nom d'affichage/i)).toBeVisible();
   await expect(page.getByLabel(/e-mail/i)).toBeVisible();
-  await expect(page.getByLabel(/mot de passe/i)).toBeVisible();
+  await expect(page.getByLabel(/nom d'utilisateur/i)).toBeVisible();
+  await expect(page.getByLabel(/^mot de passe$/i)).toBeVisible();
+  await expect(page.getByLabel(/confirmer le mot de passe/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /créer mon compte/i })).toBeVisible();
 });
 
@@ -52,7 +62,8 @@ test('FE-4b: /inscription shows "E-mail invalide" for bad email format', async (
 
   await page.getByLabel(/nom d'affichage/i).fill('Yuki');
   await page.getByLabel(/e-mail/i).fill('not-an-email');
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('E-mail invalide')).toBeVisible();
@@ -76,7 +87,9 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Yuki Moreau');
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   // Wait for redirect to home
   await expect(page).toHaveURL('/', { timeout: 10_000 });
@@ -88,7 +101,8 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.goto('/inscription');
   await page.getByRole('textbox', { name: /nom d'affichage/i }).fill('Copie Moreau');
   await page.getByRole('textbox', { name: 'E-mail' }).fill(email);
-  await page.getByRole('textbox', { name: /mot de passe/i }).fill('password456');
+  await page.getByRole('textbox', { name: /^mot de passe$/i }).fill('password456');
+  await page.getByRole('textbox', { name: /confirmer le mot de passe/i }).fill('password456');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('Cet e-mail est déjà utilisé')).toBeVisible({ timeout: 8_000 });
@@ -103,7 +117,9 @@ test('FE-5b + FE-6: sign up → redirect to / → header shows avatar initials',
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Test User');
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   // Redirects to home
@@ -126,7 +142,9 @@ test('FE-3 + FE-6: logout via avatar dropdown → header shows "Se connecter"', 
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Logout Test');
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 
@@ -155,7 +173,9 @@ test('FE-2 full: login with valid credentials → home → avatar visible', asyn
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill(displayName);
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 
@@ -205,11 +225,16 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
 
   await page.goto('/inscription');
 
-  // Tab to displayName, fill, tab to email, fill, tab to password, fill, Enter
+  // Tab through displayName → email → username → password → confirm, Enter
   await page.getByLabel(/nom d'affichage/i).focus();
   await page.keyboard.type('Keyboard User');
   await page.keyboard.press('Tab');
   await page.keyboard.type(email);
+  await page.keyboard.press('Tab'); // username — append a unique suffix to the suggestion (re-run safety)
+  await page.keyboard.press('End');
+  await page.keyboard.type(`-${Date.now()}`);
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('password123');
   await page.keyboard.press('Tab');
   await page.keyboard.type('password123');
   await page.keyboard.press('Enter');
@@ -231,7 +256,8 @@ test('FE-5 loading state: submit button shows "Création…" while submitting', 
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Slow User');
   await page.getByLabel(/e-mail/i).fill(uniqueEmail());
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   // Button should be disabled and show loading text

@@ -58,6 +58,11 @@ export interface SignupRequest {
   displayName: string;
   email: string;
   password: string;
+  /**
+   * Optional user-chosen handle — becomes profileSlug verbatim (lowercase letters/digits/hyphens,
+   * 3–30 chars). 409 USERNAME_TAKEN when already used; absent → slug auto-generated from displayName.
+   */
+  username?: string;
 }
 
 /** POST /auth/login body. */

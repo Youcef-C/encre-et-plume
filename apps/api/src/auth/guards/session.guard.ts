@@ -26,9 +26,9 @@ export class SessionGuard implements CanActivate {
     const token = req.cookies?.['ep_session'] as string | undefined;
     if (!token) throw new UnauthorizedException();
 
-    let payload: { sub: string; jti?: string; exp?: number; iat?: number };
+    let payload: { sub: string; jti?: string; exp?: number; iat?: number; ims?: number };
     try {
-      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number }>(token);
+      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number; ims?: number }>(token);
     } catch {
       throw new UnauthorizedException();
     }
@@ -40,10 +40,16 @@ export class SessionGuard implements CanActivate {
     }
 
     // F-12: per-account session epoch — reject JWTs issued before the last password reset.
-    // ponytail: session epoch; PasswordResetService.confirm() writes `session-epoch:<accountId>`.
-    const epochStr = await this.redis.get(`session-epoch:${payload.sub}`);
-    if (payload.iat !== undefined && epochStr !== null && payload.iat < parseInt(epochStr, 10)) {
-      throw new UnauthorizedException();
+    // ms precision via the custom `ims` claim: second-granularity iat left a 1s window where
+    // a token issued the same second as the reset survived it. Legacy tokens (no ims) fall
+    // back to iat*1000 — the boundary (<=) counts as pre-reset, so the old same-second hole
+    // stays closed for them too. PasswordResetService.confirm() writes `session-epoch-ms:<id>`.
+    const epochStr = await this.redis.get(`session-epoch-ms:${payload.sub}`);
+    if (epochStr !== null) {
+      const issuedMs = payload.ims ?? (payload.iat !== undefined ? payload.iat * 1000 : undefined);
+      if (issuedMs !== undefined && issuedMs <= parseInt(epochStr, 10)) {
+        throw new UnauthorizedException();
+      }
     }
 
     req.accountId = payload.sub;

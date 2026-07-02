@@ -108,11 +108,12 @@ export class PasswordResetService {
       await p.account.update({ where: { id: row.accountId }, data: { passwordHash } });
     });
 
-    // Bump session epoch → all pre-existing JWTs are invalidated (AC-B4)
-    // ponytail: session epoch; SessionGuard reads `session-epoch:<accountId>` to reject old JWTs
+    // Bump session epoch → all pre-existing JWTs are invalidated (AC-B4).
+    // Stored in MILLISECONDS: SessionGuard compares it against the token's `ims` claim
+    // (ms issued-at) so a token from the same second as the reset is still rejected.
     await this.redis.set(
-      `session-epoch:${row.accountId}`,
-      String(Math.floor(Date.now() / 1000)),
+      `session-epoch-ms:${row.accountId}`,
+      String(Date.now()),
       'EX',
       SESSION_EPOCH_TTL_S,
     );

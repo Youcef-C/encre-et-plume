@@ -224,9 +224,9 @@ describe('PasswordResetService', () => {
           data: expect.objectContaining({ passwordHash: 'hashed-newpassword' }),
         }),
       );
-      // Bump session epoch (AC-B4: invalidate all sessions)
+      // Bump session epoch in ms (AC-B4: invalidate all sessions, same-second safe)
       expect(redisService.set).toHaveBeenCalledWith(
-        'session-epoch:acc-1',
+        'session-epoch-ms:acc-1',
         expect.any(String),
         'EX',
         expect.any(Number),

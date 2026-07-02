@@ -29,7 +29,10 @@ async function signUpFresh(page: Page, email: string): Promise<void> {
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Vérif User');
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password123');
+  // Unique handle: UI-signup accounts persist across runs, a fixed suggestion would 409.
+  await page.getByLabel(/nom d'utilisateur/i).fill(email.split('@')[0].replace(/[^a-z0-9-]/g, '-'));
+  await page.getByLabel(/^mot de passe$/i).fill('password123');
+  await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 }

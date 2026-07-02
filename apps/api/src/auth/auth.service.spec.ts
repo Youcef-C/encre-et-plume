@@ -190,6 +190,68 @@ describe('AuthService', () => {
       ).resolves.toBeDefined();
     });
 
+    // ── F-1 enhancement: user-chosen username (@handle) becomes profileSlug verbatim ──
+
+    it('uses a provided username as profileSlug verbatim (no auto-generation)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue({ ...MOCK_ACCOUNT, profileSlug: 'yuki-chan' });
+
+      const result = await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        username: 'yuki-chan',
+      });
+
+      const createArg = prisma.account.create.mock.calls[0]?.[0] as { data: { profileSlug: string } };
+      expect(createArg.data.profileSlug).toBe('yuki-chan');
+      expect(slugService.ensureUniqueSlug).not.toHaveBeenCalled();
+      expect(result.account.slug).toBe('yuki-chan');
+    });
+
+    it('throws 409 USERNAME_TAKEN when the username pre-check finds an existing slug', async () => {
+      // 1st findUnique: email pre-check → free; 2nd: username pre-check → taken
+      prisma.account.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(MOCK_ACCOUNT);
+
+      await expect(
+        service.signup({
+          displayName: 'X',
+          email: 'new@test.com',
+          password: 'password123',
+          username: 'yuki-moreau',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ error: 'USERNAME_TAKEN', statusCode: 409 }),
+      });
+      expect(prisma.account.create).not.toHaveBeenCalled();
+    });
+
+    it('throws 409 USERNAME_TAKEN on a P2002 profileSlug race for a chosen username (no silent rename)', async () => {
+      const { Prisma } = await import('@prisma/client');
+      prisma.account.findUnique.mockResolvedValue(null); // both pre-checks pass (TOCTOU window)
+      prisma.account.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['profileSlug'] },
+        }),
+      );
+
+      await expect(
+        service.signup({
+          displayName: 'X',
+          email: 'new@test.com',
+          password: 'password123',
+          username: 'yuki-moreau',
+        }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ error: 'USERNAME_TAKEN', statusCode: 409 }),
+      });
+      expect(prisma.account.create).toHaveBeenCalledTimes(1); // never retried with a regenerated slug
+    });
+
     it('returns { account: AccountSummary, token: string }', async () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);

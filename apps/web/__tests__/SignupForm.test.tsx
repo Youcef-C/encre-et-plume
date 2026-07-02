@@ -47,23 +47,33 @@ function renderForm() {
   return render(<SignupForm />, { wrapper: Wrapper });
 }
 
+// Field locators — password label anchored so it doesn't match "Confirmer le mot de passe"
+const nameField = () => screen.getByLabelText(/nom d'affichage/i);
+const emailField = () => screen.getByLabelText(/e-mail/i);
+const usernameField = () => screen.getByLabelText(/nom d'utilisateur/i);
+const passwordField = () => screen.getByLabelText(/^mot de passe$/i);
+const confirmField = () => screen.getByLabelText(/confirmer le mot de passe/i);
+const submitBtn = () => screen.getByRole('button', { name: /créer mon compte/i });
+
 describe('SignupForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders three labelled fields: Nom d\'affichage, E-mail, Mot de passe', () => {
+  it('renders five labelled fields: Nom d\'affichage, E-mail, Nom d\'utilisateur (@), Mot de passe, Confirmer', () => {
     renderForm();
-    expect(screen.getByLabelText(/nom d'affichage/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/e-mail/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/mot de passe/i)).toBeInTheDocument();
+    expect(nameField()).toBeInTheDocument();
+    expect(emailField()).toBeInTheDocument();
+    expect(usernameField()).toBeInTheDocument();
+    expect(passwordField()).toBeInTheDocument();
+    expect(confirmField()).toBeInTheDocument();
   });
 
   it('shows French required errors on empty submit', async () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole('button', { name: /créer mon compte/i }));
+    await user.click(submitBtn());
 
     expect(await screen.findByText('Le nom est requis')).toBeInTheDocument();
     expect(await screen.findByText('E-mail requis')).toBeInTheDocument();
@@ -74,10 +84,11 @@ describe('SignupForm', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText(/nom d'affichage/i), 'Yuki');
-    await user.type(screen.getByLabelText(/e-mail/i), 'not-an-email');
-    await user.type(screen.getByLabelText(/mot de passe/i), 'password123');
-    await user.click(screen.getByRole('button', { name: /créer mon compte/i }));
+    await user.type(nameField(), 'Yuki');
+    await user.type(emailField(), 'not-an-email');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
 
     expect(await screen.findByText('E-mail invalide')).toBeInTheDocument();
   });
@@ -86,11 +97,11 @@ describe('SignupForm', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.click(screen.getByRole('button', { name: /créer mon compte/i }));
+    await user.click(submitBtn());
 
     await waitFor(() => {
       // First error is displayName field
-      expect(document.activeElement).toBe(screen.getByLabelText(/nom d'affichage/i));
+      expect(document.activeElement).toBe(nameField());
     });
   });
 
@@ -104,10 +115,11 @@ describe('SignupForm', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText(/nom d'affichage/i), 'Yuki Moreau');
-    await user.type(screen.getByLabelText(/e-mail/i), 'yuki@example.com');
-    await user.type(screen.getByLabelText(/mot de passe/i), 'password123');
-    await user.click(screen.getByRole('button', { name: /créer mon compte/i }));
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
 
     expect(await screen.findByText('Cet e-mail est déjà utilisé')).toBeInTheDocument();
   });
@@ -120,13 +132,116 @@ describe('SignupForm', () => {
     const user = userEvent.setup();
     renderForm();
 
-    await user.type(screen.getByLabelText(/nom d'affichage/i), 'Yuki Moreau');
-    await user.type(screen.getByLabelText(/e-mail/i), 'yuki@example.com');
-    await user.type(screen.getByLabelText(/mot de passe/i), 'password123');
-    await user.click(screen.getByRole('button', { name: /créer mon compte/i }));
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /création/i })).toBeDisabled();
     });
+  });
+
+  // ── F-1 enhancement: username (@handle) suggestion ─────────────────────────
+
+  it('auto-suggests the username from the display name (slugified) as the user types', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yüki Moreau');
+
+    expect(usernameField()).toHaveValue('yuki-moreau');
+  });
+
+  it('stops auto-updating the username once the user edits it manually', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki');
+    await user.clear(usernameField());
+    await user.type(usernameField(), 'ma-plume');
+    await user.type(nameField(), ' Moreau');
+
+    expect(usernameField()).toHaveValue('ma-plume');
+  });
+
+  it('sends the chosen username with the signup request (and never the confirm password)', async () => {
+    vi.mocked(api.signup).mockResolvedValueOnce({ account: mockAccount });
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
+
+    await waitFor(() => {
+      expect(api.signup).toHaveBeenCalledWith({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@example.com',
+        password: 'password123',
+        username: 'yuki-moreau',
+      });
+    });
+  });
+
+  it('shows an inline French format error for an invalid username', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.clear(usernameField());
+    await user.type(usernameField(), 'Yü ki!');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
+
+    expect(
+      await screen.findByText(/nom d'utilisateur invalide/i),
+    ).toBeInTheDocument();
+    expect(api.signup).not.toHaveBeenCalled();
+  });
+
+  it('maps a 409 USERNAME_TAKEN to an inline error on the username field', async () => {
+    vi.mocked(api.signup).mockRejectedValueOnce({
+      statusCode: 409,
+      message: "Ce nom d'utilisateur est déjà pris.",
+      error: 'USERNAME_TAKEN',
+    });
+
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.click(submitBtn());
+
+    expect(await screen.findByText("Ce nom d'utilisateur est déjà pris.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(usernameField());
+    });
+  });
+
+  // ── F-1 enhancement: double password confirmation ───────────────────────────
+
+  it('blocks submit and shows the French mismatch error when passwords differ', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password456');
+    await user.click(submitBtn());
+
+    expect(
+      await screen.findByText('Les mots de passe ne correspondent pas.'),
+    ).toBeInTheDocument();
+    expect(api.signup).not.toHaveBeenCalled();
   });
 });

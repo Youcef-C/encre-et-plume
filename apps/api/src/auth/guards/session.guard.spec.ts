@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RedisService } from '../../redis/redis.service';
 
 const NOW_S = 1_000_000; // fixed epoch seconds — avoids Date.now() drift
+const NOW_MS = NOW_S * 1000;
 
 function makeContext(cookieVal?: string): ExecutionContext {
   return {
@@ -46,30 +47,24 @@ describe('SessionGuard — session epoch (BE-3)', () => {
     expect(result).toBe(true);
   });
 
-  it('allows request when token iat equals the epoch (edge: same second)', async () => {
-    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S, exp: NOW_S + 3600 });
+  // ── ms-precision epoch: `ims` claim (issued-at in ms) vs `session-epoch-ms` key.
+  //    Second-granularity iat left a 1s window where a pre-reset token survived
+  //    a same-second reset (flaked in CI). ims closes it.
+
+  it('allows request when token ims is after the ms epoch (same second, issued after reset)', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S, ims: NOW_MS + 250, exp: NOW_S + 3600 });
     redis.get.mockImplementation((key: string) =>
-      Promise.resolve(key === `session-epoch:acc-1` ? String(NOW_S) : null),
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS) : null),
     );
 
     const result = await guard.canActivate(makeContext('valid-jwt'));
     expect(result).toBe(true);
   });
 
-  it('allows request when token iat is after the epoch', async () => {
-    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S + 5, exp: NOW_S + 3600 });
+  it('throws 401 when token ims < ms epoch even within the same second (pre-reset token)', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S, ims: NOW_MS - 250, exp: NOW_S + 3600 });
     redis.get.mockImplementation((key: string) =>
-      Promise.resolve(key === `session-epoch:acc-1` ? String(NOW_S) : null),
-    );
-
-    const result = await guard.canActivate(makeContext('valid-jwt'));
-    expect(result).toBe(true);
-  });
-
-  it('throws 401 when token iat < epoch (password reset invalidated all sessions)', async () => {
-    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S - 100, exp: NOW_S + 3600 });
-    redis.get.mockImplementation((key: string) =>
-      Promise.resolve(key === `session-epoch:acc-1` ? String(NOW_S) : null),
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS) : null),
     );
 
     await expect(guard.canActivate(makeContext('valid-jwt'))).rejects.toBeInstanceOf(
@@ -77,8 +72,40 @@ describe('SessionGuard — session epoch (BE-3)', () => {
     );
   });
 
+  it('throws 401 when token ims equals the ms epoch (boundary counts as pre-reset)', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S, ims: NOW_MS, exp: NOW_S + 3600 });
+    redis.get.mockImplementation((key: string) =>
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS) : null),
+    );
+
+    await expect(guard.canActivate(makeContext('valid-jwt'))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('falls back to iat*1000 for legacy tokens without ims (issued before this deploy)', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S - 100, exp: NOW_S + 3600 }); // no ims
+    redis.get.mockImplementation((key: string) =>
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS) : null),
+    );
+
+    await expect(guard.canActivate(makeContext('valid-jwt'))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('allows a legacy token (no ims) whose iat*1000 is after the ms epoch', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', iat: NOW_S + 5, exp: NOW_S + 3600 }); // no ims
+    redis.get.mockImplementation((key: string) =>
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS) : null),
+    );
+
+    const result = await guard.canActivate(makeContext('valid-jwt'));
+    expect(result).toBe(true);
+  });
+
   it('throws 401 when jti is in the denylist (existing logout behavior unchanged)', async () => {
-    jwtService.verify.mockReturnValue({ sub: 'acc-1', jti: 'tok-1', iat: NOW_S + 10, exp: NOW_S + 3600 });
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', jti: 'tok-1', iat: NOW_S + 10, ims: (NOW_S + 10) * 1000, exp: NOW_S + 3600 });
     redis.get.mockImplementation((key: string) =>
       Promise.resolve(key === `denylist:tok-1` ? '1' : null),
     );
@@ -88,11 +115,10 @@ describe('SessionGuard — session epoch (BE-3)', () => {
     );
   });
 
-  it('does not reject when iat is absent from payload (extra safety)', async () => {
-    // JWT without iat claim — no epoch rejection should occur
-    jwtService.verify.mockReturnValue({ sub: 'acc-1', exp: NOW_S + 3600 }); // no iat
+  it('does not reject when both ims and iat are absent from payload (extra safety)', async () => {
+    jwtService.verify.mockReturnValue({ sub: 'acc-1', exp: NOW_S + 3600 }); // no iat, no ims
     redis.get.mockImplementation((key: string) =>
-      Promise.resolve(key === `session-epoch:acc-1` ? String(NOW_S - 50) : null),
+      Promise.resolve(key === `session-epoch-ms:acc-1` ? String(NOW_MS - 50) : null),
     );
 
     const result = await guard.canActivate(makeContext('valid-jwt'));

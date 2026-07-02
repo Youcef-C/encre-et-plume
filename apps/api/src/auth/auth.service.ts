@@ -42,6 +42,14 @@ function emailTakenException(): ConflictException {
   });
 }
 
+function usernameTakenException(): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    message: "Ce nom d'utilisateur est déjà pris.",
+    error: 'USERNAME_TAKEN',
+  });
+}
+
 const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
 // ponytail: duplicated in accounts.service.ts — a 3-line coercion is cheaper than a shared util that ties auth↔accounts
@@ -67,12 +75,20 @@ export class AuthService {
     const exists = await this.prisma.account.findUnique({ where: { email: dto.email } });
     if (exists) throw emailTakenException();
 
+    // User-chosen handle (format already DTO-validated) → friendly pre-check, same UX as email.
+    const username = dto.username;
+    if (username !== undefined) {
+      const slugTaken = await this.prisma.account.findUnique({ where: { profileSlug: username } });
+      if (slugTaken) throw usernameTakenException();
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const baseSlug = this.slugService.slugify(dto.displayName);
+    const baseSlug = username ?? this.slugService.slugify(dto.displayName);
 
     let account: Account | undefined;
     for (let attempt = 0; account === undefined; attempt++) {
-      const profileSlug = await this.slugService.ensureUniqueSlug(baseSlug);
+      const profileSlug =
+        username ?? (await this.slugService.ensureUniqueSlug(baseSlug));
       try {
         account = await this.prisma.account.create({
           data: {
@@ -87,8 +103,12 @@ export class AuthService {
         const target = uniqueViolationTarget(err);
         // Concurrent signup won the race on the same email → same 409 as the pre-check.
         if (target?.includes('email')) throw emailTakenException();
-        // Slug collision → recompute against the now-committed row and retry (bounded).
-        if (target?.includes('profileSlug') && attempt < SLUG_CREATE_RETRIES) continue;
+        if (target?.includes('profileSlug')) {
+          // A user-CHOSEN handle must never be silently renamed → surface the conflict.
+          if (username !== undefined) throw usernameTakenException();
+          // Auto-generated slug collision → recompute against the now-committed row and retry (bounded).
+          if (attempt < SLUG_CREATE_RETRIES) continue;
+        }
         throw err;
       }
     }
@@ -133,7 +153,9 @@ export class AuthService {
 
   private signToken(accountId: string, expiresInSecs?: number): string {
     return this.jwt.sign(
-      { sub: accountId, jti: randomUUID() },
+      // ims = issued-at in MILLISECONDS (custom claim): the standard iat is second-granular,
+      // which left a 1s hole in the F-12 session-epoch invalidation. SessionGuard prefers ims.
+      { sub: accountId, jti: randomUUID(), ims: Date.now() },
       expiresInSecs !== undefined ? { expiresIn: expiresInSecs } : {},
     );
   }

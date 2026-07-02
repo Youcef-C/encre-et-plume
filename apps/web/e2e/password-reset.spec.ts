@@ -47,7 +47,10 @@ async function signUpViaUI(page: Page, email: string, password: string): Promise
   await page.goto('/inscription');
   await page.getByLabel(/nom d'affichage/i).fill('Reset User');
   await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill(password);
+  // Unique handle: UI-signup accounts persist across runs, a fixed suggestion would 409.
+  await page.getByLabel(/nom d'utilisateur/i).fill(email.split('@')[0].replace(/[^a-z0-9-]/g, '-'));
+  await page.getByLabel(/^mot de passe$/i).fill(password);
+  await page.getByLabel(/confirmer le mot de passe/i).fill(password);
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 }
@@ -282,6 +285,9 @@ test('F-12 AC-B4 (happy path): signup → request → confirm → new password w
     headers: { Cookie: cookieValue },
   });
   expect(meBeforeReset.status()).toBe(200);
+
+  // Session invalidation is ms-precise (token `ims` claim vs `session-epoch-ms`), so a
+  // token issued in the same second as the reset is still rejected — no wait needed.
 
   // 3. Request password reset
   const reqRes = await request.post(`${API}/auth/password-reset/request`, {
