@@ -53,7 +53,8 @@ async function signUpViaApi(
   password: string,
 ): Promise<string> {
   const signupRes = await request.post(`${API}/auth/signup`, {
-    data: { displayName: 'Reset User', email, password },
+    // F-13: acceptCgu required by the API
+    data: { displayName: 'Reset User', email, password, acceptCgu: true },
   });
   expect(signupRes.status()).toBe(201);
   // No session cookie from signup (blocking model)
@@ -81,6 +82,8 @@ async function signUpViaUI(page: Page, email: string, password: string): Promise
   await page.getByLabel(/nom d'utilisateur/i).fill(email.split('@')[0].replace(/[^a-z0-9-]/g, '-'));
   await page.getByLabel(/^mot de passe$/i).fill(password);
   await page.getByLabel(/confirmer le mot de passe/i).fill(password);
+  // F-13: check CGU consent before submit
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   // Blocking model: lands on /verifier-email/envoye, not /
   await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });

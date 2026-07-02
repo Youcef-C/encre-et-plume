@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import { EmailVerificationService } from './email-verification.service';
+import { LegalService } from '../legal/legal.service';
 
 const MOCK_ACCOUNT = {
   id: 'cuid-1',
@@ -31,6 +32,7 @@ describe('AuthService', () => {
   let slugService: { slugify: jest.Mock; ensureUniqueSlug: jest.Mock };
   let jwtService: { sign: jest.Mock };
   let emailVerificationService: { issueToken: jest.Mock };
+  let legalService: { currentVersion: jest.Mock; needsCguReconsent: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -45,6 +47,11 @@ describe('AuthService', () => {
     };
     jwtService = { sign: jest.fn().mockReturnValue('jwt-token') };
     emailVerificationService = { issueToken: jest.fn().mockResolvedValue(undefined) };
+    legalService = {
+      // F-13: default to null so existing tests don't include consents in create (defensive)
+      currentVersion: jest.fn().mockResolvedValue(null),
+      needsCguReconsent: jest.fn().mockResolvedValue(false),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +60,7 @@ describe('AuthService', () => {
         { provide: SlugService, useValue: slugService },
         { provide: JwtService, useValue: jwtService },
         { provide: EmailVerificationService, useValue: emailVerificationService },
+        { provide: LegalService, useValue: legalService },
       ],
     }).compile();
 
@@ -68,6 +76,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        acceptCgu: true,
       });
 
       expect(prisma.account.create).toHaveBeenCalledWith(
@@ -94,6 +103,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        acceptCgu: true,
       });
 
       const createCall = prisma.account.create.mock.calls[0]?.[0];
@@ -105,7 +115,7 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123' }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -123,7 +133,7 @@ describe('AuthService', () => {
       );
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123' }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.account.create).toHaveBeenCalledTimes(1); // no pointless retry on email
     });
@@ -148,6 +158,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        acceptCgu: true,
       });
 
       expect(prisma.account.create).toHaveBeenCalledTimes(2);
@@ -163,7 +174,7 @@ describe('AuthService', () => {
       prisma.account.create.mockRejectedValue(dbDown);
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123' }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
       ).rejects.toBe(dbDown);
     });
 
@@ -171,7 +182,7 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
 
-      await service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' });
+      await service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true });
 
       expect(emailVerificationService.issueToken).toHaveBeenCalledWith({
         id: MOCK_ACCOUNT.id,
@@ -187,7 +198,7 @@ describe('AuthService', () => {
 
       // Should not throw
       await expect(
-        service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' }),
+        service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
       ).resolves.toBeDefined();
     });
 
@@ -202,6 +213,7 @@ describe('AuthService', () => {
         email: 'yuki@test.com',
         password: 'password123',
         username: 'yuki-chan',
+        acceptCgu: true,
       });
 
       const createArg = prisma.account.create.mock.calls[0]?.[0] as { data: { profileSlug: string } };
@@ -222,6 +234,7 @@ describe('AuthService', () => {
           email: 'new@test.com',
           password: 'password123',
           username: 'yuki-moreau',
+          acceptCgu: true,
         }),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ error: 'USERNAME_TAKEN', statusCode: 409 }),
@@ -246,6 +259,7 @@ describe('AuthService', () => {
           email: 'new@test.com',
           password: 'password123',
           username: 'yuki-moreau',
+          acceptCgu: true,
         }),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ error: 'USERNAME_TAKEN', statusCode: 409 }),
@@ -261,12 +275,68 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        acceptCgu: true,
       });
 
       expect(result).toHaveProperty('account');
       expect(result).not.toHaveProperty('token'); // BE-1: no session at signup
       expect(result.account.slug).toBe('yuki-moreau');
       expect(result.account.id).toBe('cuid-1');
+    });
+
+    // ── F-13: consent records created atomically with account ─────────────────
+
+    it('F-13: includes consent rows for cgu + privacy in account.create when versions exist', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+      legalService.currentVersion
+        .mockResolvedValueOnce('1.0') // cgu
+        .mockResolvedValueOnce('1.0'); // privacy
+
+      await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        acceptCgu: true,
+      }, '127.0.0.1');
+
+      const createArg = prisma.account.create.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+      expect(createArg.data.consents).toEqual({
+        create: [
+          { document: 'cgu', version: '1.0', ip: '127.0.0.1' },
+          { document: 'privacy', version: '1.0', ip: '127.0.0.1' },
+        ],
+      });
+    });
+
+    it('F-13: omits consents from account.create when no versions are published (defensive)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+      legalService.currentVersion.mockResolvedValue(null); // no published docs
+
+      await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        acceptCgu: true,
+      });
+
+      const createArg = prisma.account.create.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+      expect(createArg.data.consents).toBeUndefined();
+    });
+
+    it('F-13: signup result has needsCguReconsent: false (default)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+
+      const result = await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        acceptCgu: true,
+      });
+
+      expect(result.account.needsCguReconsent).toBe(false);
     });
   });
 
@@ -328,6 +398,16 @@ describe('AuthService', () => {
       expect(typeof token).toBe('string');
       expect(token).toBe('jwt-token'); // matches jwtService.sign mock
     });
+
+    it('F-13: login result has needsCguReconsent: false (default — live flag only on /me)', async () => {
+      const bcrypt = await import('bcryptjs');
+      const hash = await bcrypt.hash('password123', 10);
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash, emailVerifiedAt: new Date() });
+
+      const result = await service.login({ email: 'yuki@test.com', password: 'password123' });
+
+      expect(result.account.needsCguReconsent).toBe(false);
+    });
   });
 
   describe('me', () => {
@@ -381,6 +461,25 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, emailVerifiedAt: new Date() });
       const result = await service.me('cuid-1');
       expect(result.emailVerified).toBe(true);
+    });
+
+    it('F-13: me() returns needsCguReconsent from legalService (false when accepted)', async () => {
+      prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);
+      legalService.needsCguReconsent.mockResolvedValue(false);
+
+      const result = await service.me('cuid-1');
+
+      expect(legalService.needsCguReconsent).toHaveBeenCalledWith('cuid-1');
+      expect(result.needsCguReconsent).toBe(false);
+    });
+
+    it('F-13: me() returns needsCguReconsent: true when new cgu version is published', async () => {
+      prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);
+      legalService.needsCguReconsent.mockResolvedValue(true);
+
+      const result = await service.me('cuid-1');
+
+      expect(result.needsCguReconsent).toBe(true);
     });
   });
 });

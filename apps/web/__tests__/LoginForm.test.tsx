@@ -131,6 +131,7 @@ describe('LoginForm', () => {
         avatar: null,
         createdAt: new Date().toISOString(),
         preferences: { theme: 'system' as const },
+        needsCguReconsent: false,
       },
     });
     mockRefresh.mockResolvedValue(undefined);

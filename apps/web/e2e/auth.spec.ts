@@ -43,6 +43,8 @@ async function signUpAndVerify(
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  // F-13: check CGU consent before submit
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   // Blocking model: signup lands on /verifier-email/envoye
   await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
@@ -97,6 +99,8 @@ test('FE-2: /connexion shows email + password + "Se souvenir de moi"', async ({ 
 // ---------------------------------------------------------------------------
 test('FE-4a: /inscription shows French required errors on empty submit', async ({ page }) => {
   await page.goto('/inscription');
+  // F-13: check CGU box to enable the submit button, then submit empty form
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('Le nom est requis')).toBeVisible();
@@ -111,6 +115,8 @@ test('FE-4b: /inscription shows "E-mail invalide" for bad email format', async (
   await page.getByLabel(/e-mail/i).fill('not-an-email');
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  // F-13: check CGU to enable submit
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('E-mail invalide')).toBeVisible();
@@ -137,6 +143,8 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  // F-13: check CGU consent
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   // Blocking model: lands on /verifier-email/envoye, not /
   await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
@@ -148,6 +156,8 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email) + '-2');
   await page.getByLabel(/^mot de passe$/i).fill('password456');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password456');
+  // F-13: check CGU consent
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('Cet e-mail est déjà utilisé')).toBeVisible({ timeout: 8_000 });
@@ -166,6 +176,8 @@ test('FE-5b + FE-6: sign up → lands on /verifier-email/envoye, header shows "S
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  // F-13: check CGU consent
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   // Blocking model: lands on /verifier-email/envoye, not home
@@ -259,18 +271,26 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
 
   await page.goto('/inscription');
 
-  // Tab through displayName → email → username → password → confirm, Enter
+  // Tab through displayName → email → username → password → confirm → CGU checkbox → submit
   await page.getByLabel(/nom d'affichage/i).focus();
   await page.keyboard.type('Keyboard User');
   await page.keyboard.press('Tab');
   await page.keyboard.type(email);
   await page.keyboard.press('Tab'); // username — append a unique suffix to the suggestion (re-run safety)
   await page.keyboard.press('End');
-  await page.keyboard.type(`-${Date.now()}`);
+  // Short suffix: suggestion + suffix must stay within the 30-char username limit.
+  await page.keyboard.type(`-${Math.random().toString(36).slice(2, 6)}`);
   await page.keyboard.press('Tab');
   await page.keyboard.type('password123');
   await page.keyboard.press('Tab');
   await page.keyboard.type('password123');
+  // F-13: Tab to CGU checkbox, Space to check; the label contains two links
+  // (CGU + Politique de confidentialité) that sit in the tab order before the submit.
+  await page.keyboard.press('Tab'); // move to CGU checkbox
+  await page.keyboard.press('Space'); // check the CGU checkbox
+  await page.keyboard.press('Tab'); // link: Conditions générales d'utilisation
+  await page.keyboard.press('Tab'); // link: Politique de confidentialité
+  await page.keyboard.press('Tab'); // submit button
   await page.keyboard.press('Enter');
 
   // Blocking model: successful signup lands on the link-sent page
@@ -294,6 +314,8 @@ test('FE-5 loading state: submit button shows "Création…" while submitting', 
   await page.getByLabel(/e-mail/i).fill(uniqueEmail());
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  // F-13: check CGU consent to enable submit
+  await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   // Button should be disabled and show loading text

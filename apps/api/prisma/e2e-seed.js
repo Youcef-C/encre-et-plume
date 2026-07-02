@@ -5,6 +5,9 @@
  *
  * Reads DATABASE_URL from process.env; uses @prisma/client from the api package.
  * Idempotent: upserts on email, resets password + role + verified on update.
+ *
+ * F-13: also seeds ConsentRecords (cgu + privacy at current version) for all
+ * seeded accounts so needsCguReconsent === false and e2e auth flows are unblocked.
  */
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
@@ -41,6 +44,10 @@ async function main() {
   // ponytail: cost 10 is standard; no need for lower in tests since this runs once
   const hash = bcrypt.hashSync('password123', 10);
 
+  // F-13: read current cgu + privacy versions so consent rows use the right version
+  const cguDoc = await prisma.legalDocument.findFirst({ where: { kind: 'cgu' }, orderBy: { publishedAt: 'desc' } });
+  const privacyDoc = await prisma.legalDocument.findFirst({ where: { kind: 'privacy' }, orderBy: { publishedAt: 'desc' } });
+
   const accounts = {};
   for (const spec of SPECS) {
     const account = await prisma.account.upsert({
@@ -62,6 +69,20 @@ async function main() {
       },
     });
     accounts[spec.key] = { email: account.email, id: account.id };
+
+    // F-13: ensure consent records exist so needsCguReconsent === false for seeded accounts.
+    // Uses findFirst + conditional create (idempotent — no unique constraint on ConsentRecord).
+    for (const [kind, doc] of [['cgu', cguDoc], ['privacy', privacyDoc]]) {
+      if (!doc) continue;
+      const existing = await prisma.consentRecord.findFirst({
+        where: { accountId: account.id, document: kind, version: doc.version },
+      });
+      if (!existing) {
+        await prisma.consentRecord.create({
+          data: { accountId: account.id, document: kind, version: doc.version },
+        });
+      }
+    }
   }
 
   await prisma.$disconnect();

@@ -24,6 +24,7 @@ const MOCK_ACCOUNT = {
   avatar: null,
   createdAt: new Date('2026-01-01').toISOString(),
   emailVerified: false, // F-11
+  needsCguReconsent: false, // F-13
 };
 
 // Minimal in-memory Redis mock — no extra dep needed
@@ -111,7 +112,7 @@ describe('Auth API (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' })
+        .send({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true })
         .expect(201);
 
       // No session cookie set at signup
@@ -131,7 +132,7 @@ describe('Auth API (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'taken@test.com', password: 'password123' })
+        .send({ displayName: 'X', email: 'taken@test.com', password: 'password123', acceptCgu: true })
         .expect(409);
 
       // NestJS flattens HttpException objects to response root
@@ -166,8 +167,27 @@ describe('Auth API (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'a@b.com', password: 'password123' })
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', acceptCgu: true })
         .expect(429);
+    });
+
+    // ── F-13: consent checkbox validation ────────────────────────────────────
+
+    it('F-13: 400 when acceptCgu is false (French message)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', acceptCgu: false })
+        .expect(400);
+
+      const messages: string[] = Array.isArray(res.body.message) ? res.body.message : [res.body.message];
+      expect(messages.some((m: string) => m.toLowerCase().includes('vous devez accepter'))).toBe(true);
+    });
+
+    it('F-13: 400 when acceptCgu is missing', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123' })
+        .expect(400);
     });
   });
 

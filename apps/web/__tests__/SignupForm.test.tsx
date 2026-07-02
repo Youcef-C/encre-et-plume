@@ -31,6 +31,7 @@ const mockAccount: AccountSummary = {
   avatar: null,
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
+  needsCguReconsent: false,
 };
 
 // Minimal session context provider for tests
@@ -56,6 +57,8 @@ const usernameField = () => screen.getByLabelText(/nom d'utilisateur/i);
 const passwordField = () => screen.getByLabelText(/^mot de passe$/i);
 const confirmField = () => screen.getByLabelText(/confirmer le mot de passe/i);
 const submitBtn = () => screen.getByRole('button', { name: /créer mon compte/i });
+// F-13: CGU consent checkbox
+const cguCheckbox = () => screen.getByRole('checkbox', { name: /j'accepte les/i });
 
 describe('SignupForm', () => {
   beforeEach(() => {
@@ -71,10 +74,12 @@ describe('SignupForm', () => {
     expect(confirmField()).toBeInTheDocument();
   });
 
-  it('shows French required errors on empty submit', async () => {
+  it('shows French required errors on empty submit (after accepting CGU to enable button)', async () => {
     const user = userEvent.setup();
     renderForm();
 
+    // F-13: check CGU box to enable the submit button, then submit empty form
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(await screen.findByText('Le nom est requis')).toBeInTheDocument();
@@ -90,6 +95,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'not-an-email');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(await screen.findByText('E-mail invalide')).toBeInTheDocument();
@@ -99,6 +105,8 @@ describe('SignupForm', () => {
     const user = userEvent.setup();
     renderForm();
 
+    // F-13: check CGU box to enable submit
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     await waitFor(() => {
@@ -121,6 +129,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(await screen.findByText('Cet e-mail est déjà utilisé')).toBeInTheDocument();
@@ -138,6 +147,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     await waitFor(() => {
@@ -178,6 +188,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     await waitFor(() => {
@@ -186,6 +197,7 @@ describe('SignupForm', () => {
         email: 'yuki@example.com',
         password: 'password123',
         username: 'yuki-moreau',
+        acceptCgu: true,
       });
     });
   });
@@ -199,6 +211,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     await waitFor(() => {
@@ -220,6 +233,7 @@ describe('SignupForm', () => {
     await user.type(usernameField(), 'Yü ki!');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(
@@ -242,6 +256,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(await screen.findByText("Ce nom d'utilisateur est déjà pris.")).toBeInTheDocument();
@@ -260,11 +275,48 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password456');
+    await user.click(cguCheckbox());
     await user.click(submitBtn());
 
     expect(
       await screen.findByText('Les mots de passe ne correspondent pas.'),
     ).toBeInTheDocument();
     expect(api.signup).not.toHaveBeenCalled();
+  });
+
+  // ── F-13: CGU consent checkbox ─────────────────────────────────────────────
+
+  it('F-13: submit is disabled when CGU checkbox not checked', () => {
+    renderForm();
+    expect(submitBtn()).toBeDisabled();
+  });
+
+  it('F-13: checking CGU checkbox enables the submit button', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    expect(submitBtn()).toBeDisabled();
+    await user.click(cguCheckbox());
+    expect(submitBtn()).not.toBeDisabled();
+  });
+
+  it('F-13: CGU label contains links to /cgu and /confidentialite (new tab)', () => {
+    renderForm();
+    const cguLink = screen.getByRole('link', { name: /conditions générales d'utilisation/i });
+    const privacyLink = screen.getByRole('link', { name: /politique de confidentialité/i });
+    expect(cguLink).toHaveAttribute('href', '/cgu');
+    expect(cguLink).toHaveAttribute('target', '_blank');
+    expect(privacyLink).toHaveAttribute('href', '/confidentialite');
+    expect(privacyLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('F-13: submitting with CGU unchecked (via Enter key) shows the inline error', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    // Simulate form submit bypass (e.g. Enter in a field) without checking CGU
+    // The handleSubmit guard fires even though button is disabled (defensive)
+    // Trigger via the form's submit event directly
+    const form = document.querySelector('form')!;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await screen.findByText('Vous devez accepter les conditions pour créer un compte.');
   });
 });

@@ -10,6 +10,7 @@ import { SlugService } from '../slug/slug.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { EmailModule } from '../email/email.module';
+import { LegalModule } from '../legal/legal.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { EmailModule } from '../email/email.module';
       signOptions: { expiresIn: '7d' },
     }),
     EmailModule,
+    LegalModule,
   ],
   controllers: [AuthController],
   providers: [

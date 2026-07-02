@@ -16,6 +16,7 @@ import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailService } from '../email/email.service';
+import { LegalService } from '../legal/legal.service';
 import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
 import { Prisma } from '@prisma/client';
@@ -70,11 +71,12 @@ export class AuthService {
     private readonly slugService: SlugService,
     private readonly jwt: JwtService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly legal: LegalService,
     @Optional() private readonly metrics?: MetricsService,
     @Optional() private readonly emailService?: EmailService,
   ) {}
 
-  async signup(dto: SignupDto): Promise<{ account: AccountSummary }> {
+  async signup(dto: SignupDto, ip?: string): Promise<{ account: AccountSummary }> {
     // Fast-path check for good UX; the unique constraint below is the actual guarantee.
     const exists = await this.prisma.account.findUnique({ where: { email: dto.email } });
     if (exists) throw emailTakenException();
@@ -85,6 +87,14 @@ export class AuthService {
       const slugTaken = await this.prisma.account.findUnique({ where: { profileSlug: username } });
       if (slugTaken) throw usernameTakenException();
     }
+
+    // F-13: read current cgu + privacy versions for atomic consent creation
+    const cguVersion = await this.legal.currentVersion('cgu');
+    const privacyVersion = await this.legal.currentVersion('privacy');
+    const consentRows = [
+      ...(cguVersion ? [{ document: 'cgu' as const, version: cguVersion, ip }] : []),
+      ...(privacyVersion ? [{ document: 'privacy' as const, version: privacyVersion, ip }] : []),
+    ];
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const baseSlug = username ?? this.slugService.slugify(dto.displayName);
@@ -101,6 +111,8 @@ export class AuthService {
             passwordHash,
             profileSlug,
             profile: { create: {} }, // BE-9: backing Profile row for F-3
+            // F-13: consent rows created atomically with the account (BE-4, BE-5)
+            ...(consentRows.length > 0 ? { consents: { create: consentRows } } : {}),
           },
         });
       } catch (err) {
@@ -135,7 +147,7 @@ export class AuthService {
         );
     }
 
-    return { account: this.toSummary(account) }; // BE-1 R2: no session at signup
+    return { account: this.toSummary(account) }; // BE-1 R2: no session at signup; needsCguReconsent defaults false
   }
 
   async login(dto: LoginDto): Promise<{ account: AccountSummary; token: string }> {
@@ -162,7 +174,7 @@ export class AuthService {
 
     const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 : undefined; // seconds; undefined → session
     return {
-      account: this.toSummary(account),
+      account: this.toSummary(account), // needsCguReconsent: false default on login
       token: this.signToken(account.id, maxAge),
     };
   }
@@ -175,7 +187,10 @@ export class AuthService {
   async me(accountId: string): Promise<AccountSummary> {
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new UnauthorizedException();
-    return this.toSummary(account);
+    return {
+      ...this.toSummary(account),
+      needsCguReconsent: await this.legal.needsCguReconsent(accountId), // F-13: live flag
+    };
   }
 
   private signToken(accountId: string, expiresInSecs?: number): string {
@@ -199,6 +214,7 @@ export class AuthService {
       createdAt: account.createdAt.toISOString(),
       preferences: readPreferences(account.preferences),
       emailVerified: account.emailVerifiedAt !== null, // F-11
+      needsCguReconsent: false, // F-13: default for signup/login; me() overrides with live value
     };
   }
 }

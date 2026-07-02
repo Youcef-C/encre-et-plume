@@ -9,6 +9,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
+    // F-13: pre-seed cookie consent in localStorage so the banner doesn't appear in existing
+    // tests. QA's F-13 spec clears this key before testing the banner explicitly.
+    storageState: './e2e/storage-state.json',
   },
   projects: [
     {

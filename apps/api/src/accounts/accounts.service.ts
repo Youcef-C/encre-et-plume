@@ -24,6 +24,7 @@ function toSummary(account: Account): AccountSummary {
     createdAt: account.createdAt.toISOString(),
     preferences: readPreferences(account.preferences),
     emailVerified: account.emailVerifiedAt !== null, // F-11
+    needsCguReconsent: false, // F-13: accounts endpoints don't compute the live flag; /auth/me does
   };
 }
 

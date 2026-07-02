@@ -68,6 +68,9 @@ export default function SignupForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // F-13: CGU consent checkbox
+  const [acceptedCgu, setAcceptedCgu] = useState(false);
+  const [cguError, setCguError] = useState<string | null>(null);
 
   // Refs for focus management on error (FE-7)
   const displayNameRef = useRef<HTMLInputElement>(null);
@@ -93,6 +96,13 @@ export default function SignupForm() {
     e.preventDefault();
     setServerError(null);
 
+    // F-13: defensive guard (button is disabled when unchecked, but Enter key can bypass)
+    if (!acceptedCgu) {
+      setCguError('Vous devez accepter les conditions pour créer un compte.');
+      return;
+    }
+    setCguError(null);
+
     const errors = validate(displayName, email, username, password, confirmPassword);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -112,6 +122,7 @@ export default function SignupForm() {
         email,
         password,
         ...(username ? { username } : {}),
+        acceptCgu: true,
       });
       router.push('/verifier-email/envoye?email=' + encodeURIComponent(email));
     } catch (err) {
@@ -290,9 +301,53 @@ export default function SignupForm() {
         )}
       </div>
 
+      {/* F-13: CGU consent checkbox */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <input
+            type="checkbox"
+            id="acceptCgu"
+            name="acceptCgu"
+            checked={acceptedCgu}
+            onChange={(e) => {
+              setAcceptedCgu(e.target.checked);
+              if (e.target.checked) setCguError(null);
+            }}
+            aria-describedby={cguError ? 'acceptCgu-error' : undefined}
+            style={{ marginTop: 3, width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+          />
+          <label htmlFor="acceptCgu" style={{ fontSize: 14, lineHeight: 1.5, cursor: 'pointer' }}>
+            J&apos;accepte les{' '}
+            <a
+              href="/cgu"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', fontWeight: 700 }}
+            >
+              Conditions générales d&apos;utilisation
+            </a>{' '}
+            et la{' '}
+            <a
+              href="/confidentialite"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', fontWeight: 700 }}
+            >
+              Politique de confidentialité
+            </a>
+            .
+          </label>
+        </div>
+        {cguError && (
+          <span id="acceptCgu-error" className="ep-error" role="alert">
+            {cguError}
+          </span>
+        )}
+      </div>
+
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || !acceptedCgu}
         className="ep-btn-primary"
         style={{ width: '100%', fontSize: 16 }}
       >

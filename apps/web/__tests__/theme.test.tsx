@@ -20,6 +20,7 @@ vi.mock('../lib/api', async (importOriginal) => {
       avatar: null,
       createdAt: new Date().toISOString(),
       preferences: { theme: 'dark' as const },
+      needsCguReconsent: false,
     }),
   };
 });
@@ -38,6 +39,7 @@ const mockAccount: AccountSummary = {
   avatar: null,
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
+  needsCguReconsent: false,
 };
 
 // Simple test component that exposes the theme context

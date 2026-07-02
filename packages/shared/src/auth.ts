@@ -46,6 +46,8 @@ export interface AccountSummary {
   preferences: AccountPreferences;
   /** F-11: true once the account confirmed its e-mail (Account.emailVerifiedAt != null). */
   emailVerified: boolean;
+  /** F-13: true when the account has no ConsentRecord for the current CGU version. */
+  needsCguReconsent: boolean;
 }
 
 /** PATCH /accounts/{id}/role body — admin-only role change (F-2). */
@@ -63,6 +65,8 @@ export interface SignupRequest {
    * 3–30 chars). 409 USERNAME_TAKEN when already used; absent → slug auto-generated from displayName.
    */
   username?: string;
+  /** F-13: must be true; server rejects signup if absent or false. */
+  acceptCgu: boolean;
 }
 
 /** POST /auth/login body. */

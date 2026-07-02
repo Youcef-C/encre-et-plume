@@ -23,6 +23,10 @@ import type {
   RequestPasswordResetResponse,
   ConfirmPasswordResetRequest,
   ConfirmPasswordResetResponse,
+  LegalDocumentDto,
+  LegalKind,
+  ConsentDto,
+  ConsentResponse,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -157,6 +161,14 @@ export const setAvatar = (mediaId: string): Promise<AccountSummary> =>
 
 export const deleteAvatar = (): Promise<AccountSummary> =>
   request<AccountSummary>('/accounts/me/avatar', { method: 'DELETE' });
+
+// ─── Legal (F-13) ────────────────────────────────────────────────────────────
+
+export const getLegalDocument = (kind: LegalKind): Promise<LegalDocumentDto> =>
+  request<LegalDocumentDto>(`/legal/${kind}`);
+
+export const recordConsent = (body: ConsentDto): Promise<ConsentResponse> =>
+  request<ConsentResponse>('/consents', { method: 'POST', body: JSON.stringify(body) });
 
 /** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
 export function buildSrcSet(variants: MediaVariants): string {

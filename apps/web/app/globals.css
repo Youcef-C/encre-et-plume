@@ -424,3 +424,32 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 18px;
   }
 }
+
+/* ── F-13 legal page content ────────────────────────────────────────────────
+   Prose styles for trusted backend HTML inside .ep-legal-content */
+.ep-legal-content h1,
+.ep-legal-content h2,
+.ep-legal-content h3 {
+  margin-top: 1.4em;
+  margin-bottom: 0.5em;
+}
+
+.ep-legal-content p {
+  margin-bottom: 1em;
+  line-height: 1.65;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.ep-legal-content ul,
+.ep-legal-content ol {
+  margin: 0 0 1em 1.4em;
+  line-height: 1.65;
+}
+
+/* Legal footer responsive wrap */
+@media (max-width: 480px) {
+  .ep-legal-content {
+    padding: 28px 20px !important;
+  }
+}

@@ -58,7 +58,7 @@ export class AuthController {
     @Req() req: AuthRequest,
   ): Promise<SignupResponse> {
     await this.rateLimit(`signup:${req.ip ?? 'unknown'}`);
-    const { account } = await this.authService.signup(dto);
+    const { account } = await this.authService.signup(dto, req.ip); // F-13: pass ip for consent record
     // BE-1 R2: no session at signup — the verification e-mail is the credential
     return { verificationRequired: true, email: account.email };
   }

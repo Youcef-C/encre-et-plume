@@ -4,9 +4,12 @@ import { cookies } from 'next/headers';
 import type { ThemePreference } from '@encre-et-plume/shared';
 import { THEME_PREFERENCES } from '@encre-et-plume/shared';
 import './globals.css';
-import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider } from './providers';
+import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider, CookieConsentProvider } from './providers';
 import Header from '../components/Header';
 import RoleBanner from '../components/RoleBanner';
+import LegalFooter from '../components/LegalFooter';
+import CookieBanner from '../components/CookieBanner';
+import CguReconsentModal from '../components/CguReconsentModal';
 
 const anton = Anton({
   weight: '400',
@@ -39,13 +42,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <SessionProvider>
           <ThemeProvider>
-            <UnreadProvider>
-              <RoleSimulationProvider>
-                <Header />
-                <RoleBanner />
-                <main>{children}</main>
-              </RoleSimulationProvider>
-            </UnreadProvider>
+            <CookieConsentProvider>
+              <UnreadProvider>
+                <RoleSimulationProvider>
+                  <Header />
+                  <RoleBanner />
+                  <main>{children}</main>
+                  <LegalFooter />
+                  <CookieBanner />
+                  <CguReconsentModal />
+                </RoleSimulationProvider>
+              </UnreadProvider>
+            </CookieConsentProvider>
           </ThemeProvider>
         </SessionProvider>
       </body>

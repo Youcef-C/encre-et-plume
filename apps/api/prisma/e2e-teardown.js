@@ -2,7 +2,7 @@
 /**
  * E2E teardown — removes all seeded qa_e2e_* accounts (and their profiles + portfolio items).
  * Deletes in FK-dependency order:
- *   Media → PortfolioItem → Profile → Notification → Account.
+ *   Media → PortfolioItem → Profile → Notification → ConsentRecord → Account.
  * Called by apps/web/e2e/global-teardown.ts after each e2e run.
  */
 const { PrismaClient } = require('@prisma/client');
@@ -42,7 +42,12 @@ async function main() {
     });
   }
 
-  // 4. Delete accounts
+  // 4. Delete consent records (F-13 — FK-restricts Account deletion)
+  if (accountIds.length > 0) {
+    await prisma.consentRecord.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
+  // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },
   });

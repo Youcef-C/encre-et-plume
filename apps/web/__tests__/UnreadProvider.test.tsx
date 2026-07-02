@@ -27,6 +27,7 @@ const mockAccount: AccountSummary = {
   avatar: null,
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
+  needsCguReconsent: false,
 };
 
 const mockCounts: UnreadCounts = { total: 5, messages: 3, demandes: 2, signalements: 0 };

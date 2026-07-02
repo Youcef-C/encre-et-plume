@@ -16,6 +16,7 @@ const base: AccountSummary = {
   avatar: null,
   createdAt: new Date().toISOString(),
   preferences: { theme: 'system' },
+  needsCguReconsent: false,
 };
 
 function wrap(account: AccountSummary | null) {

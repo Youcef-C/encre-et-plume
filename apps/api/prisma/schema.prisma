@@ -1,4 +1,5 @@
 // F-1: account sign-up & login. F-3 extends Profile. F-5 adds Notification. F-10 adds Media.
+// F-11 adds EmailVerificationToken. F-12 adds PasswordResetToken. F-13 adds LegalDocument + ConsentRecord.
 
 generator client {
   provider = "prisma-client-js"
@@ -51,6 +52,19 @@ enum MediaVisibility {
   private
 }
 
+// ── F-13 Legal enums ──────────────────────────────────────────────────────────
+
+enum LegalKind {
+  cgu
+  privacy
+  mentions
+}
+
+enum ConsentDocument {
+  cgu
+  privacy
+}
+
 model Account {
   id                       String                   @id @default(cuid())
   displayName              String
@@ -69,12 +83,10 @@ model Account {
   media                    Media[]
   emailVerificationTokens  EmailVerificationToken[]
   passwordResetTokens      PasswordResetToken[]
+  consents                 ConsentRecord[]          // F-13: append-only acceptance log
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
-// CS-3's per-project Asset will reference Media.id; existing URL columns
-// (Account.avatar / Profile.coverImage / PortfolioItem.image) keep storing the
-// ready public URL — mediaId references are the long-term form.
 
 model Media {
   id          String          @id @default(cuid())
@@ -163,4 +175,29 @@ model Notification {
 
   @@index([recipientId, readAt])
   @@index([recipientId, createdAt])
+}
+
+// ── F-13: Legal documents & consent records ───────────────────────────────────
+
+model LegalDocument {
+  id          String    @id @default(cuid())
+  kind        LegalKind
+  version     String
+  content     String    // trusted HTML
+  publishedAt DateTime  @default(now())
+
+  @@unique([kind, version])
+  @@index([kind, publishedAt])
+}
+
+model ConsentRecord {
+  id         String          @id @default(cuid())
+  accountId  String
+  account    Account         @relation(fields: [accountId], references: [id])
+  document   ConsentDocument
+  version    String
+  acceptedAt DateTime        @default(now())
+  ip         String?
+
+  @@index([accountId, document])
 }
