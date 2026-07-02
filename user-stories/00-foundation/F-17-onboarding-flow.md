@@ -5,7 +5,7 @@
 > Screen(s): none drawn (post-signup steps — to be designed) · Priority: Should · Fidelity: Inferred
 
 ## Frontend
-- Triggered once after signup ([[F-1]]), before landing on "Accueil"; skippable at every step ("Passer") — onboarding never blocks the app.
+- Triggered once right after **e-mail confirmation** — the [[F-11]] landing redirects here with the fresh session (signup itself ends on the link-sent page, not in the app); skippable at every step ("Passer") — onboarding never blocks the app.
 - Step 1 — **"Qui êtes-vous ?"**: pick one or both creator roles ("Scénariste", "Dessinateur·rice") or "Je suis là pour lire" (reader). Sets the profile's creator sub-roles ([[F-3]]) — NOT the authz role, which stays `utilisateur` ([[F-2]]).
 - Step 2 — **"Vos genres & affinités"**: multi-select genre/affinity tags (same vocabulary as the profile's "Genres & affinités", [[F-3]]).
 - Step 3 (creators only) — **"Que cherchez-vous ?"**: looking-for status (e.g. "Je cherche un·e dessinateur·rice", "Je cherche un·e scénariste", "Ouvert·e aux propositions", "Je regarde seulement") — the availability signal [[MC-1]]/[[MC-2]] surface.
