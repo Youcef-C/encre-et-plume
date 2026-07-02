@@ -93,6 +93,7 @@ describe('LoginForm', () => {
         email: 'yuki@example.com',
         role: 'utilisateur',
         verified: false,
+        emailVerified: false,
         slug: 'yuki',
         avatar: null,
         createdAt: new Date().toISOString(),

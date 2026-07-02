@@ -44,6 +44,8 @@ export interface AccountSummary {
   createdAt: string; // ISO 8601
   /** F-6: persisted UI preferences; theme defaults to 'system'. */
   preferences: AccountPreferences;
+  /** F-11: true once the account confirmed its e-mail (Account.emailVerifiedAt != null). */
+  emailVerified: boolean;
 }
 
 /** PATCH /accounts/{id}/role body — admin-only role change (F-2). */
@@ -79,3 +81,21 @@ export interface ApiError {
   /** Machine-readable code for the FE to branch on (e.g. EMAIL_TAKEN, INVALID_CREDENTIALS). */
   error: string;
 }
+
+// ── F-11: Email verification contracts ───────────────────────────────────────
+
+/** POST /auth/verify-email/confirm body (public; token is the credential). */
+export interface VerifyEmailConfirmRequest {
+  token: string;
+}
+
+/** POST /auth/verify-email/confirm success body. */
+export interface VerifyEmailConfirmResponse {
+  emailVerified: true;
+}
+
+/** Stable machine-readable error codes for the verification flow (ApiError.error). */
+export const EMAIL_TOKEN_INVALID = 'EMAIL_TOKEN_INVALID'; // unknown / malformed / already-consumed
+export const EMAIL_TOKEN_EXPIRED = 'EMAIL_TOKEN_EXPIRED'; // past expiresAt
+export const EMAIL_NOT_VERIFIED  = 'EMAIL_NOT_VERIFIED';  // guard rejection
+// RATE_LIMITED reused from F-1.

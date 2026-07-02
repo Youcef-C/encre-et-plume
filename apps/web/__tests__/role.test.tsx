@@ -11,6 +11,7 @@ const base: AccountSummary = {
   email: 'yuki@example.com',
   role: 'utilisateur',
   verified: false,
+  emailVerified: false,
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),

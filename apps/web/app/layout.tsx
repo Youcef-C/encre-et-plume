@@ -7,6 +7,7 @@ import './globals.css';
 import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider } from './providers';
 import Header from '../components/Header';
 import RoleBanner from '../components/RoleBanner';
+import VerificationBanner from '../components/VerificationBanner';
 
 const anton = Anton({
   weight: '400',
@@ -43,6 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <RoleSimulationProvider>
                 <Header />
                 <RoleBanner />
+                <VerificationBanner />
                 <main>{children}</main>
               </RoleSimulationProvider>
             </UnreadProvider>

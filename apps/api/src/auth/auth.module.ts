@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
+import { EmailVerifiedGuard } from './guards/email-verified.guard';
 import { SessionGuard } from './guards/session.guard';
 import { SlugService } from '../slug/slug.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +18,15 @@ import { RedisService } from '../redis/redis.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, SessionGuard, SlugService, PrismaService, RedisService],
+  providers: [
+    AuthService,
+    EmailVerificationService,
+    EmailVerifiedGuard,
+    SessionGuard,
+    SlugService,
+    PrismaService,
+    RedisService,
+  ],
+  exports: [EmailVerifiedGuard], // future modules use @UseGuards(SessionGuard, EmailVerifiedGuard)
 })
 export class AuthModule {}

@@ -22,6 +22,7 @@ const mockAccount: AccountSummary = {
   email: 'yuki@example.com',
   role: 'utilisateur',
   verified: false,
+  emailVerified: true,
   slug: 'yuki',
   avatar: null,
   createdAt: new Date().toISOString(),

@@ -14,6 +14,8 @@ import type {
   MarkAllReadResponse,
   SearchResponse,
   SearchResultType,
+  VerifyEmailConfirmRequest,
+  VerifyEmailConfirmResponse,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -83,6 +85,17 @@ export const search = (q: string, scope?: SearchResultType): Promise<SearchRespo
   request<SearchResponse>(
     `/search?q=${encodeURIComponent(q)}${scope ? `&scope=${scope}` : ''}`,
   );
+
+// ─── Email verification (F-11) ───────────────────────────────────────────────
+
+export const resendVerificationEmail = (): Promise<void> =>
+  request<void>('/auth/verify-email/request', { method: 'POST' });
+
+export const confirmEmail = (token: string): Promise<VerifyEmailConfirmResponse> =>
+  request<VerifyEmailConfirmResponse>('/auth/verify-email/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token } satisfies VerifyEmailConfirmRequest),
+  });
 
 // ─── Queue health (F-8, admin only) ──────────────────────────────────────────
 import type { QueueHealthResponse } from '@encre-et-plume/shared';

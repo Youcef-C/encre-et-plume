@@ -81,11 +81,14 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   // Wait for redirect to home
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 
-  // Second signup with same email in a fresh page context
+  // Second signup with same email in a fresh page context.
+  // After the first signup the user is logged-in (unverified) so VerificationBanner renders on
+  // /inscription, adding an aria-label containing "e-mail". Use role-based locators scoped to the
+  // form's textbox so the banner's status region does not cause strict-mode violations.
   await page.goto('/inscription');
-  await page.getByLabel(/nom d'affichage/i).fill('Copie Moreau');
-  await page.getByLabel(/e-mail/i).fill(email);
-  await page.getByLabel(/mot de passe/i).fill('password456');
+  await page.getByRole('textbox', { name: /nom d'affichage/i }).fill('Copie Moreau');
+  await page.getByRole('textbox', { name: 'E-mail' }).fill(email);
+  await page.getByRole('textbox', { name: /mot de passe/i }).fill('password456');
   await page.getByRole('button', { name: /créer mon compte/i }).click();
 
   await expect(page.getByText('Cet e-mail est déjà utilisé')).toBeVisible({ timeout: 8_000 });

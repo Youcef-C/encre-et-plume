@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'; // stdlib — no dep needed
 import {
   ConflictException,
   Injectable,
+  Logger,
   Optional,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import type { AccountSummary, AccountPreferences, ThemePreference } from '@encre
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
+import { EmailVerificationService } from './email-verification.service';
 import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
 import { Prisma } from '@prisma/client';
@@ -50,10 +52,13 @@ function readPreferences(raw: unknown): AccountPreferences {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly slugService: SlugService,
     private readonly jwt: JwtService,
+    private readonly emailVerification: EmailVerificationService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -89,6 +94,14 @@ export class AuthService {
     }
 
     this.metrics?.incSignup(); // F-9: business counter
+
+    // F-11: issue verification token — best-effort; failure must not break signup
+    await this.emailVerification
+      .issueToken({ id: account.id, email: account.email, displayName: account.displayName })
+      .catch((err: unknown) =>
+        this.logger.warn(`issueToken failed for accountId=${account.id}: ${(err as Error).message}`),
+      );
+
     return { account: this.toSummary(account), token: this.signToken(account.id) };
   }
 
@@ -136,6 +149,7 @@ export class AuthService {
       avatar: account.avatar,
       createdAt: account.createdAt.toISOString(),
       preferences: readPreferences(account.preferences),
+      emailVerified: account.emailVerifiedAt !== null, // F-11
     };
   }
 }

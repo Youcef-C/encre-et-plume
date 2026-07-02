@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
+import { EmailVerificationService } from './email-verification.service';
 
 const MOCK_ACCOUNT = {
   id: 'cuid-1',
@@ -15,6 +16,7 @@ const MOCK_ACCOUNT = {
   profileSlug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date('2026-01-01'),
+  emailVerifiedAt: null, // F-11: new field; null = unverified
 };
 
 describe('AuthService', () => {
@@ -27,6 +29,7 @@ describe('AuthService', () => {
   };
   let slugService: { slugify: jest.Mock; ensureUniqueSlug: jest.Mock };
   let jwtService: { sign: jest.Mock };
+  let emailVerificationService: { issueToken: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -40,6 +43,7 @@ describe('AuthService', () => {
       ensureUniqueSlug: jest.fn().mockResolvedValue('yuki-moreau'),
     };
     jwtService = { sign: jest.fn().mockReturnValue('jwt-token') };
+    emailVerificationService = { issueToken: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,6 +51,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: SlugService, useValue: slugService },
         { provide: JwtService, useValue: jwtService },
+        { provide: EmailVerificationService, useValue: emailVerificationService },
       ],
     }).compile();
 
@@ -161,6 +166,30 @@ describe('AuthService', () => {
       ).rejects.toBe(dbDown);
     });
 
+    it('F-11: calls emailVerificationService.issueToken after account creation (BE-3)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+
+      await service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' });
+
+      expect(emailVerificationService.issueToken).toHaveBeenCalledWith({
+        id: MOCK_ACCOUNT.id,
+        email: MOCK_ACCOUNT.email,
+        displayName: MOCK_ACCOUNT.displayName,
+      });
+    });
+
+    it('F-11: signup succeeds even if issueToken throws (best-effort)', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+      emailVerificationService.issueToken.mockRejectedValue(new Error('token failure'));
+
+      // Should not throw
+      await expect(
+        service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123' }),
+      ).resolves.toBeDefined();
+    });
+
     it('returns { account: AccountSummary, token: string }', async () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
@@ -249,6 +278,18 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, preferences: { theme: 'dark' } });
       const result = await service.me('cuid-1');
       expect(result.preferences).toEqual({ theme: 'dark' });
+    });
+
+    it('F-11: toSummary returns emailVerified:false when emailVerifiedAt is null (BE-4)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, emailVerifiedAt: null });
+      const result = await service.me('cuid-1');
+      expect(result.emailVerified).toBe(false);
+    });
+
+    it('F-11: toSummary returns emailVerified:true when emailVerifiedAt is set (BE-4)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, emailVerifiedAt: new Date() });
+      const result = await service.me('cuid-1');
+      expect(result.emailVerified).toBe(true);
     });
   });
 });

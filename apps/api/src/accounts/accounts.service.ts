@@ -23,6 +23,7 @@ function toSummary(account: Account): AccountSummary {
     avatar: account.avatar,
     createdAt: account.createdAt.toISOString(),
     preferences: readPreferences(account.preferences),
+    emailVerified: account.emailVerifiedAt !== null, // F-11
   };
 }
 

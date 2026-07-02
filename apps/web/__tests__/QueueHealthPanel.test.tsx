@@ -22,6 +22,7 @@ const adminAccount: AccountSummary = {
   email: 'admin@example.com',
   role: 'admin',
   verified: true,
+  emailVerified: true,
   slug: 'admin-user',
   avatar: null,
   createdAt: new Date().toISOString(),

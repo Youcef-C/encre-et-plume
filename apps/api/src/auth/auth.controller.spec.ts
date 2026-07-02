@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SessionGuard } from './guards/session.guard';
 import { RedisService } from '../redis/redis.service';
+import { EmailVerificationService } from './email-verification.service';
 
 const JWT_SECRET = 'test-secret';
 
@@ -20,6 +21,7 @@ const MOCK_ACCOUNT = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date('2026-01-01').toISOString(),
+  emailVerified: false, // F-11
 };
 
 // Minimal in-memory Redis mock — no extra dep needed
@@ -33,6 +35,7 @@ const makeRedisMock = () => ({
 describe('Auth API (e2e)', () => {
   let app: INestApplication;
   let authService: jest.Mocked<Partial<AuthService>>;
+  let emailVerificationServiceMock: { issueToken: jest.Mock; confirm: jest.Mock };
   let jwtService: JwtService;
   let redisMock: ReturnType<typeof makeRedisMock>;
 
@@ -41,6 +44,10 @@ describe('Auth API (e2e)', () => {
       signup: jest.fn(),
       login: jest.fn(),
       me: jest.fn(),
+    };
+    emailVerificationServiceMock = {
+      issueToken: jest.fn().mockResolvedValue(undefined),
+      confirm: jest.fn().mockResolvedValue(undefined),
     };
     redisMock = makeRedisMock();
 
@@ -53,6 +60,7 @@ describe('Auth API (e2e)', () => {
           useValue: new JwtService({ secret: JWT_SECRET }),
         },
         { provide: RedisService, useValue: redisMock },
+        { provide: EmailVerificationService, useValue: emailVerificationServiceMock },
         SessionGuard,
       ],
     }).compile();
@@ -73,6 +81,8 @@ describe('Auth API (e2e)', () => {
     redisMock.incr.mockResolvedValue(1);   // first request (under limit)
     redisMock.set.mockResolvedValue('OK');
     redisMock.expire.mockResolvedValue(1);
+    emailVerificationServiceMock.issueToken.mockResolvedValue(undefined);
+    emailVerificationServiceMock.confirm.mockResolvedValue(undefined);
   });
 
   // Include jti + expiresIn so SessionGuard populates req.jti and req.tokenExp
@@ -261,6 +271,95 @@ describe('Auth API (e2e)', () => {
 
     it('401 without session cookie', async () => {
       await request(app.getHttpServer()).post('/auth/logout').expect(401);
+    });
+  });
+
+  // ── F-11: Email verification endpoints ──────────────────────────────────────
+
+  describe('POST /auth/verify-email/request', () => {
+    it('401 without session cookie (authenticated endpoint)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/verify-email/request')
+        .expect(401);
+    });
+
+    it('204 on success — enqueues email and returns no body', async () => {
+      (authService.me as jest.Mock).mockResolvedValue(MOCK_ACCOUNT);
+      const token = validCookie('cuid-1');
+
+      await request(app.getHttpServer())
+        .post('/auth/verify-email/request')
+        .set('Cookie', `ep_session=${token}`)
+        .expect(204);
+
+      expect(emailVerificationServiceMock.issueToken).toHaveBeenCalled();
+    });
+
+    it('429 RATE_LIMITED when per-minute limit breached', async () => {
+      (authService.me as jest.Mock).mockResolvedValue(MOCK_ACCOUNT);
+      // First incr call (per-minute counter) returns over limit 1
+      redisMock.incr.mockResolvedValueOnce(2);
+      const token = validCookie('cuid-1');
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-email/request')
+        .set('Cookie', `ep_session=${token}`)
+        .expect(429);
+
+      expect(res.body.error).toBe('RATE_LIMITED');
+    });
+  });
+
+  describe('POST /auth/verify-email/confirm', () => {
+    it('200 { emailVerified: true } — public (no cookie needed)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-email/confirm')
+        .send({ token: 'valid-raw-token' })
+        .expect(200);
+
+      expect(res.body).toEqual({ emailVerified: true });
+      expect(emailVerificationServiceMock.confirm).toHaveBeenCalledWith('valid-raw-token');
+    });
+
+    it('400 on missing token field', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/verify-email/confirm')
+        .send({})
+        .expect(400);
+    });
+
+    it('400 EMAIL_TOKEN_INVALID when service throws', async () => {
+      const { BadRequestException } = await import('@nestjs/common');
+      emailVerificationServiceMock.confirm.mockRejectedValue(
+        new BadRequestException({ statusCode: 400, message: 'Token invalide ou déjà utilisé.', error: 'EMAIL_TOKEN_INVALID' }),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/verify-email/confirm')
+        .send({ token: 'bad-token' })
+        .expect(400);
+
+      expect(res.body.error).toBe('EMAIL_TOKEN_INVALID');
+    });
+  });
+
+  describe('GET /auth/verify-email/dev-latest', () => {
+    it('returns { token } when stash exists (non-prod)', async () => {
+      redisMock.get.mockResolvedValueOnce('raw-stashed-token');
+
+      const res = await request(app.getHttpServer())
+        .get('/auth/verify-email/dev-latest?email=yuki@test.com')
+        .expect(200);
+
+      expect(res.body.token).toBe('raw-stashed-token');
+    });
+
+    it('404 when no stash found', async () => {
+      redisMock.get.mockResolvedValueOnce(null);
+
+      await request(app.getHttpServer())
+        .get('/auth/verify-email/dev-latest?email=nobody@test.com')
+        .expect(404);
     });
   });
 });

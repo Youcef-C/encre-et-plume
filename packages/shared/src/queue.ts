@@ -34,6 +34,20 @@ export interface NotificationsFanoutJob {
   idempotencyKey?: string;
 }
 
+// ── F-11: Email job (F-16 will grow EmailTemplate into a catalog) ─────────────
+
+/** F-11: transactional e-mail templates. F-16 will grow this union into a catalog. */
+export type EmailTemplate = 'email_verification';
+
+/** Payload for the `email` queue. Rendered + delivered by EmailProcessor. */
+export interface EmailJob {
+  to: string;
+  template: EmailTemplate;
+  /** Template params (verification: { verifyUrl, displayName }). */
+  params: Record<string, string>;
+  idempotencyKey?: string;
+}
+
 export interface QueueHealthCounts {
   name: string;
   waiting: number;

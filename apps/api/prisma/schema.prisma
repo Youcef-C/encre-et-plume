@@ -52,20 +52,22 @@ enum MediaVisibility {
 }
 
 model Account {
-  id                    String         @id @default(cuid())
-  displayName           String
-  email                 String         @unique
-  passwordHash          String
-  role                  Role           @default(utilisateur)
-  verified              Boolean        @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
-  profileSlug           String         @unique
-  avatar                String?
-  preferences           Json           @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
-  createdAt             DateTime       @default(now())
-  profile               Profile?
-  notificationsReceived Notification[] @relation("NotifRecipient")
-  notificationsSent     Notification[] @relation("NotifSource")
-  media                 Media[]
+  id                       String                   @id @default(cuid())
+  displayName              String
+  email                    String                   @unique
+  passwordHash             String
+  role                     Role                     @default(utilisateur)
+  verified                 Boolean                  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
+  profileSlug              String                   @unique
+  avatar                   String?
+  preferences              Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
+  createdAt                DateTime                 @default(now())
+  emailVerifiedAt          DateTime?                // F-11: null = unverified; set on confirmation
+  profile                  Profile?
+  notificationsReceived    Notification[]           @relation("NotifRecipient")
+  notificationsSent        Notification[]           @relation("NotifSource")
+  media                    Media[]
+  emailVerificationTokens  EmailVerificationToken[]
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -117,6 +119,20 @@ model PortfolioItem {
   caption   String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+// ── F-11: Email verification token ───────────────────────────────────────────
+
+model EmailVerificationToken {
+  id         String    @id @default(cuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id])
+  tokenHash  String    @unique      // sha256(raw); raw is never stored
+  expiresAt  DateTime               // createdAt + 24h
+  consumedAt DateTime?              // single-use: non-null once confirmed
+  createdAt  DateTime  @default(now())
+
+  @@index([accountId])
 }
 
 model Notification {
