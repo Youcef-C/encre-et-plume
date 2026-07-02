@@ -8,7 +8,7 @@
 - **"Sécurité"** settings section with three blocks:
   - **Identifiants**: "Modifier l'adresse e-mail" (new e-mail + current password → verification of the new address before switch) and "Modifier le mot de passe" (current + new + confirmation).
   - **Sessions actives**: list of sessions (appareil/navigateur, localisation approx., "Dernière activité", badge "Session actuelle") with per-row "Déconnecter" and a global "Déconnecter toutes les autres sessions".
-  - **Double authentification (2FA)**: enable flow — QR code + manual secret for a TOTP app, confirm with a first code, then display one-time **codes de secours** ("Conservez-les précieusement — ils ne seront plus affichés."); disable flow requires password + a valid code.
+  - **Double authentification (2FA)** — strictly **optional / opt-in** (never forced, never required at signup or login unless the user enabled it; disabled by default): enable flow — QR code + manual secret for a TOTP app, confirm with a first code, then display one-time **codes de secours** ("Conservez-les précieusement — ils ne seront plus affichés."); disable flow requires password + a valid code. The activation toggle lives in the [[F-19]] settings page ("Paramètres").
 - Login ([[F-1]]) gains a 2FA step when enabled: "Code de vérification" input + "Utiliser un code de secours" fallback.
 - States: each block loading/saving/error; e-mail change pending-verification state; 2FA setup/confirm/enabled/disabled; session revoke spinner.
 - Accessibility: forms labelled; QR code has a copyable text alternative; backup codes selectable/copyable; destructive actions confirmed.
@@ -27,6 +27,7 @@
 - Shared contracts in `packages/shared/src/security.ts` (DTOs) + barrel export.
 
 ## Dependencies
+- [[F-19]] — the "Paramètres" settings page hosts this story's "Sécurité" section (incl. the optional 2FA activation).
 - [[F-1]] — credentials + the Redis session store this story surfaces and revokes.
 - [[F-11]] — e-mail change reuses the verification token flow.
 - [[F-12]] — shared password rules; both flows invalidate sessions the same way.
