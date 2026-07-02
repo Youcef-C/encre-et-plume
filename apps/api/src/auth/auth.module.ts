@@ -9,6 +9,7 @@ import { SessionGuard } from './guards/session.guard';
 import { SlugService } from '../slug/slug.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RedisService } from '../redis/redis.service';
       secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
       signOptions: { expiresIn: '7d' },
     }),
+    EmailModule,
   ],
   controllers: [AuthController],
   providers: [

@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
 import { EmailVerificationService } from './email-verification.service';
+import { EmailService } from '../email/email.service';
 import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
 import { Prisma } from '@prisma/client';
@@ -68,6 +69,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly emailVerification: EmailVerificationService,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly emailService?: EmailService,
   ) {}
 
   async signup(dto: SignupDto): Promise<{ account: AccountSummary; token: string }> {
@@ -121,6 +123,15 @@ export class AuthService {
       .catch((err: unknown) =>
         this.logger.warn(`issueToken failed for accountId=${account.id}: ${(err as Error).message}`),
       );
+
+    // F-16: welcome email — best-effort; mandatory, ponytail: @Optional() EmailService
+    if (this.emailService) {
+      await this.emailService
+        .send('welcome', account.email, { displayName: account.displayName })
+        .catch((err: unknown) =>
+          this.logger.warn(`welcome email failed for accountId=${account.id}: ${(err as Error).message}`),
+        );
+    }
 
     return { account: this.toSummary(account), token: this.signToken(account.id) };
   }

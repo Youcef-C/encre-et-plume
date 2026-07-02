@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { EmailVerificationService } from './email-verification.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { EmailService } from '../email/email.service';
 import { RedisService } from '../redis/redis.service';
 import { EMAIL_TOKEN_INVALID, EMAIL_TOKEN_EXPIRED } from '@encre-et-plume/shared';
 
@@ -24,7 +24,7 @@ describe('EmailVerificationService', () => {
     account: { update: jest.Mock };
     $transaction: jest.Mock;
   };
-  let queueService: { enqueue: jest.Mock };
+  let emailService: { send: jest.Mock };
   let redisService: { set: jest.Mock; get: jest.Mock };
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('EmailVerificationService', () => {
       account: { update: jest.fn() },
       $transaction: jest.fn(),
     };
-    queueService = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    emailService = { send: jest.fn().mockResolvedValue(undefined) };
     redisService = {
       set: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue(null),
@@ -47,7 +47,7 @@ describe('EmailVerificationService', () => {
 
     service = new EmailVerificationService(
       prisma as unknown as PrismaService,
-      queueService as unknown as QueueService,
+      emailService as unknown as EmailService,
       redisService as unknown as RedisService,
     );
   });
@@ -68,14 +68,13 @@ describe('EmailVerificationService', () => {
       const storedHash = createArg.data.tokenHash;
       // Must be a hex sha256 (64 chars)
       expect(storedHash).toMatch(/^[0-9a-f]{64}$/);
-      // stored value must NOT equal the raw token passed to QueueService
-      // enqueue(queue, name, data, opts?) → data is arg index 2
-      const enqueueArg = queueService.enqueue.mock.calls[0];
-      const verifyUrl: string = (enqueueArg[2] as { params: { verifyUrl: string } }).params.verifyUrl;
+      // Extract the raw token from the emailService.send call to verify the hash
+      const sendCall = emailService.send.mock.calls[0] as [string, string, { verifyUrl: string }];
+      const verifyUrl: string = sendCall[2].verifyUrl;
       const rawFromUrl = new URL(verifyUrl).searchParams.get('token')!;
       // stored hash must NOT be the raw token itself
       expect(storedHash).not.toBe(rawFromUrl);
-      // stored value must equal sha256(raw) — constant-time-equivalent check
+      // stored value must equal sha256(raw)
       expect(storedHash).toBe(createHash('sha256').update(rawFromUrl).digest('hex'));
     });
 
@@ -91,22 +90,20 @@ describe('EmailVerificationService', () => {
       expect(createArg.data.expiresAt.getTime()).toBe(expectedExpiry.getTime());
     });
 
-    it('enqueues an email job with template=email_verification and correct params', async () => {
+    it('calls emailService.send with template=email_verification and correct params', async () => {
       await service.issueToken(ACCOUNT);
 
-      expect(queueService.enqueue).toHaveBeenCalledTimes(1);
-      const [queueName, jobName, data] = queueService.enqueue.mock.calls[0] as [
+      expect(emailService.send).toHaveBeenCalledTimes(1);
+      const [template, to, data] = emailService.send.mock.calls[0] as [
         string,
         string,
-        { to: string; template: string; params: Record<string, string> },
+        { displayName: string; verifyUrl: string },
       ];
 
-      expect(queueName).toBe('email');
-      expect(jobName).toBe('email_verification');
-      expect(data.to).toBe(ACCOUNT.email);
-      expect(data.template).toBe('email_verification');
-      expect(data.params.displayName).toBe(ACCOUNT.displayName);
-      expect(data.params.verifyUrl).toContain('/verifier-email?token=');
+      expect(template).toBe('email_verification');
+      expect(to).toBe(ACCOUNT.email);
+      expect(data.displayName).toBe(ACCOUNT.displayName);
+      expect(data.verifyUrl).toContain('/verifier-email?token=');
     });
 
     it('stashes the raw token in Redis under dev-email-verify:<email> (non-prod only)', async () => {
@@ -139,8 +136,8 @@ describe('EmailVerificationService', () => {
       process.env['NODE_ENV'] = origEnv;
     });
 
-    it('does not propagate enqueue failure (best-effort)', async () => {
-      queueService.enqueue.mockRejectedValue(new Error('Redis down'));
+    it('does not propagate send failure (best-effort)', async () => {
+      emailService.send.mockRejectedValue(new Error('Queue down'));
 
       // Should not throw
       await expect(service.issueToken(ACCOUNT)).resolves.toBeUndefined();
@@ -229,7 +226,6 @@ describe('EmailVerificationService', () => {
       const { raw, row } = makeToken({ expiresAt: new Date(NOW.getTime() - 1) });
       prisma.emailVerificationToken.findUnique.mockResolvedValue(row);
 
-      // Verify the error code is the specific EXPIRED code, not the generic INVALID one
       await expect(service.confirm(raw)).rejects.toMatchObject({
         response: expect.objectContaining({ error: EMAIL_TOKEN_EXPIRED }),
       });

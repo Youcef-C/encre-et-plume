@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { EmailService } from '../email/email.service';
 import { RedisService } from '../redis/redis.service';
 import { PASSWORD_RESET_TOKEN_INVALID, PASSWORD_RESET_TOKEN_EXPIRED } from '@encre-et-plume/shared';
 
@@ -21,7 +21,7 @@ export class PasswordResetService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queueService: QueueService,
+    private readonly emailService: EmailService,
     private readonly redis: RedisService,
   ) {}
 
@@ -58,10 +58,9 @@ export class PasswordResetService {
 
     // ponytail: best-effort; row persists, user can re-request
     try {
-      await this.queueService.enqueue('email', 'password_reset', {
-        to: account.email,
-        template: 'password_reset',
-        params: { resetUrl, displayName: account.displayName },
+      await this.emailService.send('password_reset', account.email, {
+        resetUrl,
+        displayName: account.displayName,
       });
     } catch (err: unknown) {
       this.logger.warn(`Password-reset enqueue failed for accountId=${account.id}: ${(err as Error).message}`);
@@ -109,8 +108,6 @@ export class PasswordResetService {
     });
 
     // Bump session epoch → all pre-existing JWTs are invalidated (AC-B4).
-    // Stored in MILLISECONDS: SessionGuard compares it against the token's `ims` claim
-    // (ms issued-at) so a token from the same second as the reset is still rejected.
     await this.redis.set(
       `session-epoch-ms:${row.accountId}`,
       String(Date.now()),
@@ -122,10 +119,8 @@ export class PasswordResetService {
 
     // ponytail: best-effort; credential already updated
     try {
-      await this.queueService.enqueue('email', 'password_changed', {
-        to: row.account.email,
-        template: 'password_changed',
-        params: { displayName: row.account.displayName },
+      await this.emailService.send('password_changed', row.account.email, {
+        displayName: row.account.displayName,
       });
     } catch (err: unknown) {
       this.logger.warn(`Password-changed enqueue failed for accountId=${row.accountId}: ${(err as Error).message}`);

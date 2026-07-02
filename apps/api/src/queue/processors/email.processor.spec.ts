@@ -6,6 +6,8 @@ import {
   renderPasswordChangedEmail,
 } from './email.processor';
 import type { EmailJob } from '@encre-et-plume/shared';
+import type { EmailTransport } from '../../email/email-transport';
+import type { MetricsService } from '../../observability/metrics.service';
 
 const VERIFY_JOB: EmailJob = {
   to: 'yuki@test.com',
@@ -34,14 +36,17 @@ describe('renderVerificationEmail', () => {
   });
 });
 
-describe('EmailProcessor', () => {
+// ── EmailProcessor — no-token-logging (existing assertions, kept) ─────────────
+
+describe('EmailProcessor — no-token-logging assertions', () => {
   let processor: EmailProcessor;
   let logger: { log: jest.Mock; warn: jest.Mock };
+  let mockTransport: { send: jest.Mock };
 
   beforeEach(() => {
     logger = { log: jest.fn(), warn: jest.fn() };
-    processor = new EmailProcessor();
-    // Inject the test logger to capture output without stdout noise
+    mockTransport = { send: jest.fn().mockResolvedValue(undefined) };
+    processor = new EmailProcessor(mockTransport as unknown as EmailTransport);
     (processor as unknown as { logger: typeof logger }).logger = logger;
   });
 
@@ -65,6 +70,57 @@ describe('EmailProcessor', () => {
     // Must NOT log the verifyUrl/token (security: raw token is a credential)
     expect(allLogs).not.toContain('abc123');
     expect(allLogs).not.toContain('verifier-email');
+  });
+});
+
+// ── EmailProcessor — transport delivery + metrics ─────────────────────────────
+
+describe('EmailProcessor — transport and metrics', () => {
+  let processor: EmailProcessor;
+  let mockTransport: { send: jest.Mock };
+  let mockMetrics: { incEmailSent: jest.Mock; incEmailFailed: jest.Mock };
+
+  beforeEach(() => {
+    mockTransport = { send: jest.fn().mockResolvedValue(undefined) };
+    mockMetrics = { incEmailSent: jest.fn(), incEmailFailed: jest.fn() };
+    processor = new EmailProcessor(
+      mockTransport as unknown as EmailTransport,
+      mockMetrics as unknown as MetricsService,
+    );
+  });
+
+  it('process() calls transport.send once with rendered subject, html, text', async () => {
+    const job = { name: 'email_verification' } as unknown as Job;
+    await processor.process(VERIFY_JOB, job);
+
+    expect(mockTransport.send).toHaveBeenCalledTimes(1);
+    const sendArg = mockTransport.send.mock.calls[0][0] as {
+      to: string;
+      subject: string;
+      html: string;
+      text: string;
+    };
+    expect(sendArg.to).toBe('yuki@test.com');
+    expect(sendArg.subject).toContain('Encre & Plume');
+    expect(sendArg.html).toContain('<html');
+    expect(sendArg.text).toContain('Yuki Moreau');
+  });
+
+  it('success path calls metrics.incEmailSent with template name', async () => {
+    const job = { name: 'email_verification' } as unknown as Job;
+    await processor.process(VERIFY_JOB, job);
+
+    expect(mockMetrics.incEmailSent).toHaveBeenCalledWith('email_verification');
+    expect(mockMetrics.incEmailFailed).not.toHaveBeenCalled();
+  });
+
+  it('throwing transport rethrows and calls metrics.incEmailFailed', async () => {
+    mockTransport.send.mockRejectedValue(new Error('SMTP down'));
+    const job = { name: 'email_verification' } as unknown as Job;
+
+    await expect(processor.process(VERIFY_JOB, job)).rejects.toThrow('SMTP down');
+    expect(mockMetrics.incEmailFailed).toHaveBeenCalledWith('email_verification');
+    expect(mockMetrics.incEmailSent).not.toHaveBeenCalled();
   });
 });
 
@@ -119,10 +175,12 @@ describe('renderPasswordChangedEmail', () => {
 describe('EmailProcessor — password_reset and password_changed dispatch', () => {
   let processor: EmailProcessor;
   let logger: { log: jest.Mock; warn: jest.Mock };
+  let mockTransport: { send: jest.Mock };
 
   beforeEach(() => {
     logger = { log: jest.fn(), warn: jest.fn() };
-    processor = new EmailProcessor();
+    mockTransport = { send: jest.fn().mockResolvedValue(undefined) };
+    processor = new EmailProcessor(mockTransport as unknown as EmailTransport);
     (processor as unknown as { logger: typeof logger }).logger = logger;
   });
 

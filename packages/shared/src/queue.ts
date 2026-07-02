@@ -1,5 +1,6 @@
 // Shared queue contracts for F-8 (background job queue & reliable processing).
 import type { NotifType } from './notification.js';
+import type { EmailTemplateKey } from './email.js';
 
 export const QUEUE_NAMES = [
   'stripe-events',
@@ -34,16 +35,20 @@ export interface NotificationsFanoutJob {
   idempotencyKey?: string;
 }
 
-// ── F-11: Email job (F-16 will grow EmailTemplate into a catalog) ─────────────
+// ── F-16: Email job (catalog grown from F-11/F-12) ───────────────────────────
 
-/** F-11/F-12: transactional e-mail templates. F-16 will grow this union into a catalog. */
-export type EmailTemplate = 'email_verification' | 'password_reset' | 'password_changed';
+/**
+ * F-16: EmailTemplateKey is the catalog type.
+ * Legacy alias kept so existing imports of EmailTemplate still compile.
+ */
+export type { EmailTemplateKey };
+export type EmailTemplate = EmailTemplateKey;
 
 /** Payload for the `email` queue. Rendered + delivered by EmailProcessor. */
 export interface EmailJob {
   to: string;
-  template: EmailTemplate;
-  /** Template params (verification: { verifyUrl, displayName }). */
+  template: EmailTemplateKey;
+  /** Template params (stringy wire payload; EmailService.send() takes typed data). */
   params: Record<string, string>;
   idempotencyKey?: string;
 }

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { EmailService } from '../email/email.service';
 import { RedisService } from '../redis/redis.service';
 import { EMAIL_TOKEN_INVALID, EMAIL_TOKEN_EXPIRED } from '@encre-et-plume/shared';
 
@@ -18,7 +18,7 @@ export class EmailVerificationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queueService: QueueService,
+    private readonly emailService: EmailService,
     private readonly redis: RedisService,
   ) {}
 
@@ -41,10 +41,9 @@ export class EmailVerificationService {
 
     // ponytail: best-effort; row persists, user can resend
     try {
-      await this.queueService.enqueue('email', 'email_verification', {
-        to: account.email,
-        template: 'email_verification',
-        params: { verifyUrl, displayName: account.displayName },
+      await this.emailService.send('email_verification', account.email, {
+        verifyUrl,
+        displayName: account.displayName,
       });
     } catch (err: unknown) {
       this.logger.warn(`Email enqueue failed for accountId=${account.id}: ${(err as Error).message}`);

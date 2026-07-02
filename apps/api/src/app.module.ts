@@ -6,11 +6,13 @@ import { ProfilesModule } from './profiles/profiles.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SearchModule } from './search/search.module';
 import { QueueModule } from './queue/queue.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
   // before QueueModule's JobMetrics (which injects MetricsService) initialises.
+  // EmailModule before AuthModule: AuthModule imports EmailModule → EmailService.
   // QueueModule imports MediaModule (ImageProcessingProcessor); MediaModule is transitively loaded.
-  imports: [ObservabilityModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule],
+  imports: [ObservabilityModule, EmailModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule],
 })
 export class AppModule {}

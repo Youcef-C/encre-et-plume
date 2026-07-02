@@ -24,6 +24,8 @@ export class MetricsService {
   private readonly redisUp: Gauge;
   private readonly signupsTotal: Counter;
   readonly paymentsTotal: Counter; // declared; MR wires status='succeeded'|'failed'
+  private readonly emailSentTotal: Counter;
+  private readonly emailFailedTotal: Counter;
 
   constructor(@Optional() private readonly queueService?: QueueService) {
     collectDefaultMetrics({ register: this.register });
@@ -104,6 +106,21 @@ export class MetricsService {
       labelNames: ['status'],
       registers: [this.register],
     });
+
+    // F-16: e-mail delivery counters
+    this.emailSentTotal = new Counter({
+      name: 'email_sent_total',
+      help: 'Total transactional e-mails delivered by template',
+      labelNames: ['template'],
+      registers: [this.register],
+    });
+
+    this.emailFailedTotal = new Counter({
+      name: 'email_failed_total',
+      help: 'Total transactional e-mail delivery failures by template',
+      labelNames: ['template'],
+      registers: [this.register],
+    });
   }
 
   recordHttp(method: string, route: string, status: number, durationS: number): void {
@@ -134,6 +151,14 @@ export class MetricsService {
 
   incPayment(status: string): void {
     this.paymentsTotal.inc({ status });
+  }
+
+  incEmailSent(template: string): void {
+    this.emailSentTotal.inc({ template });
+  }
+
+  incEmailFailed(template: string): void {
+    this.emailFailedTotal.inc({ template });
   }
 
   setDbUp(up: boolean): void {

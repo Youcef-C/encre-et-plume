@@ -24,6 +24,19 @@ async function main() {
   const outFile = process.argv[2];
   if (!outFile) throw new Error('Usage: e2e-seed.js <output-json-path>');
 
+  // Hermeticity: flush leftover rate-limit counters (rl:*) from earlier manual/dev runs —
+  // stale keys 429 the auth flows even though the e2e webServer sets DISABLE_RATE_LIMIT.
+  if (process.env.REDIS_URL) {
+    const Redis = require('ioredis');
+    const redis = new Redis(process.env.REDIS_URL);
+    try {
+      const keys = await redis.keys('rl:*');
+      if (keys.length > 0) await redis.del(...keys);
+    } finally {
+      redis.disconnect();
+    }
+  }
+
   const prisma = new PrismaClient();
   // ponytail: cost 10 is standard; no need for lower in tests since this runs once
   const hash = bcrypt.hashSync('password123', 10);

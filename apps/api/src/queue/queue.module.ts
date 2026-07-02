@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { EMAIL_TRANSPORT, createEmailTransport } from '../email/email-transport';
 
 @Global()
 @Module({
@@ -33,6 +34,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
     NotificationsFanoutProcessor,
     ImageProcessingProcessor,
     EmailProcessor,
+    // F-16: EMAIL_TRANSPORT in QueueModule (not EmailModule) — avoids circular dep:
+    // EmailService (in EmailModule) injects QueueService (in QueueModule @Global).
+    { provide: EMAIL_TRANSPORT, useFactory: createEmailTransport },
     {
       // ponytail: factory collects processors; add new processors by extending inject + factory args
       provide: QUEUE_PROCESSORS,

@@ -1,5 +1,4 @@
 import { createHash } from 'crypto';
-import { BadRequestException } from '@nestjs/common';
 
 // Mock bcrypt before module imports — bcrypt.hash is called in confirm()
 jest.mock('bcryptjs', () => ({
@@ -9,7 +8,7 @@ jest.mock('bcryptjs', () => ({
 
 import { PasswordResetService } from './password-reset.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
+import { EmailService } from '../email/email.service';
 import { RedisService } from '../redis/redis.service';
 import {
   PASSWORD_RESET_TOKEN_INVALID,
@@ -33,7 +32,7 @@ describe('PasswordResetService', () => {
     };
     $transaction: jest.Mock;
   };
-  let queueService: { enqueue: jest.Mock };
+  let emailService: { send: jest.Mock };
   let redisService: { set: jest.Mock; get: jest.Mock };
 
   beforeEach(() => {
@@ -52,7 +51,7 @@ describe('PasswordResetService', () => {
       },
       $transaction: jest.fn(),
     };
-    queueService = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    emailService = { send: jest.fn().mockResolvedValue(undefined) };
     redisService = {
       set: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue(null),
@@ -60,7 +59,7 @@ describe('PasswordResetService', () => {
 
     service = new PasswordResetService(
       prisma as unknown as PrismaService,
-      queueService as unknown as QueueService,
+      emailService as unknown as EmailService,
       redisService as unknown as RedisService,
     );
   });
@@ -101,9 +100,9 @@ describe('PasswordResetService', () => {
       const storedHash = createArg.data.tokenHash;
       expect(storedHash).toMatch(/^[0-9a-f]{64}$/); // hex sha256
 
-      // raw token appears only in the enqueued resetUrl
-      const enqueueArg = queueService.enqueue.mock.calls[0];
-      const resetUrl: string = (enqueueArg[2] as { params: { resetUrl: string } }).params.resetUrl;
+      // raw token appears only in the emailService.send resetUrl param
+      const sendCall = emailService.send.mock.calls[0] as [string, string, { resetUrl: string }];
+      const resetUrl: string = sendCall[2].resetUrl;
       const rawFromUrl = new URL(resetUrl).searchParams.get('token')!;
       expect(storedHash).not.toBe(rawFromUrl);
       expect(storedHash).toBe(createHash('sha256').update(rawFromUrl).digest('hex'));
@@ -120,21 +119,19 @@ describe('PasswordResetService', () => {
       expect(createArg.data.expiresAt.getTime()).toBe(expectedExpiry.getTime());
     });
 
-    it('enqueues template=password_reset with resetUrl and displayName', async () => {
+    it('calls emailService.send with template=password_reset, resetUrl and displayName', async () => {
       await service.issueToken(ACCOUNT);
 
-      expect(queueService.enqueue).toHaveBeenCalledTimes(1);
-      const [queueName, jobName, data] = queueService.enqueue.mock.calls[0] as [
+      expect(emailService.send).toHaveBeenCalledTimes(1);
+      const [template, to, data] = emailService.send.mock.calls[0] as [
         string,
         string,
-        { to: string; template: string; params: Record<string, string> },
+        { displayName: string; resetUrl: string },
       ];
-      expect(queueName).toBe('email');
-      expect(jobName).toBe('password_reset');
-      expect(data.to).toBe(ACCOUNT.email);
-      expect(data.template).toBe('password_reset');
-      expect(data.params.displayName).toBe(ACCOUNT.displayName);
-      expect(data.params.resetUrl).toContain('/reinitialiser-mot-de-passe?token=');
+      expect(template).toBe('password_reset');
+      expect(to).toBe(ACCOUNT.email);
+      expect(data.displayName).toBe(ACCOUNT.displayName);
+      expect(data.resetUrl).toContain('/reinitialiser-mot-de-passe?token=');
     });
 
     it('stashes raw token in Redis under dev-password-reset:<email> (non-prod only)', async () => {
@@ -167,8 +164,8 @@ describe('PasswordResetService', () => {
       process.env['NODE_ENV'] = origEnv;
     });
 
-    it('does not propagate enqueue failure (best-effort)', async () => {
-      queueService.enqueue.mockRejectedValue(new Error('Queue down'));
+    it('does not propagate send failure (best-effort)', async () => {
+      emailService.send.mockRejectedValue(new Error('Queue down'));
       await expect(service.issueToken(ACCOUNT)).resolves.toBeUndefined();
     });
   });
@@ -233,7 +230,7 @@ describe('PasswordResetService', () => {
       );
     });
 
-    it('enqueues password_changed notice email after confirm', async () => {
+    it('calls emailService.send with password_changed notice after confirm', async () => {
       const { raw, row } = makeTokenRow();
       prisma.passwordResetToken.findUnique.mockResolvedValue(row);
       prisma.$transaction.mockImplementation(
@@ -242,10 +239,10 @@ describe('PasswordResetService', () => {
 
       await service.confirm(raw, 'new-password-123');
 
-      expect(queueService.enqueue).toHaveBeenCalledWith(
-        'email',
+      expect(emailService.send).toHaveBeenCalledWith(
         'password_changed',
-        expect.objectContaining({ to: 'yuki@test.com', template: 'password_changed' }),
+        'yuki@test.com',
+        expect.objectContaining({ displayName: 'Yuki Moreau' }),
       );
     });
 
@@ -282,35 +279,30 @@ describe('PasswordResetService', () => {
       const { raw, row } = makeTokenRow({ expiresAt: new Date(NOW.getTime() - 1) });
       prisma.passwordResetToken.findUnique.mockResolvedValue(row);
 
-      // Verify the code is specifically EXPIRED
       await expect(service.confirm(raw, 'newpass')).rejects.toMatchObject({
         response: expect.objectContaining({ error: PASSWORD_RESET_TOKEN_EXPIRED }),
       });
-      // Verify the two constants are different strings (compile-time sanity check)
       expect(PASSWORD_RESET_TOKEN_EXPIRED).not.toBe(PASSWORD_RESET_TOKEN_INVALID);
     });
 
-    it('does not propagate password_changed enqueue failure (best-effort)', async () => {
+    it('does not propagate password_changed send failure (best-effort)', async () => {
       const { raw, row } = makeTokenRow();
       prisma.passwordResetToken.findUnique.mockResolvedValue(row);
       prisma.$transaction.mockImplementation(
         async (fn: (tx: typeof prisma) => Promise<void>) => fn(prisma),
       );
-      queueService.enqueue.mockRejectedValue(new Error('Queue down'));
+      emailService.send.mockRejectedValue(new Error('Queue down'));
 
-      // confirm must not throw when email enqueue fails
       await expect(service.confirm(raw, 'new-password')).resolves.toBeUndefined();
     });
 
     it('never logs a raw token or password', async () => {
-      // Smoke test: service resolves without leaking secrets in errors
       const { raw, row } = makeTokenRow();
       prisma.passwordResetToken.findUnique.mockResolvedValue(row);
       prisma.$transaction.mockImplementation(
         async (fn: (tx: typeof prisma) => Promise<void>) => fn(prisma),
       );
 
-      // If this resolves, the raw token was only used to compute the hash, not stored
       await expect(service.confirm(raw, 'safe-new-pw-123')).resolves.toBeUndefined();
     });
   });

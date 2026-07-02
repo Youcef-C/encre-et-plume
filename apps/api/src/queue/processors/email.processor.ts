@@ -1,71 +1,28 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { JobProcessor } from '../job-processor';
 import type { EmailJob } from '@encre-et-plume/shared';
+import { EMAIL_TEMPLATES } from '@encre-et-plume/shared';
+import { EMAIL_TRANSPORT } from '../../email/email-transport';
+import type { EmailTransport } from '../../email/email-transport';
+import { createEmailTransport } from '../../email/email-transport';
+import { renderEmail } from '../../email/templates/render';
+import { MetricsService } from '../../observability/metrics.service';
 
-/** Pure render — no I/O, easily unit-testable. */
-export function renderVerificationEmail(params: Record<string, string>): { subject: string; text: string } {
-  return {
-    subject: `Confirmez votre adresse e-mail — Encre & Plume`,
-    text: [
-      `Bonjour ${params['displayName'] ?? ''},`,
-      ``,
-      `Merci de vous être inscrit·e sur Encre & Plume.`,
-      `Cliquez sur le lien ci-dessous pour confirmer votre adresse e-mail :`,
-      ``,
-      params['verifyUrl'] ?? '',
-      ``,
-      `Ce lien expire dans 24 heures.`,
-      ``,
-      `À bientôt,`,
-      `L'équipe Encre & Plume`,
-    ].join('\n'),
-  };
-}
+// Re-export individual renderers so existing specs that import them from here still work.
+export {
+  renderVerificationEmail,
+  renderPasswordResetEmail,
+  renderPasswordChangedEmail,
+} from '../../email/templates/render';
 
-/** F-12: Password reset email. */
-export function renderPasswordResetEmail(params: Record<string, string>): { subject: string; text: string } {
-  return {
-    subject: `Réinitialisation de votre mot de passe — Encre & Plume`,
-    text: [
-      `Bonjour ${params['displayName'] ?? ''},`,
-      ``,
-      `Vous avez demandé la réinitialisation de votre mot de passe sur Encre & Plume.`,
-      `Cliquez sur le lien ci-dessous pour choisir un nouveau mot de passe :`,
-      ``,
-      params['resetUrl'] ?? '',
-      ``,
-      `Ce lien expire dans 1 heure.`,
-      ``,
-      `Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail — votre mot de passe reste inchangé.`,
-      ``,
-      `À bientôt,`,
-      `L'équipe Encre & Plume`,
-    ].join('\n'),
-  };
-}
-
-/** F-12: Password changed notice email. */
-export function renderPasswordChangedEmail(params: Record<string, string>): { subject: string; text: string } {
-  return {
-    subject: `Votre mot de passe a été modifié — Encre & Plume`,
-    text: [
-      `Bonjour ${params['displayName'] ?? ''},`,
-      ``,
-      `Votre mot de passe sur Encre & Plume vient d'être modifié.`,
-      ``,
-      `Si vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement.`,
-      ``,
-      `À bientôt,`,
-      `L'équipe Encre & Plume`,
-    ].join('\n'),
-  };
-}
+const EMAIL_FROM = process.env['EMAIL_FROM'] ?? 'Encre & Plume <no-reply@encre-et-plume.local>';
 
 /**
- * Processor for the `email` queue (F-11/F-12).
- * Transport = log no-op in dev/CI. F-16 swaps in the real provider behind this seam.
- * ponytail: log transport; F-16 swaps in the real provider behind this seam.
+ * Processor for the `email` queue (F-16).
+ * Renders template → calls the injected transport (SMTP or log).
+ * ponytail: @Optional() on transport + metrics so unit tests using `new EmailProcessor()`
+ * still construct; falls back to env-selected transport (LogTransport in CI/test).
  */
 @Injectable()
 export class EmailProcessor implements JobProcessor<EmailJob> {
@@ -75,20 +32,42 @@ export class EmailProcessor implements JobProcessor<EmailJob> {
   // ponytail: public so test can inject a spy logger without private field access hacks
   logger = new Logger(EmailProcessor.name);
 
+  private readonly transport: EmailTransport;
+
+  constructor(
+    @Optional() @Inject(EMAIL_TRANSPORT) transport?: EmailTransport,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {
+    // Fall back to env-selected transport when DI doesn't provide one (unit tests)
+    this.transport = transport ?? createEmailTransport();
+  }
+
   async process(data: EmailJob, _job: Job): Promise<void> {
-    let subject: string;
-    switch (data.template) {
-      case 'password_reset':
-        ({ subject } = renderPasswordResetEmail(data.params));
-        break;
-      case 'password_changed':
-        ({ subject } = renderPasswordChangedEmail(data.params));
-        break;
-      default:
-        ({ subject } = renderVerificationEmail(data.params));
-        break;
+    const { subject, html, text } = renderEmail(data.template, data.params);
+
+    // List-Unsubscribe seam: only for non-mandatory templates with a token
+    // ponytail: F-15 wires the unsubscribeUrl param; Compte group is all mandatory → no header this round
+    const entry = EMAIL_TEMPLATES[data.template];
+    const headers: Record<string, string> = {};
+    if (!entry?.mandatory && data.params['unsubscribeUrl']) {
+      headers['List-Unsubscribe'] = `<${data.params['unsubscribeUrl']}>`;
     }
-    // Log only non-sensitive fields — never verifyUrl/resetUrl or raw tokens
-    this.logger.log(`email sent to ${data.to} template=${data.template} subject="${subject}"`);
+
+    try {
+      await this.transport.send({
+        to: data.to,
+        from: EMAIL_FROM,
+        subject,
+        html,
+        text,
+        headers: Object.keys(headers).length ? headers : undefined,
+      });
+      // Log only non-sensitive fields — never verifyUrl/resetUrl or raw tokens
+      this.logger.log(`email sent to ${data.to} template=${data.template} subject="${subject}"`);
+      this.metrics?.incEmailSent(data.template);
+    } catch (err: unknown) {
+      this.metrics?.incEmailFailed(data.template);
+      throw err;
+    }
   }
 }
