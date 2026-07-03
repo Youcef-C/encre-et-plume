@@ -13,6 +13,9 @@ import SupprimerCompteModal from '../../components/SupprimerCompteModal';
 import SecurityIdentifiants from '../../components/security/SecurityIdentifiants';
 import SecuritySessions from '../../components/security/SecuritySessions';
 import SecurityTwoFactor from '../../components/security/SecurityTwoFactor';
+import AppearanceSettings from '../../components/settings/AppearanceSettings';
+import CookiesSettings from '../../components/settings/CookiesSettings';
+import SettingsNav from '../../components/settings/SettingsNav';
 
 export default function ParametresPage() {
   const { account, loading } = useSession();
@@ -83,8 +86,24 @@ export default function ParametresPage() {
         Paramètres
       </h1>
 
+      <SettingsNav />
+
+      {/* Apparence section (F-19, net-new; theme synced via shared F-6 ThemeContext) */}
+      <section
+        id="apparence"
+        aria-labelledby="apparence-heading"
+        className="ep-card"
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <h2 id="apparence-heading" style={sectionHeadingStyle}>
+          Apparence
+        </h2>
+        <AppearanceSettings />
+      </section>
+
       {/* Notification preferences section */}
       <section
+        id="notifications"
         aria-labelledby="preferences-notif-heading"
         className="ep-card"
         style={{ padding: '24px 28px', marginBottom: 24 }}
@@ -95,8 +114,22 @@ export default function ParametresPage() {
         <PreferencesNotifications />
       </section>
 
+      {/* Cookies section (F-19, net-new; consent summary reuses F-13 useCookieConsent) */}
+      <section
+        id="cookies"
+        aria-labelledby="cookies-heading"
+        className="ep-card"
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <h2 id="cookies-heading" style={sectionHeadingStyle}>
+          Cookies
+        </h2>
+        <CookiesSettings />
+      </section>
+
       {/* Sécurité section (F-18) */}
       <section
+        id="securite"
         aria-labelledby="securite-heading"
         className="ep-card"
         style={{ padding: '24px 28px', marginBottom: 24 }}
@@ -130,6 +163,7 @@ export default function ParametresPage() {
 
       {/* Mes données section */}
       <section
+        id="mes-donnees"
         aria-labelledby="mes-donnees-heading"
         className="ep-card"
         style={{ padding: '24px 28px', marginBottom: 24 }}
