@@ -32,6 +32,18 @@ export function resolveGenre(input: string): string | null {
   return match ? match.fr : null;
 }
 
+/**
+ * Returns the canonical vocabulary **`id`** for an input matching any genre's `fr` OR `en`
+ * (case- & diacritics-insensitive, mirrors `resolveGenre`), else null. Used by DR-2's genre picker
+ * to convert a user-facing fr label into the id stored in the catalog URL/query.
+ */
+export function resolveGenreId(input: string): string | null {
+  const key = foldGenre(input);
+  if (!key) return null;
+  const match = GENRES.find((g) => foldGenre(g.fr) === key || foldGenre(g.en) === key);
+  return match ? match.id : null;
+}
+
 /** Canonicalize a list to fr labels, drop unknowns, dedupe (order preserved). */
 export function normalizeGenres(inputs: string[]): string[] {
   const out: string[] = [];

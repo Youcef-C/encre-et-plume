@@ -304,3 +304,18 @@ export function buildSrcSet(variants: MediaVariants): string {
   if (variants.web) parts.push(`${variants.web} 1280w`);
   return parts.join(', ');
 }
+
+// ─── Catalog "Découvrir" (DR-2) ───────────────────────────────────────────────
+import type { CatalogResponse, ActiveContest, EditorPickItem } from '@encre-et-plume/shared';
+
+export const getCatalog = (query: URLSearchParams): Promise<CatalogResponse> =>
+  request<CatalogResponse>(`/catalog${query.toString() ? `?${query.toString()}` : ''}`);
+
+export const getCatalogTrending = (): Promise<TrendingWork[]> =>
+  request<TrendingWork[]>('/catalog/trending');
+
+export const getActiveContest = (): Promise<ActiveContest | null> =>
+  request<ActiveContest | null>('/contests/active');
+
+export const getCatalogEditorPick = (): Promise<EditorPickItem[]> =>
+  request<EditorPickItem[]>('/catalog/editor-pick');

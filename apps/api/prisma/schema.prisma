@@ -309,7 +309,11 @@ model Work {
   slug               String    @unique
   title              String
   coverImage         String?                          // media URL; null → CSS halftone placeholder on FE
-  genre              String                            // "Shōnen" | "Seinen" | "Fantastique" | "Josei" | …
+  genre              String                            // display fr label — "Shōnen" | "Seinen" | "Fantastique" | "Josei" | …
+                                                         // (DR-2 catalog GENRE facet accepts F-20 vocabulary ids in the
+                                                         // query and maps id→fr via catalogGenreLabel() before filtering
+                                                         // this column — see catalog.service.ts. Column itself is unchanged
+                                                         // from DR-1: kept as the fr display label, reused verbatim by cards.)
   meta               String                            // hero/ranking meta line, e.g. "Léa B. × Hugo D. · 20 ch."
   likeCount          Int       @default(0)              // ponytail: denormalized total; DR-9 owns the increment
   weeklyLikeDelta    Int       @default(0)              // ponytail: rolling-7d delta; DR-9/DR-4 recompute from events
@@ -318,9 +322,22 @@ model Work {
   createdAt          DateTime  @default(now())
   chapters           Chapter[]
 
+  // ── DR-2: catalog facet columns ──────────────────────────────────────────
+  themes         String[] @default([])                 // CATALOG_THEMES subset (OR-in filter)
+  format         String   @default("Manga")             // one of CATALOG_FORMATS
+  language       String   @default("Français")          // one of CATALOG_LANGUAGES
+  audienceRating String   @default("Tous publics")       // CATALOG_AUDIENCE_RATINGS — DR-10 reads this for 18+ gating
+  complete       Boolean  @default(false)                // STATUT: true = "Œuvres complètes"
+  chapterCount   Int      @default(0)                    // ponytail: denormalized card count + LONGUEUR filter; DR-3/CS own real counts
+  ratingAvg      Float    @default(0)                    // ponytail: denormalized; PUB-3 reviews own it
+  publishedAt    DateTime?                                // null = not in catalog; non-null = published + recency sort key
+  editorPicks    EditorPick[]
+
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
   @@index([likeCount])
+  @@index([publishedAt])
+  @@index([ratingAvg])
 }
 
 model Chapter {
@@ -344,6 +361,33 @@ model Announcement {
   href      String                                      // link target (future PUB-7/PUB-8 route)
   order     Int              @default(0)
   createdAt DateTime         @default(now())
+
+  @@index([order])
+}
+
+// ── DR-2: catalog "Découvrir" (Contest banner + editor picks) ────────────────
+
+model Contest {
+  id        String    @id @default(cuid())
+  category  String                                     // e.g. "CONCOURS"
+  title     String                                     // "Prix du jeune mangaka 2026"
+  subtitle  String                                     // "Doté par un éditeur · clôture 30 j"
+  ctaLabel  String                                     // "Participer"
+  href      String                                      // PUB-7 route target (link/banner only for now)
+  active    Boolean   @default(true)
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([active])
+}
+
+model EditorPick {
+  id        String   @id @default(cuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  blurb     String                                      // "« Encre Blanche » repéré par une maison partenaire"
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 
   @@index([order])
 }

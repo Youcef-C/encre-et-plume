@@ -126,7 +126,8 @@ export class HomeService {
   }
 }
 
-function growthPercent(weekly: number, prior: number): number {
+/** Exported for reuse by CatalogService.getTrending (DR-2) — same growth-% formula, DR-1 owns it. */
+export function growthPercent(weekly: number, prior: number): number {
   if (prior > 0) return Math.round(((weekly - prior) / prior) * 100);
   return weekly > 0 ? 100 : 0;
 }

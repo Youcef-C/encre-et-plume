@@ -183,3 +183,47 @@ export function XIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// DR-2 — catalog "Découvrir" icons (replace the prototype's ⌕ ✓ 📖 ↑ ○ glyphs).
+
+export function SearchIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5L21 21" />
+    </Svg>
+  );
+}
+
+export function CheckIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="4.5 12.5 9.5 17.5 19.5 6.5" />
+    </Svg>
+  );
+}
+
+export function BookIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 5.5c2.5-1.5 5.5-1.5 8 0v13c-2.5-1.5-5.5-1.5-8 0v-13z" />
+      <path d="M20 5.5c-2.5-1.5-5.5-1.5-8 0v13c2.5-1.5 5.5-1.5 8 0v-13z" />
+    </Svg>
+  );
+}
+
+export function ArrowUpIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 19V5M6 11l6-6 6 6" />
+    </Svg>
+  );
+}
+
+export function CircleIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+    </Svg>
+  );
+}

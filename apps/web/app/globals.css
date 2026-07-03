@@ -547,3 +547,41 @@ h1, h2, h3, h4, h5, h6 {
     animation: none;
   }
 }
+
+/* ── DR-2 Découvrir — responsive reflow ──────────────────────────────────────
+   Desktop (>=1000px): 212px "Filtrer" sidebar (sticky) + flexible "Catalogue"
+   column + 252px "Actualités" rail (sticky), replica of the prototype layout.
+   768-1000px: sidebar and rail stack above/below the grid (no longer sticky);
+   grid drops to 2 cols.
+   <=560px: grid drops to 1 col; chips/radios grow to a >=44px tap target. */
+@media (max-width: 1000px) {
+  .ep-catalog-columns {
+    flex-direction: column;
+  }
+  .ep-catalog-sidebar,
+  .ep-catalog-rail {
+    width: 100% !important;
+    position: static !important;
+  }
+  .ep-catalog-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Chip-toggle tap-target height (QA blocker, round 2): min-height lives in a class, not an
+   inline style, so the <=560px media query below can actually win — an inline style on the
+   element beats a non-!important class rule at any viewport. */
+.ep-chip-toggle {
+  min-height: 32px;
+}
+
+@media (max-width: 560px) {
+  .ep-catalog-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ep-catalog-sidebar button,
+  .ep-catalog-sidebar label,
+  .ep-chip-toggle {
+    min-height: 44px;
+  }
+}
