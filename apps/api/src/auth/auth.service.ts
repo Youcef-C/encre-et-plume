@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'; // stdlib — no dep needed
+import { randomUUID } from 'node:crypto'; // stdlib — no dep needed
 import {
   ConflictException,
   ForbiddenException,
@@ -6,12 +6,14 @@ import {
   Logger,
   Optional,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on Node version change
-import type { AccountSummary, AccountPreferences, ThemePreference } from '@encre-et-plume/shared';
+import type { AccountSummary, AccountPreferences, ThemePreference, TwoFactorRequiredResponse } from '@encre-et-plume/shared';
 import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -72,6 +74,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly emailVerification: EmailVerificationService,
     private readonly legal: LegalService,
+    private readonly redisService: RedisService,
     @Optional() private readonly metrics?: MetricsService,
     @Optional() private readonly emailService?: EmailService,
   ) {}
@@ -150,7 +153,24 @@ export class AuthService {
     return { account: this.toSummary(account) }; // BE-1 R2: no session at signup; needsCguReconsent defaults false
   }
 
-  async login(dto: LoginDto): Promise<{ account: AccountSummary; token: string }> {
+  /**
+   * Optional TwoFactorService injection — set by SecurityModule.
+   * Avoids a circular import (SecurityModule needs AuthModule; AuthModule must not import SecurityModule).
+   * ponytail: setter injection is the idiomatic NestJS pattern for optional cross-module deps.
+   */
+  private twoFactorService?: {
+    isEnabled(accountId: string): Promise<boolean>;
+    challenge(accountId: string, rememberMe: boolean): Promise<string>;
+  };
+
+  setTwoFactorService(svc: {
+    isEnabled(accountId: string): Promise<boolean>;
+    challenge(accountId: string, rememberMe: boolean): Promise<string>;
+  }): void {
+    this.twoFactorService = svc;
+  }
+
+  async login(dto: LoginDto): Promise<{ account: AccountSummary; token: string } | TwoFactorRequiredResponse> {
     const account = await this.prisma.account.findUnique({ where: { email: dto.email } });
     const valid =
       account !== null && (await bcrypt.compare(dto.password, account.passwordHash));
@@ -182,6 +202,12 @@ export class AuthService {
       });
     }
 
+    // F-18: if 2FA is enabled, return a challenge token instead of a session cookie.
+    if (this.twoFactorService && await this.twoFactorService.isEnabled(account.id)) {
+      const challengeToken = await this.twoFactorService.challenge(account.id, dto.rememberMe ?? false);
+      return { twoFactorRequired: true, challengeToken };
+    }
+
     const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 : undefined; // seconds; undefined → session
     return {
       account: this.toSummary(account), // needsCguReconsent: false default on login
@@ -194,6 +220,36 @@ export class AuthService {
     return this.signToken(accountId);
   }
 
+  /** F-18: issue a full session after a successful 2FA challenge. */
+  async loginByAccountId(
+    accountId: string,
+    rememberMe: boolean,
+  ): Promise<{ account: AccountSummary; token: string }> {
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) throw new UnauthorizedException();
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : undefined;
+    return { account: this.toSummary(account), token: this.signToken(accountId, maxAge) };
+  }
+
+  /**
+   * BE-3 / F-18: Bump the session epoch so all pre-existing JWTs are rejected, then issue
+   * a fresh token for the caller with ims strictly GREATER than the new epoch (the same-ms
+   * hole that existed before ims was added stays closed).
+   * The fresh token's jti is returned so the controller can update the session index.
+   */
+  async rotateOtherSessions(accountId: string): Promise<{ token: string; jti: string }> {
+    const epoch = Date.now();
+    await this.redisService.set(
+      `session-epoch-ms:${accountId}`,
+      String(epoch),
+      'EX',
+      7 * 24 * 3600, // ≥ max JWT lifetime
+    );
+    const jti = randomUUID();
+    const token = this.signToken(accountId, undefined, { ims: epoch + 1, jti });
+    return { token, jti };
+  }
+
   async me(accountId: string): Promise<AccountSummary> {
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new UnauthorizedException();
@@ -203,11 +259,16 @@ export class AuthService {
     };
   }
 
-  private signToken(accountId: string, expiresInSecs?: number): string {
+  private signToken(
+    accountId: string,
+    expiresInSecs?: number,
+    overrides?: { ims?: number; jti?: string },
+  ): string {
+    const jti = overrides?.jti ?? randomUUID();
     return this.jwt.sign(
       // ims = issued-at in MILLISECONDS (custom claim): the standard iat is second-granular,
       // which left a 1s hole in the F-12 session-epoch invalidation. SessionGuard prefers ims.
-      { sub: accountId, jti: randomUUID(), ims: Date.now() },
+      { sub: accountId, jti, ims: overrides?.ims ?? Date.now() },
       expiresInSecs !== undefined ? { expiresIn: expiresInSecs } : {},
     );
   }

@@ -27,6 +27,21 @@ import type {
   LegalKind,
   ConsentDto,
   ConsentResponse,
+  // F-18 security types
+  TwoFactorRequiredResponse,
+  ChangeEmailRequest,
+  ChangeEmailResponse,
+  ConfirmEmailChangeResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
+  SecurityOverviewResponse,
+  SessionListResponse,
+  TwoFactorSetupResponse,
+  TwoFactorConfirmRequest,
+  TwoFactorConfirmResponse,
+  TwoFactorDisableRequest,
+  TwoFactorDisableResponse,
+  TwoFactorVerifyRequest,
 } from '@encre-et-plume/shared';
 
 const BASE =
@@ -53,8 +68,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const signup = (body: SignupRequest): Promise<SignupResponse> =>
   request<SignupResponse>('/auth/signup', { method: 'POST', body: JSON.stringify(body) });
 
-export const login = (body: LoginRequest): Promise<AuthResponse> =>
-  request<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) });
+export const login = (body: LoginRequest): Promise<AuthResponse | TwoFactorRequiredResponse> =>
+  request<AuthResponse | TwoFactorRequiredResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) });
 
 export const logout = (): Promise<void> =>
   request<void>('/auth/logout', { method: 'POST' });
@@ -215,6 +230,44 @@ export const getLegalDocument = (kind: LegalKind): Promise<LegalDocumentDto> =>
 
 export const recordConsent = (body: ConsentDto): Promise<ConsentResponse> =>
   request<ConsentResponse>('/consents', { method: 'POST', body: JSON.stringify(body) });
+
+// ─── Security (F-18) ─────────────────────────────────────────────────────────
+
+export const getSecurityOverview = (): Promise<SecurityOverviewResponse> =>
+  request<SecurityOverviewResponse>('/me/security/overview');
+
+export const changeEmail = (body: ChangeEmailRequest): Promise<ChangeEmailResponse> =>
+  request<ChangeEmailResponse>('/me/email', { method: 'PATCH', body: JSON.stringify(body) });
+
+export const confirmEmailChange = (token: string): Promise<ConfirmEmailChangeResponse> =>
+  request<ConfirmEmailChangeResponse>('/auth/email-change/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const changePassword = (body: ChangePasswordRequest): Promise<ChangePasswordResponse> =>
+  request<ChangePasswordResponse>('/me/password', { method: 'PATCH', body: JSON.stringify(body) });
+
+export const getSessions = (): Promise<SessionListResponse> =>
+  request<SessionListResponse>('/me/sessions');
+
+export const revokeSession = (id: string): Promise<void> =>
+  request<void>(`/me/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const revokeOtherSessions = (): Promise<void> =>
+  request<void>('/me/sessions', { method: 'DELETE' });
+
+export const twoFactorSetup = (): Promise<TwoFactorSetupResponse> =>
+  request<TwoFactorSetupResponse>('/me/2fa/setup', { method: 'POST' });
+
+export const twoFactorConfirm = (body: TwoFactorConfirmRequest): Promise<TwoFactorConfirmResponse> =>
+  request<TwoFactorConfirmResponse>('/me/2fa/confirm', { method: 'POST', body: JSON.stringify(body) });
+
+export const twoFactorDisable = (body: TwoFactorDisableRequest): Promise<TwoFactorDisableResponse> =>
+  request<TwoFactorDisableResponse>('/me/2fa/disable', { method: 'POST', body: JSON.stringify(body) });
+
+export const twoFactorVerify = (body: TwoFactorVerifyRequest): Promise<AuthResponse> =>
+  request<AuthResponse>('/auth/2fa/verify', { method: 'POST', body: JSON.stringify(body) });
 
 /** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
 export function buildSrcSet(variants: MediaVariants): string {

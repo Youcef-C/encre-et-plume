@@ -11,7 +11,9 @@ export type EmailTemplateKey =
   | 'password_reset'
   | 'password_changed'
   | 'welcome'
-  | 'data_export_ready'; // F-14: notifies when a data export archive is ready
+  | 'data_export_ready'      // F-14: notifies when a data export archive is ready
+  | 'email_change_verification' // F-18: sent to new address during email-change flow
+  | 'email_change_notice';   // F-18: sent to old address after email-change commits
 
 export interface EmailCatalogEntry {
   key: EmailTemplateKey;
@@ -29,6 +31,8 @@ export const EMAIL_TEMPLATES: Record<EmailTemplateKey, EmailCatalogEntry> = {
   password_changed: { key: 'password_changed', group: 'compte', mandatory: true },
   welcome: { key: 'welcome', group: 'compte', mandatory: true },
   data_export_ready: { key: 'data_export_ready', group: 'compte', mandatory: true }, // F-14
+  email_change_verification: { key: 'email_change_verification', group: 'compte', mandatory: true }, // F-18
+  email_change_notice: { key: 'email_change_notice', group: 'compte', mandatory: true }, // F-18
 };
 
 // ── Per-template typed payload shapes ────────────────────────────────────────
@@ -55,6 +59,17 @@ export interface DataExportReadyEmailData {
   displayName: string;
 }
 
+export interface EmailChangeVerificationEmailData {
+  displayName: string;
+  verifyUrl: string;
+  newEmail: string;
+}
+
+export interface EmailChangeNoticeEmailData {
+  displayName: string;
+  newEmail: string;
+}
+
 /**
  * Map from EmailTemplateKey → its typed params.
  * Used by EmailService.send<K>(template: K, to, data: EmailDataByTemplate[K]).
@@ -65,4 +80,6 @@ export type EmailDataByTemplate = {
   password_changed: PasswordChangedEmailData;
   welcome: WelcomeEmailData;
   data_export_ready: DataExportReadyEmailData; // F-14
+  email_change_verification: EmailChangeVerificationEmailData; // F-18
+  email_change_notice: EmailChangeNoticeEmailData; // F-18
 };

@@ -2,6 +2,7 @@
 // F-11 adds EmailVerificationToken. F-12 adds PasswordResetToken. F-13 adds LegalDocument + ConsentRecord.
 // F-14 adds DataExport + Account.deletedAt + NotifType.system.
 // F-15 adds NotificationPreference. F-17 adds Account.onboardedAt + Profile.creatorRoles.
+// F-18 adds TwoFactorCredential + EmailChangeToken.
 
 generator client {
   provider = "prisma-client-js"
@@ -100,6 +101,8 @@ model Account {
   passwordResetTokens      PasswordResetToken[]
   consents                 ConsentRecord[]          // F-13: append-only acceptance log
   dataExports              DataExport[]             // F-14: export requests
+  twoFactor                TwoFactorCredential?     // F-18: TOTP credential (optional; 1-to-1)
+  emailChangeTokens        EmailChangeToken[]       // F-18: pending email-change requests
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -249,4 +252,31 @@ model ConsentRecord {
   ip         String?
 
   @@index([accountId, document])
+}
+
+// ── F-18: 2FA credential (one per account; enabledAt null = pending/unconfirmed) ──
+
+model TwoFactorCredential {
+  id               String    @id @default(cuid())
+  accountId        String    @unique                 // one credential per account
+  account          Account   @relation(fields: [accountId], references: [id])
+  secretEncrypted  String                            // AES-256-GCM "iv:tag:ciphertext" (base64); never logged
+  enabledAt        DateTime?                          // null = setup pending (secret issued, not confirmed)
+  backupCodeHashes String[]  @default([])             // sha256(code) hex; single-use → removed on use
+  createdAt        DateTime  @default(now())
+}
+
+// ── F-18: Email change token (mirrors F-11 EmailVerificationToken) ────────────
+
+model EmailChangeToken {
+  id         String    @id @default(cuid())
+  accountId  String
+  account    Account   @relation(fields: [accountId], references: [id])
+  newEmail   String                                   // committed to Account.email on confirm
+  tokenHash  String    @unique                        // sha256(raw); raw never stored (mirror F-11/F-12)
+  expiresAt  DateTime                                 // createdAt + 24h
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([accountId])
 }

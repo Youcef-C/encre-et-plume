@@ -20,6 +20,7 @@ import type {
   ConfirmPasswordResetResponse,
   SignupResponse,
   RequestVerificationEmailResponse,
+  TwoFactorRequiredResponse,
 } from '@encre-et-plume/shared';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -69,12 +70,15 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Req() req: AuthRequest,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthResponse> {
+  ): Promise<AuthResponse | TwoFactorRequiredResponse> {
     await this.rateLimit(`login:${req.ip ?? 'unknown'}:${dto.email}`);
-    const { account, token } = await this.authService.login(dto);
+    const result = await this.authService.login(dto);
+    if ('twoFactorRequired' in result) {
+      return result; // no cookie; FE must POST /auth/2fa/verify
+    }
     const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined; // ms for Express
-    this.setCookie(res, token, maxAge);
-    return { account };
+    this.setCookie(res, result.token, maxAge);
+    return { account: result.account };
   }
 
   @UseGuards(SessionGuard)

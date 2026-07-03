@@ -33,6 +33,6 @@ import { LegalModule } from '../legal/legal.module';
     PrismaService,
     RedisService,
   ],
-  exports: [EmailVerifiedGuard], // future modules use @UseGuards(SessionGuard, EmailVerifiedGuard)
+  exports: [AuthService, EmailVerifiedGuard, SessionGuard, JwtModule], // SecurityModule imports AuthModule; controllers cannot be exported
 })
 export class AuthModule {}

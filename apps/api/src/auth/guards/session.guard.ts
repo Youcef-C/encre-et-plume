@@ -8,11 +8,22 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { RedisService } from '../../redis/redis.service';
 
+// Avoid circular import: SessionStore lives in SecurityModule (which imports AuthModule).
+// We use a structural interface to decouple the types.
+interface SessionStoreApi {
+  touch(accountId: string, jti: string, userAgent: string | null, ip: string | null): Promise<void>;
+}
+
 export type AuthRequest = Request & {
   accountId: string;
   jti?: string;
   tokenExp?: number;
 };
+
+// Module-scoped, NOT an instance field: several feature modules re-provide SessionGuard
+// locally, so multiple instances enforce requests. SecurityModule.onModuleInit() wires the
+// store on ONE instance — module scope makes the wiring visible to all of them.
+let sharedSessionStore: SessionStoreApi | undefined;
 
 @Injectable()
 export class SessionGuard implements CanActivate {
@@ -20,6 +31,11 @@ export class SessionGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly redis: RedisService,
   ) {}
+
+  /** F-18: called by SecurityModule.onModuleInit() to wire the session index. @Optional via setter. */
+  setSessionStore(store: SessionStoreApi): void {
+    sharedSessionStore = store;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthRequest>();
@@ -55,6 +71,13 @@ export class SessionGuard implements CanActivate {
     req.accountId = payload.sub;
     req.jti = payload.jti;
     req.tokenExp = payload.exp;
+
+    // F-18: best-effort session index touch — never blocks auth on failure.
+    if (sharedSessionStore && payload.jti) {
+      const ua = req.headers['user-agent'] ?? null;
+      sharedSessionStore.touch(payload.sub, payload.jti, ua, req.ip ?? null).catch(() => {});
+    }
+
     return true;
   }
 }

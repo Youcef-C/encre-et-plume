@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SlugService } from '../slug/slug.service';
 import { EmailVerificationService } from './email-verification.service';
 import { LegalService } from '../legal/legal.service';
+import { RedisService } from '../redis/redis.service';
 
 const MOCK_ACCOUNT = {
   id: 'cuid-1',
@@ -61,6 +62,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: EmailVerificationService, useValue: emailVerificationService },
         { provide: LegalService, useValue: legalService },
+        { provide: RedisService, useValue: { set: jest.fn().mockResolvedValue(undefined) } }, // F-18: rotateOtherSessions
       ],
     }).compile();
 
@@ -349,6 +351,8 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash, emailVerifiedAt: new Date() });
 
       const result = await service.login({ email: 'yuki@test.com', password: 'password123' });
+      // Narrow: in this test twoFactorService is not set so result is always { account, token }
+      if ('twoFactorRequired' in result) throw new Error('unexpected 2FA result');
 
       expect(result.account.email).toBe('yuki@test.com');
       expect(result.token).toBe('jwt-token');
@@ -405,6 +409,7 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, passwordHash: hash, emailVerifiedAt: new Date() });
 
       const result = await service.login({ email: 'yuki@test.com', password: 'password123' });
+      if ('twoFactorRequired' in result) throw new Error('unexpected 2FA result');
 
       expect(result.account.needsCguReconsent).toBe(false);
     });

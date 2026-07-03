@@ -52,6 +52,22 @@ async function main() {
     await prisma.consentRecord.deleteMany({ where: { accountId: { in: accountIds } } });
   }
 
+  // 4a. Delete F-18 TwoFactorCredential rows (FK to Account)
+  if (accountIds.length > 0) {
+    await prisma.twoFactorCredential.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
+  // 4b. Delete F-18 EmailChangeToken rows (FK to Account)
+  if (accountIds.length > 0) {
+    await prisma.emailChangeToken.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
+  // 4c. Delete F-11/F-12 verification & reset tokens (FK to Account)
+  if (accountIds.length > 0) {
+    await prisma.emailVerificationToken.deleteMany({ where: { accountId: { in: accountIds } } });
+    await prisma.passwordResetToken.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

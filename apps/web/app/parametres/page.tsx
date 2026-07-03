@@ -1,6 +1,7 @@
 'use client';
 
 // F-14: /parametres — authenticated settings page hosting "Mes données" section.
+// F-18: Adds "Sécurité" section (email, password, sessions, 2FA).
 // Redirects to /connexion when not logged in.
 
 import { useEffect } from 'react';
@@ -9,6 +10,9 @@ import { useSession } from '../../lib/session';
 import MesDonnees from '../../components/MesDonnees';
 import PreferencesNotifications from '../../components/PreferencesNotifications';
 import SupprimerCompteModal from '../../components/SupprimerCompteModal';
+import SecurityIdentifiants from '../../components/security/SecurityIdentifiants';
+import SecuritySessions from '../../components/security/SecuritySessions';
+import SecurityTwoFactor from '../../components/security/SecurityTwoFactor';
 
 export default function ParametresPage() {
   const { account, loading } = useSession();
@@ -43,6 +47,26 @@ export default function ParametresPage() {
 
   if (!account) return null;
 
+  const sectionHeadingStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-display)',
+    fontSize: 20,
+    margin: '0 0 24px',
+    color: 'var(--ink)',
+    letterSpacing: '0.02em',
+    textTransform: 'uppercase',
+    paddingBottom: 14,
+    borderBottom: '2px solid var(--border)',
+  };
+
+  const subHeadingStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-display)',
+    fontSize: 16,
+    margin: '0 0 10px',
+    color: 'var(--accent)',
+    letterSpacing: '0.02em',
+    textTransform: 'uppercase',
+  };
+
   return (
     <main style={{ maxWidth: 680, margin: '0 auto', padding: '40px 20px' }}>
       {/* Page heading */}
@@ -65,22 +89,43 @@ export default function ParametresPage() {
         className="ep-card"
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2
-          id="preferences-notif-heading"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 20,
-            margin: '0 0 24px',
-            color: 'var(--ink)',
-            letterSpacing: '0.02em',
-            textTransform: 'uppercase',
-            paddingBottom: 14,
-            borderBottom: '2px solid var(--border)',
-          }}
-        >
+        <h2 id="preferences-notif-heading" style={sectionHeadingStyle}>
           Préférences de notification
         </h2>
         <PreferencesNotifications />
+      </section>
+
+      {/* Sécurité section (F-18) */}
+      <section
+        aria-labelledby="securite-heading"
+        className="ep-card"
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <h2 id="securite-heading" style={sectionHeadingStyle}>
+          Sécurité
+        </h2>
+
+        {/* Identifiants block */}
+        <div style={{ paddingBottom: 24, marginBottom: 24, borderBottom: '1.5px solid var(--border)' }}>
+          <h3 style={subHeadingStyle}>Identifiants</h3>
+          <SecurityIdentifiants />
+        </div>
+
+        {/* Sessions actives block */}
+        <div style={{ paddingBottom: 24, marginBottom: 24, borderBottom: '1.5px solid var(--border)' }}>
+          <h3 style={subHeadingStyle}>Sessions actives</h3>
+          <SecuritySessions />
+        </div>
+
+        {/* 2FA block */}
+        <div>
+          <h3 style={subHeadingStyle}>Double authentification (2FA)</h3>
+          <p style={{ fontSize: 14, color: 'var(--ink2)', margin: '0 0 16px', lineHeight: 1.55 }}>
+            La double authentification ajoute une couche de sécurité supplémentaire à votre compte.
+            Elle est entièrement optionnelle.
+          </p>
+          <SecurityTwoFactor />
+        </div>
       </section>
 
       {/* Mes données section */}
@@ -89,19 +134,7 @@ export default function ParametresPage() {
         className="ep-card"
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2
-          id="mes-donnees-heading"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 20,
-            margin: '0 0 24px',
-            color: 'var(--ink)',
-            letterSpacing: '0.02em',
-            textTransform: 'uppercase',
-            paddingBottom: 14,
-            borderBottom: '2px solid var(--border)',
-          }}
-        >
+        <h2 id="mes-donnees-heading" style={sectionHeadingStyle}>
           Mes données
         </h2>
 
@@ -118,16 +151,7 @@ export default function ParametresPage() {
 
         {/* Deletion block */}
         <div>
-          <h3
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 16,
-              margin: '0 0 10px',
-              color: 'var(--accent)',
-              letterSpacing: '0.02em',
-              textTransform: 'uppercase',
-            }}
-          >
+          <h3 style={{ ...subHeadingStyle, color: 'var(--accent)' }}>
             Zone de danger
           </h3>
           <p style={{ fontSize: 14, color: 'var(--ink2)', margin: '0 0 14px', lineHeight: 1.55 }}>

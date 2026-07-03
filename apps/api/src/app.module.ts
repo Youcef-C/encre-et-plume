@@ -11,6 +11,7 @@ import { LegalModule } from './legal/legal.module';
 import { PrivacyModule } from './privacy/privacy.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -21,6 +22,6 @@ import { OnboardingModule } from './onboarding/onboarding.module';
   // PrivacyModule (F-14): RGPD deletion + data export; imports MediaModule/NotificationsModule/EmailModule.
   // PreferencesModule before EmailModule and NotificationsModule: both import PreferencesModule.
   // OnboardingModule (F-17): POST /me/onboarding — first-run wizard.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule],
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule],
 })
 export class AppModule {}

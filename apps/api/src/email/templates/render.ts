@@ -94,6 +94,43 @@ export function renderDataExportReadyEmail(params: Record<string, string>): { su
   };
 }
 
+export function renderEmailChangeVerificationEmail(params: Record<string, string>): { subject: string; text: string } {
+  return {
+    subject: `Confirmez votre nouvelle adresse e-mail — Encre & Plume`,
+    text: [
+      `Bonjour ${params['displayName'] ?? ''},`,
+      ``,
+      `Vous avez demandé à changer votre adresse e-mail pour ${params['newEmail'] ?? ''}.`,
+      `Cliquez sur le lien ci-dessous pour confirmer ce changement :`,
+      ``,
+      params['verifyUrl'] ?? '',
+      ``,
+      `Ce lien expire dans 24 heures.`,
+      ``,
+      `Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail — votre adresse actuelle reste inchangée.`,
+      ``,
+      `À bientôt,`,
+      `L'équipe Encre & Plume`,
+    ].join('\n'),
+  };
+}
+
+export function renderEmailChangeNoticeEmail(params: Record<string, string>): { subject: string; text: string } {
+  return {
+    subject: `Votre adresse e-mail a été modifiée — Encre & Plume`,
+    text: [
+      `Bonjour ${params['displayName'] ?? ''},`,
+      ``,
+      `L'adresse e-mail de votre compte Encre & Plume vient d'être changée pour ${params['newEmail'] ?? ''}.`,
+      ``,
+      `Si vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement.`,
+      ``,
+      `À bientôt,`,
+      `L'équipe Encre & Plume`,
+    ].join('\n'),
+  };
+}
+
 // ── html helper ───────────────────────────────────────────────────────────────
 
 /** Convert newline-delimited plain text to simple HTML paragraphs (e-mail-safe). */
@@ -130,6 +167,12 @@ export function renderEmail(
       break;
     case 'data_export_ready': // F-14
       raw = renderDataExportReadyEmail(params);
+      break;
+    case 'email_change_verification': // F-18
+      raw = renderEmailChangeVerificationEmail(params);
+      break;
+    case 'email_change_notice': // F-18
+      raw = renderEmailChangeNoticeEmail(params);
       break;
     default:
       raw = renderVerificationEmail(params);

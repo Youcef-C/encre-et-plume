@@ -10,3 +10,4 @@ export * from './media.js';
 export * from './privacy.js';
 export * from './notification-preferences.js';
 export * from './onboarding.js';
+export * from './security.js';
