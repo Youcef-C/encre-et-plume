@@ -80,6 +80,9 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 - **Design system** — manga-zine identity: Anton (display) + Zen Kaku Gothic New (body), ink `#16130f` /
   paper `#f1ece1` / accent red `#e8261c`, halftone textures, bold borders, hard offset shadows. Reuse
   tokens/components in `apps/web`; don't reinvent them. Accessibility basics are required, not optional.
+- **No emojis in the UI** (user rule — overrides any emoji/dingbat the prototype draws). Every pictogram
+  comes from the shared SVG icon set `apps/web/components/icons.tsx` (chunky ink-style strokes); extend
+  that file when a new icon is needed. Pure typography (arrows `→`, `✓`, `＋`, `◆` separators) is fine.
 - **Prototype REPLICA (not approximation)** — the UI must be a faithful **replica** of the interactive
   prototype, the single source of truth: **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**.
   Do NOT invent layouts, nav items, controls, icons, or copy — reproduce what the prototype draws.

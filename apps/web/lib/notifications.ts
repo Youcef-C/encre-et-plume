@@ -1,4 +1,6 @@
+import type { ComponentType, CSSProperties } from 'react';
 import type { NotifType } from '@encre-et-plume/shared';
+import { CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, WarningIcon } from '../components/icons';
 
 // French label composer per notification type (single source of truth on web)
 export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
@@ -14,17 +16,17 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   system:           ()  => 'Notification système',
 };
 
-// Icon per notification type (prototype unicode symbols)
-export const NOTIF_ICON: Record<NotifType, string> = {
-  message:          '✉',
-  application:      '✎',
-  report:           '⚠',
-  invitation:       '✉',
-  project_activity: '✎',
-  release:          '⚑',
-  like:             '♥',
-  comment:          '✎',
-  system:           '◉',
+// Icon component per notification type (SVG icon set — no emojis in the UI)
+export const NOTIF_ICON: Record<NotifType, ComponentType<{ size?: number; style?: CSSProperties }>> = {
+  message:          MailIcon,
+  application:      PenIcon,
+  report:           WarningIcon,
+  invitation:       MailIcon,
+  project_activity: PenIcon,
+  release:          FlagIcon,
+  like:             HeartIcon,
+  comment:          PenIcon,
+  system:           CircleDotIcon,
 };
 
 // ponytail: closest existing route per type until target surfaces are built (MC-7, MC-9, etc.)

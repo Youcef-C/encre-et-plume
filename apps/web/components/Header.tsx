@@ -15,6 +15,18 @@ import CountBadge from './CountBadge';
 import SearchOverlay from './SearchOverlay';
 // ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
 import type { UserRole } from '@encre-et-plume/shared';
+import {
+  DiamondIcon,
+  GearIcon,
+  HeartIcon,
+  InboxIcon,
+  MailIcon,
+  MenuIcon,
+  PenIcon,
+  StarIcon,
+  UserIcon,
+  XIcon,
+} from './icons';
 
 // Avatar initials fallback with halftone-dot texture.
 // size prop lets the dropdown header reuse it at 34px vs nav button at 40px.
@@ -51,10 +63,10 @@ function AvatarFallback({ name, size = 40 }: { name: string; size?: number }) {
 }
 
 // ponytail: config array keeps role-gating in one place, no per-link copy/paste
-const ROLE_LINKS: { role: UserRole; href: string; label: string; icon: string }[] = [
-  { role: 'maintainer', href: '/espace-redaction', label: 'Espace rédaction', icon: '✍' },
-  { role: 'editor',     href: '/espace-editeur',   label: 'Espace éditeur',   icon: '◆' },
-  { role: 'admin',      href: '/admin',             label: 'Panneau admin',    icon: '⚙' },
+const ROLE_LINKS: { role: UserRole; href: string; label: string; icon: React.ReactNode }[] = [
+  { role: 'maintainer', href: '/espace-redaction', label: 'Espace rédaction', icon: <PenIcon size={16} /> },
+  { role: 'editor',     href: '/espace-editeur',   label: 'Espace éditeur',   icon: <DiamondIcon size={14} /> },
+  { role: 'admin',      href: '/admin',             label: 'Panneau admin',    icon: <GearIcon size={16} /> },
 ];
 
 // Demo role labels matching prototype copy verbatim
@@ -92,7 +104,7 @@ const menuItemStyle: React.CSSProperties = {
   textDecoration: 'none',
 };
 
-const iconStyle: React.CSSProperties = { width: 18, textAlign: 'center' };
+const iconStyle: React.CSSProperties = { width: 18, display: 'flex', justifyContent: 'center' };
 
 export default function Header() {
   const { account, loading, logout } = useSession();
@@ -110,7 +122,7 @@ export default function Header() {
   const gatedLinks = ROLE_LINKS.filter((l) => l.role === effectiveRole);
 
   // Role display for dropdown user-info header (real account role, not simulated)
-  const roleIcon  = account ? (ROLE_LINKS.find(l => l.role === account.role)?.icon ?? '☆') : '';
+  const roleIcon  = account ? (ROLE_LINKS.find(l => l.role === account.role)?.icon ?? <StarIcon size={13} />) : null;
   const roleLabel = account ? (DEMO_ROLES.find(r => r.role === account.role)?.label ?? account.role) : '';
 
   // Close dropdown when clicking outside
@@ -224,12 +236,13 @@ export default function Header() {
           borderRadius: 6,
           background: 'var(--card)',
           color: 'var(--ink)',
-          fontSize: 18,
           cursor: 'pointer',
           flexShrink: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        {mobileNavOpen ? '✕' : '☰'}
+        {mobileNavOpen ? <XIcon size={20} /> : <MenuIcon size={20} />}
       </button>
 
       {/* Primary nav — 7 items per prototype TOP NAV (desktop; hidden ≤1024px) */}
@@ -340,12 +353,11 @@ export default function Header() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 16,
               textDecoration: 'none',
               flexShrink: 0,
             }}
           >
-            ♥
+            <HeartIcon size={17} />
           </Link>
           <Link
             href="/tableau-de-bord"
@@ -477,7 +489,9 @@ export default function Header() {
                 <AvatarFallback name={account.displayName} size={34} />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{account.displayName}</div>
-                  <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{roleIcon} {roleLabel}</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {roleIcon} {roleLabel}
+                  </div>
                 </div>
               </div>
 
@@ -490,7 +504,7 @@ export default function Header() {
                 style={{ ...menuItemStyle, justifyContent: 'space-between' }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={iconStyle}>✉</span>
+                  <span style={iconStyle}><MailIcon size={16} /></span>
                   Notifications
                 </span>
                 {unreadCount > 0 && (
@@ -523,7 +537,7 @@ export default function Header() {
                 className="ep-menu-item"
                 style={menuItemStyle}
               >
-                <span style={iconStyle}>◷</span>
+                <span style={iconStyle}><UserIcon size={16} /></span>
                 Mon profil
               </Link>
 
@@ -537,7 +551,7 @@ export default function Header() {
                 className="ep-menu-item"
                 style={menuItemStyle}
               >
-                <span style={{ ...iconStyle, color: 'var(--accent)' }}>♥</span>
+                <span style={{ ...iconStyle, color: 'var(--accent)' }}><HeartIcon size={16} /></span>
                 Likes &amp; ma liste
               </Link>
 
@@ -549,7 +563,7 @@ export default function Header() {
                 className="ep-menu-item"
                 style={menuItemStyle}
               >
-                <span style={iconStyle}>✎</span>
+                <span style={iconStyle}><PenIcon size={16} /></span>
                 Mes candidatures
               </Link>
 
@@ -562,7 +576,7 @@ export default function Header() {
                 style={{ ...menuItemStyle, borderBottom: '2px solid var(--border)', justifyContent: 'space-between' }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <span style={iconStyle}>↧</span>
+                  <span style={iconStyle}><InboxIcon size={16} /></span>
                   Candidatures reçues
                 </span>
                 <CountBadge
@@ -674,7 +688,7 @@ export default function Header() {
                 className="ep-menu-item"
                 style={menuItemStyle}
               >
-                <span style={iconStyle}>⚙</span>
+                <span style={iconStyle}><GearIcon size={16} /></span>
                 Paramètres
               </Link>
 

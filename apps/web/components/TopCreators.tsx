@@ -1,6 +1,8 @@
 // DR-1 — "Top artiste" + "Top scénariste du moment" cards. Replica of prototype ACCUEIL lines 445-455.
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import type { TopCreator, TopCreatorsResponse } from '@encre-et-plume/shared';
+import { BrushIcon, PenNibIcon } from './icons';
 
 function avatarStyle(avatar: string | null): React.CSSProperties {
   if (avatar) return { backgroundImage: `url(${avatar})`, backgroundSize: 'cover' };
@@ -20,7 +22,7 @@ function CreatorCard({
   creator,
 }: {
   label: string;
-  icon: string;
+  icon: ReactNode;
   headerBg: string;
   headerColor: string;
   roleLabel: string;
@@ -37,7 +39,7 @@ function CreatorCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: headerBg, color: headerColor }}>
-        <span style={{ fontSize: 16 }}>{icon}</span>
+        {icon}
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, textTransform: 'uppercase', lineHeight: 1 }}>{label}</div>
       </div>
       {creator ? (
@@ -67,7 +69,7 @@ export default function TopCreators({ data }: { data: TopCreatorsResponse }) {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, margin: '34px 0 8px' }} className="ep-top-creators">
       <CreatorCard
         label="Top artiste du moment"
-        icon="🖌"
+        icon={<BrushIcon size={17} />}
         headerBg="var(--accent)"
         headerColor="#fff"
         roleLabel="Dessinateur·rice"
@@ -75,7 +77,7 @@ export default function TopCreators({ data }: { data: TopCreatorsResponse }) {
       />
       <CreatorCard
         label="Top scénariste du moment"
-        icon="✒"
+        icon={<PenNibIcon size={17} />}
         headerBg="#16130f"
         headerColor="#f1ece1"
         roleLabel="Scénariste"

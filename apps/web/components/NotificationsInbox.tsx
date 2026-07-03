@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, createElement } from 'react';
 import { useRouter } from 'next/navigation';
 import type { NotificationItem } from '@encre-et-plume/shared';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { useUnreadCounts } from '../lib/unread';
 import { NOTIF_LABEL, NOTIF_ICON, notificationHref, relativeTime } from '../lib/notifications';
+import { MailIcon } from './icons';
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function Skeleton() {
@@ -99,7 +100,7 @@ function NotifItem({
           fontSize: 14,
         }}
       >
-        {NOTIF_ICON[item.type]}
+        {createElement(NOTIF_ICON[item.type], { size: 15 })}
       </span>
 
       {/* Text content */}
@@ -281,7 +282,9 @@ export default function NotificationsInbox() {
             color: 'var(--ink2)',
           }}
         >
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✉</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <MailIcon size={32} />
+          </div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>Aucune notification</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
             Vos invitations et activités apparaîtront ici.

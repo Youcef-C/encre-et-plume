@@ -526,3 +526,24 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── DR-1 announcement ribbon marquee ────────────────────────────────────────
+   Two copies of the item list slide -50% for a seamless loop.
+   Paused on hover; static (first copy only visible) under reduced motion. */
+.ep-ribbon-track {
+  display: flex;
+  width: max-content;
+  animation: ep-ribbon-scroll var(--ribbon-duration, 27s) linear infinite;
+}
+.ep-ribbon-viewport:hover .ep-ribbon-track {
+  animation-play-state: paused;
+}
+@keyframes ep-ribbon-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-ribbon-track {
+    animation: none;
+  }
+}

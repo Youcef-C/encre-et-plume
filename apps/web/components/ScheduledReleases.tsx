@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { ScheduledRelease } from '@encre-et-plume/shared';
 import { countdownLabel, releaseDateLabel } from '../lib/home';
+import { HeartIcon } from './icons';
 
 function coverStyle(seed: number): React.CSSProperties {
   const angles = [150, 40, 200, 110];
@@ -68,7 +69,10 @@ export default function ScheduledReleases({
                     fontWeight: 700,
                   }}
                 >
-                  {countdownLabel(item.releaseAt, now)} · ♥
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {countdownLabel(item.releaseAt, now)} ·
+                    <HeartIcon size={11} style={{ color: 'var(--accent)' }} />
+                  </span>
                 </div>
               </div>
             </Link>

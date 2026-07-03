@@ -8,6 +8,7 @@ import { useSession } from '../lib/session';
 import ProfileTags from './ProfileTags';
 import ProfileTabs from './ProfileTabs';
 import ProfileActions from './ProfileActions';
+import { XIcon } from './icons';
 import UploadControl from './UploadControl';
 
 // F-2 — Public profile page client component.
@@ -135,7 +136,7 @@ function AvatarLightbox({
           flexShrink: 0,
         }}
       >
-        ✕
+        <XIcon size={18} />
       </button>
       {/* Full-size image — object-fit:contain, no crop/distortion */}
       {/* eslint-disable-next-line @next/next/no-img-element */}

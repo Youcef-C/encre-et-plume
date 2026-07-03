@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { FeaturedWork } from '@encre-et-plume/shared';
 import { useSession } from '../lib/session';
+import { ChevronLeftIcon, ChevronRightIcon } from './icons';
 
 const AUTO_ADVANCE_MS = 6000;
 
@@ -91,7 +92,7 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
             aria-label="Diapositive précédente"
             style={arrowStyle('left')}
           >
-            ‹
+            <ChevronLeftIcon size={20} />
           </button>
           <button
             type="button"
@@ -99,7 +100,7 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
             aria-label="Diapositive suivante"
             style={arrowStyle('right')}
           >
-            ›
+            <ChevronRightIcon size={20} />
           </button>
           <div style={{ position: 'absolute', top: 26, right: 24, display: 'flex', gap: 7, zIndex: 3 }}>
             {slides.map((s, i) => (
@@ -188,7 +189,6 @@ function arrowStyle(side: 'left' | 'right'): React.CSSProperties {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 18,
     cursor: 'pointer',
     boxShadow: '3px 3px 0 var(--shadow)',
     zIndex: 3,

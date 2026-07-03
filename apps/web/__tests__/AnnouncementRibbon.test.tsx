@@ -17,11 +17,21 @@ const items: Announcement[] = [
 ];
 
 describe('AnnouncementRibbon', () => {
-  it('renders the three French tag labels', () => {
+  it('renders the three French tag labels (duplicated for the marquee loop)', () => {
     render(<AnnouncementRibbon items={items} />);
-    expect(screen.getByText('Concours')).toBeInTheDocument();
-    expect(screen.getByText('À chaud')).toBeInTheDocument();
-    expect(screen.getByText('Événement')).toBeInTheDocument();
+    // The scrolling track holds two copies of the list; the second is aria-hidden.
+    expect(screen.getAllByText('Concours')).toHaveLength(2);
+    expect(screen.getAllByText('À chaud')).toHaveLength(2);
+    expect(screen.getAllByText('Événement')).toHaveLength(2);
+  });
+
+  it('scrolls via the marquee track, second copy hidden from a11y tree', () => {
+    const { container } = render(<AnnouncementRibbon items={items} />);
+    const track = container.querySelector('.ep-ribbon-track');
+    expect(track).not.toBeNull();
+    expect(track!.querySelectorAll('[aria-hidden="true"] a')).toHaveLength(items.length);
+    // Only the visible copy's links are reachable by role.
+    expect(screen.getAllByRole('link')).toHaveLength(items.length);
   });
 
   it('links each item to its href', () => {

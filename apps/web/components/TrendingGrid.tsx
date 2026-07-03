@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { TrendingWork } from '@encre-et-plume/shared';
 import { formatLikeCount, growthLabel } from '../lib/home';
+import { HeartIcon } from './icons';
 
 function coverGradient(seed: number): React.CSSProperties {
   const angles = [125, 215, 60, 150];
@@ -78,7 +79,13 @@ export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
               <div style={{ fontWeight: 700, fontSize: 16, marginTop: 10 }}>{item.title}</div>
               <div style={{ fontSize: 13, color: 'var(--ink2)' }}>
                 {item.genre} ·{' '}
-                <span aria-label={`${formatLikeCount(item.likeCount)} j'aime`}>♥ {formatLikeCount(item.likeCount)}</span>
+                <span
+                  aria-label={`${formatLikeCount(item.likeCount)} j'aime`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}
+                >
+                  <HeartIcon size={12} style={{ color: 'var(--accent)' }} />
+                  {formatLikeCount(item.likeCount)}
+                </span>
                 {' '}· {growthLabel(item.growthPct)}
               </div>
             </Link>

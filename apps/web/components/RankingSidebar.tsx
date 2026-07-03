@@ -1,6 +1,7 @@
 // DR-1 — sidebar "Populaire · Classement de tous les temps". Replica of prototype ACCUEIL lines 476-493.
 import Link from 'next/link';
 import type { RankingRow } from '@encre-et-plume/shared';
+import { CrownIcon } from './icons';
 
 function coverStyle(cover: string | null): React.CSSProperties {
   if (cover) return { backgroundImage: `url(${cover})`, backgroundSize: 'cover' };
@@ -24,7 +25,7 @@ export default function RankingSidebar({ items }: { items: RankingRow[] }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '15px 16px', background: '#16130f', color: '#f1ece1' }}>
-        <span style={{ fontSize: 18 }}>👑</span>
+        <CrownIcon size={19} style={{ color: 'var(--accent)' }} />
         <div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, textTransform: 'uppercase', lineHeight: 1 }}>Populaire</div>
           <div style={{ fontSize: 11, color: '#cabfb2' }}>Classement de tous les temps</div>
