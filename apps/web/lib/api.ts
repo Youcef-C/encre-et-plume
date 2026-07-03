@@ -319,3 +319,15 @@ export const getActiveContest = (): Promise<ActiveContest | null> =>
 
 export const getCatalogEditorPick = (): Promise<EditorPickItem[]> =>
   request<EditorPickItem[]>('/catalog/editor-pick');
+
+// ─── Work page "Œuvre" (DR-3) ─────────────────────────────────────────────────
+import type { WorkDetail, WorkChaptersResponse, PlancheDto } from '@encre-et-plume/shared';
+
+export const getWork = (slug: string): Promise<WorkDetail> =>
+  request<WorkDetail>(`/works/${encodeURIComponent(slug)}`);
+
+export const getWorkChapters = (slug: string, page: number): Promise<WorkChaptersResponse> =>
+  request<WorkChaptersResponse>(`/works/${encodeURIComponent(slug)}/chapters?page=${page}`);
+
+export const getWorkPlanches = (slug: string): Promise<PlancheDto[]> =>
+  request<PlancheDto[]>(`/works/${encodeURIComponent(slug)}/planches`);

@@ -602,6 +602,27 @@ h1, h2, h3, h4, h5, h6 {
   outline-offset: 2px;
 }
 
+/* ── DR-3 Œuvre — responsive reflow ───────────────────────────────────────────
+   Desktop (>=901px): 288px "ÉQUIPE CRÉATIVE"/DÉTAILS aside beside the flexible
+   main column, replica of the prototype layout. <=900px: aside drops below main
+   (matches CatalogCard's own >=900 breakpoint note in the plan). <=768px: the
+   illustrations grid drops to 2 cols; <=480px: 1 col. */
+@media (max-width: 900px) {
+  .ep-oeuvre-aside {
+    width: 100% !important;
+  }
+}
+@media (max-width: 768px) {
+  .ep-planche-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  .ep-planche-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* Two-column field row (Spécialité / Ville) — single column below 640px so
    the profile edit form stays clean at 375px/768px. */
 .ep-form-row-2 {

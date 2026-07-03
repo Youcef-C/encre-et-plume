@@ -14,6 +14,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { SecurityModule } from './security/security.module';
 import { HomeModule } from './home/home.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { WorksModule } from './works/works.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -26,6 +27,7 @@ import { CatalogModule } from './catalog/catalog.module';
   // OnboardingModule (F-17): POST /me/onboarding — first-run wizard.
   // HomeModule (DR-1): public GET /home/* showroom aggregation for the "Accueil" landing page.
   // CatalogModule (DR-2): public GET /catalog* + /contests/active for the "Découvrir" catalog page.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule],
+  // WorksModule (DR-3): public GET /works/:slug* for the "Œuvre" work detail page.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule],
 })
 export class AppModule {}

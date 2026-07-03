@@ -2,20 +2,8 @@
 import Link from 'next/link';
 import type { CatalogWorkCard } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
+import { coverStyle } from '../../lib/cover';
 import { CheckIcon, BookIcon, HeartIcon } from '../icons';
-
-/** Deterministic halftone gradient from the work id (no covers uploaded yet — CSS placeholder). */
-function coverStyle(work: CatalogWorkCard): React.CSSProperties {
-  if (work.cover) return { backgroundImage: `url(${work.cover})`, backgroundSize: 'cover' };
-  const hash = [...work.id].reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const dark = hash % 3 === 2;
-  const angle = [125, 215, 60, 150, 40, 75][hash % 6];
-  return {
-    backgroundColor: dark ? 'var(--ink)' : 'var(--accent)',
-    backgroundImage: `radial-gradient(rgba(${dark ? '255,255,255,.16' : '22,19,15,.5'}) 1.5px,transparent 1.6px), linear-gradient(${angle}deg, ${dark ? 'var(--accent) 40%,var(--ink) 40%' : 'var(--ink) 42%,var(--accent) 42%'})`,
-    backgroundSize: 'var(--dot) var(--dot), cover',
-  };
-}
 
 export default function CatalogCard({ work }: { work: CatalogWorkCard }) {
   return (
@@ -28,7 +16,7 @@ export default function CatalogCard({ work }: { work: CatalogWorkCard }) {
           borderRadius: 8,
           overflow: 'hidden',
           boxShadow: '4px 4px 0 var(--shadow)',
-          ...coverStyle(work),
+          ...coverStyle(work.id, work.cover),
         }}
       >
         {work.format === 'Roman' && (

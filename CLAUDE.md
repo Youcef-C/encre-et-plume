@@ -83,6 +83,10 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 - **No emojis in the UI** (user rule — overrides any emoji/dingbat the prototype draws). Every pictogram
   comes from the shared SVG icon set `apps/web/components/icons.tsx` (chunky ink-style strokes); extend
   that file when a new icon is needed. Pure typography (arrows `→`, `✓`, `＋`, `◆` separators) is fine.
+- **On-brand form controls** (user rule): never render bare native checkboxes/selects — use the shared
+  `apps/web/components/form/OnBrandCheckbox.tsx` / `OnBrandSelect.tsx`. Genre/tag entry is never free
+  text: use `GenreChip` + `GenreSuggestInput` backed by the `packages/shared/src/genres.json` vocabulary
+  (`F-20`). Filter UIs auto-apply on change (no "Appliquer" button) with debounced text inputs.
 - **Prototype REPLICA (not approximation)** — the UI must be a faithful **replica** of the interactive
   prototype, the single source of truth: **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**.
   Do NOT invent layouts, nav items, controls, icons, or copy — reproduce what the prototype draws.

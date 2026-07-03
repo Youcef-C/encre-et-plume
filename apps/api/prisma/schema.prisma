@@ -4,6 +4,7 @@
 // F-15 adds NotificationPreference. F-17 adds Account.onboardedAt + Profile.creatorRoles.
 // F-18 adds TwoFactorCredential + EmailChangeToken.
 // DR-1 adds Work, Chapter, Announcement + Profile.trendingScore (home showroom).
+// DR-3 extends Work/Chapter + adds WorkCreator, Planche, FundingGoal, Review (work page "Œuvre").
 
 generator client {
   provider = "prisma-client-js"
@@ -118,6 +119,7 @@ model Account {
   dataExports              DataExport[]             // F-14: export requests
   twoFactor                TwoFactorCredential?     // F-18: TOTP credential (optional; 1-to-1)
   emailChangeTokens        EmailChangeToken[]       // F-18: pending email-change requests
+  workCredits              WorkCreator[]            // DR-3: works this account is credited on
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -333,6 +335,24 @@ model Work {
   publishedAt    DateTime?                                // null = not in catalog; non-null = published + recency sort key
   editorPicks    EditorPick[]
 
+  // ── DR-3: work page "Œuvre" columns ──────────────────────────────────────
+  synopsis       String?                                  // "Synopsis" block body
+  hashtags       String[] @default([])                    // "#..." chips under the synopsis
+  proseExcerpt   String?                                  // roman-only excerpt body; response nulls it unless format==='Roman'
+  readCount      Int      @default(0)                     // ponytail: denormalized; DR-4 owns the increment (reader open)
+  favoriteCount  Int      @default(0)                      // ponytail: denormalized; DR-9 owns the increment
+  ratingStoryAvg Float    @default(0)                     // ponytail: recomputed from Review rows in WorksService (not stored authoritative)
+  ratingArtAvg   Float    @default(0)                     // same note
+  reviewCount    Int      @default(0)                     // same note — DR-3 recomputes ratingStoryAvg/ratingArtAvg/reviewCount +
+                                                            // an "overall" ratingAvg from Review rows in the service response; this
+                                                            // stays the seed-set starting point, not the live source of truth (the
+                                                            // existing `ratingAvg` column above stays the DR-2 catalog sort key —
+                                                            // the two may differ until PUB-3 reconciles them).
+  creators       WorkCreator[]
+  planches       Planche[]
+  fundingGoals   FundingGoal[]
+  reviews        Review[]
+
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
   @@index([likeCount])
@@ -341,17 +361,73 @@ model Work {
 }
 
 model Chapter {
-  id        String        @id @default(cuid())
-  workId    String
-  work      Work          @relation(fields: [workId], references: [id])
-  number    Int
-  title     String?
-  status    ChapterStatus @default(published)
-  publishAt DateTime      @default(now())              // future + status=scheduled → "Sorties programmées"
-  createdAt DateTime      @default(now())
+  id           String        @id @default(cuid())
+  workId       String
+  work         Work          @relation(fields: [workId], references: [id])
+  number       Int
+  title        String?
+  status       ChapterStatus @default(published)
+  publishAt    DateTime      @default(now())              // future + status=scheduled → "Sorties programmées"
+  createdAt    DateTime      @default(now())
+  plancheCount Int           @default(0)                   // ponytail: denormalized; CS owns real page counts later
+  likeCount    Int           @default(0)                   // ponytail: denormalized; DR-9 owns the increment
 
   @@index([status, publishAt])
   @@index([workId, number])
+}
+
+// ── DR-3: work page "Œuvre" (creative team, planches, funding goals, reviews) ──
+// "CreatorMember" from the story's entity list is WorkCreator — a join row (Work × Account) with a
+// per-work role/order, distinct from Profile.creatorRoles (DR-1, an account-level self-declared tag).
+
+model WorkCreator {
+  id        String  @id @default(cuid())
+  workId    String
+  work      Work    @relation(fields: [workId], references: [id])
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+  role      String                                        // "scenariste" | "dessinateur" | …
+  order     Int     @default(0)
+
+  @@unique([workId, accountId])
+}
+
+model Planche {
+  id      String  @id @default(cuid())
+  workId  String
+  work    Work    @relation(fields: [workId], references: [id])
+  image   String?
+  caption String?
+  order   Int     @default(0)
+
+  @@index([workId, order])
+}
+
+model FundingGoal {
+  id           String @id @default(cuid())
+  workId       String
+  work         Work   @relation(fields: [workId], references: [id])
+  title        String
+  currentCents Int    @default(0)
+  targetCents  Int
+  order        Int    @default(0)
+
+  @@index([workId, order])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  workId      String
+  work        Work     @relation(fields: [workId], references: [id])
+  authorId    String?                                      // nullable: seed fixtures have no real Account
+  authorName  String
+  storyRating Int
+  artRating   Int
+  text        String
+  hidden      Boolean  @default(false)                      // AD-4/PUB-3 moderation flag; text blanked on the FE when true
+  createdAt   DateTime @default(now())
+
+  @@index([workId, createdAt])
 }
 
 model Announcement {

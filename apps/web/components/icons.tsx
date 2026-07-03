@@ -227,3 +227,38 @@ export function CircleIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// DR-3 — work page "Œuvre" icons (replace the prototype's ＋ ↗ 🛡 ⛔ glyphs).
+
+export function PlusIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+export function ShareIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M7 17L17 7M9 7h8v8" />
+    </Svg>
+  );
+}
+
+export function ShieldIcon(p: IconProps) {
+  return (
+    <Svg {...p} filled>
+      <path d="M12 3l7 3v5.5c0 5-3 8.2-7 9.5-4-1.3-7-4.5-7-9.5V6l7-3z" />
+    </Svg>
+  );
+}
+
+export function BanIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M6.5 6.5l11 11" />
+    </Svg>
+  );
+}

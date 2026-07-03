@@ -5,16 +5,18 @@
 > Screen(s): "Lecteur" · Priority: Must · Fidelity: Explicit
 
 ## Frontend
+
 - **Immersive dark stage** with "✕ Quitter" and "⛶ Plein écran".
-- **Topbar**: "‹ Catalogue"; work + chapter dropdown including "★ MES FAVORIS" quick-switch; read-mode toggle "Pages / Webtoon"; spread toggle "1 page / 2 pages"; "◳ Studio".
+- **Topbar**: "‹ Catalogue"; work + chapter dropdown including "★ MES FAVORIS" quick-switch; read-mode toggle "Pages"; spread toggle "1 page / 2 pages"; "◳ Studio".
 - **Left aside "Chapitres"**: chapter list with lock state — premium chapters show "verrouillé ★".
 - **Center stage**: manga page panels (2-page spread when selected) OR prose pages for roman type.
 - **Page navigation**: prev/next "‹ ›" + slider (1–40) with page label.
 - **Right aside "Réactions"**: ♥ like + ★ favorite ([[DR-9]]); "Commentaires" list ([[PUB-2]]) + composer.
-- **States**: image/page loading placeholders; locked-chapter state shows a paywall prompt linking to support/subscription ([[MR-1]]/[[MR-4]]); error/retry on page load; webtoon mode is continuous scroll, pages mode is paginated; spread toggle disabled in webtoon and for prose.
+- **States**: image/page loading placeholders; locked-chapter state shows a paywall prompt linking to support/subscription ([[MR-1]]/[[MR-4]]); error/retry on page load; no webtoon mode; pages mode is paginated; spread toggle disabled for prose.
 - **Accessibility**: keyboard paging (arrow keys), slider operable by keyboard with `aria-valuetext` (e.g. "page 12 sur 40"); page images have alt text; fullscreen toggle labeled; reduced-motion respected for transitions; comments composer labeled.
 
 ## Backend
+
 - **GET /works/{id}/chapters/{n}/pages** → page payload: manga image URLs (with spread metadata) or prose text blocks; total page count; readMode hint.
 - **GET /works/{id}/chapters** → chapter list with `locked` flag and access reason (premium tier).
 - **GET /me/favorites** → favorited works for the "★ MES FAVORIS" switcher (auth).
@@ -26,6 +28,7 @@
 - **Side effects**: increments read count; updates per-user reading progress; emits reaction/comment events.
 
 ## Dependencies
+
 - [[DR-3]] — entered from work page.
 - [[DR-9]] — like/favorite.
 - [[PUB-2]] — comments.
@@ -35,4 +38,6 @@
 - [[F-10]] — chapter page images served via the media system / CDN (responsive variants; premium pages via signed URLs).
 
 ## Notes
+
 - Explicit from prototype, including "verrouillé ★", read-mode and spread toggles, slider 1–40, and "◳ Studio" entry. [[MR-4]] referenced by design as subscription source though not in the global index — treat as the subscription/access concept under monetization.
+- Do not add the webtoon mode/toggle.
