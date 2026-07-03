@@ -76,7 +76,14 @@ body {
   background-size: 12px 12px, 12px 12px;
   background-position: 0 0, 6px 6px;
   color: var(--ink);
+  /* Sticky footer: column layout + main flex:1 pushes LegalFooter to the bottom on short pages */
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+body > main {
+  flex: 1;
 }
 
 /* Dark mode: solid very-dark background, no halftone dots */

@@ -13,7 +13,6 @@ import SupprimerCompteModal from '../../components/SupprimerCompteModal';
 import SecurityIdentifiants from '../../components/security/SecurityIdentifiants';
 import SecuritySessions from '../../components/security/SecuritySessions';
 import SecurityTwoFactor from '../../components/security/SecurityTwoFactor';
-import AppearanceSettings from '../../components/settings/AppearanceSettings';
 import CookiesSettings from '../../components/settings/CookiesSettings';
 import SettingsNav from '../../components/settings/SettingsNav';
 
@@ -88,18 +87,7 @@ export default function ParametresPage() {
 
       <SettingsNav />
 
-      {/* Apparence section (F-19, net-new; theme synced via shared F-6 ThemeContext) */}
-      <section
-        id="apparence"
-        aria-labelledby="apparence-heading"
-        className="ep-card"
-        style={{ padding: '24px 28px', marginBottom: 24 }}
-      >
-        <h2 id="apparence-heading" style={sectionHeadingStyle}>
-          Apparence
-        </h2>
-        <AppearanceSettings />
-      </section>
+      {/* Apparence section removed — theme picker disabled for now (light forced); see git history */}
 
       {/* Notification preferences section */}
       <section

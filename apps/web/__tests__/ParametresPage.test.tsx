@@ -64,11 +64,10 @@ describe('ParametresPage', () => {
     expect(h1s[0]).toHaveTextContent('Paramètres');
   });
 
-  it('renders the five h2 section headings in order', () => {
+  it('renders the four h2 section headings in order', () => {
     render(<ParametresPage />);
     const h2s = screen.getAllByRole('heading', { level: 2 });
     expect(h2s.map((h) => h.textContent)).toEqual([
-      'Apparence',
       'Préférences de notification',
       'Cookies',
       'Sécurité',

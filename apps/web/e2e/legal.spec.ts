@@ -368,3 +368,17 @@ test('FE-8: cookie banner at 375px does not cover the full viewport height', asy
     expect(bannerBox.width).toBeLessThanOrEqual(375 + 2); // +2 for sub-pixel rounding
   }
 });
+
+test('FOOTER-1: footer sticks to the bottom of the viewport on short pages', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/connexion'); // short page: content alone doesn't fill the viewport
+  const footer = page.locator('footer').first();
+  await expect(footer).toBeVisible();
+  const box = await footer.boundingBox();
+  expect(box).not.toBeNull();
+  if (box) {
+    // Bottom edge of the footer reaches (roughly) the bottom of the viewport —
+    // regression test for the footer floating mid-page on short pages.
+    expect(box.y + box.height).toBeGreaterThanOrEqual(900 - 4);
+  }
+});

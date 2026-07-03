@@ -5,12 +5,11 @@
  * verify seam (same pattern as security.spec.ts / privacy.spec.ts).
  *
  * Scope: this story is a pure surface reorganization — page structure, the new
- * Apparence/Cookies sections, and the in-page nav. 2FA/password/email/session
+ * Cookies section, and the in-page nav. 2FA/password/email/session
  * mechanics are F-18's e2e (security.spec.ts) and are NOT re-tested here.
  *
  * Tests:
- *   F19-E2E-1  Structure: one h1 "Paramètres", five h2s in order, nav with 5 links
- *   F19-E2E-2  Apparence: click Sombre syncs data-theme + header toggle; Système too
+ *   F19-E2E-1  Structure: one h1 "Paramètres", four h2s in order, nav with 4 links
  *   F19-E2E-3  Cookies: consent summary reflects saved choice; "Gérer les cookies" reopens banner
  *   F19-E2E-4  Nav anchors: clicking a nav link scrolls to the matching section
  *   F19-E2E-5  Responsive: /parametres at 375/768/1280 — no horizontal overflow, nav wraps
@@ -71,7 +70,7 @@ async function signUpVerifyAndLogin(
 
 // ── F19-E2E-1: Page structure ──────────────────────────────────────────────────
 
-test('F19-E2E-1: /parametres has one h1, five h2s in order, and a section nav with 5 links', async ({
+test('F19-E2E-1: /parametres has one h1, four h2s in order, and a section nav with 4 links', async ({
   page,
 }) => {
   const email = freshEmail('f19-struct');
@@ -84,96 +83,27 @@ test('F19-E2E-1: /parametres has one h1, five h2s in order, and a section nav wi
   await expect(h1s).toHaveCount(1);
   await expect(h1s.first()).toHaveText('Paramètres');
 
-  // Five h2s in exact story order
+  // Four h2s in exact story order (Apparence removed — theme picker disabled, light forced)
   const h2s = page.getByRole('heading', { level: 2 });
-  await expect(h2s).toHaveCount(5, { timeout: 10_000 });
-  await expect(h2s.nth(0)).toHaveText('Apparence');
-  await expect(h2s.nth(1)).toHaveText('Préférences de notification');
-  await expect(h2s.nth(2)).toHaveText('Cookies');
-  await expect(h2s.nth(3)).toHaveText('Sécurité');
-  await expect(h2s.nth(4)).toHaveText('Mes données');
+  await expect(h2s).toHaveCount(4, { timeout: 10_000 });
+  await expect(h2s.nth(0)).toHaveText('Préférences de notification');
+  await expect(h2s.nth(1)).toHaveText('Cookies');
+  await expect(h2s.nth(2)).toHaveText('Sécurité');
+  await expect(h2s.nth(3)).toHaveText('Mes données');
 
-  // Section nav landmark with its 5 links, in order
+  // Section nav landmark with its 4 links, in order
   const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
   await expect(nav).toBeVisible();
   const links = nav.getByRole('link');
-  await expect(links).toHaveCount(5);
-  await expect(links.nth(0)).toHaveText('Apparence');
-  await expect(links.nth(0)).toHaveAttribute('href', '#apparence');
-  await expect(links.nth(1)).toHaveText('Préférences de notification');
-  await expect(links.nth(1)).toHaveAttribute('href', '#notifications');
-  await expect(links.nth(2)).toHaveText('Cookies');
-  await expect(links.nth(2)).toHaveAttribute('href', '#cookies');
-  await expect(links.nth(3)).toHaveText('Sécurité');
-  await expect(links.nth(3)).toHaveAttribute('href', '#securite');
-  await expect(links.nth(4)).toHaveText('Mes données');
-  await expect(links.nth(4)).toHaveAttribute('href', '#mes-donnees');
-});
-
-// ── F19-E2E-2: Apparence 3-way control syncs with the header toggle ────────────
-
-test('F19-E2E-2: Apparence control syncs theme with the header toggle (Clair/Sombre/Système)', async ({
-  page,
-}) => {
-  const email = freshEmail('f19-theme');
-  await signUpVerifyAndLogin(page, email, 'F19 Theme');
-
-  await page.goto('/parametres');
-
-  // Apparence section: fieldset "Thème" with 3 buttons
-  const apparenceSection = page.locator('#apparence');
-  const themeGroup = apparenceSection.getByRole('group', { name: 'Thème' });
-  await expect(themeGroup).toBeVisible({ timeout: 10_000 });
-  await expect(themeGroup.getByRole('button', { name: /clair/i })).toBeVisible();
-  await expect(themeGroup.getByRole('button', { name: /sombre/i })).toBeVisible();
-  await expect(themeGroup.getByRole('button', { name: /système/i })).toBeVisible();
-
-  // Click "Sombre" in the Apparence section
-  await themeGroup.getByRole('button', { name: /sombre/i }).click();
-
-  // document.documentElement[data-theme] flips to "dark", no full reload
-  await expect(async () => {
-    const dataTheme = await page.evaluate(() => document.documentElement.dataset.theme);
-    expect(dataTheme).toBe('dark');
-  }).toPass({ timeout: 5_000 });
-
-  // Apparence "Sombre" button reflects aria-pressed=true
-  await expect(themeGroup.getByRole('button', { name: /sombre/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-
-  // The header toggle (in the avatar dropdown menu) reflects the SAME shared context
-  await page.getByRole('button', { name: new RegExp(`menu de f19 theme`, 'i') }).click();
-  const headerMenu = page.getByRole('menu', { name: 'Menu utilisateur' });
-  await expect(headerMenu).toBeVisible({ timeout: 5_000 });
-  const headerThemeGroup = headerMenu.getByRole('group', { name: 'Thème' });
-  await expect(headerThemeGroup.getByRole('button', { name: /sombre/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-
-  // Click "Clair" from the HEADER toggle — the Apparence section must reflect it too
-  await headerThemeGroup.getByRole('button', { name: /clair/i }).click();
-  await expect(async () => {
-    const dataTheme = await page.evaluate(() => document.documentElement.dataset.theme);
-    expect(dataTheme).toBe('light');
-  }).toPass({ timeout: 5_000 });
-  await expect(themeGroup.getByRole('button', { name: /clair/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-
-  // Click "Système" in the Apparence section
-  await themeGroup.getByRole('button', { name: /système/i }).click();
-  await expect(async () => {
-    const dataTheme = await page.evaluate(() => document.documentElement.dataset.theme);
-    expect(dataTheme).toBe('system');
-  }).toPass({ timeout: 5_000 });
-  await expect(themeGroup.getByRole('button', { name: /système/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await expect(links).toHaveCount(4);
+  await expect(links.nth(0)).toHaveText('Préférences de notification');
+  await expect(links.nth(0)).toHaveAttribute('href', '#notifications');
+  await expect(links.nth(1)).toHaveText('Cookies');
+  await expect(links.nth(1)).toHaveAttribute('href', '#cookies');
+  await expect(links.nth(2)).toHaveText('Sécurité');
+  await expect(links.nth(2)).toHaveAttribute('href', '#securite');
+  await expect(links.nth(3)).toHaveText('Mes données');
+  await expect(links.nth(3)).toHaveAttribute('href', '#mes-donnees');
 });
 
 // ── F19-E2E-3: Cookies section summary + "Gérer les cookies" reopens the banner ─
@@ -279,10 +209,10 @@ for (const vp of VIEWPORTS) {
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 2);
 
-    // Nav is visible with all 5 links reachable (wraps at mobile widths, no overflow)
+    // Nav is visible with all 4 links reachable (wraps at mobile widths, no overflow)
     const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole('link')).toHaveCount(5);
+    await expect(nav.getByRole('link')).toHaveCount(4);
 
     // Tap targets: nav links stay >= 40px tall (44px target, small tolerance) at mobile
     if (vp.width === 375) {
@@ -291,7 +221,7 @@ for (const vp of VIEWPORTS) {
     }
 
     // Sections are all reachable (present in the DOM)
-    for (const id of ['apparence', 'notifications', 'cookies', 'securite', 'mes-donnees']) {
+    for (const id of ['notifications', 'cookies', 'securite', 'mes-donnees']) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
 

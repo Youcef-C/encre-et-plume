@@ -335,10 +335,11 @@ test('F7-UI-9: Œuvres and Illustrations group headings are NOT rendered (empty 
 });
 
 // ---------------------------------------------------------------------------
-// UI: F-4/F-5/F-6 regression — header nav, badges, theme toggle still intact
+// UI: F-4/F-5 regression — header nav and dropdown still intact
+// (theme toggle removed: picker disabled, light mode forced)
 // ---------------------------------------------------------------------------
 
-test('F7-REGR-1: header nav links and theme toggle still present after search wiring', async ({
+test('F7-REGR-1: header nav links and dropdown still present after search wiring', async ({
   page,
 }) => {
   await page.goto('/connexion');
@@ -351,10 +352,10 @@ test('F7-REGR-1: header nav links and theme toggle still present after search wi
   await expect(page.getByRole('navigation', { name: /navigation principale/i })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Accueil' })).toBeVisible();
 
-  // Avatar button and dropdown (F-4) — open it and check theme toggle still there (F-6)
+  // Avatar button and dropdown (F-4) — open it and check the menu renders
   const avatarBtn = page.getByRole('button', { name: /menu de/i });
   await expect(avatarBtn).toBeVisible();
   await avatarBtn.click();
-  await expect(page.getByRole('button', { name: /clair/i })).toBeVisible({ timeout: 3_000 });
-  await expect(page.getByRole('button', { name: /sombre/i })).toBeVisible();
+  await expect(page.getByRole('menu')).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByRole('menuitem', { name: /déconnexion/i })).toBeVisible();
 });

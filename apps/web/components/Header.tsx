@@ -11,7 +11,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
 import { useUnreadCount, useUnreadCounts } from '../lib/unread';
-import { useTheme } from '../lib/theme';
 import CountBadge from './CountBadge';
 import SearchOverlay from './SearchOverlay';
 // ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
@@ -98,7 +97,6 @@ const iconStyle: React.CSSProperties = { width: 18, textAlign: 'center' };
 export default function Header() {
   const { account, loading, logout } = useSession();
   const { effectiveRole, setSimulatedRole } = useEffectiveRole();
-  const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const unreadCount = useUnreadCount();
   const { counts } = useUnreadCounts();
@@ -680,79 +678,6 @@ export default function Header() {
                 Paramètres
               </Link>
 
-              {/* PARAMÈTRES · THÈME — grouped pill per prototype */}
-              <div
-                style={{
-                  padding: '9px 13px',
-                  borderBottom: '2px solid var(--border)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: '0.06em',
-                    color: 'var(--ink2)',
-                    marginBottom: 7,
-                  }}
-                >
-                  PARAMÈTRES · THÈME
-                </div>
-                <fieldset
-                  role="group"
-                  aria-label="Thème"
-                  style={{
-                    border: '2px solid var(--ink)',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                    padding: 0,
-                    margin: 0,
-                    display: 'flex',
-                  }}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={theme === 'light'}
-                    onClick={() => setTheme('light')}
-                    className="ep-toggle-btn"
-                    style={{
-                      flex: 1,
-                      textAlign: 'center',
-                      padding: '5px',
-                      border: 'none',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      background: theme === 'light' ? 'var(--accent)' : 'var(--card)',
-                      color: theme === 'light' ? '#fff' : 'var(--ink)',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    &#9728; Clair
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={theme === 'dark'}
-                    onClick={() => setTheme('dark')}
-                    className="ep-toggle-btn"
-                    style={{
-                      flex: 1,
-                      textAlign: 'center',
-                      padding: '5px',
-                      border: 'none',
-                      borderLeft: '1px solid var(--ink)',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      background: theme === 'dark' ? 'var(--accent)' : 'var(--card)',
-                      color: theme === 'dark' ? '#fff' : 'var(--ink)',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    &#9790; Sombre
-                  </button>
-                </fieldset>
-              </div>
 
               {/* Déconnexion — prototype text; hover via ep-menu-item CSS class */}
               <button

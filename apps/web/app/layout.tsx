@@ -1,8 +1,5 @@
 import type { Metadata } from 'next';
 import { Anton, Zen_Kaku_Gothic_New } from 'next/font/google';
-import { cookies } from 'next/headers';
-import type { ThemePreference } from '@encre-et-plume/shared';
-import { THEME_PREFERENCES } from '@encre-et-plume/shared';
 import './globals.css';
 import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider, CookieConsentProvider } from './providers';
 import Header from '../components/Header';
@@ -30,15 +27,10 @@ export const metadata: Metadata = {
   description: 'Plateforme française de collaboration manga',
 };
 
-// Async server component: read the ep_theme cookie to paint the correct theme
-// on first SSR without any inline blocking script. The CSS [data-theme] rules do the rest.
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get('ep_theme')?.value as ThemePreference | undefined;
-  const theme: ThemePreference = raw && THEME_PREFERENCES.includes(raw) ? raw : 'system';
-
+// ponytail: theme picker disabled — light forced (was: SSR ep_theme cookie read; see git history)
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" data-theme={theme} className={`${anton.variable} ${zenKaku.variable}`}>
+    <html lang="fr" data-theme="light" className={`${anton.variable} ${zenKaku.variable}`}>
       <body>
         <SessionProvider>
           <ThemeProvider>

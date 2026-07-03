@@ -1,5 +1,9 @@
 // F-13: Mentions légales page — server component.
 import type { Metadata } from 'next';
+
+// Fetches live API content — must not be statically prerendered at build time
+// (the root layout no longer forces dynamic rendering since the theme cookie read was removed).
+export const dynamic = 'force-dynamic';
 import { getLegalDocument } from '../../lib/api';
 import LegalPage from '../../components/LegalPage';
 

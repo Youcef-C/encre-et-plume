@@ -6,7 +6,6 @@
 import { useEffect, useState } from 'react';
 
 const SECTIONS: { id: string; label: string }[] = [
-  { id: 'apparence', label: 'Apparence' },
   { id: 'notifications', label: 'Préférences de notification' },
   { id: 'cookies', label: 'Cookies' },
   { id: 'securite', label: 'Sécurité' },
