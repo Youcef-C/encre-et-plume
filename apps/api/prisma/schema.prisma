@@ -3,6 +3,7 @@
 // F-14 adds DataExport + Account.deletedAt + NotifType.system.
 // F-15 adds NotificationPreference. F-17 adds Account.onboardedAt + Profile.creatorRoles.
 // F-18 adds TwoFactorCredential + EmailChangeToken.
+// DR-1 adds Work, Chapter, Announcement + Profile.trendingScore (home showroom).
 
 generator client {
   provider = "prisma-client-js"
@@ -30,6 +31,20 @@ enum NotifType {
   like
   comment
   system // F-14: system notifications (data export ready, etc.)
+}
+
+// ── DR-1 Work/Chapter/Announcement enums ───────────────────────────────────────
+
+enum ChapterStatus {
+  draft
+  scheduled
+  published
+}
+
+enum AnnouncementType {
+  concours
+  a_chaud
+  evenement
 }
 
 // ── F-14 DataExport enum ──────────────────────────────────────────────────────
@@ -159,7 +174,10 @@ model Profile {
   seekingProjectLength String?
   tags                 String[]        @default([])
   portfolio            PortfolioItem[]
+  trendingScore        Int             @default(0) // DR-1: denormalized "of the moment" rank; engagement pipeline recomputes later
   createdAt            DateTime        @default(now())
+
+  @@index([trendingScore])
 }
 
 model PortfolioItem {
@@ -279,4 +297,53 @@ model EmailChangeToken {
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
+}
+
+// ── DR-1: home showroom (Work/Chapter/Announcement) ───────────────────────────
+// "ScheduledRelease" and "Creator" from the story's entity list are NOT separate tables:
+// a scheduled release IS a Chapter with status=scheduled + publishAt>now; a creator IS an
+// existing Account+Profile (role via Profile.creatorRoles, see trendingScore above).
+
+model Work {
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  title              String
+  coverImage         String?                          // media URL; null → CSS halftone placeholder on FE
+  genre              String                            // "Shōnen" | "Seinen" | "Fantastique" | "Josei" | …
+  meta               String                            // hero/ranking meta line, e.g. "Léa B. × Hugo D. · 20 ch."
+  likeCount          Int       @default(0)              // ponytail: denormalized total; DR-9 owns the increment
+  weeklyLikeDelta    Int       @default(0)              // ponytail: rolling-7d delta; DR-9/DR-4 recompute from events
+  priorWeekLikeDelta Int       @default(0)              // ponytail: prior-period delta for growth %; same note
+  featuredRank       Int?                               // null = not in "À LA UNE"; else carousel order asc
+  createdAt          DateTime  @default(now())
+  chapters           Chapter[]
+
+  @@index([featuredRank])
+  @@index([weeklyLikeDelta])
+  @@index([likeCount])
+}
+
+model Chapter {
+  id        String        @id @default(cuid())
+  workId    String
+  work      Work          @relation(fields: [workId], references: [id])
+  number    Int
+  title     String?
+  status    ChapterStatus @default(published)
+  publishAt DateTime      @default(now())              // future + status=scheduled → "Sorties programmées"
+  createdAt DateTime      @default(now())
+
+  @@index([status, publishAt])
+  @@index([workId, number])
+}
+
+model Announcement {
+  id        String           @id @default(cuid())
+  type      AnnouncementType
+  label     String                                     // French rich text, verbatim from prototype ribbon
+  href      String                                      // link target (future PUB-7/PUB-8 route)
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  @@index([order])
 }

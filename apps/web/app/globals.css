@@ -498,3 +498,31 @@ h1, h2, h3, h4, h5, h6 {
     padding: 28px 20px !important;
   }
 }
+
+/* ── DR-1 Accueil — responsive reflow ────────────────────────────────────────
+   Desktop: main column (flex:1) + 300px sticky sidebar, side by side.
+   ≤900px: sidebar stacks below main, no longer sticky; grids drop to 2 cols.
+   ≤560px: grids drop to 1 col. */
+@media (max-width: 900px) {
+  .ep-accueil-columns {
+    flex-direction: column;
+  }
+  .ep-accueil-sidebar {
+    width: 100% !important;
+    position: static !important;
+  }
+  .ep-trending-grid,
+  .ep-scheduled-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .ep-top-creators {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .ep-trending-grid,
+  .ep-scheduled-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

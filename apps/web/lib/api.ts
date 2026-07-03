@@ -269,6 +269,34 @@ export const twoFactorDisable = (body: TwoFactorDisableRequest): Promise<TwoFact
 export const twoFactorVerify = (body: TwoFactorVerifyRequest): Promise<AuthResponse> =>
   request<AuthResponse>('/auth/2fa/verify', { method: 'POST', body: JSON.stringify(body) });
 
+// ─── Home showroom (DR-1) ────────────────────────────────────────────────────
+import type {
+  FeaturedWork,
+  TrendingWork,
+  TopCreatorsResponse,
+  ScheduledRelease,
+  RankingRow,
+  Announcement,
+} from '@encre-et-plume/shared';
+
+export const getFeatured = (): Promise<FeaturedWork[]> =>
+  request<FeaturedWork[]>('/home/featured');
+
+export const getTrending = (): Promise<TrendingWork[]> =>
+  request<TrendingWork[]>('/home/trending-this-week');
+
+export const getTopCreators = (): Promise<TopCreatorsResponse> =>
+  request<TopCreatorsResponse>('/home/top-creators');
+
+export const getScheduledReleases = (): Promise<ScheduledRelease[]> =>
+  request<ScheduledRelease[]>('/home/scheduled-releases');
+
+export const getRankingAllTime = (): Promise<RankingRow[]> =>
+  request<RankingRow[]>('/home/ranking/all-time');
+
+export const getAnnouncements = (): Promise<Announcement[]> =>
+  request<Announcement[]>('/home/announcements');
+
 /** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
 export function buildSrcSet(variants: MediaVariants): string {
   const parts: string[] = [];
