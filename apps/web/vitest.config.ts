@@ -9,6 +9,7 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
     exclude: [...configDefaults.exclude, 'e2e/**'],
+    maxWorkers: '25%', // ponytail: cap fork pool so parallel/agent runs don't flood the machine
   },
   resolve: {
     alias: {

@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').copyFileSync('src/genres.json','dist/genres.json')\"",
     "lint": "echo \"(no lint configured for shared yet)\"",
     "typecheck": "tsc --noEmit",
     "test": "echo \"(no tests in shared yet)\""

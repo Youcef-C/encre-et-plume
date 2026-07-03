@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AccountSummary, ProfileResponse } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
@@ -247,6 +247,92 @@ describe('ProfilePageClient — owner view', () => {
     await waitFor(() => expect(vi.mocked(updateMyProfile)).toHaveBeenCalled());
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /enregistrer/i })).not.toBeInTheDocument()
+    );
+  });
+});
+
+describe('ProfilePageClient — seeking "Genres" chip picker (F-20)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(mockProfile);
+    vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
+  });
+
+  async function openEdit(user: ReturnType<typeof userEvent.setup>) {
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+  }
+
+  // Scoped to the seeking "Genres" panel only — the tag cloud ("Genres &
+  // affinités") uses the same mock tags ('Seinen', 'Thriller') and (round 1b)
+  // now renders identical "Retirer <tag>" chips, so an unscoped query would
+  // match both sections.
+  function seekingGenresPanel() {
+    return screen.getByText('Genres', { exact: true }).closest('div') as HTMLElement;
+  }
+
+  it('label reads "Genres" without "séparés par virgule"', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    expect(screen.getByText('Genres')).toBeInTheDocument();
+    expect(screen.queryByText(/séparés par virgule/i)).not.toBeInTheDocument();
+  });
+
+  it('renders existing seeking genres as removable chips', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const panel = within(seekingGenresPanel());
+    expect(panel.getByRole('button', { name: /retirer seinen/i })).toBeInTheDocument();
+    expect(panel.getByRole('button', { name: /retirer thriller/i })).toBeInTheDocument();
+  });
+
+  it('adding a vocabulary genre via the suggestion input renders a new removable chip', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const input = screen.getByRole('combobox', { name: /ajouter un genre/i });
+    await user.type(input, 'Dark Fantasy');
+    await user.keyboard('{Enter}');
+    expect(
+      await within(seekingGenresPanel()).findByRole('button', { name: /retirer dark fantasy/i })
+    ).toBeInTheDocument();
+  });
+
+  it('clicking "Retirer" removes the chip', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const panel = within(seekingGenresPanel());
+    await user.click(panel.getByRole('button', { name: /retirer seinen/i }));
+    expect(panel.queryByRole('button', { name: /retirer seinen/i })).not.toBeInTheDocument();
+    expect(panel.getByRole('button', { name: /retirer thriller/i })).toBeInTheDocument();
+  });
+
+  it('adding a genre that already exists (case-insensitive) is a no-op', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const input = screen.getByRole('combobox', { name: /ajouter un genre/i });
+    await user.type(input, 'seinen');
+    await user.keyboard('{Enter}');
+    expect(
+      within(seekingGenresPanel()).getAllByRole('button', { name: /retirer seinen/i })
+    ).toHaveLength(1);
+  });
+
+  it('persists the updated seeking.genres on save', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const input = screen.getByRole('combobox', { name: /ajouter un genre/i });
+    await user.type(input, 'Dark Fantasy');
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await waitFor(() =>
+      expect(vi.mocked(updateMyProfile)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          seeking: expect.objectContaining({
+            genres: expect.arrayContaining(['Seinen', 'Thriller', 'Dark Fantasy']),
+          }),
+        })
+      )
     );
   });
 });

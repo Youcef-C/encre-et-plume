@@ -52,6 +52,7 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-17](00-foundation/F-17-onboarding-flow.md) — Onboarding flow (first run) *(inferred)*
 - [F-18](00-foundation/F-18-account-security.md) — Account security (credentials, sessions, 2FA) *(inferred)*
 - [F-19](00-foundation/F-19-application-settings.md) — Application settings "Paramètres" *(inferred)*
+- [F-20](00-foundation/F-20-genre-vocabulary-tag-picker.md) — Genre vocabulary & tag picker *(inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.

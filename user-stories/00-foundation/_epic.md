@@ -30,6 +30,7 @@
 - F-17 — Onboarding flow (first run)
 - F-18 — Account security (credentials, sessions, 2FA — 2FA strictly opt-in)
 - F-19 — Application settings "Paramètres" (structured settings page hosting Apparence / Notifications / Cookies / Sécurité incl. optional 2FA / Mes données)
+- F-20 — Genre vocabulary & tag picker (shared genres.json base; fixes free-text tag inputs)
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.

@@ -352,3 +352,318 @@ test('F3-UI-8: owner edit mode updates specialty → roleLine reflected on save'
   // roleLine updates: 'mangaka indépendant · Lyon, FR'
   await expect(page.getByText('mangaka indépendant · Lyon, FR')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// F-20: Genre vocabulary & tag picker
+//   Bug fixed: the old comma-separated "Recherche active" input round-tripped
+//   through join/split on every keystroke, deleting spaces/commas as they were
+//   typed — multi-word genres could not be entered. Both genre inputs are now
+//   vocabulary-restricted pickers with no join/split anywhere.
+// ---------------------------------------------------------------------------
+
+async function loginUi(page: import('@playwright/test').Page, email: string) {
+  await page.goto('/connexion');
+  await page.getByLabel(/e-mail/i).fill(email);
+  await page.getByLabel(/mot de passe/i).fill(PASSWORD);
+  await page.getByRole('button', { name: /se connecter/i }).click();
+  await expect(page).toHaveURL('/', { timeout: 10_000 });
+}
+
+// Round 1b: the "Recherche active" seeking picker and the "Genres & affinités"
+// tag cloud now render byte-identical GenreChip markup (both "Retirer <genre>"
+// buttons) — an unscoped getByRole lookup is ambiguous once the same genre
+// exists in both places. Scope to the seeking picker via its unique
+// "Ajouter un genre" input's row (GenreSuggestInput wraps the <input> in its
+// own container div, so the chip-holding flex row is two levels up).
+function seekingGenresPanel(page: import('@playwright/test').Page) {
+  return page.getByRole('combobox', { name: 'Ajouter un genre' }).locator('../..');
+}
+
+test('F20-API-1: PATCH /profiles/me canonicalizes multi-word + diacritics tags, drops unknown genres', async ({
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  const res = await request.patch(`${API}/profiles/me`, {
+    data: { tags: ['dark fantasy', 'shonen', 'PasUnGenreValideXYZ'] },
+  });
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.tags).toContain('Dark Fantasy'); // multi-word, space preserved
+  expect(body.tags).toContain('Shōnen'); // diacritics-insensitive canonicalization
+  expect(body.tags).not.toContain('PasUnGenreValideXYZ'); // unknown silently dropped
+});
+
+test('F20-API-2: PATCH /profiles/me canonicalizes seeking.genres, drops unknown genres', async ({
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  const res = await request.patch(`${API}/profiles/me`, {
+    data: {
+      seeking: {
+        active: true,
+        targetRole: 'scénariste',
+        genres: ['dark fantasy', 'thriller', 'zzz-pas-un-genre'],
+        projectLength: 'court',
+      },
+    },
+  });
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.seeking.genres).toEqual(['Dark Fantasy', 'Thriller']);
+});
+
+test('F20-UI-1: tag cloud "+ Ajouter" accepts a multi-word genre with spaces preserved while typing', async ({
+  page,
+}) => {
+  // Baseline: no 'Dark Fantasy' tag yet.
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '＋ Ajouter' }).click();
+  const input = page.getByRole('combobox', { name: 'Nouveau genre' });
+  await expect(input).toBeVisible();
+  // Type character-by-character (this is exactly how the old bug manifested:
+  // every keystroke re-split on commas/trimmed, deleting the space as it was typed).
+  await input.pressSequentially('Dark Fantasy');
+  await expect(input).toHaveValue('Dark Fantasy'); // space NOT stripped mid-typing
+  await input.press('Enter');
+
+  // Chip created with the canonical multi-word label; input closes back to "+ Ajouter".
+  await expect(page.getByRole('button', { name: /Dark Fantasy/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '＋ Ajouter' })).toBeVisible();
+});
+
+test('F20-UI-2: tag cloud rejects a non-vocabulary string — no chip is created', async ({
+  page,
+}) => {
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '＋ Ajouter' }).click();
+  const input = page.getByRole('combobox', { name: 'Nouveau genre' });
+  await input.pressSequentially('Pas Un Genre Valide');
+  await input.press('Enter');
+
+  // Rejected silently: no new chip, input stays open (does not fall back to "+ Ajouter").
+  await expect(page.getByRole('button', { name: /Pas Un Genre Valide/ })).not.toBeVisible();
+  await expect(input).toBeVisible();
+});
+
+test('F20-UI-3: "Recherche active" genre chip picker — add, remove, and persist across reload', async ({
+  page,
+  request,
+}) => {
+  // Deterministic baseline via API: seeking active with a single 'Seinen' genre.
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, {
+    data: {
+      seeking: {
+        active: true,
+        targetRole: 'scénariste',
+        genres: ['Seinen'],
+        projectLength: 'court',
+      },
+    },
+  });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+
+  const seekingPanel = seekingGenresPanel(page);
+
+  // Existing genre renders as a removable chip.
+  await expect(seekingPanel.getByRole('button', { name: 'Retirer Seinen' })).toBeVisible();
+
+  // Add a multi-word genre via the vocabulary-backed picker (label is now "Genres", no
+  // "séparés par virgule").
+  await expect(page.getByText('Genres', { exact: true })).toBeVisible();
+  await expect(page.getByText(/séparés par virgule/)).toHaveCount(0);
+  const addGenreInput = page.getByRole('combobox', { name: 'Ajouter un genre' });
+  await addGenreInput.pressSequentially('Dark Fantasy');
+  await expect(addGenreInput).toHaveValue('Dark Fantasy'); // space preserved (the bug, structurally)
+  await addGenreInput.press('Enter');
+  await expect(seekingPanel.getByRole('button', { name: 'Retirer Dark Fantasy' })).toBeVisible();
+
+  // Non-vocabulary text is rejected here too (same shared picker).
+  await addGenreInput.pressSequentially('Genre Bidon Inexistant');
+  await addGenreInput.press('Enter');
+  await expect(seekingPanel.getByRole('button', { name: 'Retirer Genre Bidon Inexistant' })).not.toBeVisible();
+
+  // Remove the original 'Seinen' chip.
+  await seekingPanel.getByRole('button', { name: 'Retirer Seinen' }).click();
+  await expect(seekingPanel.getByRole('button', { name: 'Retirer Seinen' })).not.toBeVisible();
+
+  // Save, then reload the page fresh — the PATCH round-trip persisted only
+  // the canonical 'Dark Fantasy' genre.
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
+
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+  const seekingPanelAfterReload = seekingGenresPanel(page);
+  await expect(seekingPanelAfterReload.getByRole('button', { name: 'Retirer Dark Fantasy' })).toBeVisible();
+  await expect(seekingPanelAfterReload.getByRole('button', { name: 'Retirer Seinen' })).not.toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// F-20 Round 1b: user UX refinements
+//   (1) blur commits a matching typed genre (same path as Enter)
+//   (2) chips are always accent-red, removed via a small ✕ (GenreChip) — no
+//       more toggle/deselect
+//   (3) native <datalist> replaced by a custom on-brand dropdown
+//       (listbox/option roles, keyboard nav, outside-click close)
+// ---------------------------------------------------------------------------
+
+test('F20b-UI-1: tag cloud — blur commits a matching typed genre (no Enter needed)', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { tags: ['Seinen'] } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '＋ Ajouter' }).click();
+  const input = page.getByRole('combobox', { name: 'Nouveau genre' });
+  await input.pressSequentially('Josei');
+  // Blur (unfocus) instead of Enter — commits exactly like Enter would.
+  await input.blur();
+
+  await expect(page.getByRole('button', { name: 'Retirer Josei' })).toBeVisible();
+  // Row collapses back to "+ Ajouter" after blur, same as after a successful Enter.
+  await expect(page.getByRole('button', { name: '＋ Ajouter' })).toBeVisible();
+});
+
+test('F20b-UI-2: tag cloud — blur on a non-vocabulary string clears the input, no chip created', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { tags: ['Seinen'] } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '＋ Ajouter' }).click();
+  const input = page.getByRole('combobox', { name: 'Nouveau genre' });
+  await input.pressSequentially('Genre Inexistant Blur');
+  await input.blur();
+
+  await expect(page.getByRole('button', { name: /Genre Inexistant Blur/ })).not.toBeVisible();
+  // Input closed (cleared + cancelled) back to "+ Ajouter", per round-1b blur behavior.
+  await expect(page.getByRole('button', { name: '＋ Ajouter' })).toBeVisible();
+});
+
+test('F20b-UI-3: "Recherche active" picker — blur commits a matching genre, identical to the tag cloud', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, {
+    data: {
+      seeking: { active: true, targetRole: 'scénariste', genres: ['Seinen'], projectLength: 'court' },
+    },
+  });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+
+  const addGenreInput = page.getByRole('combobox', { name: 'Ajouter un genre' });
+  await addGenreInput.pressSequentially('Horreur');
+  await addGenreInput.blur();
+
+  await expect(seekingGenresPanel(page).getByRole('button', { name: 'Retirer Horreur' })).toBeVisible();
+});
+
+test('F20b-UI-4: custom on-brand dropdown — listbox/option roles, ArrowDown+Enter selects', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { tags: ['Seinen'] } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '＋ Ajouter' }).click();
+  const input = page.getByRole('combobox', { name: 'Nouveau genre' });
+  // Lowercase substring, matches the shared design-system dropdown pattern
+  // (role=listbox/option), not the browser-native datalist look.
+  await input.pressSequentially('fantasy');
+
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  const options = listbox.getByRole('option');
+  await expect(options).toHaveCount(4); // Fantasy, Dark Fantasy, Fantasy urbaine, Heroic Fantasy
+  await expect(options.nth(0)).toHaveText('Fantasy');
+  await expect(options.nth(1)).toHaveText('Dark Fantasy');
+
+  await input.press('ArrowDown'); // highlight moves from Fantasy (0) → Dark Fantasy (1)
+  await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+  // Visual evidence of the on-brand dropdown (ink border, card bg, hard shadow, accent highlight).
+  await page.screenshot({ path: 'e2e/screenshots/f20b-dropdown-open.png' });
+  await input.press('Enter');
+
+  await expect(page.getByRole('button', { name: 'Retirer Dark Fantasy' })).toBeVisible();
+  await expect(page.getByRole('listbox')).toHaveCount(0); // dropdown closed after selection
+});
+
+test('F20b-UI-5: ✕ on a tag-cloud chip removes it and the removal persists after reload', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { tags: ['Seinen', 'Thriller'] } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+  // Chips are always filled accent-red now — no toggle/aria-pressed, just a ✕ remove button.
+  await expect(page.getByRole('button', { name: 'Retirer Seinen' })).toBeVisible();
+  await page.getByRole('button', { name: 'Retirer Seinen' }).click();
+  await expect(page.getByRole('button', { name: 'Retirer Seinen' })).not.toBeVisible();
+
+  // Tag-cloud removal persists instantly via PATCH (no "Enregistrer" needed) — confirm via reload.
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Retirer Seinen' })).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retirer Thriller' })).toBeVisible();
+});
+
+// ── F-20 RESPONSIVE — genre chip picker at mobile / tablet / desktop ─────────
+
+for (const [label, width, height] of [
+  ['375px (mobile)', 375, 812],
+  ['768px (tablet)', 768, 1024],
+  ['1280px (desktop)', 1280, 800],
+] as [string, number, number][]) {
+  test(`F20 responsive: owner edit genre picker at ${label} — no horizontal overflow`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+    await page.goto('/e2e-utilisateur');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+    await expect(page.getByText('Genres', { exact: true })).toBeVisible();
+
+    await page.screenshot({ path: `e2e/screenshots/f20-genre-picker-${width}.png` });
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    );
+    expect(overflow).toBe(false);
+  });
+}

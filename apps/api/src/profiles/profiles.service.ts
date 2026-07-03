@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole } from '@encre-et-plume/shared';
+import { normalizeGenres } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -40,12 +41,12 @@ export class ProfilesService {
     if (dto.bio !== undefined) data['bio'] = dto.bio;
     if (dto.city !== undefined) data['city'] = dto.city;
     if (dto.specialty !== undefined) data['specialty'] = dto.specialty;
-    if (dto.tags !== undefined) data['tags'] = normalizeTags(dto.tags);
+    if (dto.tags !== undefined) data['tags'] = normalizeGenres(dto.tags);
     if (dto.seeking !== undefined) {
       const s = dto.seeking;
       if (s.active !== undefined) data['seekingActive'] = s.active;
       if (s.targetRole !== undefined) data['seekingTargetRole'] = s.targetRole;
-      if (s.genres !== undefined) data['seekingGenres'] = s.genres;
+      if (s.genres !== undefined) data['seekingGenres'] = normalizeGenres(s.genres);
       if (s.projectLength !== undefined) data['seekingProjectLength'] = s.projectLength;
     }
 
@@ -112,16 +113,4 @@ export class ProfilesService {
       counters: { followers: 0, likes: 0, works: 0, supporters: 0 },
     };
   }
-}
-
-function normalizeTags(tags: string[]): string[] {
-  const seen = new Set<string>();
-  return tags.filter((t) => {
-    const trimmed = t.trim();
-    if (!trimmed) return false;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).map((t) => t.trim());
 }

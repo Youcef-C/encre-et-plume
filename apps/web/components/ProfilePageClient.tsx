@@ -10,6 +10,8 @@ import ProfileTabs from './ProfileTabs';
 import ProfileActions from './ProfileActions';
 import { XIcon } from './icons';
 import UploadControl from './UploadControl';
+import GenreSuggestInput from './GenreSuggestInput';
+import GenreChip from './GenreChip';
 
 // F-2 — Public profile page client component.
 // Props receive the resolved slug from the server-component wrapper.
@@ -273,6 +275,23 @@ export default function ProfilePageClient({ slug }: Props) {
   function handleCancel() {
     setIsEditing(false);
     setEditData(null);
+  }
+
+  // F-20 — seeking "Genres" chip picker: case-insensitive dedup add / remove,
+  // no join/split round-trip (structural fix for the comma-separated bug).
+  function addSeekingGenre(fr: string) {
+    setEditData((d) => {
+      if (!d) return d;
+      const already = d.seeking.genres.some((g) => g.toLowerCase() === fr.toLowerCase());
+      if (already) return d;
+      return { ...d, seeking: { ...d.seeking, genres: [...d.seeking.genres, fr] } };
+    });
+  }
+
+  function removeSeekingGenre(genre: string) {
+    setEditData((d) =>
+      d && { ...d, seeking: { ...d.seeking, genres: d.seeking.genres.filter((g) => g !== genre) } }
+    );
   }
 
   async function handleAvatarUploaded(media: MediaResponse) {
@@ -681,29 +700,18 @@ export default function ProfilePageClient({ slug }: Props) {
                     </select>
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label className="ep-label" htmlFor="edit-genres">
-                      Genres (séparés par virgule)
-                    </label>
-                    <input
-                      id="edit-genres"
-                      className="ep-input"
-                      value={editData.seeking.genres.join(', ')}
-                      onChange={(e) =>
-                        setEditData((d) =>
-                          d && {
-                            ...d,
-                            seeking: {
-                              ...d.seeking,
-                              genres: e.target.value
-                                .split(',')
-                                .map((g) => g.trim())
-                                .filter(Boolean),
-                            },
-                          }
-                        )
-                      }
-                      placeholder="Ex. Seinen, Thriller"
-                    />
+                    <label className="ep-label">Genres</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      {editData.seeking.genres.map((g) => (
+                        <GenreChip key={g} label={g} onRemove={() => removeSeekingGenre(g)} />
+                      ))}
+                      <GenreSuggestInput
+                        ariaLabel="Ajouter un genre"
+                        placeholder="Genre…"
+                        onCancel={() => {}}
+                        onAdd={(fr) => addSeekingGenre(fr)}
+                      />
+                    </div>
                   </div>
                   <div style={{ marginBottom: 10 }}>
                     <label className="ep-label" htmlFor="edit-project-length">

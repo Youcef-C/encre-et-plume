@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { resolveGenre, normalizeGenres } from '@encre-et-plume/shared';
 import { ProfilesService } from './profiles.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -42,6 +43,34 @@ const PORTFOLIO_ITEM = {
   order: 0,
   createdAt: new Date('2026-01-01'),
 };
+
+// ─── Genre vocabulary (@encre-et-plume/shared) tests (T-S1) ───────────────────
+
+describe('genre vocabulary (@encre-et-plume/shared)', () => {
+  it('resolveGenre matches a canonical fr label case-insensitively', () => {
+    expect(resolveGenre('seinen')).toBe('Seinen');
+  });
+
+  it('resolveGenre matches diacritics-insensitively (via en field)', () => {
+    expect(resolveGenre('Shonen')).toBe('Shōnen');
+  });
+
+  it('resolveGenre matches a multi-word genre', () => {
+    expect(resolveGenre('Dark Fantasy')).toBe('Dark Fantasy');
+  });
+
+  it('resolveGenre returns null for an unknown genre', () => {
+    expect(resolveGenre('Not A Genre')).toBeNull();
+  });
+
+  it('resolveGenre matches via the en field when fr differs', () => {
+    expect(resolveGenre('Crime')).toBe('Policier');
+  });
+
+  it('normalizeGenres canonicalizes, dedupes, and drops unknowns (order preserved)', () => {
+    expect(normalizeGenres(['seinen', 'SEINEN', 'xyz'])).toEqual(['Seinen']);
+  });
+});
 
 // ─── ProfilesService tests ─────────────────────────────────────────────────────
 
@@ -142,6 +171,15 @@ describe('ProfilesService', () => {
       expect(res.seeking.active).toBe(false);
       expect(res.seeking.text).toBeNull();
     });
+
+    it('returns legacy free-text tags stored before the vocabulary rule verbatim (BE3, no read-path migration)', async () => {
+      const profile = { ...BASE_PROFILE, tags: ['Encre dense'] };
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile });
+
+      const res = await service.getBySlug('yuki-moreau');
+
+      expect(res.tags).toEqual(['Encre dense']);
+    });
   });
 
   // ── updateMine ───────────────────────────────────────────────────────────────
@@ -189,6 +227,43 @@ describe('ProfilesService', () => {
 
       const call = prisma.profile.upsert.mock.calls[0][0];
       expect(call.update.tags).toEqual(['Seinen', 'Thriller']);
+    });
+
+    it('canonicalizes tags to the vocabulary fr label, case-insensitively, and drops unknown entries (BE1, BE2)', async () => {
+      const upserted = { ...BASE_PROFILE, tags: ['Seinen'] };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', {
+        tags: ['seinen', 'SEINEN', 'pas-un-genre'],
+      } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.tags).toEqual(['Seinen']);
+    });
+
+    it('canonicalizes tags diacritics-insensitively (BE1)', async () => {
+      const upserted = { ...BASE_PROFILE, tags: ['Shōnen'] };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', { tags: ['shonen'] } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.tags).toEqual(['Shōnen']);
+    });
+
+    it('canonicalizes seeking.genres to the vocabulary, dropping unknown entries (BE1, multi-word)', async () => {
+      const upserted = { ...BASE_PROFILE, seekingGenres: ['Dark Fantasy', 'Thriller'] };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', {
+        seeking: { genres: ['dark fantasy', 'thriller', 'zzz'] },
+      } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.seekingGenres).toEqual(['Dark Fantasy', 'Thriller']);
     });
 
     it('persists seeking fields and recomposes seeking object', async () => {
