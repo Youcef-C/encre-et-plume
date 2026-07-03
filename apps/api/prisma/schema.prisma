@@ -5,6 +5,7 @@
 // F-18 adds TwoFactorCredential + EmailChangeToken.
 // DR-1 adds Work, Chapter, Announcement + Profile.trendingScore (home showroom).
 // DR-3 extends Work/Chapter + adds WorkCreator, Planche, FundingGoal, Review (work page "Œuvre").
+// DR-4 extends Chapter (premium/prose) + Planche (chapterId) + adds Favorite, ReadingProgress (reader).
 
 generator client {
   provider = "prisma-client-js"
@@ -120,6 +121,8 @@ model Account {
   twoFactor                TwoFactorCredential?     // F-18: TOTP credential (optional; 1-to-1)
   emailChangeTokens        EmailChangeToken[]       // F-18: pending email-change requests
   workCredits              WorkCreator[]            // DR-3: works this account is credited on
+  favorites                Favorite[]               // DR-4: favorited works (reads only; DR-9 owns the toggle write)
+  readingProgress          ReadingProgress[]        // DR-4: per-chapter reading position (feeds DR-8)
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -353,6 +356,10 @@ model Work {
   fundingGoals   FundingGoal[]
   reviews        Review[]
 
+  // ── DR-4: reader "Lecteur" ────────────────────────────────────────────────
+  favoritedBy      Favorite[]        // DR-4 reads this list; DR-9 owns the toggle write + favoriteCount increment
+  readingProgress  ReadingProgress[]
+
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
   @@index([likeCount])
@@ -371,6 +378,12 @@ model Chapter {
   createdAt    DateTime      @default(now())
   plancheCount Int           @default(0)                   // ponytail: denormalized; CS owns real page counts later
   likeCount    Int           @default(0)                   // ponytail: denormalized; DR-9 owns the increment
+
+  // ── DR-4: reader "Lecteur" ────────────────────────────────────────────────
+  premium         Boolean           @default(false)         // locked flag; stands in for MR-1/MR-4 access tier
+  prose           String?                                   // roman chapter body; paragraphs separated by "\n\n"
+  pages           Planche[]                                 // reader pages (chapterId set); DR-3 work-level planches keep chapterId=null
+  readingProgress ReadingProgress[]
 
   @@index([status, publishAt])
   @@index([workId, number])
@@ -393,14 +406,46 @@ model WorkCreator {
 }
 
 model Planche {
-  id      String  @id @default(cuid())
-  workId  String
-  work    Work    @relation(fields: [workId], references: [id])
-  image   String?
-  caption String?
-  order   Int     @default(0)
+  id        String   @id @default(cuid())
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  chapterId String?                                          // DR-4: set = reader page; null = DR-3 work-level grid planche
+  chapter   Chapter? @relation(fields: [chapterId], references: [id])
+  image     String?
+  caption   String?
+  order     Int      @default(0)
 
   @@index([workId, order])
+  @@index([chapterId, order])
+}
+
+// ── DR-4: reader "Lecteur" (favorites switcher + reading progress) ───────────
+
+model Favorite {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, workId])
+  @@index([accountId])
+}
+
+model ReadingProgress {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  chapterId String
+  chapter   Chapter  @relation(fields: [chapterId], references: [id])
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  page      Int
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, chapterId])
+  @@index([accountId, updatedAt])
 }
 
 model FundingGoal {

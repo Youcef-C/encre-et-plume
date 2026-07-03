@@ -331,3 +331,14 @@ export const getWorkChapters = (slug: string, page: number): Promise<WorkChapter
 
 export const getWorkPlanches = (slug: string): Promise<PlancheDto[]> =>
   request<PlancheDto[]>(`/works/${encodeURIComponent(slug)}/planches`);
+
+// ─── Reader "Lecteur" (DR-4) ───────────────────────────────────────────────────
+import type { ChapterPagesResponse, FavoriteWorkDto, ReadingProgressInput } from '@encre-et-plume/shared';
+
+export const getChapterPages = (slug: string, chapterNumber: number): Promise<ChapterPagesResponse> =>
+  request<ChapterPagesResponse>(`/works/${encodeURIComponent(slug)}/chapters/${chapterNumber}/pages`);
+
+export const getMyFavorites = (): Promise<FavoriteWorkDto[]> => request<FavoriteWorkDto[]>('/me/favorites');
+
+export const putReadingProgress = (body: ReadingProgressInput): Promise<void> =>
+  request<void>('/me/reading-progress', { method: 'PUT', body: JSON.stringify(body) });

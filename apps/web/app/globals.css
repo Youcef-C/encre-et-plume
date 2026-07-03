@@ -637,3 +637,51 @@ h1, h2, h3, h4, h5, h6 {
     gap: 14px;
   }
 }
+
+/* ── DR-4 Lecteur — responsive reflow + reduced motion ────────────────────────
+   Desktop (>=1025px): 184px/200px fixed Chapitres/Réactions asides beside the
+   center stage, replica of the prototype LECTEUR layout. <=1024px: columns wrap
+   so asides stack above/below the stage (Reader.tsx also defaults them collapsed
+   to a mini rail under 768px via matchMedia, no horizontal overflow either way).
+   <=480px: topbar's right-hand tool cluster wraps onto its own full-width row. */
+.ep-reader-columns {
+  flex-wrap: wrap;
+}
+@media (max-width: 1024px) {
+  .ep-reader-columns {
+    flex-direction: column;
+    align-items: center !important;
+  }
+}
+@media (max-width: 480px) {
+  .ep-reader-topbar-actions {
+    width: 100%;
+    justify-content: flex-start !important;
+  }
+}
+/* Tap targets >=44px for the round prev/next paging buttons on touch screens. */
+@media (max-width: 768px) {
+  .ep-reader-navbtn button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+.ep-reader-page-enter {
+  animation: ep-reader-fade 0.25s ease;
+}
+@keyframes ep-reader-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-reader-page-enter {
+    animation: none;
+  }
+}

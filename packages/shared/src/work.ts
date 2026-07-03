@@ -67,6 +67,8 @@ export interface WorkChapterDto {
   plancheCount: number;
   publishedAt: string; // ISO of Chapter.publishAt
   likeCount: number;
+  locked: boolean; // DR-4: premium tier lock (no access system yet -> premium === locked for all viewers)
+  lockReason: string | null; // DR-4: 'premium' | null
 }
 
 export interface WorkChaptersResponse {

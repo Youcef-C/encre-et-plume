@@ -1,9 +1,10 @@
 'use strict';
 /**
- * DR-1/DR-2/DR-3 dev/e2e seed — home showroom + catalog "Découvrir" + work page "Œuvre" data
- * (Work/Chapter/Announcement, Contest/EditorPick, WorkCreator/Planche/FundingGoal/Review + two
- * top-creator profiles). Idempotent: upserts on unique keys (slug / email / [workId,accountId]),
- * deletes-then-recreates per-work child rows (chapters/planches/goals/reviews); safe to re-run.
+ * DR-1/DR-2/DR-3/DR-4 dev/e2e seed — home showroom + catalog "Découvrir" + work page "Œuvre" +
+ * reader "Lecteur" data (Work/Chapter/Announcement, Contest/EditorPick, WorkCreator/Planche/
+ * FundingGoal/Review, Favorite + two top-creator profiles). Idempotent: upserts on unique keys
+ * (slug / email / [workId,accountId] / [accountId,workId]), deletes-then-recreates per-work child
+ * rows (chapters/planches/goals/reviews/reader pages); safe to re-run.
  * Usage: node prisma/seed.js — wired as `prisma.seed` in package.json → `pnpm exec prisma db seed`.
  *
  * ponytail: plain JS (mirrors e2e-seed.js/e2e-add-portfolio.js), no ts-node — no new runtime dependency.
@@ -50,29 +51,82 @@ const WORK_CREATORS = [
   { workSlug: 'lames-de-brume', accountSlug: 'dr1-yuki-moreau', role: 'dessinateur', order: 1 },
 ];
 
+// DR-4: roman showcase prose, verbatim from the prototype (lines 802-814), split into paragraphs.
+const ROMAN_CHAPTER_1_PARAGRAPHS = [
+  "La pluie n'avait pas cessé depuis trois jours. Elwen poussa la porte de l'archive, et l'odeur du papier humide la prit à la gorge — une odeur qu'elle connaissait par cœur, et qui pourtant, ce matin-là, lui sembla mentir.",
+  "Les rayonnages montaient si haut qu'ils se perdaient dans la pénombre, et entre eux couraient des échelles de laiton patinées par des générations de mains anxieuses. On venait ici quand on n'avait plus rien d'autre à vendre que sa propre mémoire.",
+  '« Vous cherchez un souvenir précis ? » murmura le gardien, sans lever les yeux des registres. Sa voix avait la texture du cuir usé, et ses doigts, tachés d\'encre noire, tournaient les pages avec une lenteur délibérée.',
+  "Elwen hésita. Le souvenir qu'elle venait vendre n'était pas le sien — et c'était précisément pour cela qu'elle avait choisi cette archive, la plus discrète de la basse-ville, celle où l'on ne posait jamais de questions.",
+  "Elle déposa sur le comptoir une fiole de verre dépoli, à l'intérieur de laquelle une brume pâle tournait paresseusement, comme une chose vivante qui aurait préféré dormir.",
+  '« Ce n\'est pas un souvenir ordinaire », dit-il enfin. « Il a été manipulé. Recousu. Quelqu\'un y a ajouté quelque chose qui n\'y était pas. »',
+  "Un frisson glacé descendit le long de l'échine d'Elwen. Elle avait passé des semaines à préparer cette transaction, à effacer ses traces, à répéter chaque geste. Et voilà qu'un vieil homme aux doigts noircis lisait dans le verre ce qu'elle croyait avoir si bien caché.",
+  '« Combien ? » demanda-t-elle, d\'une voix qu\'elle voulut ferme. Le gardien reposa la fiole, croisa enfin son regard, et sourit — un sourire qui ne contenait aucune chaleur.',
+  '« Je ne l\'achèterai pas », répondit-il. « Mais je vous propose un marché bien plus intéressant. Dites-moi de qui est ce souvenir, et je vous dirai pourquoi on a essayé de l\'effacer de votre propre tête. »',
+  "Elle ignorait encore que, ce jour-là, c'était sa propre mémoire qui allait lui être volée.",
+];
+
 // DR-3: ~12 published chapters for the showcase manga — first 3 verbatim from the prototype
 // (title/plancheCount/date/likeCount), the rest generic continuations (all in the past -> published).
+// DR-4: chapters 4-12 are `premium:true` (verrouillé ★ + paywall + 403 path); chapters 1-3 stay
+// free, matching the prototype.
 const WORK_CHAPTERS = {
   'lames-de-brume': [
-    { number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1800 },
-    { number: 2, title: 'La rencontre', plancheCount: 18, publishAt: new Date('2024-06-21'), likeCount: 1200 },
-    { number: 3, title: 'Le pacte', plancheCount: 20, publishAt: new Date('2024-09-12'), likeCount: 980 },
-    { number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820 },
-    { number: 5, title: null, plancheCount: 21, publishAt: new Date('2025-01-15'), likeCount: 760 },
-    { number: 6, title: null, plancheCount: 18, publishAt: new Date('2025-03-01'), likeCount: 700 },
-    { number: 7, title: null, plancheCount: 20, publishAt: new Date('2025-05-01'), likeCount: 650 },
-    { number: 8, title: null, plancheCount: 22, publishAt: new Date('2025-07-01'), likeCount: 600 },
-    { number: 9, title: null, plancheCount: 19, publishAt: new Date('2025-09-01'), likeCount: 550 },
-    { number: 10, title: null, plancheCount: 20, publishAt: new Date('2025-11-01'), likeCount: 500 },
-    { number: 11, title: null, plancheCount: 21, publishAt: new Date('2026-01-01'), likeCount: 450 },
-    { number: 12, title: null, plancheCount: 20, publishAt: new Date('2026-03-01'), likeCount: 400 },
+    { number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
+    { number: 2, title: 'La rencontre', plancheCount: 18, publishAt: new Date('2024-06-21'), likeCount: 1200, premium: false },
+    { number: 3, title: 'Le pacte', plancheCount: 20, publishAt: new Date('2024-09-12'), likeCount: 980, premium: false },
+    { number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
+    { number: 5, title: null, plancheCount: 21, publishAt: new Date('2025-01-15'), likeCount: 760, premium: true },
+    { number: 6, title: null, plancheCount: 18, publishAt: new Date('2025-03-01'), likeCount: 700, premium: true },
+    { number: 7, title: null, plancheCount: 20, publishAt: new Date('2025-05-01'), likeCount: 650, premium: true },
+    { number: 8, title: null, plancheCount: 22, publishAt: new Date('2025-07-01'), likeCount: 600, premium: true },
+    { number: 9, title: null, plancheCount: 19, publishAt: new Date('2025-09-01'), likeCount: 550, premium: true },
+    { number: 10, title: null, plancheCount: 20, publishAt: new Date('2025-11-01'), likeCount: 500, premium: true },
+    { number: 11, title: null, plancheCount: 21, publishAt: new Date('2026-01-01'), likeCount: 450, premium: true },
+    { number: 12, title: null, plancheCount: 20, publishAt: new Date('2026-03-01'), likeCount: 400, premium: true },
+  ],
+  // DR-4: roman showcase — 1 non-premium chapter with real prose (prototype's "L'odeur du
+  // papier" paragraphs verbatim, lines 802-814) so readMode:'prose' renders real content and the
+  // slider paginates (10 paragraphs / PROSE_PARAGRAPHS_PER_PAGE=5 -> totalPages 2).
+  'dr2-le-murmure-des-cendres': [
+    {
+      number: 1,
+      title: "L'odeur du papier",
+      plancheCount: 0,
+      publishAt: new Date('2026-06-20'),
+      likeCount: 340,
+      premium: false,
+      prose: ROMAN_CHAPTER_1_PARAGRAPHS.join('\n\n'),
+    },
   ],
 };
 
-// DR-3: 6 planche/illustration grid items for the showcase manga.
+// DR-3: 6 planche/illustration grid items for the showcase manga (workId only, chapterId=null —
+// these are the "Illustrations & planches" work-page grid, distinct from DR-4's reader pages below).
 const WORK_PLANCHES = {
   'lames-de-brume': [0, 1, 2, 3, 4, 5].map((i) => ({ caption: `Planche ${i + 1}`, order: i })),
 };
+
+// DR-4: reader pages (Planche rows with chapterId set) for the showcase manga's 3 free chapters —
+// 6 pages each, image:null (FE halftone placeholder); one page per chapter carries a caption to
+// exercise the speech-bubble overlay. `double` spread metadata is a response-default (false) per
+// the plan, not a seeded column.
+const CHAPTER_PAGES = {
+  'lames-de-brume': {
+    1: [0, 1, 2, 3, 4, 5].map((i) => ({ order: i, caption: i === 2 ? '« Alors prouve-le. »' : null })),
+    2: [0, 1, 2, 3, 4, 5].map((i) => ({ order: i, caption: null })),
+    3: [0, 1, 2, 3, 4, 5].map((i) => ({ order: i, caption: null })),
+  },
+};
+
+// DR-4: favorites seed for the "★ MES FAVORIS" quick-switch. Reuses the DR-1 creator account
+// `dr1-camille-roux` (email camille.roux@seed.encre-et-plume.local, password `password123`) — the
+// only real, loginable dev-seed account — rather than inventing a new one.
+const FAVORITES = [
+  { accountSlug: 'dr1-camille-roux', workSlug: 'lames-de-brume' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'neon-sutra' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'onibi' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres' },
+];
 
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).
 const WORK_FUNDING_GOALS = {
@@ -189,15 +243,55 @@ async function main() {
     await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'published' } });
     for (const c of chapters) {
       await prisma.chapter.create({
-        data: { workId: work.id, number: c.number, title: c.title, status: 'published', publishAt: c.publishAt, plancheCount: c.plancheCount, likeCount: c.likeCount },
+        data: {
+          workId: work.id,
+          number: c.number,
+          title: c.title,
+          status: 'published',
+          publishAt: c.publishAt,
+          plancheCount: c.plancheCount,
+          likeCount: c.likeCount,
+          premium: c.premium ?? false,
+          prose: c.prose ?? null,
+        },
       });
     }
+  }
+
+  // DR-4: reader pages (Planche rows with chapterId set) for the showcase manga's free chapters.
+  // Cleared+recreated per chapter (scoped by chapterId, not workId, so this never touches the
+  // DR-3 work-level grid planches created above).
+  for (const [slug, chapterPages] of Object.entries(CHAPTER_PAGES)) {
+    const work = await prisma.work.findUnique({ where: { slug } });
+    if (!work) continue;
+    for (const [number, pages] of Object.entries(chapterPages)) {
+      const chapter = await prisma.chapter.findFirst({ where: { workId: work.id, number: Number(number) } });
+      if (!chapter) continue;
+      await prisma.planche.deleteMany({ where: { chapterId: chapter.id } });
+      for (const p of pages) {
+        await prisma.planche.create({ data: { workId: work.id, chapterId: chapter.id, caption: p.caption, order: p.order } });
+      }
+    }
+  }
+
+  // DR-4: favorites for the "★ MES FAVORIS" quick-switch (read-only this round; DR-9 owns toggling).
+  for (const f of FAVORITES) {
+    const account = await prisma.account.findUnique({ where: { profileSlug: f.accountSlug } });
+    const work = await prisma.work.findUnique({ where: { slug: f.workSlug } });
+    if (!account || !work) continue;
+    await prisma.favorite.upsert({
+      where: { accountId_workId: { accountId: account.id, workId: work.id } },
+      create: { accountId: account.id, workId: work.id },
+      update: {},
+    });
   }
 
   for (const [slug, planches] of Object.entries(WORK_PLANCHES)) {
     const work = await prisma.work.findUnique({ where: { slug } });
     if (!work) continue;
-    await prisma.planche.deleteMany({ where: { workId: work.id } });
+    // DR-4: scoped to chapterId:null — these are work-level grid planches, distinct from the
+    // chapterId-set reader pages created above; an unscoped deleteMany would wipe those too.
+    await prisma.planche.deleteMany({ where: { workId: work.id, chapterId: null } });
     for (const p of planches) {
       await prisma.planche.create({ data: { workId: work.id, caption: p.caption, order: p.order } });
     }

@@ -262,3 +262,48 @@ export function BanIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// DR-4 — reader "Lecteur" icons (replace the prototype's ⛶ ◳ ▾ « » glyphs).
+
+export function FullscreenIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 4H4.5V8M16 4h3.5v4M8 20H4.5v-4M16 20h3.5v-4" />
+    </Svg>
+  );
+}
+
+export function StudioIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M13.5 4v6h6" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function CaretDownIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="5.5 9 12 15.5 18.5 9" />
+    </Svg>
+  );
+}
+
+export function CollapseLeftIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="16 5 9.5 12 16 19" />
+      <polyline points="10.5 5 4 12 10.5 19" />
+    </Svg>
+  );
+}
+
+export function CollapseRightIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="8 5 14.5 12 8 19" />
+      <polyline points="13.5 5 20 12 13.5 19" />
+    </Svg>
+  );
+}

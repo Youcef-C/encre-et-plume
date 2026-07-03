@@ -51,7 +51,7 @@ const work: WorkDetail = {
 };
 
 const chapters: WorkChaptersResponse = {
-  items: [{ id: 'ch-1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishedAt: '2024-03-14T00:00:00.000Z', likeCount: 1800 }],
+  items: [{ id: 'ch-1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishedAt: '2024-03-14T00:00:00.000Z', likeCount: 1800, locked: false, lockReason: null }],
   total: 1,
   page: 1,
   pageSize: 10,

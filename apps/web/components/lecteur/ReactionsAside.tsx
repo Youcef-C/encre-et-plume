@@ -1,0 +1,122 @@
+'use client';
+
+// DR-4 FE-6 — right "Réactions" aside. Replica of LECTEUR lines 826-845.
+// Like/favorite/comment writes are deferred to DR-9/PUB-2 (plan.md §7): reuses the same
+// usePersonalAction stub as WorkHero/Sidebar — signed-out click redirects to /connexion,
+// signed-in click shows a transient "Bientôt disponible" affordance, no real write.
+import { useState } from 'react';
+import type { AccountSummary } from '@encre-et-plume/shared';
+import { usePersonalAction } from '../../lib/usePersonalAction';
+import { formatLikeCount } from '../../lib/home';
+import { HeartIcon, StarIcon, ArrowUpIcon, CollapseLeftIcon, CollapseRightIcon } from '../icons';
+
+type Props = {
+  likeCount: number;
+  favoriteCount: number;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  account: AccountSummary | null;
+};
+
+const asideStyle: React.CSSProperties = {
+  width: 200,
+  flex: 'none',
+  background: '#221d18',
+  border: '3px solid #4a4239',
+  borderRadius: 8,
+  padding: 13,
+  color: '#cabfb2',
+};
+
+const pillBtn: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 14,
+  fontWeight: 700,
+  color: '#fff',
+  background: '#2c261f',
+  border: '2px solid #4a4239',
+  borderRadius: 6,
+  padding: '5px 11px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
+export default function ReactionsAside({ likeCount, favoriteCount, collapsed, onToggleCollapsed, account }: Props) {
+  const { trigger, notice } = usePersonalAction(account);
+  const [draft, setDraft] = useState('');
+
+  if (collapsed) {
+    return (
+      <aside style={{ ...asideStyle, width: 48 }}>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label="Développer"
+          title="Développer"
+          style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', background: 'none', border: 'none', color: '#cabfb2', fontFamily: 'inherit' }}
+        >
+          <CollapseLeftIcon size={16} style={{ color: '#fff' }} />
+          <span style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-display)', fontSize: 14, textTransform: 'uppercase', color: 'var(--accent)', letterSpacing: '.08em' }}>
+            Réactions
+          </span>
+        </button>
+      </aside>
+    );
+  }
+
+  return (
+    <aside data-side="right" style={asideStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label="Réduire"
+          title="Réduire"
+          style={{ cursor: 'pointer', width: 28, height: 28, border: '2px solid #4a4239', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cabfb2', background: 'none', marginRight: 'auto' }}
+        >
+          <CollapseRightIcon size={14} />
+        </button>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, textTransform: 'uppercase', color: '#fff' }}>Réactions</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button type="button" onClick={trigger} aria-label={`J'aime · ${formatLikeCount(likeCount)}`} style={pillBtn}>
+          <HeartIcon size={14} /> {formatLikeCount(likeCount)}
+        </button>
+        <button type="button" onClick={trigger} aria-label={`Favori · ${formatLikeCount(favoriteCount)}`} style={pillBtn}>
+          <StarIcon size={14} /> {formatLikeCount(favoriteCount)}
+        </button>
+      </div>
+
+      {notice && (
+        <p role="status" style={{ fontSize: 11, color: '#cabfb2', fontWeight: 700, margin: '0 0 10px' }}>
+          Bientôt disponible
+        </p>
+      )}
+
+      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: '#fff' }}>Commentaires</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 11 }}>
+        <p style={{ fontSize: 12, color: '#8d8478', margin: 0 }}>Aucun commentaire pour l&apos;instant.</p>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          aria-label="Commenter"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Commenter…"
+          style={{ flex: 1, minWidth: 0, background: '#2c261f', border: '2px solid #4a4239', borderRadius: 6, padding: '6px 9px', color: '#fff', fontSize: 12, fontFamily: 'inherit' }}
+        />
+        <button
+          type="button"
+          onClick={trigger}
+          aria-label="Envoyer le commentaire"
+          style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--accent)', border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 11px', cursor: 'pointer' }}
+        >
+          <ArrowUpIcon size={12} />
+        </button>
+      </div>
+    </aside>
+  );
+}

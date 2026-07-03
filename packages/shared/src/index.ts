@@ -15,3 +15,4 @@ export * from './home.js';
 export * from './genres.js';
 export * from './catalog.js';
 export * from './work.js';
+export * from './reader.js';

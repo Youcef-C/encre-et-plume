@@ -15,6 +15,7 @@ import { SecurityModule } from './security/security.module';
 import { HomeModule } from './home/home.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { WorksModule } from './works/works.module';
+import { ReaderModule } from './reader/reader.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -28,6 +29,7 @@ import { WorksModule } from './works/works.module';
   // HomeModule (DR-1): public GET /home/* showroom aggregation for the "Accueil" landing page.
   // CatalogModule (DR-2): public GET /catalog* + /contests/active for the "Découvrir" catalog page.
   // WorksModule (DR-3): public GET /works/:slug* for the "Œuvre" work detail page.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule],
+  // ReaderModule (DR-4): GET /works/:slug/chapters/:n/pages + /me/favorites + /me/reading-progress.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule, ReaderModule],
 })
 export class AppModule {}

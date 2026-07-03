@@ -66,6 +66,7 @@ Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
 - [DR-8](01-discovery-reading/DR-8-ma-liste-coups-de-coeur.md) — "Ma liste & coups de cœur"
 - [DR-9](01-discovery-reading/DR-9-like-favorite.md) — Like / favorite
 - [DR-10](01-discovery-reading/DR-10-age-verification-18-plus-gating.md) — Age verification & 18+ content gating *(inferred)*
+- [DR-11](01-discovery-reading/DR-11-reading-history-resume.md) — Reading history & resume "Reprendre la lecture" *(inferred)*
 
 ### [02 · Matching & Collaboration](02-matching-collaboration/_epic.md) — `MC`
 Find a partner, calls, applications, contacts, messaging.

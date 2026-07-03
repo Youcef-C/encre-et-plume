@@ -233,7 +233,7 @@ describe('WorksService', () => {
       prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
       prisma.chapter.count.mockResolvedValue(25);
       prisma.chapter.findMany.mockResolvedValue([
-        { id: 'c1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2026-01-01'), likeCount: 1800 },
+        { id: 'c1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2026-01-01'), likeCount: 1800, premium: false },
       ]);
 
       const result = await service.getChapters('lames-de-brume', 2);
@@ -255,6 +255,8 @@ describe('WorksService', () => {
             plancheCount: 22,
             publishedAt: '2026-01-01T00:00:00.000Z',
             likeCount: 1800,
+            locked: false,
+            lockReason: null,
           },
         ],
         total: 25,
@@ -262,6 +264,30 @@ describe('WorksService', () => {
         pageSize: WORK_CHAPTER_PAGE_SIZE,
         totalPages: Math.ceil(25 / WORK_CHAPTER_PAGE_SIZE),
       });
+    });
+
+    it('marks a premium chapter locked with reason "premium" (DR-4)', async () => {
+      prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
+      prisma.chapter.count.mockResolvedValue(1);
+      prisma.chapter.findMany.mockResolvedValue([
+        { id: 'c4', number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
+      ]);
+
+      const result = await service.getChapters('lames-de-brume', 1);
+
+      expect(result?.items[0]).toMatchObject({ locked: true, lockReason: 'premium' });
+    });
+
+    it('non-premium chapter is not locked (lockReason null)', async () => {
+      prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
+      prisma.chapter.count.mockResolvedValue(1);
+      prisma.chapter.findMany.mockResolvedValue([
+        { id: 'c1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
+      ]);
+
+      const result = await service.getChapters('lames-de-brume', 1);
+
+      expect(result?.items[0]).toMatchObject({ locked: false, lockReason: null });
     });
   });
 
@@ -280,8 +306,17 @@ describe('WorksService', () => {
 
       const result = await service.getPlanches('lames-de-brume');
 
-      expect(prisma.planche.findMany).toHaveBeenCalledWith({ where: { workId: 'w1' }, orderBy: { order: 'asc' } });
+      expect(prisma.planche.findMany).toHaveBeenCalledWith({ where: { workId: 'w1', chapterId: null }, orderBy: { order: 'asc' } });
       expect(result).toEqual([{ id: 'p1', image: 'img.jpg', caption: 'Planche 1' }]);
+    });
+
+    it('excludes DR-4 reader pages (chapterId set) from the work-level grid (DR-4 regression)', async () => {
+      prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
+      prisma.planche.findMany.mockResolvedValue([]);
+
+      await service.getPlanches('lames-de-brume');
+
+      expect(prisma.planche.findMany.mock.calls[0][0].where).toEqual({ workId: 'w1', chapterId: null });
     });
 
     it('an empty array is a valid response', async () => {

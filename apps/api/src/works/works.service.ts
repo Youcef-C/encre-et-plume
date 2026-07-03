@@ -66,7 +66,9 @@ export class WorksService {
       const work = await this.prisma.work.findFirst({ where: { slug, publishedAt: { not: null } } });
       if (!work) return null;
 
-      const planches = await this.prisma.planche.findMany({ where: { workId: work.id }, orderBy: { order: 'asc' } });
+      // DR-4: chapterId:null excludes reader pages (Planche rows scoped to a Chapter) — this
+      // grid is the work-level "Illustrations & planches" list only.
+      const planches = await this.prisma.planche.findMany({ where: { workId: work.id, chapterId: null }, orderBy: { order: 'asc' } });
       return planches.map((p) => ({ id: p.id, image: p.image, caption: p.caption }));
     });
   }
@@ -141,6 +143,7 @@ interface ChapterRow {
   plancheCount: number;
   publishAt: Date;
   likeCount: number;
+  premium: boolean;
 }
 
 function mapWorkDetail(work: WorkRow, chapterCount: number): WorkDetail {
@@ -217,6 +220,7 @@ function aggregateRatings(reviews: ReviewRow[]): { ratingAvg: number; ratingStor
 }
 
 function mapChapter(c: ChapterRow) {
+  // DR-4: no access system yet — premium ⇒ locked for every viewer.
   return {
     id: c.id,
     number: c.number,
@@ -224,5 +228,7 @@ function mapChapter(c: ChapterRow) {
     plancheCount: c.plancheCount,
     publishedAt: c.publishAt.toISOString(),
     likeCount: c.likeCount,
+    locked: c.premium,
+    lockReason: c.premium ? 'premium' : null,
   };
 }

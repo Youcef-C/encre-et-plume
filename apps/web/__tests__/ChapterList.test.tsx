@@ -24,6 +24,8 @@ function chapter(n: number, overrides: Partial<WorkChaptersResponse['items'][num
     plancheCount: 20,
     publishedAt: '2024-03-14T00:00:00.000Z',
     likeCount: 1800,
+    locked: false,
+    lockReason: null,
     ...overrides,
   };
 }
