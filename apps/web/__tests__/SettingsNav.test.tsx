@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import SettingsNav from '../components/settings/SettingsNav';
 
 describe('SettingsNav', () => {
@@ -24,5 +24,24 @@ describe('SettingsNav', () => {
       expect(links[i]).toHaveTextContent(label);
       expect(links[i]).toHaveAttribute('href', href);
     });
+  });
+
+  it('clicking a nav link expands the target section and collapses the others (accordion)', () => {
+    const target = document.createElement('details');
+    target.id = 'cookies';
+    const other = document.createElement('details');
+    other.id = 'securite';
+    other.open = true;
+    document.body.append(target, other);
+    try {
+      render(<SettingsNav />);
+      expect(target.open).toBe(false);
+      fireEvent.click(screen.getByRole('link', { name: 'Cookies' }));
+      expect(target.open).toBe(true);
+      expect(other.open).toBe(false);
+    } finally {
+      target.remove();
+      other.remove();
+    }
   });
 });

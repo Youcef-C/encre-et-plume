@@ -90,41 +90,47 @@ export default function ParametresPage() {
       {/* Apparence section removed — theme picker disabled for now (light forced); see git history */}
 
       {/* Notification preferences section */}
-      <section
+      <details
         id="notifications"
-        aria-labelledby="preferences-notif-heading"
-        className="ep-card"
+        className="ep-card ep-settings-section"
+        open
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2 id="preferences-notif-heading" style={sectionHeadingStyle}>
-          Préférences de notification
-        </h2>
+        <summary className="ep-settings-summary">
+          <h2 id="preferences-notif-heading" style={sectionHeadingStyle}>
+            Préférences de notification
+          </h2>
+        </summary>
         <PreferencesNotifications />
-      </section>
+      </details>
 
       {/* Cookies section (F-19, net-new; consent summary reuses F-13 useCookieConsent) */}
-      <section
+      <details
         id="cookies"
-        aria-labelledby="cookies-heading"
-        className="ep-card"
+        className="ep-card ep-settings-section"
+        open
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2 id="cookies-heading" style={sectionHeadingStyle}>
-          Cookies
-        </h2>
+        <summary className="ep-settings-summary">
+          <h2 id="cookies-heading" style={sectionHeadingStyle}>
+            Cookies
+          </h2>
+        </summary>
         <CookiesSettings />
-      </section>
+      </details>
 
       {/* Sécurité section (F-18) */}
-      <section
+      <details
         id="securite"
-        aria-labelledby="securite-heading"
-        className="ep-card"
+        className="ep-card ep-settings-section"
+        open
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2 id="securite-heading" style={sectionHeadingStyle}>
-          Sécurité
-        </h2>
+        <summary className="ep-settings-summary">
+          <h2 id="securite-heading" style={sectionHeadingStyle}>
+            Sécurité
+          </h2>
+        </summary>
 
         {/* Identifiants block */}
         <div style={{ paddingBottom: 24, marginBottom: 24, borderBottom: '1.5px solid var(--border)' }}>
@@ -147,18 +153,20 @@ export default function ParametresPage() {
           </p>
           <SecurityTwoFactor />
         </div>
-      </section>
+      </details>
 
       {/* Mes données section */}
-      <section
+      <details
         id="mes-donnees"
-        aria-labelledby="mes-donnees-heading"
-        className="ep-card"
+        className="ep-card ep-settings-section"
+        open
         style={{ padding: '24px 28px', marginBottom: 24 }}
       >
-        <h2 id="mes-donnees-heading" style={sectionHeadingStyle}>
-          Mes données
-        </h2>
+        <summary className="ep-settings-summary">
+          <h2 id="mes-donnees-heading" style={sectionHeadingStyle}>
+            Mes données
+          </h2>
+        </summary>
 
         {/* Export block */}
         <div
@@ -181,7 +189,7 @@ export default function ParametresPage() {
           </p>
           <SupprimerCompteModal />
         </div>
-      </section>
+      </details>
     </main>
   );
 }

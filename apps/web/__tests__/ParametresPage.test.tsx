@@ -80,6 +80,21 @@ describe('ParametresPage', () => {
     expect(screen.getByRole('navigation', { name: 'Sections des paramètres' })).toBeInTheDocument();
   });
 
+  it('renders the four sections as collapsible <details>, expanded by default', () => {
+    const { container } = render(<ParametresPage />);
+    const sections = container.querySelectorAll('details.ep-settings-section');
+    expect(Array.from(sections).map((d) => d.id)).toEqual([
+      'notifications',
+      'cookies',
+      'securite',
+      'mes-donnees',
+    ]);
+    sections.forEach((d) => {
+      expect(d).toHaveAttribute('open');
+      expect(d.querySelector('summary.ep-settings-summary')).not.toBeNull();
+    });
+  });
+
   it('redirects to /connexion when logged out', async () => {
     sessionState.account = null;
     sessionState.loading = false;

@@ -13,6 +13,7 @@
  *   F19-E2E-3  Cookies: consent summary reflects saved choice; "Gérer les cookies" reopens banner
  *   F19-E2E-4  Nav anchors: clicking a nav link scrolls to the matching section
  *   F19-E2E-5  Responsive: /parametres at 375/768/1280 — no horizontal overflow, nav wraps
+ *   F19-E2E-6  Collapsible sections: summary click collapses, nav click re-expands
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -157,29 +158,77 @@ test('F19-E2E-4: clicking a section-nav link scrolls to the matching section', a
 
   await page.goto('/parametres');
 
+  // Target Sécurité (tall, mid-page): the last section can bottom out before
+  // reaching the scroll offset, which would make the position assertion flaky.
   const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
-  await nav.getByRole('link', { name: 'Mes données' }).click();
+  await nav.getByRole('link', { name: 'Sécurité' }).click();
 
-  // The URL hash updates and the target section is scrolled into view
-  await expect(page).toHaveURL(/#mes-donnees$/);
+  // The URL hash updates and the target card's START lands below the sticky
+  // header (68px) — regression test for the anchor scrolling past the card top.
+  await expect(page).toHaveURL(/#securite$/);
   await expect(async () => {
-    const inView = await page.evaluate(() => {
-      const el = document.getElementById('mes-donnees');
-      if (!el) return false;
-      const rect = el.getBoundingClientRect();
-      return rect.top < window.innerHeight && rect.bottom > 0;
+    const top = await page.evaluate(() => {
+      const el = document.getElementById('securite');
+      return el ? el.getBoundingClientRect().top : NaN;
     });
-    expect(inView).toBe(true);
+    expect(top).toBeGreaterThanOrEqual(140); // fully clear of the header + sticky nav
+    expect(top).toBeLessThanOrEqual(230); // and near the top of the viewport
   }).toPass({ timeout: 5_000 });
+
+  // The section nav itself stays pinned right below the 68px header while scrolled
+  const navBox = await nav.boundingBox();
+  expect(navBox).not.toBeNull();
+  if (navBox) {
+    expect(navBox.y).toBeGreaterThanOrEqual(60);
+    expect(navBox.y).toBeLessThanOrEqual(90);
+  }
 
   // "Current section indicated": the IntersectionObserver-driven scroll-spy sets
   // aria-current="location" on the nav link matching the visible section (real
   // browser, unlike jsdom where it's guarded off).
-  await expect(nav.getByRole('link', { name: 'Mes données' })).toHaveAttribute(
+  await expect(nav.getByRole('link', { name: 'Sécurité' })).toHaveAttribute(
     'aria-current',
     'location',
     { timeout: 5_000 },
   );
+
+  // Accordion: the other sections collapsed when Sécurité was selected
+  await expect(page.locator('details#securite')).toHaveAttribute('open', '');
+  for (const other of ['notifications', 'cookies', 'mes-donnees']) {
+    await expect(page.locator(`details#${other}`)).not.toHaveAttribute('open', '');
+  }
+});
+
+// ── F19-E2E-6: Sections are collapsible; nav re-expands a collapsed section ────
+
+test('F19-E2E-6: sections collapse via their header and a nav click re-expands them', async ({
+  page,
+}) => {
+  const email = freshEmail('f19-collapse');
+  await signUpVerifyAndLogin(page, email, 'F19 Collapse');
+
+  await page.goto('/parametres');
+
+  const cookiesSection = page.locator('details#cookies');
+  const summary = cookiesSection.locator('summary');
+  const manageBtn = cookiesSection.getByRole('button', { name: /gérer les cookies/i });
+
+  // Expanded by default: content visible
+  await expect(manageBtn).toBeVisible({ timeout: 10_000 });
+
+  // Click the section header → collapses, content hidden
+  await summary.click();
+  await expect(cookiesSection).not.toHaveAttribute('open', '');
+  await expect(manageBtn).toBeHidden();
+
+  // Clicking the nav link re-expands the collapsed section (and collapses the others)
+  const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
+  await nav.getByRole('link', { name: 'Cookies' }).click();
+  await expect(cookiesSection).toHaveAttribute('open', '');
+  await expect(manageBtn).toBeVisible();
+  for (const other of ['notifications', 'securite', 'mes-donnees']) {
+    await expect(page.locator(`details#${other}`)).not.toHaveAttribute('open', '');
+  }
 });
 
 // ── F19-E2E-5: Responsive — 375/768/1280 ────────────────────────────────────────

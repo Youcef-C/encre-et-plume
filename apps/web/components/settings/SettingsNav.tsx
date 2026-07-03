@@ -12,8 +12,26 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: 'mes-donnees', label: 'Mes données' },
 ];
 
+/**
+ * Sections are collapsible <details>; a nav click expands the target and collapses
+ * the others (accordion), synchronously BEFORE the browser performs the anchor
+ * scroll so the scroll position is computed against the collapsed layout.
+ */
+function openSection(id: string): void {
+  SECTIONS.forEach(({ id: sectionId }) => {
+    const el = document.getElementById(sectionId);
+    if (el instanceof HTMLDetailsElement) el.open = sectionId === id;
+  });
+}
+
 export default function SettingsNav() {
   const [current, setCurrent] = useState<string | null>(null);
+
+  // Deep links (/parametres#securite) must land on an expanded section too.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (id) openSection(id);
+  }, []);
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
@@ -40,12 +58,19 @@ export default function SettingsNav() {
         flexWrap: 'wrap',
         gap: 8,
         marginBottom: 28,
+        // Always on top while browsing sections: pinned right below the 68px sticky header.
+        position: 'sticky',
+        top: 68,
+        zIndex: 20,
+        background: '#fbfaf6', // body background — cards scroll cleanly underneath
+        padding: '12px 0',
       }}
     >
       {SECTIONS.map(({ id, label }) => (
         <a
           key={id}
           href={`#${id}`}
+          onClick={() => openSection(id)}
           aria-current={current === id ? 'location' : undefined}
           className="ep-toggle-btn"
           style={{

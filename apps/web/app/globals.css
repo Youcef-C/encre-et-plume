@@ -454,6 +454,44 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.65;
 }
 
+/* Paramètres: collapsible section cards (native <details>) */
+.ep-settings-section {
+  /* Anchor scroll lands below the 68px sticky header + the sticky section nav (~92px) */
+  scroll-margin-top: 168px;
+}
+@media (max-width: 480px) {
+  .ep-settings-section {
+    /* The sticky nav wraps to two rows on narrow screens */
+    scroll-margin-top: 196px;
+  }
+}
+.ep-settings-summary {
+  cursor: pointer;
+  list-style: none;
+  position: relative;
+}
+.ep-settings-summary::-webkit-details-marker {
+  display: none;
+}
+.ep-settings-summary::after {
+  content: '▾';
+  position: absolute;
+  right: 0;
+  top: 2px;
+  font-size: 18px;
+  color: var(--ink);
+  transition: transform 0.15s ease;
+}
+.ep-settings-section:not([open]) > .ep-settings-summary::after {
+  transform: rotate(-90deg);
+}
+/* Collapsed card: drop the heading's bottom spacing/rule (inline-styled → !important) */
+.ep-settings-section:not([open]) > .ep-settings-summary h2 {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
+}
+
 /* Legal footer responsive wrap */
 @media (max-width: 480px) {
   .ep-legal-content {

@@ -186,7 +186,7 @@ test('F15-E2E-1: /parametres renders 5-category matrix; mandatory rows show "Tou
   });
 
   // Preferences section locator
-  const section = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const section = page.locator('details#notifications');
   await expect(section).toBeVisible({ timeout: 8_000 });
 
   // 5 fieldsets = 5 NOTIFICATION_TYPES
@@ -230,7 +230,7 @@ test('F15-E2E-2: toggle non-mandatory switch → toast → reload → state pers
     timeout: 10_000,
   });
 
-  const section = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const section = page.locator('details#notifications');
   const messagesFieldset = section.getByRole('group', { name: 'Messages' });
   await expect(messagesFieldset).toBeVisible({ timeout: 8_000 });
 
@@ -253,7 +253,7 @@ test('F15-E2E-2: toggle non-mandatory switch → toast → reload → state pers
   await expect(page.getByRole('heading', { name: /préférences de notification/i })).toBeVisible({
     timeout: 10_000,
   });
-  const afterSection = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const afterSection = page.locator('details#notifications');
   await expect(
     afterSection.getByRole('group', { name: 'Messages' }).getByRole('switch').first(),
   ).toHaveAttribute('aria-checked', 'false', { timeout: 8_000 });
@@ -397,7 +397,7 @@ test('F15-E2E-8a: responsive 375px — no horizontal overflow; matrix visible', 
   expect(scrollWidth).toBeLessThanOrEqual(375 + 2); // allow 2px scrollbar
 
   // Matrix is still present
-  const section = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const section = page.locator('details#notifications');
   await expect(section).toBeVisible();
   await expect(section.getByRole('group').first()).toBeVisible();
 
@@ -420,7 +420,7 @@ test('F15-E2E-8b: responsive 768px — no horizontal overflow; matrix usable', a
   const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(768 + 2);
 
-  const section = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const section = page.locator('details#notifications');
   await expect(section.getByRole('group').first()).toBeVisible();
 
   await page.screenshot({
@@ -441,7 +441,7 @@ test('F15-E2E-8c: responsive 1280px — desktop; no horizontal overflow', async 
   const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(1280 + 2);
 
-  const section = page.locator('section[aria-labelledby="preferences-notif-heading"]');
+  const section = page.locator('details#notifications');
   await expect(section.getByRole('group').first()).toBeVisible();
 
   await page.screenshot({
