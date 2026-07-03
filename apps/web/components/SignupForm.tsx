@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ApiError } from '@encre-et-plume/shared';
 import { signup } from '../lib/api';
+import OnBrandCheckbox from './form/OnBrandCheckbox';
 
 interface FieldErrors {
   displayName?: string;
@@ -303,41 +304,40 @@ export default function SignupForm() {
 
       {/* F-13: CGU consent checkbox */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          <input
-            type="checkbox"
-            id="acceptCgu"
-            name="acceptCgu"
-            checked={acceptedCgu}
-            onChange={(e) => {
-              setAcceptedCgu(e.target.checked);
-              if (e.target.checked) setCguError(null);
-            }}
-            aria-describedby={cguError ? 'acceptCgu-error' : undefined}
-            style={{ marginTop: 3, width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
-          />
-          <label htmlFor="acceptCgu" style={{ fontSize: 14, lineHeight: 1.5, cursor: 'pointer' }}>
-            J&apos;accepte les{' '}
-            <a
-              href="/cgu"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', fontWeight: 700 }}
-            >
-              Conditions générales d&apos;utilisation
-            </a>{' '}
-            et la{' '}
-            <a
-              href="/confidentialite"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', fontWeight: 700 }}
-            >
-              Politique de confidentialité
-            </a>
-            .
-          </label>
-        </div>
+        <OnBrandCheckbox
+          id="acceptCgu"
+          name="acceptCgu"
+          checked={acceptedCgu}
+          onChange={(e) => {
+            setAcceptedCgu(e.target.checked);
+            if (e.target.checked) setCguError(null);
+          }}
+          aria-describedby={cguError ? 'acceptCgu-error' : undefined}
+          style={{ alignItems: 'flex-start', fontSize: 14, lineHeight: 1.5 }}
+          label={
+            <span>
+              J&apos;accepte les{' '}
+              <a
+                href="/cgu"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', fontWeight: 700 }}
+              >
+                Conditions générales d&apos;utilisation
+              </a>{' '}
+              et la{' '}
+              <a
+                href="/confidentialite"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', fontWeight: 700 }}
+              >
+                Politique de confidentialité
+              </a>
+              .
+            </span>
+          }
+        />
         {cguError && (
           <span id="acceptCgu-error" className="ep-error" role="alert">
             {cguError}

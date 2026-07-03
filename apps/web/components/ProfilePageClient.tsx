@@ -12,6 +12,25 @@ import { XIcon } from './icons';
 import UploadControl from './UploadControl';
 import GenreSuggestInput from './GenreSuggestInput';
 import GenreChip from './GenreChip';
+import OnBrandCheckbox from './form/OnBrandCheckbox';
+import OnBrandSelect from './form/OnBrandSelect';
+
+// Profile edit form ergonomics pass — shared style tokens for the three
+// grouped sections (fieldset reset + display-font legend, matching the
+// section-heading language used elsewhere, e.g. FilterSidebar's "Filtrer").
+const editFieldsetStyle: React.CSSProperties = { border: 'none', padding: 0, margin: '0 0 20px 0' };
+const editLegendStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  fontFamily: 'var(--font-display)',
+  fontSize: 16,
+  textTransform: 'uppercase',
+  letterSpacing: '0.02em',
+  padding: 0,
+  margin: '0 0 12px 0',
+  borderBottom: '2px solid var(--border)',
+  paddingBottom: 8,
+};
 
 // F-2 — Public profile page client component.
 // Props receive the resolved slug from the server-component wrapper.
@@ -434,9 +453,10 @@ export default function ProfilePageClient({ slug }: Props) {
 
             <div style={{ flex: 1 }} />
 
-            {/* Owner: edit toggle / Visitor: action buttons */}
+            {/* Owner: edit toggle (while editing, Enregistrer/Annuler are anchored at the end
+                of the form below instead) / Visitor: action buttons */}
             {isOwner ? (
-              !isEditing ? (
+              !isEditing && (
                 <button
                   type="button"
                   onClick={handleStartEdit}
@@ -455,31 +475,6 @@ export default function ProfilePageClient({ slug }: Props) {
                 >
                   &#9998; Modifier le profil
                 </button>
-              ) : (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="ep-btn-secondary"
-                    style={{ fontSize: 13, padding: '7px 16px' }}
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={saving || avatarBusy}
-                    aria-busy={avatarBusy}
-                    className="ep-btn-primary"
-                    style={{ fontSize: 13, padding: '7px 18px' }}
-                  >
-                    {saving
-                      ? 'Enregistrement…'
-                      : avatarBusy
-                        ? 'Optimisation en cours…'
-                        : 'Enregistrer'}
-                  </button>
-                </div>
               )
             ) : (
               <ProfileActions />
@@ -515,228 +510,272 @@ export default function ProfilePageClient({ slug }: Props) {
             </div>
           )}
 
-          {/* Edit form (F-6 + F-10) — owner only, when isEditing */}
+          {/* Edit form (F-6 + F-10) — owner only, when isEditing.
+              Grouped into three titled sections (fieldset + display-font legend) for
+              ergonomics; Enregistrer/Annuler are anchored at the end, after the last
+              section, instead of floating next to the name row. */}
           {isOwner && isEditing && editData && (
             <div
               style={{
                 marginTop: 14,
                 border: '2px solid var(--ink)',
                 borderRadius: 8,
-                padding: '14px 16px',
+                padding: '18px 18px 4px',
                 background: 'var(--paper)',
               }}
             >
-              {/* Avatar upload (F-10) — key resets internal state after delete */}
-              <UploadControl
-                key={uploadKey}
-                kind="avatar"
-                label="Photo de profil"
-                currentUrl={profile.avatar}
-                onUploaded={(media) => void handleAvatarUploaded(media)}
-                onBusyChange={setAvatarBusy}
-              />
+              {/* Photo de profil — titled via UploadControl's own bold label (no
+                  duplicate visible heading); aria-label keeps the fieldset grouping
+                  named for assistive tech. */}
+              <fieldset aria-label="Photo de profil" style={editFieldsetStyle}>
+                <UploadControl
+                  key={uploadKey}
+                  kind="avatar"
+                  label="Photo de profil"
+                  currentUrl={profile.avatar}
+                  onUploaded={(media) => void handleAvatarUploaded(media)}
+                  onBusyChange={setAvatarBusy}
+                />
 
-              {/* Delete avatar — only when currently has one */}
-              {profile.avatar && !deleteConfirm && (
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm(true)}
-                  className="ep-btn-secondary"
-                  style={{
-                    fontSize: 13,
-                    padding: '6px 14px',
-                    marginBottom: 10,
-                    color: 'var(--accent)',
-                    borderColor: 'var(--accent)',
-                  }}
-                >
-                  Supprimer la photo
-                </button>
-              )}
+                {/* Delete avatar — only when currently has one */}
+                {profile.avatar && !deleteConfirm && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(true)}
+                    className="ep-btn-secondary"
+                    style={{
+                      fontSize: 13,
+                      padding: '6px 14px',
+                      marginTop: 10,
+                      color: 'var(--accent)',
+                      borderColor: 'var(--accent)',
+                    }}
+                  >
+                    Supprimer la photo
+                  </button>
+                )}
 
-              {/* Inline confirm step for delete */}
-              {deleteConfirm && (
-                <div
-                  style={{
-                    marginBottom: 10,
-                    padding: '10px 12px',
-                    border: '2px solid var(--accent)',
-                    borderRadius: 6,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                    background: 'var(--card)',
-                  }}
-                >
-                  <span style={{ fontSize: 13, flex: 1 }}>
-                    Supprimer la photo de profil ?
-                  </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirm(false)}
-                      disabled={deleting}
-                      className="ep-btn-secondary"
-                      style={{ fontSize: 13, padding: '5px 12px' }}
-                    >
-                      Non
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteAvatar()}
-                      disabled={deleting}
-                      className="ep-btn-primary"
-                      style={{
-                        fontSize: 13,
-                        padding: '5px 14px',
-                        background: 'var(--accent)',
-                        borderColor: 'var(--accent)',
-                      }}
-                    >
-                      {deleting ? 'Suppression…' : 'Oui, supprimer'}
-                    </button>
+                {/* Inline confirm step for delete */}
+                {deleteConfirm && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: '10px 12px',
+                      border: '2px solid var(--accent)',
+                      borderRadius: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                      background: 'var(--card)',
+                    }}
+                  >
+                    <span style={{ fontSize: 13, flex: 1 }}>
+                      Supprimer la photo de profil ?
+                    </span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirm(false)}
+                        disabled={deleting}
+                        className="ep-btn-secondary"
+                        style={{ fontSize: 13, padding: '5px 12px' }}
+                      >
+                        Non
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteAvatar()}
+                        disabled={deleting}
+                        className="ep-btn-primary"
+                        style={{
+                          fontSize: 13,
+                          padding: '5px 14px',
+                          background: 'var(--accent)',
+                          borderColor: 'var(--accent)',
+                        }}
+                      >
+                        {deleting ? 'Suppression…' : 'Oui, supprimer'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </fieldset>
+
+              {/* Informations — spécialité + ville share a row on wider screens
+                  (.ep-form-row-2 collapses to one column below 640px). */}
+              <fieldset style={editFieldsetStyle}>
+                <legend style={editLegendStyle}>Informations</legend>
+
+                <div className="ep-form-row-2" style={{ marginBottom: 12 }}>
+                  <div>
+                    <label className="ep-label" htmlFor="edit-specialty">
+                      Spécialité
+                    </label>
+                    <input
+                      id="edit-specialty"
+                      className="ep-input"
+                      value={editData.specialty ?? ''}
+                      onChange={(e) =>
+                        setEditData((d) => d && { ...d, specialty: e.target.value || null })
+                      }
+                      placeholder="Ex. encre & screentone"
+                    />
+                  </div>
+                  <div>
+                    <label className="ep-label" htmlFor="edit-city">
+                      Ville
+                    </label>
+                    <input
+                      id="edit-city"
+                      className="ep-input"
+                      value={editData.city ?? ''}
+                      onChange={(e) =>
+                        setEditData((d) => d && { ...d, city: e.target.value || null })
+                      }
+                      placeholder="Ex. Lyon, FR"
+                    />
                   </div>
                 </div>
-              )}
 
-              <div style={{ marginBottom: 12 }}>
-                <label className="ep-label" htmlFor="edit-specialty">
-                  Spécialité
-                </label>
-                <input
-                  id="edit-specialty"
-                  className="ep-input"
-                  value={editData.specialty ?? ''}
-                  onChange={(e) =>
-                    setEditData((d) => d && { ...d, specialty: e.target.value || null })
-                  }
-                  placeholder="Ex. encre & screentone"
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label className="ep-label" htmlFor="edit-city">
-                  Ville
-                </label>
-                <input
-                  id="edit-city"
-                  className="ep-input"
-                  value={editData.city ?? ''}
-                  onChange={(e) =>
-                    setEditData((d) => d && { ...d, city: e.target.value || null })
-                  }
-                  placeholder="Ex. Lyon, FR"
-                />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label className="ep-label" htmlFor="edit-bio">
-                  Biographie
-                </label>
-                <textarea
-                  id="edit-bio"
-                  className="ep-input"
-                  rows={3}
-                  value={editData.bio ?? ''}
-                  onChange={(e) =>
-                    setEditData((d) => d && { ...d, bio: e.target.value || null })
-                  }
-                  placeholder="Présentez-vous en quelques mots…"
-                />
-              </div>
+                <div>
+                  <label className="ep-label" htmlFor="edit-bio">
+                    Biographie
+                  </label>
+                  <textarea
+                    id="edit-bio"
+                    className="ep-input"
+                    rows={3}
+                    value={editData.bio ?? ''}
+                    onChange={(e) =>
+                      setEditData((d) => d && { ...d, bio: e.target.value || null })
+                    }
+                    placeholder="Présentez-vous en quelques mots…"
+                  />
+                </div>
+              </fieldset>
 
-              {/* Seeking toggle */}
-              <div style={{ marginBottom: editData.seeking.active ? 10 : 0 }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
+              {/* Recherche de partenaire — on-brand checkbox toggle (real input
+                  visually hidden for a11y, custom box + CheckIcon show state), then
+                  (if active) role select, genres picker, longueur — in that order. */}
+              <fieldset style={editFieldsetStyle}>
+                <legend style={editLegendStyle}>Recherche de partenaire</legend>
+
+                <div style={{ marginBottom: editData.seeking.active ? 14 : 0 }}>
+                  <OnBrandCheckbox
+                    label="Recherche active"
                     checked={editData.seeking.active}
                     onChange={(e) =>
                       setEditData((d) =>
                         d && { ...d, seeking: { ...d.seeking, active: e.target.checked } }
                       )
                     }
+                    style={{ fontWeight: 700 }}
                   />
-                  Recherche active
-                </label>
-              </div>
+                </div>
 
-              {editData.seeking.active && (
-                <div style={{ marginTop: 10, paddingLeft: 8, borderLeft: '2px solid var(--tone)' }}>
-                  <div style={{ marginBottom: 10 }}>
-                    <label className="ep-label" htmlFor="edit-target-role">
-                      Recherche un·e
-                    </label>
-                    <select
-                      id="edit-target-role"
-                      className="ep-input"
-                      value={editData.seeking.targetRole ?? ''}
-                      onChange={(e) =>
-                        setEditData((d) =>
-                          d && {
-                            ...d,
-                            seeking: {
-                              ...d.seeking,
-                              targetRole: (e.target.value as SeekingTargetRole) || null,
-                            },
-                          }
-                        )
-                      }
-                    >
-                      <option value="">-- Choisir --</option>
-                      {SEEKING_TARGET_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label className="ep-label">Genres</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                      {editData.seeking.genres.map((g) => (
-                        <GenreChip key={g} label={g} onRemove={() => removeSeekingGenre(g)} />
-                      ))}
-                      <GenreSuggestInput
-                        ariaLabel="Ajouter un genre"
-                        placeholder="Genre…"
-                        onCancel={() => {}}
-                        onAdd={(fr) => addSeekingGenre(fr)}
+                {editData.seeking.active && (
+                  <div style={{ paddingLeft: 8, borderLeft: '2px solid var(--tone)' }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="ep-label" htmlFor="edit-target-role">
+                        Recherche un·e
+                      </label>
+                      <OnBrandSelect
+                        id="edit-target-role"
+                        value={editData.seeking.targetRole ?? ''}
+                        onChange={(e) =>
+                          setEditData((d) =>
+                            d && {
+                              ...d,
+                              seeking: {
+                                ...d.seeking,
+                                targetRole: (e.target.value as SeekingTargetRole) || null,
+                              },
+                            }
+                          )
+                        }
+                      >
+                        <option value="">-- Choisir --</option>
+                        {SEEKING_TARGET_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </OnBrandSelect>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="ep-label">Genres</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                        {editData.seeking.genres.map((g) => (
+                          <GenreChip key={g} label={g} onRemove={() => removeSeekingGenre(g)} />
+                        ))}
+                        <GenreSuggestInput
+                          ariaLabel="Ajouter un genre"
+                          placeholder="Genre…"
+                          onCancel={() => {}}
+                          onAdd={(fr) => addSeekingGenre(fr)}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="ep-label" htmlFor="edit-project-length">
+                        Longueur de projet
+                      </label>
+                      <input
+                        id="edit-project-length"
+                        className="ep-input"
+                        value={editData.seeking.projectLength ?? ''}
+                        onChange={(e) =>
+                          setEditData((d) =>
+                            d && {
+                              ...d,
+                              seeking: {
+                                ...d.seeking,
+                                projectLength: e.target.value || null,
+                              },
+                            }
+                          )
+                        }
+                        placeholder="Ex. projet long"
                       />
                     </div>
                   </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <label className="ep-label" htmlFor="edit-project-length">
-                      Longueur de projet
-                    </label>
-                    <input
-                      id="edit-project-length"
-                      className="ep-input"
-                      value={editData.seeking.projectLength ?? ''}
-                      onChange={(e) =>
-                        setEditData((d) =>
-                          d && {
-                            ...d,
-                            seeking: {
-                              ...d.seeking,
-                              projectLength: e.target.value || null,
-                            },
-                          }
-                        )
-                      }
-                      placeholder="Ex. projet long"
-                    />
-                  </div>
-                </div>
-              )}
+                )}
+              </fieldset>
+
+              {/* Actions — anchored at the end of the form, not next to the name row */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 8,
+                  borderTop: '2px solid var(--border)',
+                  padding: '16px 0',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="ep-btn-secondary"
+                  style={{ fontSize: 13, padding: '7px 16px' }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={saving || avatarBusy}
+                  aria-busy={avatarBusy}
+                  className="ep-btn-primary"
+                  style={{ fontSize: 13, padding: '7px 18px' }}
+                >
+                  {saving
+                    ? 'Enregistrement…'
+                    : avatarBusy
+                      ? 'Optimisation en cours…'
+                      : 'Enregistrer'}
+                </button>
+              </div>
             </div>
           )}
 

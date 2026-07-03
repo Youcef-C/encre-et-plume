@@ -247,7 +247,8 @@ test('FE-3/FE-4: "Gérer les cookies" footer button reopens the banner', async (
 test('FE-7: cookie banner is not focus-stealing on first visit', async ({ page }) => {
   await clearConsentOnce(page);
   await page.goto('/');
-  await page.waitForLoadState('networkidle');
+  // No networkidle wait: the header's unread-count poller keeps the network
+  // busy forever, so it can never fire. The visible dialog is the real signal.
   const banner = page.getByRole('dialog', { name: /gestion des cookies/i });
   await expect(banner).toBeVisible({ timeout: 8_000 });
 

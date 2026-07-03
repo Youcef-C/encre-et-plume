@@ -585,3 +585,34 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 44px;
   }
 }
+
+/* ── Profile edit form ergonomics pass ────────────────────────────────────
+   On-brand checkbox ("Recherche active"): the real <input type="checkbox">
+   stays visually hidden but focusable (a11y); the custom box right after it
+   in the DOM gets the focus ring, matching every other interactive control's
+   :focus-visible treatment above. */
+.ep-checkbox-input:focus-visible + .ep-checkbox-box {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* On-brand <select> (OnBrandSelect) — same focus ring as every other control */
+.ep-select:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Two-column field row (Spécialité / Ville) — single column below 640px so
+   the profile edit form stays clean at 375px/768px. */
+.ep-form-row-2 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .ep-form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+}

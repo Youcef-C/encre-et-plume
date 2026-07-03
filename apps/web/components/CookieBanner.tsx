@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useCookieConsent } from '../lib/cookie-consent';
+import OnBrandCheckbox from './form/OnBrandCheckbox';
 
 export default function CookieBanner() {
   const { isOpen, save } = useCookieConsent();
@@ -72,54 +73,33 @@ export default function CookieBanner() {
             }}
           >
             {/* Essentiels — always on */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <input
-                type="checkbox"
-                id="cookie-essential"
-                checked
-                disabled
-                aria-label="Essentiels"
-                style={{ width: 18, height: 18, cursor: 'not-allowed' }}
-              />
-              <label htmlFor="cookie-essential" style={{ fontSize: 14, fontWeight: 700, cursor: 'not-allowed' }}>
-                Essentiels
-                <span
-                  style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink2)', marginLeft: 8 }}
-                >
-                  — toujours actifs
-                </span>
-              </label>
-            </div>
+            <OnBrandCheckbox
+              checked
+              disabled
+              aria-label="Essentiels"
+              label={
+                <>
+                  <span style={{ fontWeight: 700 }}>Essentiels</span>
+                  <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--ink2)', marginLeft: 8 }}>
+                    — toujours actifs
+                  </span>
+                </>
+              }
+            />
 
             {/* Mesure d'audience */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <input
-                type="checkbox"
-                id="cookie-audience"
-                checked={audience}
-                onChange={(e) => setAudience(e.target.checked)}
-                aria-label="Mesure d'audience"
-                style={{ width: 18, height: 18, cursor: 'pointer' }}
-              />
-              <label htmlFor="cookie-audience" style={{ fontSize: 14, cursor: 'pointer' }}>
-                Mesure d&apos;audience
-              </label>
-            </div>
+            <OnBrandCheckbox
+              checked={audience}
+              onChange={(e) => setAudience(e.target.checked)}
+              label="Mesure d'audience"
+            />
 
             {/* Contenus tiers */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <input
-                type="checkbox"
-                id="cookie-third"
-                checked={thirdParty}
-                onChange={(e) => setThirdParty(e.target.checked)}
-                aria-label="Contenus tiers"
-                style={{ width: 18, height: 18, cursor: 'pointer' }}
-              />
-              <label htmlFor="cookie-third" style={{ fontSize: 14, cursor: 'pointer' }}>
-                Contenus tiers
-              </label>
-            </div>
+            <OnBrandCheckbox
+              checked={thirdParty}
+              onChange={(e) => setThirdParty(e.target.checked)}
+              label="Contenus tiers"
+            />
 
             <button
               onClick={saveCustom}

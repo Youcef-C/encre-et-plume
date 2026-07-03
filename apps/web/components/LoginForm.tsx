@@ -7,6 +7,7 @@ import { EMAIL_NOT_VERIFIED, TWO_FACTOR_CHALLENGE_INVALID, TWO_FACTOR_INVALID_CO
 import type { ApiError } from '@encre-et-plume/shared';
 import { login, twoFactorVerify } from '../lib/api';
 import { useSession } from '../lib/session';
+import OnBrandCheckbox from './form/OnBrandCheckbox';
 
 interface FieldErrors {
   email?: string;
@@ -295,21 +296,14 @@ export default function LoginForm() {
       </div>
 
       {/* Remember me */}
-      <div style={{ marginBottom: 28, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <input
+      <div style={{ marginBottom: 28 }}>
+        <OnBrandCheckbox
           id="rememberMe"
           name="rememberMe"
-          type="checkbox"
           checked={rememberMe}
           onChange={(e) => setRememberMe(e.target.checked)}
-          style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }}
+          label="Se souvenir de moi"
         />
-        <label
-          htmlFor="rememberMe"
-          style={{ fontSize: 14, fontWeight: 500, cursor: 'pointer', color: 'var(--ink)' }}
-        >
-          Se souvenir de moi
-        </label>
       </div>
 
       <button

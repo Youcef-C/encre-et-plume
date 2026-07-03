@@ -337,6 +337,59 @@ describe('ProfilePageClient — seeking "Genres" chip picker (F-20)', () => {
   });
 });
 
+describe('ProfilePageClient — edit form ergonomics pass (on-brand controls + sections)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(mockProfile);
+    vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
+  });
+
+  async function openEdit(user: ReturnType<typeof userEvent.setup>) {
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+  }
+
+  it('groups the form into titled sections: a "Photo de profil" group, "Informations", and "Recherche de partenaire"', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    expect(screen.getByRole('group', { name: 'Photo de profil' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Informations' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Recherche de partenaire' })).toBeInTheDocument();
+  });
+
+  it('the "Recherche un·e" select uses the on-brand platform select styling (bold, ink border, matching FilterSidebar)', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const select = screen.getByRole('combobox', { name: /recherche un/i }) as HTMLSelectElement;
+    expect(select.style.fontWeight).toBe('700');
+    expect(select.style.border).toBe('2px solid var(--ink)');
+  });
+
+  it('the "Recherche active" control is a real checkbox with an accessible name, keyboard-toggleable', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const checkbox = screen.getByRole('checkbox', { name: /recherche active/i });
+    expect(checkbox).toBeChecked(); // mock profile has seeking.active: true
+    checkbox.focus();
+    await user.keyboard(' ');
+    expect(checkbox).not.toBeChecked();
+    // Sub-fields (role select, genres, project length) hide once inactive.
+    expect(screen.queryByRole('combobox', { name: /recherche un/i })).not.toBeInTheDocument();
+  });
+
+  it('anchors Enregistrer/Annuler at the end of the form, after the last section', async () => {
+    const user = userEvent.setup();
+    await openEdit(user);
+    const projectLengthInput = screen.getByLabelText('Longueur de projet');
+    const saveBtn = screen.getByRole('button', { name: /enregistrer/i });
+    // eslint-disable-next-line no-bitwise
+    expect(
+      projectLengthInput.compareDocumentPosition(saveBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+});
+
 describe('ProfilePageClient — error state', () => {
   it('shows error message when profile fetch fails with 404', async () => {
     vi.mocked(getProfile).mockRejectedValue({

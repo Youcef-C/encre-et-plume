@@ -26,6 +26,7 @@ import { STATUT_LABELS, LONGUEUR_LABELS, TRI_LABELS, PUBLIC_LABELS, PUBLIC_ALL_L
 import { SearchIcon, CheckIcon, CircleIcon, CircleDotIcon } from '../icons';
 import GenreSuggestInput from '../GenreSuggestInput';
 import GenreChip from '../GenreChip';
+import OnBrandSelect from '../form/OnBrandSelect';
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -241,29 +242,18 @@ export default function FilterSidebar({
         <label htmlFor="catalog-tri" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', letterSpacing: '.05em', display: 'block', marginBottom: 9 }}>
           Trier
         </label>
-        <select
+        <OnBrandSelect
           id="catalog-tri"
           aria-label="Trier"
           value={filters.tri}
           onChange={(e) => apply({ tri: e.target.value as CatalogQuery['tri'] })}
-          style={{
-            width: '100%',
-            border: '2px solid var(--ink)',
-            borderRadius: 6,
-            padding: '7px 9px',
-            fontSize: 13,
-            fontWeight: 700,
-            background: 'var(--card)',
-            color: 'var(--ink)',
-            fontFamily: 'inherit',
-          }}
         >
           {CATALOG_TRIS.map((tri) => (
             <option key={tri} value={tri}>
               {TRI_LABELS[tri]}
             </option>
           ))}
-        </select>
+        </OnBrandSelect>
       </div>
 
       <div
