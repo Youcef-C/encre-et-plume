@@ -8,7 +8,9 @@ import { coverStyle } from '../../lib/cover';
 import { formatLikeCount } from '../../lib/home';
 import { ratingLabel } from '../../lib/work';
 import { usePersonalAction } from '../../lib/usePersonalAction';
+import { useResumePosition } from '../../lib/useResumePosition';
 import { CheckIcon, HeartIcon, StarIcon, PlusIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
+import ResumeProgress from './ResumeProgress';
 
 const badgeStyle: React.CSSProperties = {
   background: 'var(--card)',
@@ -36,6 +38,7 @@ const actionBase: React.CSSProperties = {
 
 export default function WorkHero({ work, account }: { work: WorkDetail; account: AccountSummary | null }) {
   const { trigger, notice } = usePersonalAction(account);
+  const resume = useResumePosition(work.slug, account);
 
   return (
     <div>
@@ -98,10 +101,15 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <Link
-              href={`/lecteur/${work.slug}`}
+              href={resume ? `/lecteur/${work.slug}?chapitre=${resume.chapterNumber}&page=${resume.page}` : `/lecteur/${work.slug}`}
+              aria-label={
+                resume
+                  ? `Reprendre la lecture : chapitre ${resume.chapterNumber}, page ${resume.page} sur ${resume.totalPages}`
+                  : undefined
+              }
               style={{ ...actionBase, background: 'var(--accent)', color: '#fff', textDecoration: 'none' }}
             >
-              Lire
+              {resume ? 'Reprendre la lecture' : 'Lire'}
             </Link>
             <button type="button" onClick={trigger} style={{ ...actionBase, background: 'var(--card)', color: 'var(--ink)' }}>
               <PlusIcon size={14} /> Ma liste
@@ -123,6 +131,15 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
               <FlagIcon size={14} /> Signaler
             </button>
           </div>
+
+          {resume && (
+            <ResumeProgress
+              chapterNumber={resume.chapterNumber}
+              workTitle={resume.workTitle}
+              page={resume.page}
+              totalPages={resume.totalPages}
+            />
+          )}
 
           {notice && (
             <p role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>

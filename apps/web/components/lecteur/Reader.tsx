@@ -43,6 +43,8 @@ export default function Reader({ slug }: { slug: string }) {
   const [chapters, setChapters] = useState<WorkChapterDto[]>([]);
 
   const initialChapter = Math.max(1, parseInt(searchParams.get('chapitre') ?? '1', 10) || 1);
+  const initialPage = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
+  const initialPageConsumed = useRef(false);
   const [chapterNumber, setChapterNumber] = useState(initialChapter);
   const [pagesState, setPagesState] = useState<PagesState>('loading');
   const [pagesData, setPagesData] = useState<ChapterPagesResponse | null>(null);
@@ -101,6 +103,14 @@ export default function Reader({ slug }: { slug: string }) {
         setPagesData(data);
         setPagesState('ready');
         setPaywallChapter(null);
+        // DR-11 F-d: honor a `?page=` deep link once, on the initial chapter only — every
+        // later chapter switch resets to page 1 (top-of-effect setPage(1) above already did that).
+        const start =
+          chapterNumber === initialChapter && !initialPageConsumed.current
+            ? Math.min(Math.max(1, initialPage), data.totalPages)
+            : 1;
+        initialPageConsumed.current = true;
+        setPage(start);
       })
       .catch((err: ApiError) => {
         if (cancelled) return;

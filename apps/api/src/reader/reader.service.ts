@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { ChapterPagesResponse, ReaderPageDto } from '@encre-et-plume/shared';
-import { PROSE_PARAGRAPHS_PER_PAGE } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { chapterTotalPages } from './chapter-pagination';
 
 /**
  * DR-4 reader "Lecteur". Public, no guard — mirrors WorksController (anonymous visitors read
@@ -36,7 +36,7 @@ export class ReaderService {
         workSlug: slug,
         chapterNumber,
         readMode: 'prose',
-        totalPages: Math.ceil(prose.length / PROSE_PARAGRAPHS_PER_PAGE),
+        totalPages: chapterTotalPages(true, chapter.prose, 0),
         pages: [],
         prose,
       };
@@ -47,6 +47,6 @@ export class ReaderService {
     // (CS-*) produces real double-page panels; a dedicated column can replace this later.
     const pages: ReaderPageDto[] = planches.map((p, i) => ({ index: i + 1, image: p.image, caption: p.caption, double: false }));
 
-    return { workSlug: slug, chapterNumber, readMode: 'pages', totalPages: pages.length, pages, prose: [] };
+    return { workSlug: slug, chapterNumber, readMode: 'pages', totalPages: chapterTotalPages(false, null, pages.length), pages, prose: [] };
   }
 }

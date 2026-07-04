@@ -160,3 +160,96 @@ test.describe('Œuvre work page', () => {
     expect(overflow).toBe(true);
   });
 });
+
+/**
+ * DR-11 Reading history & resume — hermetic, route-mocked. Overrides /auth/me (signed-in) and
+ * /me/reading-history/:slug from mockWorkFeeds's anon default. NOT run this session — for
+ * QA/CI to execute per the plan's §6 acceptance flow.
+ */
+const signedInAccount = {
+  id: 'mock-reader-1',
+  slug: 'camille',
+  displayName: 'Camille',
+  role: 'utilisateur',
+  verified: true,
+  emailVerified: true,
+  avatar: null,
+  createdAt: new Date().toISOString(),
+  preferences: { theme: 'system' },
+};
+
+const resumeEntry = {
+  workSlug: 'lames-de-brume',
+  workTitle: 'Lames de Brume',
+  chapterNumber: 4,
+  chapterTitle: null,
+  page: 12,
+  totalPages: 28,
+  updatedAt: '2026-07-01T00:00:00.000Z',
+};
+
+test.describe('Œuvre work page — resume (DR-11)', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockWorkFeeds(page);
+    await page.route(`${API}/auth/me`, (route) => route.fulfill({ json: signedInAccount }));
+  });
+
+  test('signed-in reader with history: CTA becomes "Reprendre la lecture" and deep-links to the saved chapter/page', async ({ page }) => {
+    await page.route(`${API}/me/reading-history/lames-de-brume`, (route) => route.fulfill({ json: resumeEntry }));
+    await page.goto('/oeuvre/lames-de-brume');
+
+    const cta = page.getByRole('main').getByRole('link', { name: 'Reprendre la lecture' });
+    await expect(cta).toBeVisible();
+    await expect(cta).toHaveAttribute('href', '/lecteur/lames-de-brume?chapitre=4&page=12');
+    // Scoped by aria-label: the page also renders an unrelated "Impression papier" funding-goal
+    // progressbar (Sidebar) — a bare getByRole('progressbar') is ambiguous (strict-mode violation).
+    await expect(page.getByRole('progressbar', { name: /^Progression/ })).toBeVisible();
+    await expect(page.getByText('Ch. 4 · Lames de Brume — page 12/28')).toBeVisible();
+  });
+
+  test('signed-in reader with no history (404): unchanged "Lire" CTA, no progress bar', async ({ page }) => {
+    await page.route(`${API}/me/reading-history/lames-de-brume`, (route) =>
+      route.fulfill({ status: 404, json: { statusCode: 404, message: 'Aucune progression' } }),
+    );
+    await page.goto('/oeuvre/lames-de-brume');
+
+    await expect(page.getByRole('main').getByRole('link', { name: 'Lire', exact: true })).toHaveAttribute(
+      'href',
+      '/lecteur/lames-de-brume',
+    );
+    await expect(page.getByRole('progressbar', { name: /^Progression/ })).toHaveCount(0);
+  });
+
+  for (const width of [375, 768, 1280]) {
+    test(`resume bar + indicator have no horizontal overflow at ${width}px`, async ({ page }) => {
+      await page.route(`${API}/me/reading-history/lames-de-brume`, (route) => route.fulfill({ json: resumeEntry }));
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/oeuvre/lames-de-brume');
+      await expect(page.getByRole('progressbar', { name: /^Progression/ })).toBeVisible();
+      const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth + 1);
+      expect(overflow).toBe(true);
+    });
+  }
+
+  test('clicking "Reprendre la lecture" opens the reader at the saved chapter and page', async ({ page }) => {
+    await page.route(`${API}/me/reading-history/lames-de-brume`, (route) => route.fulfill({ json: resumeEntry }));
+    await page.route(`${API}/me/favorites`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/works/lames-de-brume/chapters/4/pages`, (route) =>
+      route.fulfill({
+        json: {
+          workSlug: 'lames-de-brume',
+          chapterNumber: 4,
+          readMode: 'pages',
+          totalPages: 28,
+          pages: Array.from({ length: 28 }, (_, i) => ({ index: i + 1, image: null, caption: null, double: false })),
+          prose: [],
+        },
+      }),
+    );
+    await page.goto('/oeuvre/lames-de-brume');
+    await page.getByRole('main').getByRole('link', { name: 'Reprendre la lecture' }).click();
+
+    await expect(page).toHaveURL('/lecteur/lames-de-brume?chapitre=4&page=12');
+    await expect(page.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 12 sur 28');
+  });
+});

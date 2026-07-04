@@ -342,3 +342,12 @@ export const getMyFavorites = (): Promise<FavoriteWorkDto[]> => request<Favorite
 
 export const putReadingProgress = (body: ReadingProgressInput): Promise<void> =>
   request<void>('/me/reading-progress', { method: 'PUT', body: JSON.stringify(body) });
+
+// ─── Reading history & resume (DR-11) ─────────────────────────────────────────
+import type { ReadingHistoryResponse, ReadingHistoryEntry } from '@encre-et-plume/shared';
+
+export const getReadingHistory = (page = 1): Promise<ReadingHistoryResponse> =>
+  request<ReadingHistoryResponse>(`/me/reading-history?page=${page}`);
+
+export const getReadingHistoryForWork = (slug: string): Promise<ReadingHistoryEntry> =>
+  request<ReadingHistoryEntry>(`/me/reading-history/${encodeURIComponent(slug)}`);

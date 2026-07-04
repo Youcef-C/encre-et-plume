@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { WorkDetail, AccountSummary } from '@encre-et-plume/shared';
+import type { WorkDetail, AccountSummary, ReadingHistoryEntry } from '@encre-et-plume/shared';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -13,6 +13,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api')>();
+  return { ...actual, getReadingHistoryForWork: vi.fn() };
+});
+
+import * as api from '../lib/api';
 import WorkHero from '../components/oeuvre/WorkHero';
 
 const work: WorkDetail = {
@@ -50,8 +56,21 @@ const admin: AccountSummary = {
   verified: true,
 } as AccountSummary;
 
+const resumeEntry: ReadingHistoryEntry = {
+  workSlug: 'lames-de-brume',
+  workTitle: 'Lames de Brume',
+  chapterNumber: 4,
+  chapterTitle: null,
+  page: 12,
+  totalPages: 28,
+  updatedAt: '2026-07-01T00:00:00.000Z',
+};
+
 describe('WorkHero (DR-3 FE-2)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getReadingHistoryForWork).mockRejectedValue({ statusCode: 404, message: 'Aucune progression' });
+  });
 
   it('renders the back link, badges with text equivalents, and title', () => {
     render(<WorkHero work={work} account={null} />);
@@ -104,5 +123,33 @@ describe('WorkHero (DR-3 FE-2)', () => {
     await user.click(screen.getByRole('button', { name: /Ma liste/ }));
     expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('signed-in with history: CTA becomes "Reprendre la lecture", deep-links to the saved chapter/page, and shows the progress bar (F1/F2/F3)', async () => {
+    vi.mocked(api.getReadingHistoryForWork).mockResolvedValue(resumeEntry);
+    render(<WorkHero work={work} account={admin} />);
+
+    await waitFor(() => expect(screen.getByText('Reprendre la lecture')).toBeInTheDocument());
+    expect(screen.getByText('Reprendre la lecture').closest('a')).toHaveAttribute(
+      'href',
+      '/lecteur/lames-de-brume?chapitre=4&page=12',
+    );
+    expect(screen.queryByText('Lire')).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByText('Ch. 4 · Lames de Brume — page 12/28')).toBeInTheDocument();
+  });
+
+  it('anonymous: unchanged "Lire" CTA, no progress bar, no history fetch (F4)', () => {
+    render(<WorkHero work={work} account={null} />);
+    expect(screen.getByText('Lire').closest('a')).toHaveAttribute('href', '/lecteur/lames-de-brume');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(api.getReadingHistoryForWork).not.toHaveBeenCalled();
+  });
+
+  it('signed-in with no history (404): unchanged "Lire" CTA, no progress bar (F4)', async () => {
+    render(<WorkHero work={work} account={admin} />);
+    await waitFor(() => expect(api.getReadingHistoryForWork).toHaveBeenCalled());
+    expect(screen.getByText('Lire').closest('a')).toHaveAttribute('href', '/lecteur/lames-de-brume');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 });

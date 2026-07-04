@@ -208,4 +208,53 @@ describe('Reader (DR-4 FE-1)', () => {
     });
     expect(api.putReadingProgress).not.toHaveBeenCalled();
   });
+
+  describe('DR-11 F-d — honors the ?page= deep link', () => {
+    const chapter4Pages: ChapterPagesResponse = {
+      workSlug: 'lames-de-brume',
+      chapterNumber: 4,
+      readMode: 'pages',
+      totalPages: 28,
+      pages: Array.from({ length: 28 }, (_, i) => ({ index: i + 1, image: null, caption: null, double: false })),
+      prose: [],
+    };
+    const chaptersWithTwoUnlocked: WorkChaptersResponse = {
+      ...chaptersResponse,
+      items: [
+        chaptersResponse.items[0],
+        { id: 'ch-2', number: 2, title: 'Le silence', plancheCount: 6, publishedAt: '2024-03-14T00:00:00.000Z', likeCount: 90, locked: false, lockReason: null },
+      ],
+    };
+
+    it('starts at the deep-linked page on the initial chapter', async () => {
+      searchParams = new URLSearchParams('chapitre=4&page=12');
+      vi.mocked(api.getWork).mockResolvedValue(work);
+      vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+      vi.mocked(api.getChapterPages).mockResolvedValue(chapter4Pages);
+      vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 12 sur 28'));
+    });
+
+    it('clamps a deep-linked page beyond totalPages to totalPages', async () => {
+      searchParams = new URLSearchParams('chapitre=1&page=999');
+      mockReady();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 6 sur 6'));
+    });
+
+    it('resets to page 1 when switching to another chapter', async () => {
+      searchParams = new URLSearchParams('chapitre=1&page=3');
+      vi.mocked(api.getWork).mockResolvedValue(work);
+      vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersWithTwoUnlocked);
+      vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
+      vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 3 sur 6'));
+
+      await user.click(screen.getByText('2 · Le silence'));
+      await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6'));
+    });
+  });
 });

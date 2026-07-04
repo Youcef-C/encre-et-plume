@@ -128,6 +128,15 @@ const FAVORITES = [
   { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres' },
 ];
 
+// DR-11: reading-history/resume fixtures. Same demo account as FAVORITES (dr1-camille-roux, the
+// only real loginable dev-seed account — see DR-4's backend-notes flag). One manga row (chapter 1
+// of the free showcase manga, page 3/6) so QA can see "Reprendre la lecture" -> chapitre=1&page=3
+// on the work page, and one roman row (chapter 1, page 1/2) for the prose fixture.
+const READING_PROGRESS = [
+  { accountSlug: 'dr1-camille-roux', workSlug: 'lames-de-brume', chapterNumber: 1, page: 3 },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres', chapterNumber: 1, page: 1 },
+];
+
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).
 const WORK_FUNDING_GOALS = {
   'lames-de-brume': [
@@ -240,6 +249,14 @@ async function main() {
   for (const [slug, chapters] of Object.entries(WORK_CHAPTERS)) {
     const work = await prisma.work.findUnique({ where: { slug } });
     if (!work) continue;
+    // DR-11: ReadingProgress FK's to Chapter (no cascade) — delete stale progress rows on the
+    // about-to-be-wiped chapters first, otherwise this deleteMany 500s once any account (seeded
+    // or live-tested) has read a chapter here. READING_PROGRESS below recreates fresh rows against
+    // the new chapter ids later in this same run.
+    const staleChapters = await prisma.chapter.findMany({ where: { workId: work.id, status: 'published' }, select: { id: true } });
+    if (staleChapters.length) {
+      await prisma.readingProgress.deleteMany({ where: { chapterId: { in: staleChapters.map((c) => c.id) } } });
+    }
     await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'published' } });
     for (const c of chapters) {
       await prisma.chapter.create({
@@ -283,6 +300,21 @@ async function main() {
       where: { accountId_workId: { accountId: account.id, workId: work.id } },
       create: { accountId: account.id, workId: work.id },
       update: {},
+    });
+  }
+
+  // DR-11: reading-history/resume fixtures — upsert on the model's own unique key so reseeding
+  // never accumulates duplicates or clobbers other accounts' progress.
+  for (const rp of READING_PROGRESS) {
+    const account = await prisma.account.findUnique({ where: { profileSlug: rp.accountSlug } });
+    const work = await prisma.work.findUnique({ where: { slug: rp.workSlug } });
+    if (!account || !work) continue;
+    const chapter = await prisma.chapter.findFirst({ where: { workId: work.id, number: rp.chapterNumber } });
+    if (!chapter) continue;
+    await prisma.readingProgress.upsert({
+      where: { accountId_chapterId: { accountId: account.id, chapterId: chapter.id } },
+      create: { accountId: account.id, chapterId: chapter.id, workId: work.id, page: rp.page },
+      update: { page: rp.page },
     });
   }
 
