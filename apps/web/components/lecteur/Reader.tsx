@@ -58,12 +58,13 @@ export default function Reader({ slug }: { slug: string }) {
   const [favorites, setFavorites] = useState<FavoriteWorkDto[]>([]);
   const [paywallChapter, setPaywallChapter] = useState<{ number: number; title: string | null } | null>(null);
 
-  // Asides collapse behind a toggle on narrow viewports (mobile) — replica desktop layout
-  // otherwise (F responsive requirement).
+  // Narrow viewports: the chapter list collapses behind a full-width bar (it's long), but
+  // Réactions stays EXPANDED below the stage — a collapsed 32px bar reads as "the module
+  // disappeared" on mobile (user report, 2026-07-04). Desktop keeps the replica layout.
   useEffect(() => {
     if (isNarrow) {
       setLeftCollapsed(true);
-      setRightCollapsed(true);
+      setRightCollapsed(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNarrow]);
@@ -242,6 +243,7 @@ export default function Reader({ slug }: { slug: string }) {
   return (
     <div
       ref={stageRef}
+      data-ep-reader
       style={{
         background: 'var(--ink)',
         minHeight: fullscreen ? '100vh' : 'calc(100vh - 69px)',

@@ -85,7 +85,7 @@ function halftoneStyle(seed: number): React.CSSProperties {
 function PageCard({ workTitle, chapterNumber, page, double }: { workTitle: string; chapterNumber: number; page: ReaderPageDto; double?: boolean }) {
   const alt = `${workTitle} — chapitre ${chapterNumber}, page ${page.index}`;
   return (
-    <div style={{ ...pageCardStyle(double), display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
+    <div className="ep-manga-page" style={{ ...pageCardStyle(double), display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
       {page.image ? (
         // eslint-disable-next-line @next/next/no-img-element -- plain <img> + CDN semantics (no next/image), platform convention
         <img

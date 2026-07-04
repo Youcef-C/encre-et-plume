@@ -80,9 +80,10 @@ export default function ChapterAside({
 }: Props) {
   if (collapsed) {
     return (
-      <aside style={{ ...asideStyle, width: 48 }}>
+      <aside className="ep-reader-aside" style={{ ...asideStyle, width: 48 }}>
         <button
           type="button"
+          className="ep-aside-rail-btn"
           onClick={onToggleCollapsed}
           aria-label="Développer"
           title="Développer"
@@ -100,7 +101,7 @@ export default function ChapterAside({
           }}
         >
           <CollapseRightIcon size={16} style={{ color: '#fff' }} />
-          <span style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-display)', fontSize: 14, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          <span className="ep-aside-rail-label" style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-display)', fontSize: 14, textTransform: 'uppercase', letterSpacing: '.08em' }}>
             Chapitres
           </span>
         </button>
@@ -109,7 +110,7 @@ export default function ChapterAside({
   }
 
   return (
-    <aside data-side="left" style={asideStyle}>
+    <aside data-side="left" className="ep-reader-aside" style={asideStyle}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, textTransform: 'uppercase', color: '#fff' }}>Chapitres</div>
         <button

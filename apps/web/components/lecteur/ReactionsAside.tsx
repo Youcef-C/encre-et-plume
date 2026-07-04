@@ -49,16 +49,17 @@ export default function ReactionsAside({ likeCount, favoriteCount, collapsed, on
 
   if (collapsed) {
     return (
-      <aside style={{ ...asideStyle, width: 48 }}>
+      <aside className="ep-reader-aside" style={{ ...asideStyle, width: 48 }}>
         <button
           type="button"
+          className="ep-aside-rail-btn"
           onClick={onToggleCollapsed}
           aria-label="Développer"
           title="Développer"
           style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', background: 'none', border: 'none', color: '#cabfb2', fontFamily: 'inherit' }}
         >
           <CollapseLeftIcon size={16} style={{ color: '#fff' }} />
-          <span style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-display)', fontSize: 14, textTransform: 'uppercase', color: 'var(--accent)', letterSpacing: '.08em' }}>
+          <span className="ep-aside-rail-label" style={{ writingMode: 'vertical-rl', fontFamily: 'var(--font-display)', fontSize: 14, textTransform: 'uppercase', color: 'var(--accent)', letterSpacing: '.08em' }}>
             Réactions
           </span>
         </button>
@@ -67,7 +68,7 @@ export default function ReactionsAside({ likeCount, favoriteCount, collapsed, on
   }
 
   return (
-    <aside data-side="right" style={asideStyle}>
+    <aside data-side="right" className="ep-reader-aside" style={asideStyle}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
         <button
           type="button"

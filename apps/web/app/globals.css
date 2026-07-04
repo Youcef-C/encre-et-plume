@@ -687,19 +687,58 @@ h1, h2, h3, h4, h5, h6 {
     height: auto;
     min-height: calc(100dvh - 69px);
     overflow: visible;
+    /* Breathing room between the reader's last element and the site footer. */
+    padding-bottom: 40px !important;
   }
   .ep-reader-columns {
     flex: none;
     flex-direction: column;
-    align-items: center !important;
+    align-items: stretch !important;
+    /* Explicit vertical rhythm between chapitres bar / stage / réactions; also absorbs the
+       ~20px intrinsic-height under-report of the aspect-ratio page card in stacked flow. */
+    row-gap: 26px;
+  }
+  /* Stacked flow: the page defines its own height (width-driven below), no forced 70vh
+     that the % chain can't resolve against (that made the page thin + overflow the footer).
+     stagecol must also drop its desktop flex-basis-0 (contributes ~0 intrinsic height in a
+     column, letting content spill over the Réactions bar and the footer). */
+  .ep-reader-stagecol {
+    flex: none;
   }
   .ep-reader-stagearea {
     flex: none;
-    min-height: 70vh;
+    height: auto;
+  }
+  .ep-reader-page-enter {
+    height: auto !important;
+  }
+  /* Width-driven page on mobile with an EXPLICIT height (width × 3/2): a percent-width +
+     aspect-ratio card doesn't contribute its derived height to flex ancestors' intrinsic
+     sizing here, so following content (nav, Réactions, footer) overlapped the page. A calc()
+     off the viewport is fully definite and breaks the cycle. 56px = the shell's 28px×2
+     horizontal padding. */
+  .ep-manga-page {
+    width: min(100vw - 56px, 440px) !important;
+    height: calc(min(100vw - 56px, 440px) * 1.5) !important;
+    max-width: none !important;
+    flex: none !important;
+    margin: 0 auto;
   }
   .ep-reader-columns > aside {
     max-height: none;
     overflow-y: visible;
+    width: 100% !important;
+  }
+  /* Collapsed asides become full-width horizontal bars (not 48px vertical desktop rails):
+     readable label, 44px+ tap target, Chapitres above / Réactions below the stage. */
+  .ep-aside-rail-btn {
+    flex-direction: row !important;
+    justify-content: center;
+    gap: 10px !important;
+    min-height: 32px;
+  }
+  .ep-aside-rail-label {
+    writing-mode: horizontal-tb !important;
   }
 }
 @media (max-width: 480px) {
@@ -763,4 +802,22 @@ h1, h2, h3, h4, h5, h6 {
 }
 @media (prefers-reduced-motion: reduce) {
   .ep-spinner { animation: none !important; }
+}
+
+/* ── DR-4 reader page: the site footer blends into the dark stage ────────────
+   (user request 2026-07-04). Stylesheet !important outranks the footer's inline
+   styles, including its JS hover color mutations — the footer goes quiet/dark
+   only while a reader is mounted (body:has). */
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] {
+  background: var(--ink) !important;
+  border-top-color: #4a4239 !important;
+}
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] a,
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] button,
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] nav,
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] span:not([aria-hidden]) {
+  color: #cabfb2 !important;
+}
+body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidden="true"] {
+  color: #4a4239 !important;
 }
