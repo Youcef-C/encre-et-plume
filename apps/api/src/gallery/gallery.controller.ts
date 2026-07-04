@@ -1,5 +1,11 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import type { GalleryFeatureCard, GalleryListResponse, GalleryPreview } from '@encre-et-plume/shared';
+import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import type {
+  GalleryFeatureCard,
+  GalleryIllustrationCard,
+  GalleryListResponse,
+  GalleryPreview,
+  IllustrationDetail,
+} from '@encre-et-plume/shared';
 import { GalleryService } from './gallery.service';
 import { parseGalleryQuery } from './parse-gallery-query';
 
@@ -25,5 +31,19 @@ export class GalleryController {
   @Get('illustrations/:id/preview')
   preview(@Param('id') id: string): Promise<GalleryPreview> {
     return this.galleryService.getPreview(id);
+  }
+
+  // DR-6: declared after the static `trending` route so `:id` doesn't shadow it (NestJS matches
+  // routes in declaration order for same-segment-count paths).
+  @Get('illustrations/:id')
+  async illustration(@Param('id') id: string): Promise<IllustrationDetail> {
+    const detail = await this.galleryService.getIllustration(id);
+    if (!detail) throw new NotFoundException('Illustration introuvable');
+    return detail;
+  }
+
+  @Get('illustrations/:id/more')
+  more(@Param('id') id: string): Promise<GalleryIllustrationCard[]> {
+    return this.galleryService.getMoreByArtist(id);
   }
 }

@@ -10,6 +10,8 @@ describe('GalleryController', () => {
     findIllustrations: jest.Mock;
     getTrending: jest.Mock;
     getPreview: jest.Mock;
+    getIllustration: jest.Mock;
+    getMoreByArtist: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -24,6 +26,8 @@ describe('GalleryController', () => {
       }),
       getTrending: jest.fn().mockResolvedValue([{ id: 'i1', rank: 1 }]),
       getPreview: jest.fn().mockResolvedValue({ id: 'i1', title: 'Pluie de Néons' }),
+      getIllustration: jest.fn().mockResolvedValue({ id: 'i1', title: 'Pluie de Néons' }),
+      getMoreByArtist: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -62,5 +66,27 @@ describe('GalleryController', () => {
     service.getPreview.mockRejectedValue(new NotFoundException('Illustration nope not found'));
 
     await expect(controller.preview('nope')).rejects.toThrow(NotFoundException);
+  });
+
+  it('GET /illustrations/:id delegates to getIllustration and returns the detail', async () => {
+    const result = await controller.illustration('i1');
+
+    expect(service.getIllustration).toHaveBeenCalledWith('i1');
+    expect(result).toEqual({ id: 'i1', title: 'Pluie de Néons' });
+  });
+
+  it('GET /illustrations/:id throws a 404 when the service returns null (missing/unpublished)', async () => {
+    service.getIllustration.mockResolvedValue(null);
+
+    await expect(controller.illustration('nope')).rejects.toThrow(NotFoundException);
+  });
+
+  it('GET /illustrations/:id/more delegates to getMoreByArtist', async () => {
+    service.getMoreByArtist.mockResolvedValue([{ id: 'i2' }]);
+
+    const result = await controller.more('i1');
+
+    expect(service.getMoreByArtist).toHaveBeenCalledWith('i1');
+    expect(result).toEqual([{ id: 'i2' }]);
   });
 });

@@ -623,6 +623,20 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ── DR-6 Illustration detail — responsive reflow ─────────────────────────────
+   Desktop (>900px): 1.7fr/1fr artwork+sidebar grid, sticky sidebar, replica of
+   the prototype layout. <=900px: single column, sidebar drops under the artwork
+   and its sticky positioning is dropped (nothing to stick to in a stacked flow). */
+@media (max-width: 900px) {
+  .ep-illustration-columns {
+    grid-template-columns: 1fr !important;
+  }
+  .ep-illustration-sidebar {
+    position: static !important;
+    top: auto !important;
+  }
+}
+
 /* Two-column field row (Spécialité / Ville) — single column below 640px so
    the profile edit form stays clean at 375px/768px. */
 .ep-form-row-2 {

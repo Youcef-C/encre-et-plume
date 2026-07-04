@@ -1,0 +1,131 @@
+'use client';
+
+// DR-6 FE-T1 — illustration detail "/illustration/{id}" orchestrator. Mirrors OeuvreClient's
+// state machine (loading/notfound/error/ready); getIllustrationMore fetches independently so a
+// failure there never blanks the rest of the page (DR-1 pattern).
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { ApiError, IllustrationDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
+import * as api from '../../lib/api';
+import { useSession } from '../../lib/session';
+import IllustrationViewer from './IllustrationViewer';
+import IllustrationMeta from './IllustrationMeta';
+import IllustrationComments from './IllustrationComments';
+import ArtistSidebar from './ArtistSidebar';
+
+type State = 'loading' | 'ready' | 'notfound' | 'error';
+
+export default function IllustrationClient({ id }: { id: string }) {
+  const { account } = useSession();
+  const [state, setState] = useState<State>('loading');
+  const [detail, setDetail] = useState<IllustrationDetail | null>(null);
+  const [more, setMore] = useState<GalleryIllustrationCard[]>([]);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState('loading');
+    api
+      .getIllustration(id)
+      .then((data) => {
+        if (cancelled) return;
+        setDetail(data);
+        setState('ready');
+      })
+      .catch((err: ApiError) => {
+        if (cancelled) return;
+        setError(err);
+        setState(err.statusCode === 404 ? 'notfound' : 'error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, retryKey]);
+
+  useEffect(() => {
+    api.getIllustrationMore(id).then(setMore).catch(() => setMore([]));
+  }, [id]);
+
+  if (state === 'loading') {
+    return (
+      <div
+        role="status"
+        aria-label="Chargement de l'illustration…"
+        className="ep-skeleton-delayed"
+        style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px' }}
+      >
+        <div aria-hidden="true" style={{ height: 600, background: 'var(--tone)', opacity: 0.5, borderRadius: 12 }} />
+      </div>
+    );
+  }
+
+  if (state === 'notfound') {
+    return (
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
+        <Link href="/galerie" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
+          ‹ Galerie
+        </Link>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 6vw, 56px)', textTransform: 'uppercase', margin: '20px 0 12px' }}>
+          Illustration introuvable
+        </h1>
+        <p style={{ color: 'var(--ink2)', fontSize: 15 }}>Cette illustration n&apos;existe pas ou a été dépubliée.</p>
+      </div>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <div role="alert" style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
+        <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>
+          {error?.message ?? 'Impossible de charger cette illustration.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => setRetryKey((k) => k + 1)}
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            background: 'var(--accent)',
+            color: '#fff',
+            border: '2px solid var(--ink)',
+            borderRadius: 6,
+            padding: '8px 16px',
+            cursor: 'pointer',
+          }}
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+
+  if (!detail) return null;
+
+  return (
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px' }}>
+      <Link href="/galerie" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
+        ‹ Galerie
+      </Link>
+
+      <div className="ep-illustration-columns" style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 24, marginTop: 14, alignItems: 'start' }}>
+        <div>
+          <IllustrationViewer detail={detail} account={account} />
+          <IllustrationMeta detail={detail} />
+          <IllustrationComments account={account} />
+        </div>
+
+        <ArtistSidebar
+          artist={detail.artist}
+          categoryLabel={detail.categoryLabel}
+          publishedAt={detail.publishedAt}
+          dimensionsLabel={detail.dimensionsLabel}
+          tools={detail.tools}
+          license={detail.license ?? '© Tous droits réservés'}
+          more={more}
+          account={account}
+        />
+      </div>
+    </div>
+  );
+}

@@ -71,3 +71,32 @@ export interface GalleryPreview {
   likeCount: number;
   image: string | null; // larger image (null -> halftone placeholder)
 }
+
+// DR-6: illustration detail screen ("/illustration/:id"). Additive — nothing above changes.
+
+/** Artist block on the illustration detail response. */
+export interface IllustrationArtist {
+  id: string | null; // Account id, null when the fixture has no linked Account
+  name: string; // always present (denormalized artistName)
+  slug: string | null; // Account.profileSlug -> /:slug (F-3), null -> plain text
+  role: string; // French role label, e.g. "Dessinateur·rice" (default when unlinked)
+  city: string | null; // Account/Profile city, else null
+  avatar: string | null; // null -> CSS halftone placeholder
+}
+
+/** GET /illustrations/:id */
+export interface IllustrationDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  category: GalleryCategoryKey;
+  categoryLabel: string; // galleryCategoryLabel()
+  hashtags: string[]; // rendered as "#{tag}" chips
+  image: string | null; // large artwork (null -> halftone)
+  dimensionsLabel: string | null; // "2480 × 3508" when both width & height set, else null
+  tools: string | null;
+  license: string | null; // BE default applied server-side: "© Tous droits réservés" when null
+  likeCount: number;
+  publishedAt: string | null; // ISO 8601
+  artist: IllustrationArtist;
+}

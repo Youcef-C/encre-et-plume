@@ -353,7 +353,13 @@ export const getReadingHistoryForWork = (slug: string): Promise<ReadingHistoryEn
   request<ReadingHistoryEntry>(`/me/reading-history/${encodeURIComponent(slug)}`);
 
 // ─── Illustration gallery "Galerie" (DR-5) ────────────────────────────────────
-import type { GalleryListResponse, GalleryFeatureCard, GalleryPreview } from '@encre-et-plume/shared';
+import type {
+  GalleryListResponse,
+  GalleryFeatureCard,
+  GalleryPreview,
+  GalleryIllustrationCard,
+  IllustrationDetail,
+} from '@encre-et-plume/shared';
 
 export const getGallery = (query: URLSearchParams): Promise<GalleryListResponse> =>
   request<GalleryListResponse>(`/illustrations${query.toString() ? `?${query.toString()}` : ''}`);
@@ -363,3 +369,10 @@ export const getGalleryTrending = (): Promise<GalleryFeatureCard[]> =>
 
 export const getGalleryPreview = (id: string): Promise<GalleryPreview> =>
   request<GalleryPreview>(`/illustrations/${encodeURIComponent(id)}/preview`);
+
+// ─── Illustration detail "Illustration" (DR-6) ────────────────────────────────
+export const getIllustration = (id: string): Promise<IllustrationDetail> =>
+  request<IllustrationDetail>(`/illustrations/${encodeURIComponent(id)}`);
+
+export const getIllustrationMore = (id: string): Promise<GalleryIllustrationCard[]> =>
+  request<GalleryIllustrationCard[]>(`/illustrations/${encodeURIComponent(id)}/more`);

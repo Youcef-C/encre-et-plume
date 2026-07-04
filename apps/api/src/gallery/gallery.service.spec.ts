@@ -13,9 +13,13 @@ const ILLUSTRATION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => (
   artistName: 'Yuki Moreau',
   category: 'couvertures',
   genres: [],
+  description: null,
+  hashtags: [],
   image: null,
   width: null,
   height: null,
+  tools: null,
+  license: null,
   likeCount: 12400,
   weeklyLikeDelta: 900,
   publishedAt: new Date('2026-06-01'),
@@ -217,5 +221,143 @@ describe('GalleryService', () => {
     prisma.illustration.findFirst.mockResolvedValue(null);
 
     await expect(service.getPreview('nope')).rejects.toThrow(NotFoundException);
+  });
+
+  describe('getIllustration (DR-6 detail)', () => {
+    it('linked artist: maps full artist block (name, slug, role label, city, avatar)', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(
+        ILLUSTRATION_ROW({
+          artistId: 'acc1',
+          artist: {
+            id: 'acc1',
+            profileSlug: 'dr1-yuki-moreau',
+            avatar: 'https://cdn.test/avatar.png',
+            profile: { creatorRoles: ['dessinateur'], city: 'Lyon' },
+          },
+          description: 'Encrage traditionnel rehaussé de trames numériques.',
+          hashtags: ['encre', 'noir', 'néon', 'pluie'],
+          width: 2480,
+          height: 3508,
+          tools: 'Encre · CSP',
+          license: '© Tous droits réservés',
+        }),
+      );
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.artist).toEqual({
+        id: 'acc1',
+        name: 'Yuki Moreau',
+        slug: 'dr1-yuki-moreau',
+        role: 'Dessinateur·rice',
+        city: 'Lyon',
+        avatar: 'https://cdn.test/avatar.png',
+      });
+      expect(result?.dimensionsLabel).toBe('2480 × 3508');
+      expect(result?.tools).toBe('Encre · CSP');
+      expect(result?.license).toBe('© Tous droits réservés');
+      expect(result?.description).toBe('Encrage traditionnel rehaussé de trames numériques.');
+      expect(result?.hashtags).toEqual(['encre', 'noir', 'néon', 'pluie']);
+    });
+
+    it('maps the scenariste role to its French label "Scénariste"', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(
+        ILLUSTRATION_ROW({
+          artistId: 'acc2',
+          artist: { id: 'acc2', profileSlug: 'dr1-camille-roux', avatar: null, profile: { creatorRoles: ['scenariste'], city: null } },
+        }),
+      );
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.artist.role).toBe('Scénariste');
+    });
+
+    it('unlinked artist: name-only defaults (no id/slug/city/avatar, default role label)', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ artistId: null, artist: null }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.artist).toEqual({
+        id: null,
+        name: 'Yuki Moreau',
+        slug: null,
+        role: 'Dessinateur·rice',
+        city: null,
+        avatar: null,
+      });
+    });
+
+    it('dimensionsLabel is null when width or height is missing', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ width: null, height: 3508 }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.dimensionsLabel).toBeNull();
+    });
+
+    it('license defaults to the standard copyright string when the column is null', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ license: null }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.license).toBe('© Tous droits réservés');
+    });
+
+    it('maps categoryLabel and publishedAt as an ISO string', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(
+        ILLUSTRATION_ROW({ category: 'couvertures', publishedAt: new Date('2026-06-01T00:00:00.000Z') }),
+      );
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.categoryLabel).toBe('Couvertures');
+      expect(result?.publishedAt).toBe('2026-06-01T00:00:00.000Z');
+    });
+
+    it('queries only the published illustration matching the id', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW());
+
+      await service.getIllustration('i1');
+
+      const args = prisma.illustration.findFirst.mock.calls[0][0];
+      expect(args.where).toEqual({ id: 'i1', publishedAt: { not: null } });
+    });
+
+    it('returns null for an unknown or unpublished id', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(null);
+
+      const result = await service.getIllustration('nope');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getMoreByArtist (DR-6 "Plus de cet·te artiste")', () => {
+    it('groups by the source artistName, excludes the current id, only published, capped at 6, ordered by likeCount desc/id asc', async () => {
+      prisma.illustration.findFirst.mockResolvedValue({ artistName: 'Yuki Moreau' });
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW({ id: 'i2' }), ILLUSTRATION_ROW({ id: 'i3' })]);
+
+      const result = await service.getMoreByArtist('i1');
+
+      expect(prisma.illustration.findFirst.mock.calls[0][0]).toEqual({
+        where: { id: 'i1', publishedAt: { not: null } },
+        select: { artistName: true },
+      });
+      const args = prisma.illustration.findMany.mock.calls[0][0];
+      expect(args.where).toEqual({ artistName: 'Yuki Moreau', publishedAt: { not: null }, id: { not: 'i1' } });
+      expect(args.orderBy).toEqual([{ likeCount: 'desc' }, { id: 'asc' }]);
+      expect(args.take).toBe(6);
+      expect(result.map((c) => c.id)).toEqual(['i2', 'i3']);
+    });
+
+    it('returns [] without querying findMany when the source id is unknown/unpublished', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(null);
+
+      const result = await service.getMoreByArtist('nope');
+
+      expect(result).toEqual([]);
+      expect(prisma.illustration.findMany).not.toHaveBeenCalled();
+    });
   });
 });

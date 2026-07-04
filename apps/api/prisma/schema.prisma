@@ -527,6 +527,10 @@ model Illustration {
   image           String?                        // media URL; null -> CSS halftone placeholder (coverStyle)
   width           Int?                            // dimensions (DR-6/preview meta)
   height          Int?
+  description     String?                        // DR-6: meta-block paragraph
+  hashtags        String[]  @default([])        // DR-6: free descriptive chips ("#encre") — NOT F-20 genres
+  tools           String?                        // DR-6: "Détails" -> Outils, e.g. "Encre · CSP"
+  license         String?                        // DR-6: "Détails" -> Licence; null -> "© Tous droits réservés" (BE default)
   likeCount       Int       @default(0)          // ponytail: denormalized; DR-9 owns the increment
   weeklyLikeDelta Int       @default(0)          // rolling-7d delta -> "tendance" sort + trending endpoint
   publishedAt     DateTime?                        // null = not public; non-null = in gallery + "nouveautes" sort key

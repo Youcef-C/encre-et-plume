@@ -7,12 +7,19 @@ import type {
   GalleryPreview,
   GalleryQuery,
   GallerySummary,
+  IllustrationArtist,
+  IllustrationDetail,
 } from '@encre-et-plume/shared';
 import { GALLERY_PAGE_SIZE, catalogGenreLabel, galleryCategoryLabel } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 const CACHE_TTL_S = 60; // ponytail: fail-open Redis cache, same TTL/pattern as CatalogService.
+const DEFAULT_LICENSE = '© Tous droits réservés';
+// DR-6: role -> French label, same convention as DR-3's Sidebar.tsx ROLE_LABEL map (frontend copy).
+const ROLE_LABELS: Record<string, string> = { dessinateur: 'Dessinateur·rice', scenariste: 'Scénariste' };
+const DEFAULT_ROLE_LABEL = 'Dessinateur·rice';
+const MORE_BY_ARTIST_LIMIT = 6;
 
 /**
  * DR-5 illustration gallery "Galerie". Public, read-only, cached in Redis (fail-open — a cache
@@ -90,6 +97,33 @@ export class GalleryService {
     };
   }
 
+  /** GET /illustrations/:id — full detail. `null` when missing/unpublished (controller maps to 404). */
+  async getIllustration(id: string): Promise<IllustrationDetail | null> {
+    const row = await this.prisma.illustration.findFirst({
+      where: { id, publishedAt: { not: null } },
+      include: { artist: { include: { profile: true } } },
+    });
+    if (!row) return null;
+    return mapToDetail(row);
+  }
+
+  /** GET /illustrations/:id/more — "Plus de cet·te artiste", grouped by the stable `artistName`. */
+  async getMoreByArtist(id: string): Promise<GalleryIllustrationCard[]> {
+    const source = await this.prisma.illustration.findFirst({
+      where: { id, publishedAt: { not: null } },
+      select: { artistName: true },
+    });
+    if (!source) return [];
+
+    const rows = await this.prisma.illustration.findMany({
+      where: { artistName: source.artistName, publishedAt: { not: null }, id: { not: id } },
+      orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+      take: MORE_BY_ARTIST_LIMIT,
+      include: { artist: true },
+    });
+    return rows.map(mapToCard);
+  }
+
   /** Fail-open Redis cache: any read/write error falls through to `fn` — never errors the request. */
   private async cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const hit = await this.redis.get(key);
@@ -150,5 +184,49 @@ function mapToCard(row: IllustrationRow): GalleryIllustrationCard {
     categoryLabel: galleryCategoryLabel(row.category),
     likeCount: row.likeCount,
     thumbnail: row.image,
+  };
+}
+
+interface IllustrationDetailRow extends IllustrationRow {
+  description: string | null;
+  hashtags: string[];
+  width: number | null;
+  height: number | null;
+  tools: string | null;
+  license: string | null;
+  publishedAt: Date | null;
+  artist?: { id: string; profileSlug: string; avatar: string | null; profile?: { creatorRoles: string[]; city: string | null } | null } | null;
+}
+
+function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    category: row.category as GalleryCategoryKey,
+    categoryLabel: galleryCategoryLabel(row.category),
+    hashtags: row.hashtags,
+    image: row.image,
+    dimensionsLabel: row.width != null && row.height != null ? `${row.width} × ${row.height}` : null,
+    tools: row.tools,
+    license: row.license ?? DEFAULT_LICENSE,
+    likeCount: row.likeCount,
+    publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+    artist: mapArtist(row),
+  };
+}
+
+function mapArtist(row: IllustrationDetailRow): IllustrationArtist {
+  if (!row.artist) {
+    return { id: null, name: row.artistName, slug: null, role: DEFAULT_ROLE_LABEL, city: null, avatar: null };
+  }
+  const roleKey = row.artist.profile?.creatorRoles[0];
+  return {
+    id: row.artist.id,
+    name: row.artistName,
+    slug: row.artist.profileSlug,
+    role: (roleKey && ROLE_LABELS[roleKey]) ?? DEFAULT_ROLE_LABEL,
+    city: row.artist.profile?.city ?? null,
+    avatar: row.artist.avatar ?? null,
   };
 }
