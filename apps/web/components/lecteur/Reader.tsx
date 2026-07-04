@@ -177,10 +177,11 @@ export default function Reader({ slug }: { slug: string }) {
     router.replace(`/lecteur/${slug}?chapitre=${number}`);
   }
 
-  const readMode = pagesData?.readMode ?? 'pages';
   const effectiveSpreadMode = forceSingleSpread ? 'single' : spreadMode;
   const totalPages = pagesData?.totalPages ?? 1;
-  const step = effectiveSpreadMode === 'double' && readMode === 'pages' ? 2 : 1;
+  // Story update (States bullet): 2-page spread now steps pages by 2 for roman too, not just
+  // manga - the spread toggle is enabled for both read modes (Topbar.tsx).
+  const step = effectiveSpreadMode === 'double' ? 2 : 1;
 
   function goPrev() {
     setPage((p) => Math.max(1, p - step));
@@ -224,6 +225,18 @@ export default function Reader({ slug }: { slug: string }) {
   }
   function openPaywall(chapter: WorkChapterDto) {
     setPaywallChapter({ number: chapter.number, title: chapter.title });
+  }
+
+  // Story update: "◳ Studio" repurposed into a "clear view" toggle - collapses both side asides
+  // at once for a bigger, distraction-free panel (distinct from full immersive fullscreen, which
+  // unmounts the topbar too). Reuses the existing per-aside collapse state rather than adding a
+  // new one: "active" simply means both asides currently happen to be collapsed, regardless of
+  // why (this toggle, or the mobile auto-collapse effect above).
+  const clearViewActive = leftCollapsed && rightCollapsed;
+  function toggleClearView() {
+    const next = !clearViewActive;
+    setLeftCollapsed(next);
+    setRightCollapsed(next);
   }
 
   return (
@@ -278,7 +291,7 @@ export default function Reader({ slug }: { slug: string }) {
           />
         </>
       ) : (
-        <div style={{ maxWidth: 1560, margin: '0 auto', padding: '18px 28px 22px', width: '100%' }}>
+        <div className="ep-reader-shell" style={{ maxWidth: 1560, margin: '0 auto', padding: '18px 28px 22px', width: '100%' }}>
           {/* QA F1 fix (round 2): "✕ Quitter" now renders INSIDE Topbar's own flex row (rightmost,
               next to "Plein écran") instead of as a separately positioned element here — a flex
               child can never overlap a sibling or the site header, whereas any position:fixed/
@@ -289,11 +302,12 @@ export default function Reader({ slug }: { slug: string }) {
             currentChapterNumber={chapterNumber}
             favorites={favorites}
             signedIn={!!account}
-            readMode={readMode}
             spreadMode={effectiveSpreadMode}
             onSpreadChange={setSpreadMode}
             isFullscreen={fullscreen}
             onFullscreenToggle={toggleFullscreen}
+            clearViewActive={clearViewActive}
+            onToggleClearView={toggleClearView}
           />
           <div className="ep-reader-columns" style={{ display: 'flex', gap: 22, marginTop: 16, alignItems: 'stretch', justifyContent: 'center' }}>
             <ChapterAside
@@ -305,20 +319,33 @@ export default function Reader({ slug }: { slug: string }) {
               onOpenPaywall={openPaywall}
             />
 
-            <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, position: 'relative' }}>
-              <Stage
-                workTitle={work.title}
-                chapterNumber={chapterNumber}
-                chapterTitle={currentChapter?.title ?? null}
-                pagesState={pagesState}
-                pagesData={pagesData}
-                page={page}
-                spreadMode={effectiveSpreadMode}
-                onRetry={() => setPagesRetryKey((k) => k + 1)}
-              />
-              {paywallChapter && (
-                <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
-              )}
+            {/* QA Finding A: `flex:'1 1 auto'` used this column's own (large, double-page) content
+                size as its hypothetical main size BEFORE flex-shrink negotiation - so a 2-page
+                spread's width alone could exceed the leftover row space and force `.ep-reader-
+                columns`' flex-wrap to split the asides onto separate stacked lines instead of
+                shrinking this column. `flex:'1 1 0'` (basis 0) makes ordinary flex-grow space
+                distribution give this column the row's actual leftover width instead, so the row
+                stays a single 3-column line and the stage shrinks rather than the asides wrapping
+                away. */}
+            {/* min-height:0 + a flex:1 stage-area sub-box give the page a viewport-anchored
+                definite height to resolve height:100% against (see .ep-reader-stagearea in
+                globals.css), instead of the tallest-aside height that collapsed the manga page. */}
+            <div className="ep-reader-stagecol">
+              <div className="ep-reader-stagearea">
+                <Stage
+                  workTitle={work.title}
+                  chapterNumber={chapterNumber}
+                  chapterTitle={currentChapter?.title ?? null}
+                  pagesState={pagesState}
+                  pagesData={pagesData}
+                  page={page}
+                  spreadMode={effectiveSpreadMode}
+                  onRetry={() => setPagesRetryKey((k) => k + 1)}
+                />
+                {paywallChapter && (
+                  <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
+                )}
+              </div>
               {pagesState === 'ready' && (
                 <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
               )}

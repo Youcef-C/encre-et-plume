@@ -160,6 +160,89 @@ test.describe('Lecteur — manga reader', () => {
     expect(hasOverflow).toBe(false);
   });
 
+  // Story update (2026-07-04): back returns to the current work's page, not the catalogue -
+  // overrides the prototype's "‹ Catalogue" link ("✕ Quitter" already covers the same
+  // destination as a distinct "quit reading" action, verified by the AABB tests below).
+  test('the back link returns to the current work\'s page, not the catalogue', async ({ page }) => {
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await page.getByRole('link', { name: "‹ Retour à l'œuvre" }).click();
+    await expect(page).toHaveURL('/oeuvre/lames-de-brume');
+  });
+
+  // Story update (2026-07-04): "Fixed page aspect ratio" - manga pages are forced to a fixed
+  // manga page ratio (~2:3 portrait) so they never stretch to fill the stage.
+  test('manga pages are constrained to the manga page ratio (~2:3)', async ({ page }) => {
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    const pageCard = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' }).locator('xpath=..');
+    const ratio = await pageCard.evaluate((el) => getComputedStyle(el).aspectRatio);
+    expect(ratio).toBe('2 / 3');
+  });
+
+  // QA BLOCKER regression: the ratio assertion above passed even while the page rendered as a
+  // ~34x51px stamp (a correct-ratio-but-tiny box) - `getComputedStyle().aspectRatio` never checks
+  // rendered pixel size. This asserts the REAL bounding box the browser lays out, at the exact
+  // viewport QA used, so a collapse-to-min-content regression fails here even if a future change
+  // preserves the CSS ratio property. The locator targets the PageCard element itself (`xpath=..`
+  // from the halftone placeholder's own `role="img"` div walks up exactly one level, to its direct
+  // parent - the page card, not the outer 100%-sized `MangaPages` wrapper one level further up).
+  test('BLOCKER: the manga page renders large, not collapsed to min-content', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    const pageCard = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' }).locator('xpath=..');
+    const box = await pageCard.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThan(300);
+    expect(box!.width).toBeGreaterThan(200);
+  });
+
+  // QA Finding A (user-reported: "Réactions gets squished to the bottom" with a 2-page spread
+  // open): `.ep-reader-columns`' unconditional flex-wrap + the middle column's old `flex:'1 1
+  // auto'` let the column's own (large, double-page) content size force the row to wrap into 3
+  // stacked lines instead of a 3-column row. Verify the row stays a single line: Réactions sits to
+  // the RIGHT of the stage (not below it), and both asides sit near the same vertical position.
+  test('with a 2-page manga spread open, "Chapitres" and "Réactions" stay docked left/right of the stage (not wrapped below it)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await page.getByRole('button', { name: '2 pages' }).click();
+
+    const chapitres = page.getByText('Chapitres', { exact: true });
+    const reactions = page.getByText('Réactions', { exact: true });
+    const stage = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' }).locator('xpath=..');
+    const [chapitresBox, reactionsBox, stageBox] = await Promise.all([
+      chapitres.boundingBox(),
+      reactions.boundingBox(),
+      stage.boundingBox(),
+    ]);
+    expect(chapitresBox).not.toBeNull();
+    expect(reactionsBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+    expect(reactionsBox!.x).toBeGreaterThan(stageBox!.x);
+    expect(Math.abs(reactionsBox!.y - chapitresBox!.y)).toBeLessThan(40);
+  });
+
+  // Same acceptance criterion, but with the Studio "Vue dégagée" clear-view ALSO active (both
+  // asides collapsed to mini-rails) - the collapsed rails must still dock left/right, not wrap.
+  test('with a 2-page manga spread AND "Vue dégagée" both active, the collapsed asides stay docked left/right', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await page.getByRole('button', { name: '2 pages' }).click();
+    await page.getByRole('button', { name: 'Vue dégagée' }).click();
+
+    const chapitres = page.getByText('Chapitres', { exact: true });
+    const reactions = page.getByText('Réactions', { exact: true });
+    const stage = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' }).locator('xpath=..');
+    const [chapitresBox, reactionsBox, stageBox] = await Promise.all([
+      chapitres.boundingBox(),
+      reactions.boundingBox(),
+      stage.boundingBox(),
+    ]);
+    expect(chapitresBox).not.toBeNull();
+    expect(reactionsBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+    expect(reactionsBox!.x).toBeGreaterThan(stageBox!.x);
+    expect(Math.abs(reactionsBox!.y - chapitresBox!.y)).toBeLessThan(40);
+  });
+
   // QA F1 regression, round 2: a coordinate-based fix (position:absolute inside the stage) only
   // moved the collision around - the pill then landed on top of "Plein écran" at 1280px and the
   // chapter-title dropdown at 375px. Structural fix: "✕ Quitter" is now a normal flex child of
@@ -169,6 +252,28 @@ test.describe('Lecteur — manga reader', () => {
   function boxesIntersect(a: { x: number; y: number; width: number; height: number }, b: typeof a): boolean {
     return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
   }
+
+  // Story update: "◳ Studio" is repurposed into a "Vue dégagée" clear-view toggle - collapses
+  // both side asides for a bigger reading panel, distinct from full immersive fullscreen (the
+  // topbar itself, including the back link and "Plein écran" button, stays visible).
+  test('"Vue dégagée" collapses both asides for a bigger panel, and restores them on a second click', async ({ page }) => {
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await expect(page.getByText('1 · Sous la pluie')).toBeVisible();
+
+    const studioBtn = page.getByRole('button', { name: 'Vue dégagée' });
+    await expect(studioBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await studioBtn.click();
+    await expect(studioBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('1 · Sous la pluie')).not.toBeVisible();
+    // Distinct from immersive fullscreen: the topbar chrome stays visible.
+    await expect(page.getByRole('link', { name: "‹ Retour à l'œuvre" })).toBeVisible();
+    await expect(page.getByRole('button', { name: /plein écran/i })).toBeVisible();
+
+    await studioBtn.click();
+    await expect(studioBtn).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByText('1 · Sous la pluie')).toBeVisible();
+  });
 
   for (const width of [375, 1280]) {
     test(`"✕ Quitter", "Plein écran", and the chapter dropdown never overlap at ${width}px`, async ({ page }) => {
@@ -310,11 +415,64 @@ test.describe('Lecteur — roman (prose) reader', () => {
     await mockRomanFeeds(page);
   });
 
-  test('renders paginated prose with the spread toggle disabled', async ({ page }) => {
+  // QA Finding A, roman variant: the same wrap regression reproduces with a roman 2-page spread
+  // (two wide A4 surfaces), independent of read mode - verify it's fixed here too.
+  test('with a 2-page roman spread open, "Chapitres" and "Réactions" stay docked left/right of the stage', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
+    await page.getByRole('button', { name: '2 pages' }).click();
+
+    const chapitres = page.getByText('Chapitres', { exact: true });
+    const reactions = page.getByText('Réactions', { exact: true });
+    const stage = page.getByText('Paragraphe 1.').locator('xpath=..');
+    const [chapitresBox, reactionsBox, stageBox] = await Promise.all([
+      chapitres.boundingBox(),
+      reactions.boundingBox(),
+      stage.boundingBox(),
+    ]);
+    expect(chapitresBox).not.toBeNull();
+    expect(reactionsBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+    expect(reactionsBox!.x).toBeGreaterThan(stageBox!.x);
+    expect(Math.abs(reactionsBox!.y - chapitresBox!.y)).toBeLessThan(40);
+  });
+
+  test('renders paginated prose with the spread toggle enabled', async ({ page }) => {
     await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
     await expect(page.getByText('Paragraphe 1.')).toBeVisible();
-    await expect(page.getByRole('button', { name: '1 page' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: '2 pages' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '1 page' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '2 pages' })).toBeEnabled();
     await expect(page.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 2');
+  });
+
+  // NEW (story States update): the "2 pages" spread is now enabled for roman too - two A4 page
+  // surfaces side by side, same toggle/behavior as the manga spread.
+  test('toggling "2 pages" renders a 2-page roman spread', async ({ page }) => {
+    await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
+    await page.getByRole('button', { name: '2 pages' }).click();
+    await expect(page.getByRole('button', { name: '2 pages' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('Paragraphe 1.')).toBeVisible();
+    await expect(page.getByText('Paragraphe 6.')).toBeVisible();
+  });
+
+  // Story update (2026-07-04): "Fixed page aspect ratio" - roman prose pages are constrained to
+  // an A4-proportioned page surface (1:√2 ≈ 1:1.414) so they read like a real page, not a stretched box.
+  test('roman prose pages are constrained to the A4 ratio (1:1.414)', async ({ page }) => {
+    await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
+    const pageSurface = page.getByText('Paragraphe 1.').locator('xpath=..');
+    const ratio = await pageSurface.evaluate((el) => getComputedStyle(el).aspectRatio);
+    expect(ratio).toBe('1 / 1.414');
+  });
+
+  // Consistency fix (same round as the manga BLOCKER): the roman A4 surface now also fills the
+  // stage (height:100%, not just a maxHeight percentage) - verify the rendered box, not just the
+  // CSS aspect-ratio property.
+  test('roman prose pages render large, filling the stage height', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
+    const pageSurface = page.getByText('Paragraphe 1.').locator('xpath=..');
+    const box = await pageSurface.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThan(300);
   });
 });

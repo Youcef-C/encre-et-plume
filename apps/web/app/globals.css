@@ -644,13 +644,62 @@ h1, h2, h3, h4, h5, h6 {
    so asides stack above/below the stage (Reader.tsx also defaults them collapsed
    to a mini rail under 768px via matchMedia, no horizontal overflow either way).
    <=480px: topbar's right-hand tool cluster wraps onto its own full-width row. */
+/* Desktop reader is viewport-height-anchored so the page ratio has a definite box to
+   resolve against (not the tallest aside — that made the manga page collapse to a stamp
+   when the asides were short/collapsed). ≤1024px it relaxes to normal document flow and
+   the columns stack. */
+.ep-reader-shell {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 69px);
+  overflow: hidden;
+}
 .ep-reader-columns {
   flex-wrap: wrap;
+  flex: 1;
+  min-height: 0;
+}
+.ep-reader-stagecol {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.ep-reader-stagearea {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Long chapter lists / reactions scroll inside their column instead of stretching the row. */
+.ep-reader-columns > aside {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
 }
 @media (max-width: 1024px) {
+  .ep-reader-shell {
+    height: auto;
+    min-height: calc(100dvh - 69px);
+    overflow: visible;
+  }
   .ep-reader-columns {
+    flex: none;
     flex-direction: column;
     align-items: center !important;
+  }
+  .ep-reader-stagearea {
+    flex: none;
+    min-height: 70vh;
+  }
+  .ep-reader-columns > aside {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 @media (max-width: 480px) {

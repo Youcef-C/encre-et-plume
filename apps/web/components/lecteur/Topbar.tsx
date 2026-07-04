@@ -15,11 +15,12 @@ type Props = {
   currentChapterNumber: number;
   favorites: FavoriteWorkDto[];
   signedIn: boolean;
-  readMode: 'pages' | 'prose';
   spreadMode: 'single' | 'double';
   onSpreadChange: (mode: 'single' | 'double') => void;
   isFullscreen: boolean;
   onFullscreenToggle: () => void;
+  clearViewActive: boolean;
+  onToggleClearView: () => void;
 };
 
 const segmentBtn = (active: boolean): React.CSSProperties => ({
@@ -54,18 +55,23 @@ export default function Topbar({
   currentChapterNumber,
   favorites,
   signedIn,
-  readMode,
   spreadMode,
   onSpreadChange,
   isFullscreen,
   onFullscreenToggle,
+  clearViewActive,
+  onToggleClearView,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: '#f1ece1', flexWrap: 'wrap' }}>
-      <Link href="/decouvrir" style={{ cursor: 'pointer', fontSize: 14, fontWeight: 700, opacity: 0.85, textDecoration: 'none', color: 'inherit' }}>
-        ‹ Catalogue
+      {/* Story update (2026-07-04): back returns to the current work, not the catalogue - overrides
+          the prototype's "‹ Catalogue" link. "✕ Quitter" (tool row, right) already resolves to the
+          same /oeuvre/{slug} destination as an explicit "quit reading" action; this is the one
+          breadcrumb-style "go back" affordance, so the two aren't two competing "back" buttons. */}
+      <Link href={`/oeuvre/${workSlug}`} style={{ cursor: 'pointer', fontSize: 14, fontWeight: 700, opacity: 0.85, textDecoration: 'none', color: 'inherit' }}>
+        ‹ Retour à l&apos;œuvre
       </Link>
 
       <span style={{ position: 'relative' }}>
@@ -100,27 +106,33 @@ export default function Topbar({
           <span style={segmentBtn(true)}>Pages</span>
         </div>
         <div style={{ display: 'flex', border: '2px solid #4a4239', borderRadius: 6, overflow: 'hidden' }}>
-          <button
-            type="button"
-            onClick={() => onSpreadChange('single')}
-            disabled={readMode === 'prose'}
-            aria-pressed={spreadMode === 'single'}
-            style={{ ...segmentBtn(spreadMode === 'single'), opacity: readMode === 'prose' ? 0.4 : 1, cursor: readMode === 'prose' ? 'not-allowed' : 'pointer' }}
-          >
+          {/* Story update (States bullet): the 2-page spread is now enabled for roman too (was
+              disabled/locked for prose) - two A4 page surfaces side by side (Stage.tsx), same as
+              the manga 2-page spread; narrow viewports still fall back to single automatically
+              (Reader.tsx's existing forceSingleSpread media-query check, unaffected by readMode). */}
+          <button type="button" onClick={() => onSpreadChange('single')} aria-pressed={spreadMode === 'single'} style={segmentBtn(spreadMode === 'single')}>
             1 page
           </button>
-          <button
-            type="button"
-            onClick={() => onSpreadChange('double')}
-            disabled={readMode === 'prose'}
-            aria-pressed={spreadMode === 'double'}
-            style={{ ...segmentBtn(spreadMode === 'double'), opacity: readMode === 'prose' ? 0.4 : 1, cursor: readMode === 'prose' ? 'not-allowed' : 'pointer' }}
-          >
+          <button type="button" onClick={() => onSpreadChange('double')} aria-pressed={spreadMode === 'double'} style={segmentBtn(spreadMode === 'double')}>
             2 pages
           </button>
         </div>
-        <button type="button" title="Bientôt disponible" onClick={(e) => e.preventDefault()} style={toolBtn}>
-          <StudioIcon size={14} /> Studio
+        {/* Story update: "◳ Studio" repurposed into a "clear view" toggle - collapses both side
+            asides (Chapitres + Réactions) for a bigger, distraction-free reading panel, distinct
+            from full immersive fullscreen (the topbar itself stays visible either way). */}
+        <button
+          type="button"
+          onClick={onToggleClearView}
+          aria-pressed={clearViewActive}
+          title={clearViewActive ? 'Rétablir les panneaux' : 'Réduire les panneaux pour lire sans distraction'}
+          style={{
+            ...toolBtn,
+            background: clearViewActive ? 'var(--accent)' : toolBtn.background,
+            color: clearViewActive ? '#fff' : toolBtn.color,
+            borderColor: clearViewActive ? 'var(--ink)' : '#4a4239',
+          }}
+        >
+          <StudioIcon size={14} /> Vue dégagée
         </button>
         <button
           type="button"
