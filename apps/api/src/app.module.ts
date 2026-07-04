@@ -19,6 +19,7 @@ import { WorksModule } from './works/works.module';
 import { ReaderModule } from './reader/reader.module';
 import { ReadingHistoryModule } from './reading-history/reading-history.module';
 import { GalleryModule } from './gallery/gallery.module';
+import { ListModule } from './list/list.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -36,6 +37,7 @@ import { GalleryModule } from './gallery/gallery.module';
   // ReaderModule (DR-4): GET /works/:slug/chapters/:n/pages + /me/favorites + /me/reading-progress.
   // ReadingHistoryModule (DR-11): GET /me/reading-history(/:workSlug) — resume "Reprendre la lecture".
   // GalleryModule (DR-5): public GET /illustrations* for the "Galerie" illustration gallery page.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule],
+  // ListModule (DR-8): GET /me/list, GET /me/likes, DELETE /me/list/:slug — "Ma liste & coups de cœur".
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule],
 })
 export class AppModule {}

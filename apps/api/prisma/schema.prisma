@@ -124,6 +124,7 @@ model Account {
   favorites                Favorite[]               // DR-4: favorited works (reads only; DR-9 owns the toggle write)
   readingProgress          ReadingProgress[]        // DR-4: per-chapter reading position (feeds DR-8)
   illustrations            Illustration[]           // DR-5: gallery illustrations credited to this artist
+  watchlist                WatchlistItem[]          // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -361,6 +362,9 @@ model Work {
   favoritedBy      Favorite[]        // DR-4 reads this list; DR-9 owns the toggle write + favoriteCount increment
   readingProgress  ReadingProgress[]
 
+  // ── DR-8: "Ma liste" saved works ─────────────────────────────────────────
+  watchlistedBy    WatchlistItem[]
+
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
   @@index([likeCount])
@@ -447,6 +451,20 @@ model ReadingProgress {
 
   @@unique([accountId, chapterId])
   @@index([accountId, updatedAt])
+}
+
+// ── DR-8: "Ma liste" saved works (watchlist) — read + remove only; DR-9 owns the add write ────
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, workId])
+  @@index([accountId, createdAt])
 }
 
 model FundingGoal {

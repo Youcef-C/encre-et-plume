@@ -137,6 +137,17 @@ const READING_PROGRESS = [
   { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres', chapterNumber: 1, page: 1 },
 ];
 
+// DR-8: "Ma liste" (WatchlistItem) fixtures — same demo account as FAVORITES/READING_PROGRESS
+// (dr1-camille-roux). 4 real works so the "Ma liste" tab count is 4 (like the prototype).
+// `lames-de-brume` already has DR-11 ReadingProgress (ch.1 p.3) -> "Reprendre · Ch. 1 / 12" + bar;
+// `neon-sutra` has no progress -> "Pas commencé". List/likes are not required to be disjoint.
+const WATCHLIST = [
+  { accountSlug: 'dr1-camille-roux', workSlug: 'lames-de-brume' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'onibi' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'neon-sutra' },
+  { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres' },
+];
+
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).
 const WORK_FUNDING_GOALS = {
   'lames-de-brume': [
@@ -379,6 +390,19 @@ async function main() {
       where: { accountId_chapterId: { accountId: account.id, chapterId: chapter.id } },
       create: { accountId: account.id, chapterId: chapter.id, workId: work.id, page: rp.page },
       update: { page: rp.page },
+    });
+  }
+
+  // DR-8: "Ma liste" watchlist fixtures — upsert on the model's own unique key so reseeding never
+  // accumulates duplicates.
+  for (const w of WATCHLIST) {
+    const account = await prisma.account.findUnique({ where: { profileSlug: w.accountSlug } });
+    const work = await prisma.work.findUnique({ where: { slug: w.workSlug } });
+    if (!account || !work) continue;
+    await prisma.watchlistItem.upsert({
+      where: { accountId_workId: { accountId: account.id, workId: work.id } },
+      create: { accountId: account.id, workId: work.id },
+      update: {},
     });
   }
 

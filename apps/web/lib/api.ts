@@ -380,3 +380,13 @@ export const getIllustration = (id: string): Promise<IllustrationDetail> =>
 
 export const getIllustrationMore = (id: string): Promise<GalleryIllustrationCard[]> =>
   request<GalleryIllustrationCard[]>(`/illustrations/${encodeURIComponent(id)}/more`);
+
+// ─── "Ma liste & coups de cœur" (DR-8) ────────────────────────────────────────
+import type { ListItemDto, LikedWorkDto } from '@encre-et-plume/shared';
+
+export const getMyList = (): Promise<ListItemDto[]> => request<ListItemDto[]>('/me/list');
+
+export const getMyLikes = (): Promise<LikedWorkDto[]> => request<LikedWorkDto[]>('/me/likes');
+
+export const removeFromMyList = (slug: string): Promise<void> =>
+  request<void>(`/me/list/${encodeURIComponent(slug)}`, { method: 'DELETE' });

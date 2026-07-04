@@ -872,3 +872,35 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   background: var(--accent);
   color: #fff;
 }
+
+/* ── DR-8 Ma liste — responsive reflow, replica of prototype MA LISTE grids (lines 2034/2041):
+   desktop repeat(4,1fr) → 2 cols ≤900px → 1 col ≤560px. Remove "✕" badge tap target grows to
+   >=44px at <=560px (same pattern as DR-5's .ep-gallery-eye — class rule so the media query
+   can win over the inline style). */
+.ep-malist-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 40px;
+}
+.ep-malist-remove {
+  min-width: 26px;
+  min-height: 26px;
+}
+.ep-malist-tab {
+  min-height: 44px;
+}
+@media (max-width: 900px) {
+  .ep-malist-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 560px) {
+  .ep-malist-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ep-malist-remove {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
