@@ -62,12 +62,12 @@ export class SecurityAuthController {
   }
 
   /**
-   * GET /auth/email-change/dev-latest — non-prod e2e seam.
-   * ponytail: non-prod test seam ONLY — mirrors /auth/verify-email/dev-latest pattern.
+   * GET /auth/email-change/dev-latest — positive opt-in only; hermetic e2e seam.
+   * ponytail: default OFF (H1) — mirrors /auth/verify-email/dev-latest pattern.
    */
   @Get('email-change/dev-latest')
   async devLatestEmailChangeToken(@Query('email') email: string): Promise<{ token: string }> {
-    if (process.env['NODE_ENV'] === 'production') throw new NotFoundException();
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] !== 'true') throw new NotFoundException();
     const token = await this.redis.get(`dev-email-change:${email}`);
     if (!token) throw new NotFoundException();
     return { token };

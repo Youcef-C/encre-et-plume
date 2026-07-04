@@ -88,8 +88,8 @@ export class EmailChangeService {
     const webOrigin = process.env['WEB_ORIGIN'] ?? 'http://localhost:3000';
     const verifyUrl = `${webOrigin}/parametres/confirmer-email?token=${raw}`;
 
-    // ponytail: non-prod only — hermetic e2e seam
-    if (process.env['NODE_ENV'] !== 'production') {
+    // ponytail: positive opt-in only (H1) — hermetic e2e seam
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] === 'true') {
       await this.redis.set(`dev-email-change:${newEmail}`, raw, 'EX', DEV_STASH_TTL_S);
     }
 

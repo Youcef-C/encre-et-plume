@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { getJwtSecret } from '../auth/jwt-secret';
 import { ReactionsController } from './reactions.controller';
 import { ReactionsService } from './reactions.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,7 +11,7 @@ import { SessionGuard } from '../auth/guards/session.guard';
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

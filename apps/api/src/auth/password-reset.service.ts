@@ -51,8 +51,8 @@ export class PasswordResetService {
     const webOrigin = process.env['WEB_ORIGIN'] ?? 'http://localhost:3000';
     const resetUrl = `${webOrigin}/reinitialiser-mot-de-passe?token=${raw}`;
 
-    // ponytail: non-prod only; hermetic e2e seam — mirrors email-verification.service.ts
-    if (process.env['NODE_ENV'] !== 'production') {
+    // ponytail: positive opt-in only (H1); hermetic e2e seam — mirrors email-verification.service.ts
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] === 'true') {
       await this.redis.set(`dev-password-reset:${account.email}`, raw, 'EX', DEV_STASH_TTL_S);
     }
 

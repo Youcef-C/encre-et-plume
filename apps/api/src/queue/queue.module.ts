@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { getJwtSecret } from '../auth/jwt-secret';
 import { QueueService } from './queue.service';
 import { WorkerRunner } from './worker-runner';
 import { JobMetrics } from './job-metrics';
@@ -27,7 +28,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
     MediaModule,         // exports MediaService → injected into ImageProcessingProcessor + DataExportProcessor + AccountErasureProcessor
     PreferencesModule,   // F-15: exports NotificationPreferencesService → EmailService's opt-out check (no circular dep: PreferencesModule imports nothing from here)
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

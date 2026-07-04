@@ -17,11 +17,12 @@ import {
 } from '@encre-et-plume/shared';
 import type { NotifType, EmailGroup } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 const TOKEN_TTL_SECONDS = 90 * 24 * 3600; // 90 days
 
 function getSecret(): string {
-  return process.env['JWT_SECRET'] ?? process.env['UNSUBSCRIBE_SECRET'] ?? 'dev-secret-change-in-prod';
+  return process.env['UNSUBSCRIBE_SECRET'] ?? getJwtSecret();
 }
 
 @Injectable()

@@ -14,6 +14,8 @@ module.exports = {
   },
   testEnvironment: 'node',
   maxWorkers: '25%', // ponytail: cap worker pool so parallel/agent test runs don't flood the machine
+  // H1: ENABLE_DEV_AUTH_SEAMS opt-in for the dev-latest/token-stash test seams (see test/jest.env.setup.js)
+  setupFiles: ['<rootDir>/../test/jest.env.setup.js'],
   moduleNameMapper: {
     // <rootDir> = apps/api/src; need 3 levels up to reach monorepo root
     '^@encre-et-plume/shared$': '<rootDir>/../../../packages/shared/src/index.ts',

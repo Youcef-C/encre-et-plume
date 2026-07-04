@@ -137,12 +137,13 @@ export class AuthController {
   }
 
   /**
-   * GET /auth/verify-email/dev-latest — non-prod only; hermetic e2e seam.
-   * ponytail: non-prod test seam ONLY — never exists in prod; lets e2e read token without SMTP.
+   * GET /auth/verify-email/dev-latest — positive opt-in only; hermetic e2e seam.
+   * ponytail: default OFF (H1) — never live unless ENABLE_DEV_AUTH_SEAMS==='true'; lets e2e read
+   * token without SMTP.
    */
   @Get('verify-email/dev-latest')
   async devLatestToken(@Query('email') email: string): Promise<{ token: string }> {
-    if (process.env['NODE_ENV'] === 'production') throw new NotFoundException();
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] !== 'true') throw new NotFoundException();
     const token = await this.redis.get(`dev-email-verify:${email}`);
     if (!token) throw new NotFoundException();
     return { token };
@@ -174,12 +175,12 @@ export class AuthController {
   }
 
   /**
-   * GET /auth/password-reset/dev-latest — non-prod only; hermetic e2e seam.
-   * ponytail: non-prod test seam ONLY — never exists in prod.
+   * GET /auth/password-reset/dev-latest — positive opt-in only; hermetic e2e seam.
+   * ponytail: default OFF (H1) — never live unless ENABLE_DEV_AUTH_SEAMS==='true'.
    */
   @Get('password-reset/dev-latest')
   async devLatestResetToken(@Query('email') email: string): Promise<{ token: string }> {
-    if (process.env['NODE_ENV'] === 'production') throw new NotFoundException();
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] !== 'true') throw new NotFoundException();
     const token = await this.redis.get(`dev-password-reset:${email}`);
     if (!token) throw new NotFoundException();
     return { token };

@@ -34,9 +34,16 @@ export class GalleryController {
     return this.galleryService.getTrending();
   }
 
+  // H2: OptionalSessionGuard populates req.accountId when logged-in so the 18+ gate can tell
+  // a logged-in minor apart from a visitor — mirrors the `illustration` detail route below.
   @Get('illustrations/:id/preview')
-  preview(@Param('id') id: string): Promise<GalleryPreview> {
-    return this.galleryService.getPreview(id);
+  @UseGuards(OptionalSessionGuard)
+  async preview(@Param('id') id: string, @Req() req: AuthRequest): Promise<GalleryPreview> {
+    const preview = await this.galleryService.getPreview(id);
+    if (preview.is18plus) {
+      await this.ageGate.assertMayView18Plus(req.accountId);
+    }
+    return preview;
   }
 
   // DR-6: declared after the static `trending` route so `:id` doesn't shadow it (NestJS matches

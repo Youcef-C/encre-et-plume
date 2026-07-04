@@ -106,9 +106,9 @@ describe('EmailVerificationService', () => {
       expect(data.verifyUrl).toContain('/verifier-email?token=');
     });
 
-    it('stashes the raw token in Redis under dev-email-verify:<email> (non-prod only)', async () => {
-      const origEnv = process.env['NODE_ENV'];
-      process.env['NODE_ENV'] = 'test';
+    it('stashes the raw token in Redis under dev-email-verify:<email> when ENABLE_DEV_AUTH_SEAMS=true', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = 'true';
 
       await service.issueToken(ACCOUNT);
 
@@ -119,12 +119,12 @@ describe('EmailVerificationService', () => {
         3600,
       );
 
-      process.env['NODE_ENV'] = origEnv;
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
 
-    it('does NOT stash in Redis in production', async () => {
-      const origEnv = process.env['NODE_ENV'];
-      process.env['NODE_ENV'] = 'production';
+    it('does NOT stash in Redis when ENABLE_DEV_AUTH_SEAMS is not "true" (H1 default OFF)', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      delete process.env['ENABLE_DEV_AUTH_SEAMS'];
 
       await service.issueToken(ACCOUNT);
 
@@ -133,7 +133,7 @@ describe('EmailVerificationService', () => {
       );
       expect(devStashCalls).toHaveLength(0);
 
-      process.env['NODE_ENV'] = origEnv;
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
 
     it('does not propagate send failure (best-effort)', async () => {

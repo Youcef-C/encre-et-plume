@@ -328,4 +328,26 @@ describe('WorksService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getAudienceRating (H2)', () => {
+    it('returns null when the work is missing/unpublished', async () => {
+      prisma.work.findFirst.mockResolvedValue(null);
+
+      const result = await service.getAudienceRating('inconnu');
+
+      expect(result).toBeNull();
+    });
+
+    it("returns the work's audienceRating when found", async () => {
+      prisma.work.findFirst.mockResolvedValue({ audienceRating: '18+' });
+
+      const result = await service.getAudienceRating('le-dernier-ronin');
+
+      expect(prisma.work.findFirst.mock.calls[0][0]).toEqual({
+        where: { slug: 'le-dernier-ronin', publishedAt: { not: null } },
+        select: { audienceRating: true },
+      });
+      expect(result).toBe('18+');
+    });
+  });
 });

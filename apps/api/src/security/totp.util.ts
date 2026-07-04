@@ -14,6 +14,7 @@ import {
   createHash,
 } from 'node:crypto';
 import { TOTP_PERIOD, TOTP_DIGITS, TOTP_WINDOW, TOTP_ISSUER, BACKUP_CODE_COUNT } from '@encre-et-plume/shared';
+import { getJwtSecret } from '../auth/jwt-secret';
 
 // ── Base32 (RFC 4648, no padding) ─────────────────────────────────────────────
 
@@ -116,8 +117,7 @@ function getEncKey(): Buffer {
   const envKey = process.env['TWO_FACTOR_ENC_KEY'];
   if (envKey) return Buffer.from(envKey, 'base64');
   // ponytail: fallback so dev/CI needs no extra env var; scrypt with salt ensures 32 bytes
-  const jwtSecret = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod';
-  return scryptSync(jwtSecret, 'ep-2fa', 32);
+  return scryptSync(getJwtSecret(), 'ep-2fa', 32);
 }
 
 /** Encrypt a TOTP secret (base32 string) for DB storage. Format: base64(iv):base64(tag):base64(ct). */

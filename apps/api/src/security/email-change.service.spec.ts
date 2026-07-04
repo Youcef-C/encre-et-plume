@@ -101,7 +101,7 @@ describe('EmailChangeService', () => {
       expect(emailService.send).toHaveBeenCalledWith('email_change_verification', 'new@test.com', expect.any(Object));
     });
 
-    it('stashes the dev-latest token in Redis (non-prod)', async () => {
+    it('stashes the dev-latest token in Redis when ENABLE_DEV_AUTH_SEAMS=true', async () => {
       prisma.account.findUnique
         .mockResolvedValueOnce({ ...MOCK_ACCOUNT })
         .mockResolvedValueOnce(null);
@@ -113,6 +113,22 @@ describe('EmailChangeService', () => {
         'EX',
         expect.any(Number),
       );
+    });
+
+    it('does NOT stash in Redis when ENABLE_DEV_AUTH_SEAMS is not "true" (H1 default OFF)', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      delete process.env['ENABLE_DEV_AUTH_SEAMS'];
+
+      prisma.account.findUnique
+        .mockResolvedValueOnce({ ...MOCK_ACCOUNT })
+        .mockResolvedValueOnce(null);
+      prisma.emailChangeToken.create.mockResolvedValue({});
+      await service.request('acc-1', 'new@test.com', 'password123');
+
+      const devStashCalls = redis.set.mock.calls.filter(([key]: [string]) => key.startsWith('dev-email-change:'));
+      expect(devStashCalls).toHaveLength(0);
+
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
   });
 

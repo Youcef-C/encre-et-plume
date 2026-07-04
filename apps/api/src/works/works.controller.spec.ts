@@ -9,7 +9,7 @@ import type { AuthRequest } from '../auth/guards/session.guard';
 
 describe('WorksController', () => {
   let controller: WorksController;
-  let service: { getWork: jest.Mock; getChapters: jest.Mock; getPlanches: jest.Mock };
+  let service: { getWork: jest.Mock; getChapters: jest.Mock; getPlanches: jest.Mock; getAudienceRating: jest.Mock };
   let ageGate: { assertMayView18Plus: jest.Mock };
 
   beforeEach(async () => {
@@ -17,6 +17,7 @@ describe('WorksController', () => {
       getWork: jest.fn().mockResolvedValue({ id: 'w1', slug: 'lames-de-brume', audienceRating: 'Tous publics' }),
       getChapters: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }),
       getPlanches: jest.fn().mockResolvedValue([]),
+      getAudienceRating: jest.fn().mockResolvedValue('Tous publics'),
     };
     ageGate = { assertMayView18Plus: jest.fn().mockResolvedValue(undefined) };
 
@@ -35,7 +36,7 @@ describe('WorksController', () => {
     controller = module.get<WorksController>(WorksController);
   });
 
-  it('is public — no class-level guards (chapters/planches stay fully public)', () => {
+  it('is public — no class-level guards (chapters stay fully public; planches gets a method-level guard, H2)', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, WorksController) as unknown[] | undefined;
     expect(guards).toBeUndefined();
   });
@@ -117,15 +118,63 @@ describe('WorksController', () => {
     await expect(controller.getChapters('inconnu', '1')).rejects.toThrow(NotFoundException);
   });
 
+  it('GET /works/:slug/planches applies OptionalSessionGuard at the method level (H2)', () => {
+    const guards = Reflect.getMetadata(GUARDS_METADATA, WorksController.prototype.getPlanches) as unknown[] | undefined;
+    expect(guards).toContain(OptionalSessionGuard);
+  });
+
   it('GET /works/:slug/planches delegates to getPlanches', async () => {
     service.getPlanches.mockResolvedValue([{ id: 'p1', image: null, caption: null }]);
-    const result = await controller.getPlanches('lames-de-brume');
+    const req = {} as AuthRequest;
+    const result = await controller.getPlanches('lames-de-brume', req);
     expect(service.getPlanches).toHaveBeenCalledWith('lames-de-brume');
     expect(result).toEqual([{ id: 'p1', image: null, caption: null }]);
   });
 
   it('GET /works/:slug/planches throws NotFoundException when the work is missing', async () => {
     service.getPlanches.mockResolvedValue(null);
-    await expect(controller.getPlanches('inconnu')).rejects.toThrow(NotFoundException);
+    const req = {} as AuthRequest;
+    await expect(controller.getPlanches('inconnu', req)).rejects.toThrow(NotFoundException);
+  });
+
+  describe('H2: 18+ age gate on planches', () => {
+    it('does not call the age gate for a non-18+ work', async () => {
+      service.getPlanches.mockResolvedValue([]);
+      service.getAudienceRating.mockResolvedValue('Tous publics');
+      const req = { accountId: 'acc-1' } as AuthRequest;
+
+      await controller.getPlanches('x', req);
+
+      expect(ageGate.assertMayView18Plus).not.toHaveBeenCalled();
+    });
+
+    it('calls the age gate with req.accountId for an 18+ work', async () => {
+      service.getPlanches.mockResolvedValue([]);
+      service.getAudienceRating.mockResolvedValue('18+');
+      const req = { accountId: 'acc-1' } as AuthRequest;
+
+      await controller.getPlanches('x', req);
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+    });
+
+    it('calls the age gate with undefined accountId for a visitor on an 18+ work', async () => {
+      service.getPlanches.mockResolvedValue([]);
+      service.getAudienceRating.mockResolvedValue('18+');
+      const req = {} as AuthRequest;
+
+      await controller.getPlanches('x', req);
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined);
+    });
+
+    it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {
+      service.getPlanches.mockResolvedValue([]);
+      service.getAudienceRating.mockResolvedValue('18+');
+      ageGate.assertMayView18Plus.mockRejectedValue(new ForbiddenException({ error: 'AGE_RESTRICTED' }));
+      const req = { accountId: 'acc-minor' } as AuthRequest;
+
+      await expect(controller.getPlanches('x', req)).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 });

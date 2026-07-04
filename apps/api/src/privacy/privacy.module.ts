@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { getJwtSecret } from '../auth/jwt-secret';
 import { PrivacyController } from './privacy.controller';
 import { PrivacyService } from './privacy.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,7 +16,7 @@ import { EmailModule } from '../email/email.module';
     NotificationsModule, // exports NotificationsService
     EmailModule,         // exports EmailService
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

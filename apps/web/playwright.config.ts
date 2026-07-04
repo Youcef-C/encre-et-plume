@@ -33,8 +33,9 @@ export default defineConfig({
       stdout: 'pipe',
       stderr: 'pipe',
       // Disable signup/login rate-limit for e2e so auth.spec.ts doesn't exhaust
-      // the 10/15-min Redis counter across repeated runs.
-      env: { DISABLE_RATE_LIMIT: 'true' },
+      // the 10/15-min Redis counter across repeated runs. H1: dev-latest token-disclosure
+      // endpoints are opt-in only — e2e needs them to read tokens without SMTP.
+      env: { DISABLE_RATE_LIMIT: 'true', ENABLE_DEV_AUTH_SEAMS: 'true' },
     },
     {
       command: 'pnpm --filter @encre-et-plume/web start',

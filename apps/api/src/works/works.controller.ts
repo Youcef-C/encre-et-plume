@@ -17,8 +17,8 @@ export class WorksController {
     private readonly ageGate: AgeGateService,
   ) {}
 
-  // DR-10 BE-6: OptionalSessionGuard only on the detail route (the one that hard-gates 18+
-  // content) — chapters/planches listings stay fully public/guard-free.
+  // DR-10 BE-6 / H2: OptionalSessionGuard on both routes that expose 18+ artwork (this detail
+  // route and `:slug/planches` below) — `:slug/chapters` stays fully public/guard-free.
   @Get(':slug')
   @UseGuards(OptionalSessionGuard)
   async getWork(@Param('slug') slug: string, @Req() req: AuthRequest): Promise<WorkDetail> {
@@ -38,10 +38,17 @@ export class WorksController {
     return result;
   }
 
+  // H2: same OptionalSessionGuard + assertMayView18Plus treatment as the detail route above —
+  // this listing exposes the same 18+ artwork.
   @Get(':slug/planches')
-  async getPlanches(@Param('slug') slug: string): Promise<PlancheDto[]> {
+  @UseGuards(OptionalSessionGuard)
+  async getPlanches(@Param('slug') slug: string, @Req() req: AuthRequest): Promise<PlancheDto[]> {
     const result = await this.worksService.getPlanches(slug);
     if (!result) throw new NotFoundException('Œuvre introuvable');
+    const audienceRating = await this.worksService.getAudienceRating(slug);
+    if (audienceRating && isWork18Plus(audienceRating)) {
+      await this.ageGate.assertMayView18Plus(req.accountId);
+    }
     return result;
   }
 }

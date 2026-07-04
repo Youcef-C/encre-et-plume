@@ -158,7 +158,7 @@ describe('SecurityAuthController — public /auth endpoints (F-18)', () => {
   });
 
   describe('GET /auth/email-change/dev-latest', () => {
-    it('200 { token } when stash exists (non-prod)', async () => {
+    it('200 { token } when stash exists (ENABLE_DEV_AUTH_SEAMS=true)', async () => {
       redisMock.get.mockResolvedValueOnce('raw-change-token');
 
       const res = await request(app.getHttpServer())
@@ -174,6 +174,18 @@ describe('SecurityAuthController — public /auth endpoints (F-18)', () => {
       await request(app.getHttpServer())
         .get('/auth/email-change/dev-latest?email=nobody@test.com')
         .expect(404);
+    });
+
+    it('404 when ENABLE_DEV_AUTH_SEAMS is not "true", even when a stash exists (H1)', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      delete process.env['ENABLE_DEV_AUTH_SEAMS'];
+
+      // The gate short-circuits before any Redis read — no stash mock needed/consumed here.
+      await request(app.getHttpServer())
+        .get('/auth/email-change/dev-latest?email=new@test.com')
+        .expect(404);
+
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
   });
 });

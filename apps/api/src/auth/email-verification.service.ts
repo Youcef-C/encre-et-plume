@@ -34,8 +34,8 @@ export class EmailVerificationService {
     const webOrigin = process.env['WEB_ORIGIN'] ?? 'http://localhost:3000';
     const verifyUrl = `${webOrigin}/verifier-email?token=${raw}`;
 
-    // ponytail: non-prod only; test seam for hermetic e2e, mirrors a mailhog inbox
-    if (process.env['NODE_ENV'] !== 'production') {
+    // ponytail: positive opt-in only (H1); test seam for hermetic e2e, mirrors a mailhog inbox
+    if (process.env['ENABLE_DEV_AUTH_SEAMS'] === 'true') {
       await this.redis.set(`dev-email-verify:${account.email}`, raw, 'EX', DEV_STASH_TTL_S);
     }
 

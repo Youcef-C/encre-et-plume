@@ -446,7 +446,7 @@ describe('Auth API (e2e)', () => {
   });
 
   describe('GET /auth/verify-email/dev-latest', () => {
-    it('returns { token } when stash exists (non-prod)', async () => {
+    it('returns { token } when stash exists (ENABLE_DEV_AUTH_SEAMS=true)', async () => {
       redisMock.get.mockResolvedValueOnce('raw-stashed-token');
 
       const res = await request(app.getHttpServer())
@@ -462,6 +462,18 @@ describe('Auth API (e2e)', () => {
       await request(app.getHttpServer())
         .get('/auth/verify-email/dev-latest?email=nobody@test.com')
         .expect(404);
+    });
+
+    it('404 when ENABLE_DEV_AUTH_SEAMS is not "true", even when a stash exists (H1)', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      delete process.env['ENABLE_DEV_AUTH_SEAMS'];
+
+      // The gate short-circuits before any Redis read — no stash mock needed/consumed here.
+      await request(app.getHttpServer())
+        .get('/auth/verify-email/dev-latest?email=yuki@test.com')
+        .expect(404);
+
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
   });
 
@@ -561,7 +573,7 @@ describe('Auth API (e2e)', () => {
   });
 
   describe('GET /auth/password-reset/dev-latest', () => {
-    it('returns { token } when stash exists (non-prod)', async () => {
+    it('returns { token } when stash exists (ENABLE_DEV_AUTH_SEAMS=true)', async () => {
       redisMock.get.mockResolvedValueOnce('raw-reset-stash');
 
       const res = await request(app.getHttpServer())
@@ -577,6 +589,18 @@ describe('Auth API (e2e)', () => {
       await request(app.getHttpServer())
         .get('/auth/password-reset/dev-latest?email=nobody@test.com')
         .expect(404);
+    });
+
+    it('404 when ENABLE_DEV_AUTH_SEAMS is not "true", even when a stash exists (H1)', async () => {
+      const origFlag = process.env['ENABLE_DEV_AUTH_SEAMS'];
+      delete process.env['ENABLE_DEV_AUTH_SEAMS'];
+
+      // The gate short-circuits before any Redis read — no stash mock needed/consumed here.
+      await request(app.getHttpServer())
+        .get('/auth/password-reset/dev-latest?email=yuki@test.com')
+        .expect(404);
+
+      process.env['ENABLE_DEV_AUTH_SEAMS'] = origFlag;
     });
   });
 });

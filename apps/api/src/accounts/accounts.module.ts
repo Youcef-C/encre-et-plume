@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { getJwtSecret } from '../auth/jwt-secret';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
 import { SessionGuard } from '../auth/guards/session.guard';
@@ -12,7 +13,7 @@ import { MediaModule } from '../media/media.module';
   imports: [
     MediaModule, // exports MediaService → AccountsService.setAvatar
     JwtModule.register({
-      secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

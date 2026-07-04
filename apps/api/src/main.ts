@@ -22,6 +22,7 @@ import { initSentry } from './observability/sentry';
 initSentry();
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cookieParser = require('cookie-parser') as typeof import('cookie-parser');
 import { AppModule } from './app.module';
@@ -31,6 +32,10 @@ import { WorkerRunner } from './queue/worker-runner';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(AppLoggerService));
+
+  // H3: security headers (X-Frame-Options, nosniff, HSTS, ...). crossOriginResourcePolicy off —
+  // media (S3/CDN URLs) and cross-origin fetches from the web app must keep working.
+  app.use(helmet({ crossOriginResourcePolicy: false }));
 
   // Cookie-based session transport (D2/D3)
   app.use(cookieParser());

@@ -73,16 +73,60 @@ describe('GalleryController', () => {
     expect(result).toEqual([{ id: 'i1', rank: 1 }]);
   });
 
+  it('GET /illustrations/:id/preview applies OptionalSessionGuard at the method level (H2)', () => {
+    const guards = Reflect.getMetadata(GUARDS_METADATA, GalleryController.prototype.preview) as unknown[] | undefined;
+    expect(guards).toContain(OptionalSessionGuard);
+  });
+
   it('GET /illustrations/:id/preview delegates to the service', async () => {
-    const result = await controller.preview('i1');
+    const req = {} as AuthRequest;
+    const result = await controller.preview('i1', req);
     expect(service.getPreview).toHaveBeenCalledWith('i1');
     expect(result).toEqual({ id: 'i1', title: 'Pluie de Néons' });
   });
 
   it('GET /illustrations/:id/preview propagates a 404 for an unknown id', async () => {
     service.getPreview.mockRejectedValue(new NotFoundException('Illustration nope not found'));
+    const req = {} as AuthRequest;
 
-    await expect(controller.preview('nope')).rejects.toThrow(NotFoundException);
+    await expect(controller.preview('nope', req)).rejects.toThrow(NotFoundException);
+  });
+
+  describe('H2: 18+ age gate on illustration preview', () => {
+    it('does not call the age gate when is18plus is false', async () => {
+      service.getPreview.mockResolvedValue({ id: 'i1', is18plus: false });
+      const req = { accountId: 'acc-1' } as AuthRequest;
+
+      await controller.preview('i1', req);
+
+      expect(ageGate.assertMayView18Plus).not.toHaveBeenCalled();
+    });
+
+    it('calls the age gate with req.accountId when is18plus is true', async () => {
+      service.getPreview.mockResolvedValue({ id: 'i1', is18plus: true });
+      const req = { accountId: 'acc-1' } as AuthRequest;
+
+      await controller.preview('i1', req);
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+    });
+
+    it('calls the age gate with undefined accountId for a visitor', async () => {
+      service.getPreview.mockResolvedValue({ id: 'i1', is18plus: true });
+      const req = {} as AuthRequest;
+
+      await controller.preview('i1', req);
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined);
+    });
+
+    it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {
+      service.getPreview.mockResolvedValue({ id: 'i1', is18plus: true });
+      ageGate.assertMayView18Plus.mockRejectedValue(new ForbiddenException({ error: 'AGE_RESTRICTED' }));
+      const req = { accountId: 'acc-minor' } as AuthRequest;
+
+      await expect(controller.preview('i1', req)).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   it('GET /illustrations/:id delegates to getIllustration and returns the detail', async () => {

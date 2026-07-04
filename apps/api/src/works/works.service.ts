@@ -73,6 +73,15 @@ export class WorksService {
     });
   }
 
+  /** H2: lightweight lookup so the controller can gate 18+ content on public listing routes. */
+  async getAudienceRating(slug: string): Promise<string | null> {
+    const work = await this.prisma.work.findFirst({
+      where: { slug, publishedAt: { not: null } },
+      select: { audienceRating: true },
+    });
+    return work?.audienceRating ?? null;
+  }
+
   /** Fail-open Redis cache: any read/write error falls through to `fn` — never errors the request. */
   private async cached<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const hit = await this.redis.get(key);
