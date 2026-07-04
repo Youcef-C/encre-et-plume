@@ -13,6 +13,7 @@ import { PreferencesModule } from './preferences/preferences.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { SecurityModule } from './security/security.module';
 import { HomeModule } from './home/home.module';
+import { RankingModule } from './ranking/ranking.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { WorksModule } from './works/works.module';
 import { ReaderModule } from './reader/reader.module';
@@ -29,11 +30,12 @@ import { GalleryModule } from './gallery/gallery.module';
   // PreferencesModule before EmailModule and NotificationsModule: both import PreferencesModule.
   // OnboardingModule (F-17): POST /me/onboarding — first-run wizard.
   // HomeModule (DR-1): public GET /home/* showroom aggregation for the "Accueil" landing page.
+  // RankingModule (DR-7): public GET /ranking/all-time?genre= — extends DR-1's ranking.util single source.
   // CatalogModule (DR-2): public GET /catalog* + /contests/active for the "Découvrir" catalog page.
   // WorksModule (DR-3): public GET /works/:slug* for the "Œuvre" work detail page.
   // ReaderModule (DR-4): GET /works/:slug/chapters/:n/pages + /me/favorites + /me/reading-progress.
   // ReadingHistoryModule (DR-11): GET /me/reading-history(/:workSlug) — resume "Reprendre la lecture".
   // GalleryModule (DR-5): public GET /illustrations* for the "Galerie" illustration gallery page.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule],
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule],
 })
 export class AppModule {}

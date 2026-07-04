@@ -11,6 +11,7 @@ import type {
 } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { RANKING_ORDER_BY, toRankingRow } from '../ranking/ranking.util';
 
 const CACHE_TTL_S = 60; // ponytail: 60s TTL; DR-9 invalidates on like events.
 
@@ -88,13 +89,14 @@ export class HomeService {
     });
   }
 
+  /** Single source of truth shared with DR-7's RankingService (see ../ranking/ranking.util.ts). */
   async getRankingAllTime(): Promise<RankingRow[]> {
     return this.cached('home:ranking', async () => {
       const works = await this.prisma.work.findMany({
-        orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+        orderBy: RANKING_ORDER_BY,
         take: 8,
       });
-      return works.map((w, i) => ({ id: w.id, slug: w.slug, rank: i + 1, title: w.title, cover: w.coverImage, meta: w.meta }));
+      return works.map(toRankingRow);
     });
   }
 

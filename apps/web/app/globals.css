@@ -864,3 +864,11 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
     min-height: 44px;
   }
 }
+
+/* ── DR-7 Classement — "Lire" row action, replica of prototype CLASSEMENT line 1087
+   (style-hover="background:var(--accent);color:#fff"). Row hover reuses .ep-menu-item. */
+.ep-lire-pill:hover,
+.ep-lire-pill:focus-visible {
+  background: var(--accent);
+  color: #fff;
+}

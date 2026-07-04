@@ -297,6 +297,10 @@ export const getRankingAllTime = (): Promise<RankingRow[]> =>
 export const getAnnouncements = (): Promise<Announcement[]> =>
   request<Announcement[]>('/home/announcements');
 
+// ─── Ranking "Classement" (DR-7) ──────────────────────────────────────────────
+export const getRanking = (genre?: string): Promise<RankingRow[]> =>
+  request<RankingRow[]>(`/ranking/all-time${genre ? `?genre=${encodeURIComponent(genre)}` : ''}`);
+
 /** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
 export function buildSrcSet(variants: MediaVariants): string {
   const parts: string[] = [];
