@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WorkDetail, WorkChaptersResponse, ChapterPagesResponse, AccountSummary } from '@encre-et-plume/shared';
 
@@ -255,6 +255,188 @@ describe('Reader (DR-4 FE-1)', () => {
 
       await user.click(screen.getByText('2 · Le silence'));
       await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6'));
+    });
+  });
+
+  // Story update (2026-07-04): "Plein écran" is now a real immersive mode, not just a native
+  // Fullscreen API call. jsdom never implements requestFullscreen/exitFullscreen, so every
+  // click here exercises the degraded ("Fullscreen API unavailable") path by construction —
+  // exactly the path the story calls out as the one that must still work, driven purely off the
+  // `fullscreen` React state rather than `document.fullscreenElement`.
+  describe('Plein écran (immersive) mode', () => {
+    it('hides the topbar and both asides, and shows a minimal bottom bar with page nav + favorites switch + chapter switch + exit control', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+
+      expect(screen.queryByText('‹ Catalogue')).not.toBeInTheDocument();
+      expect(screen.queryByText('Chapitres')).not.toBeInTheDocument();
+      expect(screen.queryByText('Réactions')).not.toBeInTheDocument();
+
+      const bar = screen.getByRole('toolbar', { name: /plein écran/i });
+      expect(within(bar).getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6');
+      expect(within(bar).getByRole('button', { name: /Favoris/ })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: /Ch\. 1/ })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: 'Quitter le plein écran' })).toBeInTheDocument();
+    });
+
+    // QA (round 2): the bar previously reserved its own layout height as a flex sibling, so the
+    // stage only ever filled ~91% desktop / ~77% mobile, and hiding the bar didn't grow the
+    // stage back. Fixed by making the bar overlay the stage instead of taking flow height.
+    it('overlays the stage instead of reserving layout height (stage content fills the container; bar is a positioned overlay, not a flex sibling)', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+
+      const stageContent = screen.getByTestId('fullscreen-stage');
+      expect(stageContent.style.position).toBe('absolute');
+      expect(stageContent.style.inset).toBe('0');
+
+      const bar = screen.getByRole('toolbar', { name: /plein écran/i });
+      expect(bar.style.position).toBe('absolute');
+      expect(bar.style.bottom).toBe('0px');
+      // Not a flex child taking its own row height alongside the stage content.
+      expect(bar.style.flex).toBe('');
+    });
+
+    it('exiting fullscreen restores the full reader chrome exactly as before', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+
+      await user.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+      expect(screen.queryByText('Chapitres')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Quitter le plein écran' }));
+      expect(screen.getByText('‹ Catalogue')).toBeInTheDocument();
+      expect(screen.getByText('Chapitres')).toBeInTheDocument();
+      expect(screen.getByText('Réactions')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Passer en plein écran' })).toBeInTheDocument();
+    });
+
+    it('the favorites quick-switch inside the bottom bar lists favorites when signed in', async () => {
+      sessionAccount = account;
+      mockReady();
+      vi.mocked(api.getMyFavorites).mockResolvedValue([{ slug: 'onibi', title: 'Onibi', cover: null, meta: 'Yuki M. · 8 ch.' }]);
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+
+      const bar = screen.getByRole('toolbar', { name: /plein écran/i });
+      await user.click(within(bar).getByRole('button', { name: /Favoris/ }));
+      expect(screen.getByText('Onibi')).toBeInTheDocument();
+    });
+
+    it('the chapter quick-switch inside the bottom bar lists chapters (locked state included)', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+
+      const bar = screen.getByRole('toolbar', { name: /plein écran/i });
+      await user.click(within(bar).getByRole('button', { name: /Ch\. 1/ }));
+      expect(screen.getByText('4 · — verrouillé ★')).toBeInTheDocument();
+    });
+
+    // Story update (2026-07-04): the bottom bar auto-hides after ~2.5-3s of no pointer
+    // movement so the manga fills the screen uninterrupted, and re-reveals on
+    // pointer move / key press / touch, never trapping a keyboard user mid-focus.
+    describe('bottom bar auto-hide', () => {
+      async function enterFullscreen() {
+        mockReady();
+        render(<Reader slug="lames-de-brume" />);
+        await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Passer en plein écran' }));
+        return screen.getByRole('toolbar', { name: /plein écran/i });
+      }
+
+      it('hides the bar after ~2.5-3s of no pointer movement', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const bar = await enterFullscreen();
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'true');
+      });
+
+      it('re-reveals on pointer move and resets the idle timer', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const bar = await enterFullscreen();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'true');
+
+        act(() => {
+          document.dispatchEvent(new Event('pointermove'));
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+
+        // Timer was reset by the pointermove, not just paused — still visible partway through.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1500);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+      });
+
+      it('re-reveals on keydown (a key press, not just the ArrowLeft/Right paging keys)', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const bar = await enterFullscreen();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'true');
+
+        act(() => {
+          fireEvent.keyDown(document, { key: 'Tab' });
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+      });
+
+      it('stays visible while a control inside the bar has keyboard focus, even past the idle timeout', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const bar = await enterFullscreen();
+        act(() => {
+          within(bar).getByRole('button', { name: /Favoris/ }).focus();
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5000);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+      });
+
+      it('resumes auto-hide once focus leaves the bar', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const bar = await enterFullscreen();
+        const favBtn = within(bar).getByRole('button', { name: /Favoris/ });
+        act(() => {
+          favBtn.focus();
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5000);
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'false');
+
+        // The idle timer already elapsed at 5s while masked by focus - blurring should reveal
+        // that immediately, with no further wait needed (never "trap" a keyboard user, but also
+        // never artificially keep the bar shown longer than the idle window once focus leaves).
+        act(() => {
+          favBtn.blur();
+        });
+        expect(bar).toHaveAttribute('data-hidden', 'true');
+      });
     });
   });
 });

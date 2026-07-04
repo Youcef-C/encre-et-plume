@@ -15,6 +15,7 @@ import Stage, { type PagesState } from './Stage';
 import ReaderNav from './ReaderNav';
 import ReactionsAside from './ReactionsAside';
 import Paywall from './Paywall';
+import ImmersiveBar from './ImmersiveBar';
 
 type WorkState = 'loading' | 'ready' | 'notfound' | 'error';
 
@@ -155,11 +156,19 @@ export default function Reader({ slug }: { slug: string }) {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // Story update (2026-07-04): "Plein écran" drives a real immersive layout, not just the native
+  // Fullscreen API. The `fullscreen` state (not `document.fullscreenElement`) is the single
+  // source of truth the render below branches on, flipped optimistically here so the immersive
+  // layout still works when the API is unavailable/rejected (degrade gracefully, per the story).
+  // The `fullscreenchange` listener above stays in sync for exits the API drives itself (Esc,
+  // browser chrome) — it only ever needs to turn `fullscreen` off, never fight this toggle.
   function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen?.();
-    } else {
-      void stageRef.current?.requestFullscreen?.();
+    const next = !fullscreen;
+    setFullscreen(next);
+    if (next) {
+      stageRef.current?.requestFullscreen?.()?.catch(() => {});
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.()?.catch(() => {});
     }
   }
 
@@ -210,36 +219,34 @@ export default function Reader({ slug }: { slug: string }) {
 
   const currentChapter = chapters.find((c) => c.number === chapterNumber);
 
-  return (
-    <div ref={stageRef} style={{ background: 'var(--ink)', minHeight: 'calc(100vh - 69px)', position: 'relative' }}>
-      <div style={{ maxWidth: 1560, margin: '0 auto', padding: '18px 28px 22px' }}>
-        {/* QA F1 fix (round 2): "✕ Quitter" now renders INSIDE Topbar's own flex row (rightmost,
-            next to "Plein écran") instead of as a separately positioned element here — a flex
-            child can never overlap a sibling or the site header, whereas any position:fixed/
-            absolute coordinate is only ever "usually" non-overlapping. See Topbar.tsx. */}
-        <Topbar
-          workTitle={work.title}
-          workSlug={slug}
-          currentChapterNumber={chapterNumber}
-          favorites={favorites}
-          signedIn={!!account}
-          readMode={readMode}
-          spreadMode={effectiveSpreadMode}
-          onSpreadChange={setSpreadMode}
-          isFullscreen={fullscreen}
-          onFullscreenToggle={toggleFullscreen}
-        />
-        <div className="ep-reader-columns" style={{ display: 'flex', gap: 22, marginTop: 16, alignItems: 'stretch', justifyContent: 'center' }}>
-          <ChapterAside
-            chapters={chapters}
-            currentChapterNumber={chapterNumber}
-            collapsed={leftCollapsed}
-            onToggleCollapsed={() => setLeftCollapsed((v) => !v)}
-            onLoadChapter={(chapter) => selectChapter(chapter.number)}
-            onOpenPaywall={(chapter) => setPaywallChapter({ number: chapter.number, title: chapter.title })}
-          />
+  function loadChapter(chapter: WorkChapterDto) {
+    selectChapter(chapter.number);
+  }
+  function openPaywall(chapter: WorkChapterDto) {
+    setPaywallChapter({ number: chapter.number, title: chapter.title });
+  }
 
-          <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, position: 'relative' }}>
+  return (
+    <div
+      ref={stageRef}
+      style={{
+        background: 'var(--ink)',
+        minHeight: fullscreen ? '100vh' : 'calc(100vh - 69px)',
+        position: 'relative',
+      }}
+    >
+      {fullscreen ? (
+        // "Plein écran" immersive mode (story update, 2026-07-04): topbar + both asides are
+        // unmounted entirely (not just visually hidden). QA (round 2) caught that giving
+        // ImmersiveBar `flex:none` in a flex column still RESERVES its own layout height (stage
+        // only filled ~91% desktop / ~77% mobile, and hiding the bar didn't grow the stage back)
+        // — the fix is to stop reserving space at all: the stage content fills this whole
+        // position:relative container via `position:absolute;inset:0` (~100% of the viewport at
+        // every breakpoint), and ImmersiveBar overlays its bottom edge as its own absolutely
+        // positioned sibling instead of a flex row. Auto-hiding it then genuinely uncovers the
+        // manga, because it was never taking room away from it to begin with.
+        <>
+          <div data-testid="fullscreen-stage" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <Stage
               workTitle={work.title}
               chapterNumber={chapterNumber}
@@ -253,20 +260,80 @@ export default function Reader({ slug }: { slug: string }) {
             {paywallChapter && (
               <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
             )}
-            {pagesState === 'ready' && (
-              <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
-            )}
           </div>
-
-          <ReactionsAside
-            likeCount={currentChapter?.likeCount ?? 0}
-            favoriteCount={work.favoriteCount}
-            collapsed={rightCollapsed}
-            onToggleCollapsed={() => setRightCollapsed((v) => !v)}
-            account={account}
+          <ImmersiveBar
+            page={page}
+            totalPages={totalPages}
+            step={step}
+            onPrev={goPrev}
+            onNext={goNext}
+            onSetPage={setPageDirect}
+            favorites={favorites}
+            signedIn={!!account}
+            chapters={chapters}
+            currentChapterNumber={chapterNumber}
+            onLoadChapter={loadChapter}
+            onOpenPaywall={openPaywall}
+            onExitFullscreen={toggleFullscreen}
           />
+        </>
+      ) : (
+        <div style={{ maxWidth: 1560, margin: '0 auto', padding: '18px 28px 22px', width: '100%' }}>
+          {/* QA F1 fix (round 2): "✕ Quitter" now renders INSIDE Topbar's own flex row (rightmost,
+              next to "Plein écran") instead of as a separately positioned element here — a flex
+              child can never overlap a sibling or the site header, whereas any position:fixed/
+              absolute coordinate is only ever "usually" non-overlapping. See Topbar.tsx. */}
+          <Topbar
+            workTitle={work.title}
+            workSlug={slug}
+            currentChapterNumber={chapterNumber}
+            favorites={favorites}
+            signedIn={!!account}
+            readMode={readMode}
+            spreadMode={effectiveSpreadMode}
+            onSpreadChange={setSpreadMode}
+            isFullscreen={fullscreen}
+            onFullscreenToggle={toggleFullscreen}
+          />
+          <div className="ep-reader-columns" style={{ display: 'flex', gap: 22, marginTop: 16, alignItems: 'stretch', justifyContent: 'center' }}>
+            <ChapterAside
+              chapters={chapters}
+              currentChapterNumber={chapterNumber}
+              collapsed={leftCollapsed}
+              onToggleCollapsed={() => setLeftCollapsed((v) => !v)}
+              onLoadChapter={loadChapter}
+              onOpenPaywall={openPaywall}
+            />
+
+            <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, position: 'relative' }}>
+              <Stage
+                workTitle={work.title}
+                chapterNumber={chapterNumber}
+                chapterTitle={currentChapter?.title ?? null}
+                pagesState={pagesState}
+                pagesData={pagesData}
+                page={page}
+                spreadMode={effectiveSpreadMode}
+                onRetry={() => setPagesRetryKey((k) => k + 1)}
+              />
+              {paywallChapter && (
+                <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
+              )}
+              {pagesState === 'ready' && (
+                <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
+              )}
+            </div>
+
+            <ReactionsAside
+              likeCount={currentChapter?.likeCount ?? 0}
+              favoriteCount={work.favoriteCount}
+              collapsed={rightCollapsed}
+              onToggleCollapsed={() => setRightCollapsed((v) => !v)}
+              account={account}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

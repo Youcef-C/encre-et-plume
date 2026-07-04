@@ -207,6 +207,103 @@ test.describe('Lecteur — manga reader', () => {
   }
 });
 
+// Story update (2026-07-04): "Plein écran" is a real immersive mode (topbar + both asides
+// unmounted, minimal bottom bar with page nav + favorites switch + chapter switch), not just a
+// native Fullscreen API call. Assertions below check the resulting DOM/ARIA state rather than
+// `document.fullscreenElement` — the component drives its layout off React state either way
+// (real Fullscreen API engaged, or the "unavailable" degraded path), so the behavior under test
+// is identical regardless of whether the browser actually grants native fullscreen in CI.
+test.describe('Lecteur — Plein écran (immersive) mode', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockCommon(page);
+    await mockMangaFeeds(page);
+  });
+
+  test('hides the topbar/asides, shows the minimal bottom bar, switches page/chapter from it, and exiting restores the chrome', async ({ page }) => {
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await expect(page.getByText('Chapitres')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Passer en plein écran' }).click();
+    // Auto-hide (story update, 2026-07-04): the bar starts visible and only idles out after
+    // ~2.8s of no pointer movement, but a defensive nudge keeps this test's own assertion
+    // sequence (several awaits) safely inside that window regardless of CI slowness.
+    await page.mouse.move(640, 420);
+
+    await expect(page.getByText('Chapitres')).not.toBeVisible();
+    await expect(page.getByText('Réactions')).not.toBeVisible();
+    await expect(page.getByRole('link', { name: '✕ Quitter' })).not.toBeVisible();
+
+    const bar = page.getByRole('toolbar', { name: /plein écran/i });
+    await expect(bar).toBeVisible();
+    await expect(bar.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6');
+    await expect(bar.getByRole('button', { name: /Favoris/ })).toBeVisible();
+    await expect(bar.getByRole('button', { name: /Ch\. 1/ })).toBeVisible();
+
+    // Page switch, from the bar's own nav.
+    await bar.getByRole('button', { name: 'Page suivante' }).click();
+    await expect(bar.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 2 sur 6');
+
+    // Favorites quick-switch opens (signed-out hint, per mockCommon's 401 /me/favorites).
+    await bar.getByRole('button', { name: /Favoris/ }).click();
+    await expect(page.getByText(/pour voir vos favoris/)).toBeVisible();
+
+    // Chapter switch, from the bar's own compact popover (selecting the locked chapter proves
+    // the switch reaches real chapters, not just a static label).
+    await bar.getByRole('button', { name: /Ch\. 1/ }).click();
+    await page.getByText('4 · — verrouillé ★').click();
+    await expect(page.getByRole('dialog', { name: /Chapitre verrouillé/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Fermer' }).click();
+
+    await bar.getByRole('button', { name: 'Quitter le plein écran' }).click();
+    await expect(page.getByText('Chapitres')).toBeVisible();
+    await expect(page.getByText('Réactions')).toBeVisible();
+    await expect(page.getByRole('link', { name: '✕ Quitter' })).toBeVisible();
+  });
+
+  test('the bottom bar auto-hides after ~2.8s idle and re-reveals on pointer move', async ({ page }) => {
+    // Playwright's Clock API (deterministic, no real wall-clock wait) - installed before
+    // navigation so it governs the idle timer from the moment ImmersiveBar mounts.
+    await page.clock.install();
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await page.getByRole('button', { name: 'Passer en plein écran' }).click();
+
+    const bar = page.getByRole('toolbar', { name: /plein écran/i });
+    await expect(bar).toHaveAttribute('data-hidden', 'false');
+
+    await page.clock.fastForward(3000);
+    await expect(bar).toHaveAttribute('data-hidden', 'true');
+
+    await page.mouse.move(400, 300);
+    await expect(bar).toHaveAttribute('data-hidden', 'false');
+  });
+
+  // QA (round 2): the bar previously RESERVED its own layout height as a flex sibling, so the
+  // stage only filled ~91% desktop / ~77% mobile of the viewport, and hiding the bar didn't grow
+  // the stage back - the whole point of auto-hide (manga fills the screen uninterrupted) never
+  // actually happened. Fixed by overlaying the bar instead of reserving space for it; verify the
+  // stage now fills ~100% of the viewport at both the desktop and mobile widths QA measured,
+  // and that the bar overlays the stage's bottom edge rather than sitting below a shorter box.
+  for (const width of [375, 1280]) {
+    test(`the stage fills ~100% of the viewport in fullscreen at ${width}px (bar overlaid, not reserving height)`, async ({ page }) => {
+      const height = 900;
+      await page.setViewportSize({ width, height });
+      await page.goto('/lecteur/lames-de-brume?chapitre=1');
+      await page.getByRole('button', { name: 'Passer en plein écran' }).click();
+
+      const stage = page.getByTestId('fullscreen-stage');
+      const stageBox = await stage.boundingBox();
+      expect(stageBox).not.toBeNull();
+      expect(stageBox!.height / height).toBeGreaterThanOrEqual(0.95);
+
+      // The bar overlays the stage's bottom edge (doesn't push the stage's own box shorter).
+      const bar = page.getByRole('toolbar', { name: /plein écran/i });
+      const barBox = await bar.boundingBox();
+      expect(barBox).not.toBeNull();
+      expect(barBox!.y + barBox!.height).toBeGreaterThanOrEqual(height - 2);
+    });
+  }
+});
+
 test.describe('Lecteur — roman (prose) reader', () => {
   test.beforeEach(async ({ page }) => {
     await mockCommon(page);

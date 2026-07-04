@@ -7,6 +7,7 @@
 ## Frontend
 
 - **Immersive dark stage** with "✕ Quitter" and "⛶ Plein écran".
+- **Plein écran (immersive) mode** (user-specified 2026-07-04): the manga/page stage fills ~95% of the viewport with the side asides ("Chapitres", "Réactions") and the topbar chrome hidden, leaving a minimal bottom control bar overlaid on the stage: the page counter + prev/next navigators (and slider), plus a compact control to **switch title from favorites** ("★ MES FAVORIS" quick-switch) and to **switch page/chapter**. Exiting fullscreen restores the full reader chrome. Works via the Fullscreen API on the stage; degrades gracefully if the API is unavailable (in-page maximized layout with the same minimal bottom bar). Reduced-motion respected; the bottom bar is keyboard-reachable. **The bottom control bar auto-hides after a few seconds (~2.5–3s) of no mouse movement** and re-reveals on pointer move / key press / touch (so the manga fills the screen uninterrupted while reading); it also stays visible while hovered or while a control in it has keyboard focus, and never hides in a way that traps keyboard users.
 - **Topbar**: "‹ Catalogue"; work + chapter dropdown including "★ MES FAVORIS" quick-switch; read-mode toggle "Pages"; spread toggle "1 page / 2 pages"; "◳ Studio".
 - **Left aside "Chapitres"**: chapter list with lock state — premium chapters show "verrouillé ★".
 - **Center stage**: manga page panels (2-page spread when selected) OR prose pages for roman type.

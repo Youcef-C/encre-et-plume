@@ -685,3 +685,33 @@ h1, h2, h3, h4, h5, h6 {
     animation: none;
   }
 }
+
+/* ── DR-4 Plein écran — bottom bar auto-hide ─────────────────────────────────
+   `data-hidden` (set from ImmersiveBar's idle-timer + focus-within React state) is the
+   behavioral source of truth; this stylesheet only ever provides presentation on top of it.
+   Hovering a hidden bar reveals it with a pure-CSS :hover override (no JS tracking needed —
+   pointer-events:none still allows the hover itself, and still allows Tab focus, to land). */
+.ep-immersive-bar {
+  transition: opacity 0.2s ease;
+}
+.ep-immersive-bar[data-hidden='true'] {
+  opacity: 0;
+  pointer-events: none;
+}
+.ep-immersive-bar[data-hidden='true']:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-immersive-bar {
+    transition: none;
+  }
+}
+
+/* Route-loading spinner (app/loading.tsx). Static under reduced motion. */
+@keyframes ep-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-spinner { animation: none !important; }
+}

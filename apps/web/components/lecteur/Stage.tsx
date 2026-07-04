@@ -42,7 +42,15 @@ function PageCard({ workTitle, chapterNumber, page }: { workTitle: string; chapt
     <div style={{ ...pageCardStyle, display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
       {page.image ? (
         // eslint-disable-next-line @next/next/no-img-element -- plain <img> + CDN semantics (no next/image), platform convention
-        <img src={page.image} alt={alt} style={{ display: 'block', maxWidth: '100%' }} />
+        <img
+          src={page.image}
+          alt={alt}
+          // QA (round 2, Plein écran): a viewport-relative maxHeight bounds the page image
+          // regardless of ancestor sizing (percentage maxHeight would need every ancestor to
+          // have a definite height, which pageCardStyle intentionally doesn't) — keeps a real
+          // manga page fitting within the fullscreen stage instead of overflowing it.
+          style={{ display: 'block', maxWidth: '100%', maxHeight: '88vh', objectFit: 'contain' }}
+        />
       ) : (
         <div role="img" aria-label={alt} style={halftoneStyle(page.index)} />
       )}

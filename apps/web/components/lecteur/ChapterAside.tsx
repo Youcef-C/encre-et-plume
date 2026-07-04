@@ -23,6 +23,53 @@ const asideStyle: React.CSSProperties = {
   color: '#cabfb2',
 };
 
+// Extracted so the "Plein écran" immersive bottom bar's compact chapter-switch popover
+// (ImmersiveBar) can reuse the exact same rows/lock semantics without duplicating them.
+export function ChapterRows({
+  chapters,
+  currentChapterNumber,
+  onLoadChapter,
+  onOpenPaywall,
+}: Pick<Props, 'chapters' | 'currentChapterNumber' | 'onLoadChapter' | 'onOpenPaywall'>) {
+  function handleClick(chapter: WorkChapterDto) {
+    if (chapter.locked) onOpenPaywall(chapter);
+    else onLoadChapter(chapter);
+  }
+
+  return (
+    <>
+      {chapters.map((chapter) => {
+        const active = chapter.number === currentChapterNumber;
+        const label = chapter.locked ? `${chapter.number} · — verrouillé ★` : `${chapter.number} · ${chapter.title ?? '—'}`;
+        return (
+          <button
+            key={chapter.id}
+            type="button"
+            onClick={() => handleClick(chapter)}
+            aria-current={active ? 'true' : undefined}
+            style={{
+              textAlign: 'left',
+              padding: '6px 8px',
+              borderRadius: 5,
+              minHeight: 32,
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: active ? 700 : 500,
+              background: active ? 'var(--accent)' : 'transparent',
+              color: active ? '#fff' : '#cabfb2',
+              opacity: chapter.locked ? 0.5 : 1,
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 export default function ChapterAside({
   chapters,
   currentChapterNumber,
@@ -31,11 +78,6 @@ export default function ChapterAside({
   onLoadChapter,
   onOpenPaywall,
 }: Props) {
-  function handleClick(chapter: WorkChapterDto) {
-    if (chapter.locked) onOpenPaywall(chapter);
-    else onLoadChapter(chapter);
-  }
-
   if (collapsed) {
     return (
       <aside style={{ ...asideStyle, width: 48 }}>
@@ -93,34 +135,7 @@ export default function ChapterAside({
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, fontWeight: 500 }}>
-        {chapters.map((chapter) => {
-          const active = chapter.number === currentChapterNumber;
-          const label = chapter.locked ? `${chapter.number} · — verrouillé ★` : `${chapter.number} · ${chapter.title ?? '—'}`;
-          return (
-            <button
-              key={chapter.id}
-              type="button"
-              onClick={() => handleClick(chapter)}
-              aria-current={active ? 'true' : undefined}
-              style={{
-                textAlign: 'left',
-                padding: '6px 8px',
-                borderRadius: 5,
-                minHeight: 32,
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 13,
-                fontWeight: active ? 700 : 500,
-                background: active ? 'var(--accent)' : 'transparent',
-                color: active ? '#fff' : '#cabfb2',
-                opacity: chapter.locked ? 0.5 : 1,
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
+        <ChapterRows chapters={chapters} currentChapterNumber={currentChapterNumber} onLoadChapter={onLoadChapter} onOpenPaywall={onOpenPaywall} />
       </div>
     </aside>
   );
