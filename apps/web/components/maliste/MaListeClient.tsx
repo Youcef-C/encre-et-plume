@@ -130,12 +130,15 @@ export default function MaListeClient() {
   const [likesState, setLikesState] = useState<PanelState>('loading');
   const [likesRetry, setLikesRetry] = useState(0);
 
-  // Optimistic remove + undo (F4): a slug in `pending` is hidden from the grid and shows an
-  // "Annuler" cell in its place; the timer either restores it (undo) or fires the DELETE and
-  // drops it permanently once the window lapses. `// ponytail:` a plain timeout ref map — no
-  // DR-9 add-back write exists, so undo is purely client-side until the window lapses.
+  // Optimistic remove + undo (F4, extended DR-9 FE7 to the "Coups de cœur" tab too): a slug in
+  // `pending`/`likesPending` is hidden from its grid and shows an "Annuler" cell in its place;
+  // the timer either restores it (undo) or fires the DELETE and drops it permanently once the
+  // window lapses. `// ponytail:` a plain timeout ref map — no DR-9 add-back write exists, so
+  // undo is purely client-side until the window lapses.
   const [pending, setPending] = useState<Record<string, true>>({});
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [likesPending, setLikesPending] = useState<Record<string, true>>({});
+  const likeTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     if (!account) return;
@@ -178,14 +181,17 @@ export default function MaListeClient() {
   useEffect(
     () => () => {
       Object.values(timers.current).forEach(clearTimeout);
+      Object.values(likeTimers.current).forEach(clearTimeout);
     },
     [],
   );
 
+  // DR-9 FE7: re-pointed from the removed `DELETE /me/list/:slug` to the counter-aware
+  // `DELETE /reactions/save` (B5) — the single unsave implementation.
   function requestRemove(slug: string) {
     setPending((p) => ({ ...p, [slug]: true }));
     timers.current[slug] = setTimeout(() => {
-      api.removeFromMyList(slug).catch(() => {});
+      api.unsaveReaction({ targetType: 'work', targetId: slug }).catch(() => {});
       setList((rows) => rows.filter((r) => r.slug !== slug));
       setPending((p) => {
         const next = { ...p };
@@ -200,6 +206,30 @@ export default function MaListeClient() {
     clearTimeout(timers.current[slug]);
     delete timers.current[slug];
     setPending((p) => {
+      const next = { ...p };
+      delete next[slug];
+      return next;
+    });
+  }
+
+  function requestUnlike(slug: string) {
+    setLikesPending((p) => ({ ...p, [slug]: true }));
+    likeTimers.current[slug] = setTimeout(() => {
+      api.unlikeReaction({ targetType: 'work', targetId: slug }).catch(() => {});
+      setLikes((rows) => rows.filter((r) => r.slug !== slug));
+      setLikesPending((p) => {
+        const next = { ...p };
+        delete next[slug];
+        return next;
+      });
+      delete likeTimers.current[slug];
+    }, UNDO_WINDOW_MS);
+  }
+
+  function undoUnlike(slug: string) {
+    clearTimeout(likeTimers.current[slug]);
+    delete likeTimers.current[slug];
+    setLikesPending((p) => {
       const next = { ...p };
       delete next[slug];
       return next;
@@ -250,6 +280,7 @@ export default function MaListeClient() {
   }
 
   const visibleList = list.filter((r) => !pending[r.slug]);
+  const visibleLikes = likes.filter((r) => !likesPending[r.slug]);
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '28px 28px 80px' }}>
@@ -267,7 +298,7 @@ export default function MaListeClient() {
           const isActive = tab === t.key;
           const isListTab = t.key === 'liste';
           const ready = isListTab ? listState === 'ready' : likesState === 'ready';
-          const count = isListTab ? visibleList.length : likes.length;
+          const count = isListTab ? visibleList.length : visibleLikes.length;
           return (
             <button
               key={t.key}
@@ -351,9 +382,13 @@ export default function MaListeClient() {
           {likesState === 'ready' && likes.length === 0 && <EmptyState />}
           {likesState === 'ready' && likes.length > 0 && (
             <div className="ep-malist-grid">
-              {likes.map((item) => (
-                <LikeCard key={item.slug} item={item} />
-              ))}
+              {likes.map((item) =>
+                likesPending[item.slug] ? (
+                  <UndoCell key={item.slug} onUndo={() => undoUnlike(item.slug)} />
+                ) : (
+                  <LikeCard key={item.slug} item={item} onRemove={requestUnlike} />
+                ),
+              )}
             </div>
           )}
         </div>

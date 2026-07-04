@@ -20,6 +20,7 @@ import { ReaderModule } from './reader/reader.module';
 import { ReadingHistoryModule } from './reading-history/reading-history.module';
 import { GalleryModule } from './gallery/gallery.module';
 import { ListModule } from './list/list.module';
+import { ReactionsModule } from './reactions/reactions.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -37,7 +38,9 @@ import { ListModule } from './list/list.module';
   // ReaderModule (DR-4): GET /works/:slug/chapters/:n/pages + /me/favorites + /me/reading-progress.
   // ReadingHistoryModule (DR-11): GET /me/reading-history(/:workSlug) — resume "Reprendre la lecture".
   // GalleryModule (DR-5): public GET /illustrations* for the "Galerie" illustration gallery page.
-  // ListModule (DR-8): GET /me/list, GET /me/likes, DELETE /me/list/:slug — "Ma liste & coups de cœur".
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule],
+  // ListModule (DR-8): GET /me/list, GET /me/likes — "Ma liste & coups de cœur" (removeFromList
+  //   moved to ReactionsModule's DELETE /reactions/save, B5 — single unsave implementation).
+  // ReactionsModule (DR-9): POST/DELETE /reactions/{like,save} + GET /reactions/state.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule],
 })
 export class AppModule {}

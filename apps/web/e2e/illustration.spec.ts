@@ -110,6 +110,32 @@ test.describe('Illustration detail', () => {
     await expect(page.getByText('Illustration introuvable')).toBeVisible();
   });
 
+  test('DR-9: signed-in J\'aime/Enregistrer toggle aria-pressed and the like count', async ({ page }) => {
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({
+        json: {
+          id: 'mock-reader-1', slug: 'camille', displayName: 'Camille', role: 'utilisateur',
+          verified: true, emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
+          preferences: { theme: 'system' },
+        },
+      }),
+    );
+    await page.route(`${API}/reactions/state**`, (route) => route.fulfill({ json: { i1: { liked: false, saved: false } } }));
+    await page.route(`${API}/reactions/like`, (route) => route.fulfill({ json: { active: true, count: 3401 } }));
+    await page.route(`${API}/reactions/save`, (route) => route.fulfill({ json: { active: true, count: 1 } }));
+    await page.goto('/illustration/i1');
+
+    const likeBtn = page.getByRole('button', { name: "J'aime" });
+    await likeBtn.click();
+    const likedBtn = page.getByRole('button', { name: 'Retirer le j\'aime' });
+    await expect(likedBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect(likedBtn).toContainText('3,4k');
+
+    const saveBtn = page.getByRole('button', { name: 'Ajouter à ma liste' });
+    await saveBtn.click();
+    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('responsive: no horizontal overflow at 375 / 768 / 1280', async ({ page }) => {
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });

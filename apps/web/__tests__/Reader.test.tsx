@@ -12,6 +12,11 @@ vi.mock('../lib/api', async (importOriginal) => {
     getChapterPages: vi.fn(),
     getMyFavorites: vi.fn(),
     putReadingProgress: vi.fn(),
+    getReactionState: vi.fn().mockResolvedValue({}),
+    likeReaction: vi.fn(),
+    unlikeReaction: vi.fn(),
+    saveReaction: vi.fn(),
+    unsaveReaction: vi.fn(),
   };
 });
 
@@ -99,6 +104,7 @@ function mockReady() {
   vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
   vi.mocked(api.getMyFavorites).mockResolvedValue([]);
   vi.mocked(api.putReadingProgress).mockResolvedValue(undefined);
+  vi.mocked(api.getReactionState).mockResolvedValue({});
 }
 
 describe('Reader (DR-4 FE-1)', () => {

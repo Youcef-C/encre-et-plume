@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ApiError, WorkChapterDto, WorkDetail, ChapterPagesResponse, FavoriteWorkDto } from '@encre-et-plume/shared';
+import type { ApiError, WorkChapterDto, WorkDetail, ChapterPagesResponse, FavoriteWorkDto, ReactionViewerState } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import Topbar from './Topbar';
@@ -140,6 +140,45 @@ export default function Reader({ slug }: { slug: string }) {
       .then(setFavorites)
       .catch(() => setFavorites([]));
   }, [account]);
+
+  // DR-9 FE5: hydrate ♥ chapter-like (re-fetched per chapter) and ★ work-save reaction state.
+  const [chapterReaction, setChapterReaction] = useState<ReactionViewerState>({ liked: false, saved: false });
+  const [workReaction, setWorkReaction] = useState<ReactionViewerState>({ liked: false, saved: false });
+  const currentChapterId = chapters.find((c) => c.number === chapterNumber)?.id ?? null;
+
+  useEffect(() => {
+    if (!account || !currentChapterId) {
+      setChapterReaction({ liked: false, saved: false });
+      return;
+    }
+    let cancelled = false;
+    api
+      .getReactionState('chapter', [currentChapterId])
+      .then((state) => {
+        if (!cancelled) setChapterReaction(state[currentChapterId] ?? { liked: false, saved: false });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account, currentChapterId]);
+
+  useEffect(() => {
+    if (!account) {
+      setWorkReaction({ liked: false, saved: false });
+      return;
+    }
+    let cancelled = false;
+    api
+      .getReactionState('work', [slug])
+      .then((state) => {
+        if (!cancelled) setWorkReaction(state[slug] ?? { liked: false, saved: false });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account, slug]);
 
   useEffect(() => {
     if (!account || pagesState !== 'ready') return;
@@ -354,8 +393,12 @@ export default function Reader({ slug }: { slug: string }) {
             </div>
 
             <ReactionsAside
+              workSlug={slug}
+              chapterId={currentChapter?.id ?? ''}
               likeCount={currentChapter?.likeCount ?? 0}
               favoriteCount={work.favoriteCount}
+              liked={chapterReaction.liked}
+              saved={workReaction.saved}
               collapsed={rightCollapsed}
               onToggleCollapsed={() => setRightCollapsed((v) => !v)}
               account={account}

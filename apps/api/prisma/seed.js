@@ -71,7 +71,9 @@ const ROMAN_CHAPTER_1_PARAGRAPHS = [
 // free, matching the prototype.
 const WORK_CHAPTERS = {
   'lames-de-brume': [
-    { number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
+    // DR-9: likeCount includes the pre-active REACTIONS seed below (dr1-camille-roux already
+    // likes chapter 1) — 1801, not 1800, so the counter isn't off-by-one on first toggle.
+    { number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1801, premium: false },
     { number: 2, title: 'La rencontre', plancheCount: 18, publishAt: new Date('2024-06-21'), likeCount: 1200, premium: false },
     { number: 3, title: 'Le pacte', plancheCount: 20, publishAt: new Date('2024-09-12'), likeCount: 980, premium: false },
     { number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
@@ -148,6 +150,15 @@ const WATCHLIST = [
   { accountSlug: 'dr1-camille-roux', workSlug: 'dr2-le-murmure-des-cendres' },
 ];
 
+// DR-9: pre-active Reaction fixtures (chapter/illustration `like` — the two target types with no
+// per-user table; work like/save reuse the already-seeded FAVORITES/WATCHLIST above). Same demo
+// account (dr1-camille-roux) so QA can see the active->inactive path immediately, not just
+// inactive->active. WORK_CHAPTERS/ILLUSTRATIONS likeCount above already include these rows.
+const REACTIONS = [
+  { accountSlug: 'dr1-camille-roux', targetType: 'chapter', workSlug: 'lames-de-brume', chapterNumber: 1, kind: 'like' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-1', kind: 'like' },
+];
+
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).
 const WORK_FUNDING_GOALS = {
   'lames-de-brume': [
@@ -212,7 +223,9 @@ const ANNOUNCEMENTS = [
 // per-piece values for the rest; dr5-illus-6 intentionally carries tools/license/width/height:null
 // to exercise the null-fallback rendering (a rough process sketch with no recorded metadata yet).
 const ILLUSTRATIONS = [
-  { id: 'dr5-illus-1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'couvertures', genres: ['Shōnen', 'Aventure'], likeCount: 12400, weeklyLikeDelta: 900, publishAt: inDays(-8),
+  // DR-9: likeCount includes the pre-active REACTIONS seed below (dr1-camille-roux already likes
+  // this piece) — 12401, not 12400, so the counter isn't off-by-one on first toggle.
+  { id: 'dr5-illus-1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'couvertures', genres: ['Shōnen', 'Aventure'], likeCount: 12401, weeklyLikeDelta: 900, publishAt: inDays(-8),
     description: "Encrage traditionnel rehaussé de trames numériques. Réalisée pour explorer l'ambiance pluvieuse et les reflets néon de la série — pinceau G, trames 60 lpi et quelques heures de patience.",
     hashtags: ['encre', 'noir', 'néon', 'pluie'], width: 2480, height: 3508, tools: 'Encre · CSP', license: '© Tous droits réservés' },
   { id: 'dr5-illus-2', title: 'Onibi · Esprit du feu', artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai', 'Fantastique'], likeCount: 9700, weeklyLikeDelta: 700, publishAt: inDays(-15),
@@ -328,9 +341,13 @@ async function main() {
     // about-to-be-wiped chapters first, otherwise this deleteMany 500s once any account (seeded
     // or live-tested) has read a chapter here. READING_PROGRESS below recreates fresh rows against
     // the new chapter ids later in this same run.
+    // DR-9: Reaction.targetId is a plain string (no FK), so it won't 500, but the chapter's id
+    // changes on every reseed — without this, stale chapter-like Reaction rows would accumulate
+    // forever. REACTIONS below recreates fresh rows against the new chapter ids.
     const staleChapters = await prisma.chapter.findMany({ where: { workId: work.id, status: 'published' }, select: { id: true } });
     if (staleChapters.length) {
       await prisma.readingProgress.deleteMany({ where: { chapterId: { in: staleChapters.map((c) => c.id) } } });
+      await prisma.reaction.deleteMany({ where: { targetType: 'chapter', targetId: { in: staleChapters.map((c) => c.id) } } });
     }
     await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'published' } });
     for (const c of chapters) {
@@ -457,6 +474,27 @@ async function main() {
       publishedAt: i.publishAt,
     };
     await prisma.illustration.upsert({ where: { id: i.id }, create: { id: i.id, ...data }, update: data });
+  }
+
+  // DR-9: pre-active chapter/illustration Reaction fixtures — upsert on the model's own unique key
+  // so reseeding never accumulates duplicates.
+  for (const r of REACTIONS) {
+    const account = await prisma.account.findUnique({ where: { profileSlug: r.accountSlug } });
+    if (!account) continue;
+    let targetId;
+    if (r.targetType === 'chapter') {
+      const work = await prisma.work.findUnique({ where: { slug: r.workSlug } });
+      const chapter = work ? await prisma.chapter.findFirst({ where: { workId: work.id, number: r.chapterNumber } }) : null;
+      targetId = chapter ? chapter.id : null;
+    } else {
+      targetId = r.illustrationId;
+    }
+    if (!targetId) continue;
+    await prisma.reaction.upsert({
+      where: { accountId_targetType_targetId_kind: { accountId: account.id, targetType: r.targetType, targetId, kind: r.kind } },
+      create: { accountId: account.id, targetType: r.targetType, targetId, kind: r.kind },
+      update: {},
+    });
   }
 }
 

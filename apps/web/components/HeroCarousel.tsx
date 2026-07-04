@@ -1,11 +1,13 @@
 'use client';
 
 // DR-1 — "À LA UNE" hero carousel. Replica of prototype ACCUEIL lines 389-407.
+// DR-9 FE4: "＋ Ma liste" is re-pointed from the nav-only stub to the real per-slide save toggle.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import type { FeaturedWork } from '@encre-et-plume/shared';
+import type { FeaturedWork, ReactionStateResponse } from '@encre-et-plume/shared';
 import { useSession } from '../lib/session';
+import { useReaction } from '../lib/useReaction';
+import * as api from '../lib/api';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
 
 const AUTO_ADVANCE_MS = 6000;
@@ -24,7 +26,6 @@ function coverStyle(cover: string | null): React.CSSProperties {
 export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
   const [active, setActive] = useState(0);
   const [hovered, setHovered] = useState(false);
-  const router = useRouter();
   const { account } = useSession();
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
@@ -41,15 +42,38 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [count, hovered, active]);
 
-  if (count === 0) return null;
-  const slide = slides[active]!;
-
-  const handleMaListe = () => {
-    if (!account) {
-      router.push('/connexion?redirect=/');
+  // DR-9: hydrate every slide's saved state in one GET /reactions/state call.
+  const [reactionState, setReactionState] = useState<ReactionStateResponse>({});
+  useEffect(() => {
+    if (!account || count === 0) {
+      setReactionState({});
+      return;
     }
-    // ponytail: authenticated save is a no-op today — DR-8/DR-9 wire the real "＋ Ma liste" write.
-  };
+    let cancelled = false;
+    api
+      .getReactionState('work', slides.map((s) => s.slug))
+      .then((state) => {
+        if (!cancelled) setReactionState(state);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, count]);
+
+  // Hook order must stay stable across renders — compute `slide` before the early return and
+  // fall back to an empty targetId when the carousel has no slides yet.
+  const slide = slides[active];
+  const save = useReaction({
+    targetType: 'work',
+    targetId: slide?.slug ?? '',
+    kind: 'save',
+    account,
+    initialActive: slide ? (reactionState[slide.slug]?.saved ?? false) : false,
+    initialCount: 0,
+  });
+  if (count === 0 || !slide) return null;
 
   return (
     <div
@@ -158,10 +182,11 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
           </Link>
           <button
             type="button"
-            onClick={handleMaListe}
+            onClick={save.toggle}
             className="ep-btn-secondary"
-            aria-label="Ajouter à ma liste"
-            title="Ajouter à ma liste"
+            aria-pressed={save.active}
+            aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+            title={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
           >
             ＋ Ma liste
           </button>

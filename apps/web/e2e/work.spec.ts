@@ -119,7 +119,13 @@ test.describe('Œuvre work page', () => {
 
   test('anonymous clicking "Ma liste" redirects to /connexion', async ({ page }) => {
     await page.goto('/oeuvre/lames-de-brume');
-    await page.getByRole('button', { name: /Ma liste/ }).click();
+    await page.getByRole('button', { name: 'Ajouter à ma liste' }).click();
+    await expect(page).toHaveURL('/connexion');
+  });
+
+  test('DR-9: anonymous clicking ♥ "j\'aime" redirects to /connexion', async ({ page }) => {
+    await page.goto('/oeuvre/lames-de-brume');
+    await page.getByRole('button', { name: "J'aime" }).click();
     await expect(page).toHaveURL('/connexion');
   });
 
@@ -230,6 +236,36 @@ test.describe('Œuvre work page — resume (DR-11)', () => {
       expect(overflow).toBe(true);
     });
   }
+
+  test('DR-9: signed-in ♥/★ toggles update aria-pressed and count, and persist through reload via hydration', async ({ page }) => {
+    let liked = false;
+    let saved = false;
+    await page.route(`${API}/reactions/state**`, (route) =>
+      route.fulfill({ json: { 'lames-de-brume': { liked, saved } } }),
+    );
+    await page.route(`${API}/reactions/like`, (route) => {
+      liked = route.request().method() === 'POST';
+      route.fulfill({ json: { active: liked, count: liked ? 3401 : 3400 } });
+    });
+    await page.route(`${API}/reactions/save`, (route) => {
+      saved = route.request().method() === 'POST';
+      route.fulfill({ json: { active: saved, count: saved ? 341 : 340 } });
+    });
+    await page.goto('/oeuvre/lames-de-brume');
+
+    const likeBtn = page.getByRole('button', { name: "J'aime" });
+    await likeBtn.click();
+    await expect(page.getByRole('button', { name: 'Retirer le j\'aime' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByText('3,4k')).toBeVisible();
+
+    const saveBtn = page.getByRole('button', { name: 'Ajouter à ma liste' });
+    await saveBtn.click();
+    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Retirer le j\'aime' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+  });
 
   test('clicking "Reprendre la lecture" opens the reader at the saved chapter and page', async ({ page }) => {
     await page.route(`${API}/me/reading-history/lames-de-brume`, (route) => route.fulfill({ json: resumeEntry }));

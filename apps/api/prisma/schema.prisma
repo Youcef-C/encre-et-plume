@@ -125,6 +125,7 @@ model Account {
   readingProgress          ReadingProgress[]        // DR-4: per-chapter reading position (feeds DR-8)
   illustrations            Illustration[]           // DR-5: gallery illustrations credited to this artist
   watchlist                WatchlistItem[]          // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
+  reactions                Reaction[]               // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -465,6 +466,22 @@ model WatchlistItem {
 
   @@unique([accountId, workId])
   @@index([accountId, createdAt])
+}
+
+// ── DR-9: like/save toggles for targets with no per-user table (chapter, illustration) ────────
+// Work reactions reuse Favorite (like) / WatchlistItem (save) — see list.service.ts / reactions.service.ts.
+
+model Reaction {
+  id         String   @id @default(cuid())
+  accountId  String
+  account    Account  @relation(fields: [accountId], references: [id])
+  targetType String   // 'chapter' | 'illustration'
+  targetId   String   // Chapter.id | Illustration.id
+  kind       String   // 'like' | 'save'
+  createdAt  DateTime @default(now())
+
+  @@unique([accountId, targetType, targetId, kind])
+  @@index([targetType, targetId, kind])
 }
 
 model FundingGoal {

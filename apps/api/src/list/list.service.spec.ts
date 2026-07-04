@@ -24,14 +24,14 @@ const FAVORITE_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
 describe('ListService', () => {
   let service: ListService;
   let prisma: {
-    watchlistItem: { findMany: jest.Mock; deleteMany: jest.Mock };
+    watchlistItem: { findMany: jest.Mock };
     readingProgress: { findMany: jest.Mock };
     favorite: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
     prisma = {
-      watchlistItem: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      watchlistItem: { findMany: jest.fn().mockResolvedValue([]) },
       readingProgress: { findMany: jest.fn().mockResolvedValue([]) },
       favorite: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -132,22 +132,6 @@ describe('ListService', () => {
     it('returns an empty array when nothing is liked', async () => {
       const result = await service.getLikes('acc-1');
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('removeFromList', () => {
-    it('issues a deleteMany scoped to accountId + work.slug', async () => {
-      await service.removeFromList('acc-1', 'lames-de-brume');
-
-      expect(prisma.watchlistItem.deleteMany).toHaveBeenCalledWith({
-        where: { accountId: 'acc-1', work: { slug: 'lames-de-brume' } },
-      });
-    });
-
-    it('is idempotent when no row matches (0 rows deleted, no throw)', async () => {
-      prisma.watchlistItem.deleteMany.mockResolvedValue({ count: 0 });
-
-      await expect(service.removeFromList('acc-1', 'inconnu')).resolves.toBeUndefined();
     });
   });
 });

@@ -388,5 +388,25 @@ export const getMyList = (): Promise<ListItemDto[]> => request<ListItemDto[]>('/
 
 export const getMyLikes = (): Promise<LikedWorkDto[]> => request<LikedWorkDto[]>('/me/likes');
 
-export const removeFromMyList = (slug: string): Promise<void> =>
-  request<void>(`/me/list/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+// removeFromMyList (DELETE /me/list/:slug) removed — DR-9 B5 consolidated unsave onto the
+// counter-aware DELETE /reactions/save (below), the route this wrapper called no longer exists.
+
+// ─── Reactions ♥/★ (DR-9) ──────────────────────────────────────────────────────
+import type { ReactionTargetType, ReactionToggleRequest, ReactionToggleResponse, ReactionStateResponse } from '@encre-et-plume/shared';
+
+export const likeReaction = (body: ReactionToggleRequest): Promise<ReactionToggleResponse> =>
+  request<ReactionToggleResponse>('/reactions/like', { method: 'POST', body: JSON.stringify(body) });
+
+export const unlikeReaction = (body: ReactionToggleRequest): Promise<ReactionToggleResponse> =>
+  request<ReactionToggleResponse>('/reactions/like', { method: 'DELETE', body: JSON.stringify(body) });
+
+export const saveReaction = (body: ReactionToggleRequest): Promise<ReactionToggleResponse> =>
+  request<ReactionToggleResponse>('/reactions/save', { method: 'POST', body: JSON.stringify(body) });
+
+export const unsaveReaction = (body: ReactionToggleRequest): Promise<ReactionToggleResponse> =>
+  request<ReactionToggleResponse>('/reactions/save', { method: 'DELETE', body: JSON.stringify(body) });
+
+export const getReactionState = (targetType: ReactionTargetType, ids: string[]): Promise<ReactionStateResponse> =>
+  ids.length === 0
+    ? Promise.resolve({})
+    : request<ReactionStateResponse>(`/reactions/state?targetType=${targetType}&ids=${ids.map(encodeURIComponent).join(',')}`);

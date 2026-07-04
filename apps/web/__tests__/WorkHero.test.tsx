@@ -15,7 +15,15 @@ vi.mock('next/link', () => ({
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getReadingHistoryForWork: vi.fn() };
+  return {
+    ...actual,
+    getReadingHistoryForWork: vi.fn(),
+    getReactionState: vi.fn(),
+    likeReaction: vi.fn(),
+    unlikeReaction: vi.fn(),
+    saveReaction: vi.fn(),
+    unsaveReaction: vi.fn(),
+  };
 });
 
 import * as api from '../lib/api';
@@ -70,6 +78,7 @@ describe('WorkHero (DR-3 FE-2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getReadingHistoryForWork).mockRejectedValue({ statusCode: 404, message: 'Aucune progression' });
+    vi.mocked(api.getReactionState).mockResolvedValue({});
   });
 
   it('renders the back link, badges with text equivalents, and title', () => {
@@ -110,19 +119,70 @@ describe('WorkHero (DR-3 FE-2)', () => {
     expect(screen.getByText('MODÉRATION')).toBeInTheDocument();
   });
 
-  it('anonymous clicking a personal action ("Ma liste") redirects to /connexion', async () => {
+  it('anonymous clicking a personal action ("Soutenir") redirects to /connexion', async () => {
     const user = userEvent.setup();
     render(<WorkHero work={work} account={null} />);
-    await user.click(screen.getByRole('button', { name: /Ma liste/ }));
+    await user.click(screen.getByRole('button', { name: /Soutenir/ }));
     expect(push).toHaveBeenCalledWith('/connexion');
   });
 
   it('authed clicking a personal action shows a "Bientôt disponible" affordance', async () => {
     const user = userEvent.setup();
     render(<WorkHero work={work} account={admin} />);
-    await user.click(screen.getByRole('button', { name: /Ma liste/ }));
+    await user.click(screen.getByRole('button', { name: /Soutenir/ }));
     expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('DR-9: ♥ "j\'aime" toggles aria-pressed and increments the shown count', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.likeReaction).mockResolvedValue({ active: true, count: 3401 });
+    render(<WorkHero work={work} account={admin} />);
+
+    const likeBtn = screen.getByRole('button', { name: "J'aime" });
+    expect(likeBtn).toHaveAttribute('aria-pressed', 'false');
+    await user.click(likeBtn);
+    expect(likeBtn).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(screen.getByText('3,4k')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Retirer le j\'aime' })).toBeInTheDocument();
+  });
+
+  it('DR-9: "＋ Ma liste" toggles saved state and the favoris stat count', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.saveReaction).mockResolvedValue({ active: true, count: 341 });
+    render(<WorkHero work={work} account={admin} />);
+
+    const saveBtn = screen.getByRole('button', { name: 'Ajouter à ma liste' });
+    await user.click(saveBtn);
+    expect(screen.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(screen.getByText('341')).toBeInTheDocument());
+  });
+
+  it('DR-9: anonymous ♥ click redirects to /connexion', async () => {
+    const user = userEvent.setup();
+    render(<WorkHero work={work} account={null} />);
+    await user.click(screen.getByRole('button', { name: "J'aime" }));
+    expect(push).toHaveBeenCalledWith('/connexion');
+  });
+
+  it('DR-9: a rejected like toggle reverts and shows an inline error', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.likeReaction).mockRejectedValue(new Error('boom'));
+    render(<WorkHero work={work} account={admin} />);
+
+    const likeBtn = screen.getByRole('button', { name: "J'aime" });
+    await user.click(likeBtn);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: "J'aime" })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('3,4k')).toBeInTheDocument();
+  });
+
+  it('DR-9: hydrates active state from GET /reactions/state for a signed-in account', async () => {
+    vi.mocked(api.getReactionState).mockResolvedValue({ 'lames-de-brume': { liked: true, saved: false } });
+    render(<WorkHero work={work} account={admin} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Retirer le j\'aime' })).toHaveAttribute('aria-pressed', 'true'),
+    );
   });
 
   it('signed-in with history: CTA becomes "Reprendre la lecture", deep-links to the saved chapter/page, and shows the progress bar (F1/F2/F3)', async () => {

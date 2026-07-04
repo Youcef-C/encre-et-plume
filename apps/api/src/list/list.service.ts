@@ -20,9 +20,11 @@ type FavoriteRow = {
 };
 
 /**
- * DR-8 — "Ma liste" (WatchlistItem, new) + "Coups de cœur" (reuses DR-4's Favorite, read-only here;
- * DR-9 owns the like toggle). Progress is joined in-memory from DR-4's ReadingProgress, one query
- * for the whole account (avoids N+1) — mirrors DR-11's dedupe pattern.
+ * DR-8 — "Ma liste" (WatchlistItem) + "Coups de cœur" (reuses DR-4's Favorite) — read-only; DR-9's
+ * ReactionsService owns both the add/remove writes (POST/DELETE /reactions/{save,like}) so there is a
+ * single unsave/unlike implementation and the Work counters never drift (B5). Progress is joined
+ * in-memory from DR-4's ReadingProgress, one query for the whole account (avoids N+1) — mirrors
+ * DR-11's dedupe pattern.
  */
 @Injectable()
 export class ListService {
@@ -85,10 +87,5 @@ export class ListService {
       likeCount: row.work.likeCount,
       likedAt: row.createdAt.toISOString(),
     }));
-  }
-
-  async removeFromList(accountId: string, slug: string): Promise<void> {
-    // Idempotent: 0 rows deleted (already removed / never saved) is not an error.
-    await this.prisma.watchlistItem.deleteMany({ where: { accountId, work: { slug } } });
   }
 }

@@ -24,6 +24,12 @@ vi.mock('../lib/api', () => ({
   getScheduledReleases: vi.fn(),
   getRankingAllTime: vi.fn(),
   getAnnouncements: vi.fn(),
+  // DR-9 — HeroCarousel's per-slide save toggle (unused by this suite's assertions).
+  getReactionState: vi.fn().mockResolvedValue({}),
+  likeReaction: vi.fn(),
+  unlikeReaction: vi.fn(),
+  saveReaction: vi.fn(),
+  unsaveReaction: vi.fn(),
 }));
 
 import * as api from '../lib/api';

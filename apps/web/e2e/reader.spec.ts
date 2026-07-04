@@ -120,6 +120,35 @@ test.describe('Lecteur — manga reader', () => {
     await expect(page.getByText('1 · Sous la pluie')).toBeVisible();
   });
 
+  test('DR-9: signed-in ♥ (chapter like) and ★ (work save) toggle aria-pressed and counts in Réactions', async ({ page }) => {
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({
+        json: {
+          id: 'mock-reader-1', slug: 'camille', displayName: 'Camille', role: 'utilisateur',
+          verified: true, emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
+          preferences: { theme: 'system' },
+        },
+      }),
+    );
+    await page.route(`${API}/me/favorites`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/reactions/state**`, (route) => {
+      const url = new URL(route.request().url());
+      const key = url.searchParams.get('targetType') === 'chapter' ? 'ch-1' : 'lames-de-brume';
+      route.fulfill({ json: { [key]: { liked: false, saved: false } } });
+    });
+    await page.route(`${API}/reactions/like`, (route) => route.fulfill({ json: { active: true, count: 1801 } }));
+    await page.route(`${API}/reactions/save`, (route) => route.fulfill({ json: { active: true, count: 341 } }));
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+
+    const likeBtn = page.getByRole('button', { name: "J'aime" });
+    await likeBtn.click();
+    await expect(page.getByRole('button', { name: 'Retirer le j\'aime' })).toHaveAttribute('aria-pressed', 'true');
+
+    const saveBtn = page.getByRole('button', { name: 'Ajouter à ma liste' });
+    await saveBtn.click();
+    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('paging via the "›" button and ArrowRight advances the slider + label', async ({ page }) => {
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
     const slider = page.getByRole('slider');

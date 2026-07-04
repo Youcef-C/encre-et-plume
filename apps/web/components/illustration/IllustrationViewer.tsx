@@ -2,11 +2,15 @@
 
 // DR-6 FE-T2 (FE-2, FE-3, FE-9, FE-10, FE-11) — artwork viewer, action bar, fullscreen, admin bar.
 // Replica of prototype ILLUSTRATION lines 656-673.
-import { useState } from 'react';
+// DR-9 FE6: J'aime (like) and Enregistrer (save) are real toggles; Partager/Signaler stay stubbed.
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { IllustrationDetail, AccountSummary } from '@encre-et-plume/shared';
+import type { IllustrationDetail, AccountSummary, ReactionViewerState } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
+import { formatLikeCount } from '../../lib/home';
 import { usePersonalAction } from '../../lib/usePersonalAction';
+import { useReaction } from '../../lib/useReaction';
+import * as api from '../../lib/api';
 import { HeartIcon, PlusIcon, FullscreenIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
 import IllustrationFullscreen from './IllustrationFullscreen';
 
@@ -29,6 +33,41 @@ const actionBase: React.CSSProperties = {
 export default function IllustrationViewer({ detail, account }: { detail: IllustrationDetail; account: AccountSummary | null }) {
   const { trigger, notice } = usePersonalAction(account);
   const [fullscreen, setFullscreen] = useState(false);
+
+  const [reactionState, setReactionState] = useState<ReactionViewerState>({ liked: false, saved: false });
+  useEffect(() => {
+    if (!account) {
+      setReactionState({ liked: false, saved: false });
+      return;
+    }
+    let cancelled = false;
+    api
+      .getReactionState('illustration', [detail.id])
+      .then((state) => {
+        if (!cancelled) setReactionState(state[detail.id] ?? { liked: false, saved: false });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account, detail.id]);
+
+  const like = useReaction({
+    targetType: 'illustration',
+    targetId: detail.id,
+    kind: 'like',
+    account,
+    initialActive: reactionState.liked,
+    initialCount: detail.likeCount,
+  });
+  const save = useReaction({
+    targetType: 'illustration',
+    targetId: detail.id,
+    kind: 'save',
+    account,
+    initialActive: reactionState.saved,
+    initialCount: 0,
+  });
 
   return (
     <div>
@@ -60,10 +99,22 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
       </div>
 
       <div style={{ display: 'flex', gap: 9, marginTop: 14, flexWrap: 'wrap' }}>
-        <button type="button" onClick={trigger} style={actionBase}>
-          <HeartIcon size={14} /> J&apos;aime
+        <button
+          type="button"
+          onClick={like.toggle}
+          aria-pressed={like.active}
+          aria-label={like.active ? "Retirer le j'aime" : "J'aime"}
+          style={{ ...actionBase, background: like.active ? 'var(--accent)' : 'var(--card)', color: like.active ? '#fff' : 'var(--ink)' }}
+        >
+          <HeartIcon size={14} /> J&apos;aime · {formatLikeCount(like.count)}
         </button>
-        <button type="button" onClick={trigger} style={actionBase}>
+        <button
+          type="button"
+          onClick={save.toggle}
+          aria-pressed={save.active}
+          aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+          style={{ ...actionBase, background: save.active ? 'var(--accent)' : 'var(--card)', color: save.active ? '#fff' : 'var(--ink)' }}
+        >
           <PlusIcon size={14} /> Enregistrer
         </button>
         <button type="button" onClick={() => setFullscreen(true)} style={actionBase}>
@@ -80,6 +131,12 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
       {notice && (
         <p role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>
           Bientôt disponible
+        </p>
+      )}
+
+      {(like.error || save.error) && (
+        <p role="alert" style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>
+          Une erreur est survenue, réessayez.
         </p>
       )}
 

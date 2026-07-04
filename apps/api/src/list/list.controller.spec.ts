@@ -6,13 +6,12 @@ import { SessionGuard } from '../auth/guards/session.guard';
 
 describe('ListController', () => {
   let controller: ListController;
-  let service: { getList: jest.Mock; getLikes: jest.Mock; removeFromList: jest.Mock };
+  let service: { getList: jest.Mock; getLikes: jest.Mock };
 
   beforeEach(async () => {
     service = {
       getList: jest.fn().mockResolvedValue([]),
       getLikes: jest.fn().mockResolvedValue([]),
-      removeFromList: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -47,18 +46,6 @@ describe('ListController', () => {
     it('delegates to getLikes with req.accountId', async () => {
       await controller.getLikes({ accountId: 'acc-1' } as never);
       expect(service.getLikes).toHaveBeenCalledWith('acc-1');
-    });
-  });
-
-  describe('DELETE /me/list/:slug', () => {
-    it('delegates to removeFromList with req.accountId and the slug param', async () => {
-      await controller.remove({ accountId: 'acc-1' } as never, 'lames-de-brume');
-      expect(service.removeFromList).toHaveBeenCalledWith('acc-1', 'lames-de-brume');
-    });
-
-    it('never uses a client-supplied accountId, only req.accountId', async () => {
-      await controller.remove({ accountId: 'acc-owner' } as never, 'onibi');
-      expect(service.removeFromList).toHaveBeenCalledWith('acc-owner', 'onibi');
     });
   });
 });

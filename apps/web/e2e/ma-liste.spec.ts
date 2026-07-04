@@ -61,8 +61,14 @@ async function mockSignedIn(page: Page) {
     return route.continue();
   });
   await page.route(`${API}/me/likes`, (route) => route.fulfill({ json: likeItems }));
-  await page.route(`${API}/me/list/lames-de-brume`, (route) => {
-    if (route.request().method() === 'DELETE') return route.fulfill({ status: 204, body: '' });
+  // DR-9 B5/FE7: "Ma liste" remove + "Coups de cœur" unlike both re-point onto the reactions
+  // endpoints (the old DELETE /me/list/:slug route was removed).
+  await page.route(`${API}/reactions/save`, (route) => {
+    if (route.request().method() === 'DELETE') return route.fulfill({ json: { active: false, count: 0 } });
+    return route.continue();
+  });
+  await page.route(`${API}/reactions/like`, (route) => {
+    if (route.request().method() === 'DELETE') return route.fulfill({ json: { active: false, count: 8099 } });
     return route.continue();
   });
 }
@@ -111,6 +117,21 @@ test.describe('Ma liste & coups de cœur', () => {
     await page.waitForTimeout(5200);
     await expect(page.getByRole('tab', { name: 'Ma liste · 1' })).toBeVisible();
     await expect(page.getByText('Lames de Brume')).toHaveCount(0);
+  });
+
+  test('DR-9 FE7: unliking a Coups de cœur card removes it and stays removed after the undo window', async ({ page }) => {
+    await mockSignedIn(page);
+    await page.goto('/ma-liste');
+    await page.getByRole('tab', { name: 'Coups de cœur · 1' }).click();
+    await expect(page.getByText('Néon Sutra')).toBeVisible();
+
+    await page.getByRole('button', { name: "Retirer le j'aime" }).click();
+    await expect(page.getByText('Néon Sutra')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Annuler' })).toBeVisible();
+
+    await page.waitForTimeout(5200);
+    await expect(page.getByText('Néon Sutra')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Coups de cœur · 0' })).toBeVisible();
   });
 
   test('375px viewport has no horizontal overflow', async ({ page }) => {

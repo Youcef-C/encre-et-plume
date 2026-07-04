@@ -14,6 +14,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api')>();
+  return { ...actual, getReactionState: vi.fn(), saveReaction: vi.fn(), unsaveReaction: vi.fn() };
+});
+
+import * as api from '../lib/api';
 import HeroCarousel from '../components/HeroCarousel';
 
 const slides: FeaturedWork[] = [
@@ -34,6 +40,7 @@ function renderCarousel(account: null | { id: string } = null) {
 beforeEach(() => {
   mockPush.mockClear();
   window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.mocked(api.getReactionState).mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -108,13 +115,18 @@ describe('HeroCarousel', () => {
     const user = userEvent.setup();
     renderCarousel(null);
     await user.click(screen.getByRole('button', { name: /ma liste/i }));
-    expect(mockPush).toHaveBeenCalledWith('/connexion?redirect=/');
+    expect(mockPush).toHaveBeenCalledWith('/connexion');
   });
 
-  it('authenticated "＋ Ma liste" click does not redirect', async () => {
+  it('DR-9: authenticated "＋ Ma liste" click toggles aria-pressed and calls saveReaction, no redirect', async () => {
     const user = userEvent.setup();
+    vi.mocked(api.saveReaction).mockResolvedValue({ active: true, count: 1 });
     renderCarousel({ id: 'a1' });
-    await user.click(screen.getByRole('button', { name: /ma liste/i }));
+    const btn = screen.getByRole('button', { name: 'Ajouter à ma liste' });
+    expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await user.click(btn);
     expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+    expect(api.saveReaction).toHaveBeenCalledWith({ targetType: 'work', targetId: 'neon-sutra' });
   });
 });

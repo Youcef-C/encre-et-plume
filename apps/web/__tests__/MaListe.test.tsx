@@ -6,7 +6,7 @@ import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getMyList: vi.fn(), getMyLikes: vi.fn(), removeFromMyList: vi.fn() };
+  return { ...actual, getMyList: vi.fn(), getMyLikes: vi.fn(), unsaveReaction: vi.fn(), unlikeReaction: vi.fn() };
 });
 
 vi.mock('next/link', () => ({
@@ -139,14 +139,14 @@ describe('MaListeClient (DR-8)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Annuler' }));
     expect(screen.getByText('Lames de Brume')).toBeInTheDocument();
-    expect(api.removeFromMyList).not.toHaveBeenCalled();
+    expect(api.unsaveReaction).not.toHaveBeenCalled();
   });
 
-  it('remove ✕: lapsing the undo window calls removeFromMyList and decrements the tab count', async () => {
+  it('remove ✕: lapsing the undo window calls unsaveReaction (DR-9 FE7 re-point) and decrements the tab count', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(api.getMyList).mockResolvedValue(listItems);
     vi.mocked(api.getMyLikes).mockResolvedValue([]);
-    vi.mocked(api.removeFromMyList).mockResolvedValue(undefined);
+    vi.mocked(api.unsaveReaction).mockResolvedValue({ active: false, count: 0 });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderClient();
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Ma liste · 2' })).toBeInTheDocument());
@@ -155,7 +155,9 @@ describe('MaListeClient (DR-8)', () => {
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });
-    await waitFor(() => expect(api.removeFromMyList).toHaveBeenCalledWith('lames-de-brume'));
+    await waitFor(() =>
+      expect(api.unsaveReaction).toHaveBeenCalledWith({ targetType: 'work', targetId: 'lames-de-brume' }),
+    );
     expect(screen.getByRole('tab', { name: 'Ma liste · 1' })).toBeInTheDocument();
   });
 
@@ -172,6 +174,28 @@ describe('MaListeClient (DR-8)', () => {
     expect(link).toHaveTextContent(/Néon Sutra/);
     expect(link).toHaveTextContent(/Shōnen/);
     expect(link).toHaveTextContent('8,1k');
+  });
+
+  it('DR-9 FE7: unliking a Coups de cœur card removes it and calls unlikeReaction', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue(likeItems);
+    vi.mocked(api.unlikeReaction).mockResolvedValue({ active: false, count: 8099 });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Coups de cœur · 1' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Coups de cœur · 1' }));
+    await waitFor(() => expect(screen.getByText('Néon Sutra')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Retirer le j\'aime' }));
+    expect(screen.queryByText('Néon Sutra')).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    await waitFor(() =>
+      expect(api.unlikeReaction).toHaveBeenCalledWith({ targetType: 'work', targetId: 'neon-sutra' }),
+    );
   });
 
   it('shows the per-tab empty state', async () => {

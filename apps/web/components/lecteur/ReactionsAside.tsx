@@ -1,18 +1,22 @@
 'use client';
 
 // DR-4 FE-6 — right "Réactions" aside. Replica of LECTEUR lines 826-845.
-// Like/favorite/comment writes are deferred to DR-9/PUB-2 (plan.md §7): reuses the same
-// usePersonalAction stub as WorkHero/Sidebar — signed-out click redirects to /connexion,
-// signed-in click shows a transient "Bientôt disponible" affordance, no real write.
+// DR-9 FE5: ♥ (chapter like) and ★ (work save) are now real toggles via `useReaction`; the
+// comment composer stays on the `usePersonalAction` stub (PUB-2, out of scope).
 import { useState } from 'react';
 import type { AccountSummary } from '@encre-et-plume/shared';
 import { usePersonalAction } from '../../lib/usePersonalAction';
+import { useReaction } from '../../lib/useReaction';
 import { formatLikeCount } from '../../lib/home';
 import { HeartIcon, StarIcon, ArrowUpIcon, CollapseLeftIcon, CollapseRightIcon } from '../icons';
 
 type Props = {
+  workSlug: string;
+  chapterId: string;
   likeCount: number;
   favoriteCount: number;
+  liked: boolean;
+  saved: boolean;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   account: AccountSummary | null;
@@ -43,9 +47,11 @@ const pillBtn: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 
-export default function ReactionsAside({ likeCount, favoriteCount, collapsed, onToggleCollapsed, account }: Props) {
+export default function ReactionsAside({ workSlug, chapterId, likeCount, favoriteCount, liked, saved, collapsed, onToggleCollapsed, account }: Props) {
   const { trigger, notice } = usePersonalAction(account);
   const [draft, setDraft] = useState('');
+  const like = useReaction({ targetType: 'chapter', targetId: chapterId, kind: 'like', account, initialActive: liked, initialCount: likeCount });
+  const save = useReaction({ targetType: 'work', targetId: workSlug, kind: 'save', account, initialActive: saved, initialCount: favoriteCount });
 
   if (collapsed) {
     return (
@@ -83,17 +89,35 @@ export default function ReactionsAside({ likeCount, favoriteCount, collapsed, on
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <button type="button" onClick={trigger} aria-label={`J'aime · ${formatLikeCount(likeCount)}`} style={pillBtn}>
-          <HeartIcon size={14} /> {formatLikeCount(likeCount)}
+        <button
+          type="button"
+          onClick={like.toggle}
+          aria-pressed={like.active}
+          aria-label={like.active ? "Retirer le j'aime" : "J'aime"}
+          style={pillBtn}
+        >
+          <HeartIcon size={14} style={{ color: like.active ? 'var(--accent)' : undefined }} /> {formatLikeCount(like.count)}
         </button>
-        <button type="button" onClick={trigger} aria-label={`Favori · ${formatLikeCount(favoriteCount)}`} style={pillBtn}>
-          <StarIcon size={14} /> {formatLikeCount(favoriteCount)}
+        <button
+          type="button"
+          onClick={save.toggle}
+          aria-pressed={save.active}
+          aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+          style={pillBtn}
+        >
+          <StarIcon size={14} style={{ color: save.active ? 'var(--accent)' : undefined }} /> {formatLikeCount(save.count)}
         </button>
       </div>
 
       {notice && (
         <p role="status" style={{ fontSize: 11, color: '#cabfb2', fontWeight: 700, margin: '0 0 10px' }}>
           Bientôt disponible
+        </p>
+      )}
+
+      {(like.error || save.error) && (
+        <p role="alert" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700, margin: '0 0 10px' }}>
+          Une erreur est survenue, réessayez.
         </p>
       )}
 
