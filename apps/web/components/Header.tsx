@@ -78,7 +78,8 @@ const DEMO_ROLES: { role: UserRole; label: string }[] = [
 ];
 
 // §prototype TOP NAV: seven primary nav links in exact order.
-// Galerie/Actualités/Trouver/Calendrier 404 until their epics land — render anyway per replica.
+// Actualités/Trouver/Calendrier 404 until their epics land — render anyway per replica.
+// Galerie now real (DR-5).
 const NAV_LINKS = [
   { href: '/',           label: 'Accueil'    },
   { href: '/decouvrir',  label: 'Découvrir'  },

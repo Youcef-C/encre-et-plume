@@ -307,3 +307,22 @@ export function CollapseRightIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// DR-5 — gallery "Galerie" icons (replace the prototype's 👁 🔥 glyphs — no-emoji rule).
+
+export function EyeIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
+export function FlameIcon(p: IconProps) {
+  return (
+    <Svg {...p} filled>
+      <path d="M12 2.5c1 3-2.5 4.5-2.5 8a2.5 2.5 0 005 0c1.2 1 2 2.6 2 4.2 0 3.2-2.9 5.8-6.5 5.8S3.5 17.9 3.5 14.7c0-3.4 2.3-5.7 4-7.6.9-1 1.7-2.4 1.7-3.6.7.6 1.9 1.7 2.8 3z" />
+    </Svg>
+  );
+}

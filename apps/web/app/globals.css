@@ -821,3 +821,32 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] span:not([
 body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidden="true"] {
   color: #4a4239 !important;
 }
+
+/* ── DR-5 Galerie — responsive reflow (FE-11) ─────────────────────────────────
+   Desktop (>1000px): "Tendances cette semaine" is a 1.4fr/1fr feature pair, replica of the
+   prototype layout. <=768px: the feature pair stacks to a single column. The "Toutes les
+   illustrations" grid is already a fluid auto-fill(minmax(210px,1fr)) — it reflows on its own,
+   no override needed. Eye/CTA tap targets grow to >=44px at <=560px (same pattern as DR-2's
+   .ep-chip-toggle — a class rule so the media query can actually win over an inline style). */
+@media (max-width: 768px) {
+  .ep-gallery-trending {
+    grid-template-columns: 1fr !important;
+  }
+}
+.ep-gallery-eye {
+  min-width: 30px;
+  min-height: 30px;
+}
+.ep-gallery-cta {
+  display: inline-flex !important;
+  align-items: center;
+}
+@media (max-width: 560px) {
+  .ep-gallery-eye {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .ep-gallery-cta {
+    min-height: 44px;
+  }
+}

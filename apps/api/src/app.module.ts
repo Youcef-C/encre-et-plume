@@ -17,6 +17,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { WorksModule } from './works/works.module';
 import { ReaderModule } from './reader/reader.module';
 import { ReadingHistoryModule } from './reading-history/reading-history.module';
+import { GalleryModule } from './gallery/gallery.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -32,6 +33,7 @@ import { ReadingHistoryModule } from './reading-history/reading-history.module';
   // WorksModule (DR-3): public GET /works/:slug* for the "Œuvre" work detail page.
   // ReaderModule (DR-4): GET /works/:slug/chapters/:n/pages + /me/favorites + /me/reading-progress.
   // ReadingHistoryModule (DR-11): GET /me/reading-history(/:workSlug) — resume "Reprendre la lecture".
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule],
+  // GalleryModule (DR-5): public GET /illustrations* for the "Galerie" illustration gallery page.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule],
 })
 export class AppModule {}

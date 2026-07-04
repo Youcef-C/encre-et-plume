@@ -7,14 +7,16 @@
 ## Frontend
 - **Header**: "Galerie" + summary "128 illustrations · 36 artistes" + "＋ Publier une illustration" (→ create illustration / gallery upload, part of [[CS-3]]).
 - **Category chips**: Tout, Personnages, Couvertures, Décors, Fan-art, Process (single active).
+- **Search bar** (user-specified 2026-07-04): debounced text search over illustration title/artist — auto-applies while typing (no submit button), URL-synced like the other facets.
+- **Genre filter** (user-specified 2026-07-04): searchbar-to-add-tags picker over the full [[F-20]] vocabulary (same GenreSuggestInput + red GenreChip pattern as the profile page and [[DR-2]]), multi-select, OR within the facet; illustrations carry vocabulary genres.
 - **Sort control**: "Trié par : Tendance ▾" (e.g. Tendance / Nouveautés / Populaires).
-- **"🔥 Tendances cette semaine"**: 2 feature cards.
-- **"Toutes les illustrations"**: masonry grid cards (title, artist, category, ♥) with "👁 Aperçu rapide" quick-preview overlay → opens detail [[DR-6]].
+- **"🔥 Tendances cette semaine"**: 2 feature cards — **both** carry the "👁 Aperçu rapide" quick-preview affordance (user note 2026-07-04: #1 was missing it).
+- **"Toutes les illustrations"**: masonry grid cards (title, artist, category, ♥) with "👁 Aperçu rapide" quick-preview overlay → opens detail [[DR-6]]. The preview's close « ✕ » control must not disturb the overlay layout (user note 2026-07-04).
 - **States**: loading skeleton masonry; empty state per category; error/retry; quick-preview overlay shows larger image + minimal meta and a path into [[DR-6]].
 - **Accessibility**: category chips as toggle buttons with `aria-pressed`; quick-preview reachable by keyboard and dismissible with Esc; images have alt text; ♥ counts have accessible labels.
 
 ## Backend
-- **GET /illustrations** → filtered by `category`, sorted by `tri`, paginated (id, title, artist, category, likeCount, thumbnail).
+- **GET /illustrations** → filtered by `category`, **`q` (debounced text over title/artist)** and **`genre[]` (F-20 vocabulary ids, OR within the facet — Illustration entities carry vocabulary genres)**, sorted by `tri`, paginated (id, title, artist, category, likeCount, thumbnail).
 - **GET /illustrations/trending** → top trending-this-week illustrations.
 - **GET /illustrations/{id}/preview** → quick-preview payload (larger image + minimal meta).
 - **POST /illustrations** → publish an illustration (cross-ref create flow [[CS-3]]; auth, role Illustrator/Creator).

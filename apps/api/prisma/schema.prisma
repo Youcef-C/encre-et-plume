@@ -123,6 +123,7 @@ model Account {
   workCredits              WorkCreator[]            // DR-3: works this account is credited on
   favorites                Favorite[]               // DR-4: favorited works (reads only; DR-9 owns the toggle write)
   readingProgress          ReadingProgress[]        // DR-4: per-chapter reading position (feeds DR-8)
+  illustrations            Illustration[]           // DR-5: gallery illustrations credited to this artist
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -511,4 +512,28 @@ model EditorPick {
   createdAt DateTime @default(now())
 
   @@index([order])
+}
+
+// ── DR-5: illustration gallery "Galerie" ──────────────────────────────────────
+
+model Illustration {
+  id              String    @id @default(cuid())
+  title           String
+  artistId        String?                       // nullable like Review.authorId (seed fixtures may lack a real Account)
+  artist          Account?  @relation(fields: [artistId], references: [id])
+  artistName      String                        // denormalized display name (always present)
+  category        String                        // GALLERY_CATEGORY_KEYS: personnages|couvertures|decors|fanart|process
+  genres          String[]  @default([])        // Round 2: F-20 vocabulary fr labels (like Work.genre/themes) — genre[] facet
+  image           String?                        // media URL; null -> CSS halftone placeholder (coverStyle)
+  width           Int?                            // dimensions (DR-6/preview meta)
+  height          Int?
+  likeCount       Int       @default(0)          // ponytail: denormalized; DR-9 owns the increment
+  weeklyLikeDelta Int       @default(0)          // rolling-7d delta -> "tendance" sort + trending endpoint
+  publishedAt     DateTime?                        // null = not public; non-null = in gallery + "nouveautes" sort key
+  createdAt       DateTime  @default(now())
+
+  @@index([publishedAt])
+  @@index([weeklyLikeDelta])
+  @@index([likeCount])
+  @@index([category])
 }

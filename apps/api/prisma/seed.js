@@ -179,6 +179,39 @@ const ANNOUNCEMENTS = [
   { type: 'evenement', label: '« Lames de Brume » Ch.2 vendredi', href: '/actualites', order: 2 },
 ];
 
+// DR-5: gallery "Galerie" — 14 illustrations = the prototype's 2 feature/trending cards + 12 grid
+// cards, verbatim titles/artists (plan §6). Categories are the canonical GALLERY_CATEGORY_KEYS
+// (personnages/couvertures/decors/fanart/process) — plan §BE-2's chip-authoritative reconciliation,
+// not the prototype's decorative per-card `data-illus-cat` labels. weeklyLikeDelta is set so the
+// two feature-card items (Pluie de Néons, Onibi) hold the top-2 deltas -> getTrending() picks them.
+// artistAccountSlug links to an existing seeded Account by profileSlug when one exists (only Yuki
+// Moreau, the DR-1 creator fixture); every other artist is artistName-only (artistId: null),
+// mirroring Review.authorId's nullable-author precedent — these are fictional gallery artists with
+// no real Account row. publishedAt spread over the past ~70 days (relative inDays(-n)) so
+// tri=nouveautes stays meaningful whenever the seed is re-run.
+// Round 2: `genres` (fr labels, F-20 vocabulary — same convention as Work.genre/themes) tags each
+// illustration for the genre[] facet. Cover art reuses its source work's genre (Pluie de
+// Néons/Couverture · Néon Sutra -> Néon Sutra's Shōnen; Fan-art · Le Dernier Ronin -> its Seinen;
+// Spectre d'avril -> Spectres d'Avril's Fantastique); the yokai-themed pieces get Yōkai/Fantastique;
+// process/study sketches (Étude d'encre #7, Carnet d'encre · planche 12) carry no genre (empty array
+// — a technique study isn't "about" a genre) to also demonstrate the empty-genres case.
+const ILLUSTRATIONS = [
+  { id: 'dr5-illus-1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'couvertures', genres: ['Shōnen', 'Aventure'], likeCount: 12400, weeklyLikeDelta: 900, publishAt: inDays(-8) },
+  { id: 'dr5-illus-2', title: 'Onibi · Esprit du feu', artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai', 'Fantastique'], likeCount: 9700, weeklyLikeDelta: 700, publishAt: inDays(-15) },
+  { id: 'dr5-illus-3', title: 'Lames de Brume — Ch.2', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: ['Seinen'], likeCount: 3400, weeklyLikeDelta: 320, publishAt: inDays(-30) },
+  { id: 'dr5-illus-4', title: 'Sanctuaire oublié', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Fantastique', 'Horreur'], likeCount: 2100, weeklyLikeDelta: 180, publishAt: inDays(-45) },
+  { id: 'dr5-illus-5', title: 'Rin, sous la pluie', artistName: 'Mira K.', category: 'personnages', genres: ['Drame'], likeCount: 5900, weeklyLikeDelta: 480, publishAt: inDays(-3) },
+  { id: 'dr5-illus-6', title: "Étude d'encre #7", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 1300, weeklyLikeDelta: 90, publishAt: inDays(-60) },
+  { id: 'dr5-illus-7', title: 'Couverture · Néon Sutra', artistName: 'Léa B.', category: 'couvertures', genres: ['Shōnen'], likeCount: 8100, weeklyLikeDelta: 610, publishAt: inDays(-1) },
+  { id: 'dr5-illus-8', title: "Masque de l'oni", artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai'], likeCount: 4600, weeklyLikeDelta: 380, publishAt: inDays(-20) },
+  { id: 'dr5-illus-9', title: 'Ruelles de Kowloon', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Cyberpunk'], likeCount: 2800, weeklyLikeDelta: 220, publishAt: inDays(-25) },
+  { id: 'dr5-illus-10', title: 'Fan-art · Le Dernier Ronin', artistName: 'Sasha N.', category: 'fanart', genres: ['Seinen'], likeCount: 6200, weeklyLikeDelta: 520, publishAt: inDays(-5) },
+  { id: 'dr5-illus-11', title: "Carnet d'encre · planche 12", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 980, weeklyLikeDelta: 60, publishAt: inDays(-70) },
+  { id: 'dr5-illus-12', title: "Spectre d'avril", artistName: 'Camille D.', category: 'personnages', genres: ['Fantastique', 'Horreur'], likeCount: 3000, weeklyLikeDelta: 260, publishAt: inDays(-35) },
+  { id: 'dr5-illus-13', title: 'Geisha mécanique', artistName: 'Mira K.', category: 'personnages', genres: ['Steampunk'], likeCount: 7300, weeklyLikeDelta: 590, publishAt: inDays(-2) },
+  { id: 'dr5-illus-14', title: 'Forêt de bambous', artistName: 'Léa B.', category: 'decors', genres: ['Aventure'], likeCount: 1900, weeklyLikeDelta: 150, publishAt: inDays(-50) },
+];
+
 // Top artiste/scénariste du moment — also the (fictional) creative duo behind "Lames de Brume".
 const CREATORS = [
   { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur' },
@@ -345,6 +378,24 @@ async function main() {
     for (const r of reviews) {
       await prisma.review.create({ data: { workId: work.id, authorName: r.authorName, storyRating: r.storyRating, artRating: r.artRating, text: r.text } });
     }
+  }
+
+  // DR-5: gallery "Galerie" illustrations. Upserted by explicit `id` (same pattern as CONTESTS —
+  // Illustration has no other natural unique field) so re-seeding never accumulates duplicates.
+  for (const i of ILLUSTRATIONS) {
+    const account = i.artistAccountSlug ? await prisma.account.findUnique({ where: { profileSlug: i.artistAccountSlug } }) : null;
+    const data = {
+      title: i.title,
+      artistId: account ? account.id : null,
+      artistName: i.artistName,
+      category: i.category,
+      genres: i.genres,
+      image: null,
+      likeCount: i.likeCount,
+      weeklyLikeDelta: i.weeklyLikeDelta,
+      publishedAt: i.publishAt,
+    };
+    await prisma.illustration.upsert({ where: { id: i.id }, create: { id: i.id, ...data }, update: data });
   }
 }
 
