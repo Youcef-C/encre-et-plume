@@ -4,6 +4,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -42,13 +43,16 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000) // L: cap free-text length
   bio?: string | null;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120) // L: cap free-text length
   city?: string | null;
 
   @IsOptional()
   @IsString()
+  @MaxLength(160) // L: cap free-text length
   specialty?: string | null;
 }

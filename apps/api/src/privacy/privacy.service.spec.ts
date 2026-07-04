@@ -262,7 +262,7 @@ describe('PrivacyService', () => {
         `session-epoch-ms:${ACCOUNT_ID}`,
         expect.any(String),
         'EX',
-        expect.any(Number),
+        30 * 24 * 60 * 60, // M7: REMEMBER_ME_MAX_AGE_S — must be >= the rememberMe max age, not just 7d
       );
       expect(queue.enqueue).toHaveBeenCalledWith(
         'account-erasure',

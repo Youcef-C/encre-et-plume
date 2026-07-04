@@ -15,7 +15,7 @@ const GENRE_IDS = new Set(GENRES.map((g) => g.id));
  */
 export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
   return {
-    q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'] : undefined,
+    q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined, // L: cap length
     genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     category: allowlistScalar(raw['category'], GALLERY_CATEGORY_KEYS),
     tri: allowlistScalar(raw['tri'], GALLERY_TRIS) ?? 'tendance',

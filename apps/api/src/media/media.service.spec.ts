@@ -136,6 +136,21 @@ describe('MediaService', () => {
       process.env['DISABLE_RATE_LIMIT'] = '';
     });
 
+    it('M4: DISABLE_RATE_LIMIT=true is ignored in production — rate limit still applies', async () => {
+      const origDisable = process.env['DISABLE_RATE_LIMIT'];
+      const origNodeEnv = process.env['NODE_ENV'];
+      process.env['DISABLE_RATE_LIMIT'] = 'true';
+      process.env['NODE_ENV'] = 'production';
+      redis.incr.mockResolvedValueOnce(31); // over the 30/hour limit
+
+      try {
+        await expect(service.requestUpload('acc-1', dto)).rejects.toSatisfyApiStatus(429);
+      } finally {
+        process.env['DISABLE_RATE_LIMIT'] = origDisable;
+        process.env['NODE_ENV'] = origNodeEnv;
+      }
+    });
+
     it('returns mediaId, uploadUrl, bucketKey, expiresIn on happy path', async () => {
       prisma.media.create.mockResolvedValue(makeMedia());
 

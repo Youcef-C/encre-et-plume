@@ -31,6 +31,7 @@ import { LoginDto } from './dto/login.dto';
 import { VerifyEmailConfirmDto, RequestVerificationEmailDto } from './dto/verify-email.dto';
 import { PasswordResetRequestDto, PasswordResetConfirmDto } from './dto/password-reset.dto';
 import { RedisService } from '../redis/redis.service';
+import { REMEMBER_ME_MAX_AGE_S } from './session-epoch.constants';
 
 const COOKIE_NAME = 'ep_session';
 const SESSION_COOKIE_OPTS = {
@@ -43,6 +44,9 @@ const SESSION_COOKIE_OPTS = {
 // Rate limit: 10 attempts per 15-minute window per key (login/signup)
 const RL_LIMIT = 10;
 const RL_WINDOW_SECS = 900;
+// M6: per-IP-only ceiling on login, higher than the per-(ip,email) limit — catches a password
+// spray across many accounts from one IP that the composite key never trips.
+const LOGIN_IP_LIMIT = 50;
 
 @Controller('auth')
 export class AuthController {
@@ -71,12 +75,15 @@ export class AuthController {
     @Req() req: AuthRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse | TwoFactorRequiredResponse> {
+    // M6: composite (ip,email) key alone lets a spray across many accounts from one IP through
+    // uncapped — add a higher, per-IP-only ceiling alongside it.
+    await this.rateLimit(`login-ip:${req.ip ?? 'unknown'}`, LOGIN_IP_LIMIT, RL_WINDOW_SECS);
     await this.rateLimit(`login:${req.ip ?? 'unknown'}:${dto.email}`);
     const result = await this.authService.login(dto);
     if ('twoFactorRequired' in result) {
       return result; // no cookie; FE must POST /auth/2fa/verify
     }
-    const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined; // ms for Express
+    const maxAge = dto.rememberMe ? REMEMBER_ME_MAX_AGE_S * 1000 : undefined; // ms for Express
     this.setCookie(res, result.token, maxAge);
     return { account: result.account };
   }
@@ -187,9 +194,24 @@ export class AuthController {
   }
 
   private async rateLimit(key: string, limit = RL_LIMIT, windowSecs = RL_WINDOW_SECS): Promise<void> {
-    // ponytail: skip in e2e so auth.spec.ts doesn't exhaust the 10/15-min limit across runs
-    if (process.env['DISABLE_RATE_LIMIT'] === 'true') return;
-    const count = await this.redis.incr(`rl:${key}`);
+    // ponytail: skip in e2e so auth.spec.ts doesn't exhaust the 10/15-min limit across runs.
+    // M4: NEVER honor this in production — a stray env var must not disable auth throttling.
+    if (process.env['DISABLE_RATE_LIMIT'] === 'true' && process.env['NODE_ENV'] !== 'production') return;
+
+    let count: number;
+    try {
+      // M3: strict variant — a Redis outage must fail CLOSED (block), not silently disable throttling.
+      count = await this.redis.incrOrThrow(`rl:${key}`);
+    } catch {
+      throw new HttpException(
+        {
+          statusCode: 429,
+          message: 'Service temporairement indisponible. Réessayez plus tard.',
+          error: 'RATE_LIMIT_UNAVAILABLE',
+        },
+        429,
+      );
+    }
     if (count === 1) await this.redis.expire(`rl:${key}`, windowSecs);
     if (count > limit) {
       throw new HttpException(

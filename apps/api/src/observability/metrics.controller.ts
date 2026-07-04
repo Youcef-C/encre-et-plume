@@ -1,4 +1,11 @@
-import { Controller, Get, Req, Res, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Req,
+  Res,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { MetricsService } from './metrics.service';
 import { HealthService } from './health.service';
@@ -18,7 +25,13 @@ export class MetricsController {
   @Get('metrics')
   async getMetrics(@Req() req: Request, @Res() res: Response): Promise<void> {
     const token = process.env['METRICS_TOKEN'];
-    if (token) {
+    // M5: in production a missing METRICS_TOKEN must refuse — never serve internals
+    // (routes/queue depth/DB pool) unauthenticated. Non-prod (dev/CI) may stay open for scraping.
+    if (!token) {
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new ServiceUnavailableException('METRICS_TOKEN must be configured in production');
+      }
+    } else {
       const auth = req.headers['authorization'];
       if (auth !== `Bearer ${token}`) {
         throw new UnauthorizedException();

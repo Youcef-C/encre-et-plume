@@ -30,8 +30,10 @@ const MOCK_ACCOUNT = {
 // Minimal in-memory Redis mock — no extra dep needed
 const makeRedisMock = () => ({
   get: jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null),
+  // M3: SessionGuard (denylist/epoch) reads via the strict variant too.
+  getOrThrow: jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null),
   set: jest.fn().mockResolvedValue('OK'),
-  incr: jest.fn<Promise<number>, [string]>().mockResolvedValue(1),
+  incrOrThrow: jest.fn<Promise<number>, [string]>().mockResolvedValue(1), // M3: rateLimit() uses the strict variant
   expire: jest.fn().mockResolvedValue(1),
 });
 
@@ -90,7 +92,8 @@ describe('Auth API (e2e)', () => {
   beforeEach(() => {
     // Reset redis mock to safe defaults between tests
     redisMock.get.mockResolvedValue(null); // not denylisted
-    redisMock.incr.mockResolvedValue(1);   // first request (under limit)
+    redisMock.getOrThrow.mockResolvedValue(null); // not denylisted / no epoch (M3)
+    redisMock.incrOrThrow.mockResolvedValue(1);   // first request (under limit)
     redisMock.set.mockResolvedValue('OK');
     redisMock.expire.mockResolvedValue(1);
     emailVerificationServiceMock.issueToken.mockResolvedValue(undefined);
@@ -162,7 +165,7 @@ describe('Auth API (e2e)', () => {
     });
 
     it('429 when rate limit exceeded', async () => {
-      redisMock.incr.mockResolvedValue(11); // over the 10-per-window limit
+      redisMock.incrOrThrow.mockResolvedValue(11); // over the 10-per-window limit
       (authService.signup as jest.Mock).mockResolvedValue({ account: MOCK_ACCOUNT, token: 'x' });
 
       await request(app.getHttpServer())
@@ -272,12 +275,51 @@ describe('Auth API (e2e)', () => {
     });
 
     it('429 when rate limit exceeded', async () => {
-      redisMock.incr.mockResolvedValue(11);
+      redisMock.incrOrThrow.mockResolvedValue(11);
 
       await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: 'yuki@test.com', password: 'password123' })
         .expect(429);
+    });
+
+    it('M6: 429 when the per-IP login ceiling is exceeded (password-spray across many emails)', async () => {
+      // Composite (ip,email) key stays under its own limit; the IP-only ceiling has already tripped.
+      redisMock.incrOrThrow.mockImplementation((key: string) =>
+        Promise.resolve(key.startsWith('rl:login-ip:') ? 51 : 1),
+      );
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'yet-another-account@test.com', password: 'password123' })
+        .expect(429);
+    });
+
+    it('M3: 429 when Redis errors (fail closed — never silently disables throttling)', async () => {
+      redisMock.incrOrThrow.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'yuki@test.com', password: 'password123' })
+        .expect(429);
+    });
+
+    it('M4: rate limit still applies when DISABLE_RATE_LIMIT=true but NODE_ENV=production', async () => {
+      const origDisable = process.env['DISABLE_RATE_LIMIT'];
+      const origNodeEnv = process.env['NODE_ENV'];
+      process.env['DISABLE_RATE_LIMIT'] = 'true';
+      process.env['NODE_ENV'] = 'production';
+      redisMock.incrOrThrow.mockResolvedValue(11); // over limit
+
+      try {
+        await request(app.getHttpServer())
+          .post('/auth/login')
+          .send({ email: 'yuki@test.com', password: 'password123' })
+          .expect(429);
+      } finally {
+        process.env['DISABLE_RATE_LIMIT'] = origDisable;
+        process.env['NODE_ENV'] = origNodeEnv;
+      }
     });
   });
 
@@ -307,8 +349,8 @@ describe('Auth API (e2e)', () => {
     });
 
     it('401 when jti is in the denylist (token revoked after logout)', async () => {
-      // Simulate a denylisted token
-      redisMock.get.mockResolvedValue('1');
+      // Simulate a denylisted token (SessionGuard reads via the strict getOrThrow variant — M3)
+      redisMock.getOrThrow.mockResolvedValue('1');
       const token = validCookie('cuid-1', 'revoked-jti');
 
       await request(app.getHttpServer())
@@ -390,7 +432,7 @@ describe('Auth API (e2e)', () => {
     });
 
     it('BE-3: 429 RATE_LIMITED when IP rate limit exceeded', async () => {
-      redisMock.incr.mockResolvedValueOnce(11); // over 10/900s limit
+      redisMock.incrOrThrow.mockResolvedValueOnce(11); // over 10/900s limit
 
       const res = await request(app.getHttpServer())
         .post('/auth/verify-email/request')
@@ -508,7 +550,7 @@ describe('Auth API (e2e)', () => {
     });
 
     it('429 RATE_LIMITED when IP rate limit exceeded', async () => {
-      redisMock.incr.mockResolvedValueOnce(11); // over limit
+      redisMock.incrOrThrow.mockResolvedValueOnce(11); // over limit
 
       const res = await request(app.getHttpServer())
         .post('/auth/password-reset/request')

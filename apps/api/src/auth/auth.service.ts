@@ -23,6 +23,7 @@ import type { SignupDto } from './dto/signup.dto';
 import type { LoginDto } from './dto/login.dto';
 import { Prisma } from '@prisma/client';
 import type { Account } from '@prisma/client';
+import { REMEMBER_ME_MAX_AGE_S } from './session-epoch.constants';
 
 const BCRYPT_ROUNDS = 10;
 // ACID: the DB unique constraints are the real concurrency control for email/slug —
@@ -209,7 +210,7 @@ export class AuthService {
       return { twoFactorRequired: true, challengeToken };
     }
 
-    const maxAge = dto.rememberMe ? 30 * 24 * 60 * 60 : undefined; // seconds; undefined → session
+    const maxAge = dto.rememberMe ? REMEMBER_ME_MAX_AGE_S : undefined; // seconds; undefined → session
     return {
       account: this.toSummary(account), // needsCguReconsent: false default on login
       token: this.signToken(account.id, maxAge),
@@ -228,7 +229,7 @@ export class AuthService {
   ): Promise<{ account: AccountSummary; token: string }> {
     const account = await this.prisma.account.findUnique({ where: { id: accountId } });
     if (!account) throw new UnauthorizedException();
-    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : undefined;
+    const maxAge = rememberMe ? REMEMBER_ME_MAX_AGE_S : undefined;
     return { account: this.toSummary(account), token: this.signToken(accountId, maxAge) };
   }
 
@@ -244,7 +245,7 @@ export class AuthService {
       `session-epoch-ms:${accountId}`,
       String(epoch),
       'EX',
-      7 * 24 * 3600, // ≥ max JWT lifetime
+      REMEMBER_ME_MAX_AGE_S, // M7: >= max JWT lifetime (rememberMe = 30d)
     );
     const jti = randomUUID();
     const token = this.signToken(accountId, undefined, { ims: epoch + 1, jti });

@@ -24,17 +24,33 @@ export class OptionalSessionGuard implements CanActivate {
 
     let payload: { sub: string; jti?: string; exp?: number; iat?: number; ims?: number };
     try {
-      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number; ims?: number }>(token);
+      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number; ims?: number }>(
+        token,
+        { algorithms: ['HS256'] }, // L: pin verify algorithm (defense-in-depth against alg confusion)
+      );
     } catch {
       return true; // invalid/expired token — treat as visitor, never block a public read
     }
 
+    // M3: strict reads — on a Redis outage we cannot confirm the token isn't revoked/pre-reset,
+    // so fail closed by treating the request as an anonymous visitor (never throws: this guard
+    // must never block a public read, it only decides whether to trust the token as authenticated).
     if (payload.jti) {
-      const denied = await this.redis.get(`denylist:${payload.jti}`);
+      let denied: string | null;
+      try {
+        denied = await this.redis.getOrThrow(`denylist:${payload.jti}`);
+      } catch {
+        return true;
+      }
       if (denied) return true; // revoked session — treat as visitor
     }
 
-    const epochStr = await this.redis.get(`session-epoch-ms:${payload.sub}`);
+    let epochStr: string | null;
+    try {
+      epochStr = await this.redis.getOrThrow(`session-epoch-ms:${payload.sub}`);
+    } catch {
+      return true;
+    }
     if (epochStr !== null) {
       const issuedMs = payload.ims ?? (payload.iat !== undefined ? payload.iat * 1000 : undefined);
       if (issuedMs !== undefined && issuedMs <= parseInt(epochStr, 10)) {

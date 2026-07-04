@@ -24,7 +24,7 @@ const GENRE_IDS = new Set(GENRES.map((g) => g.id));
  */
 export function parseCatalogQuery(raw: RawQuery): CatalogQuery {
   return {
-    q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'] : undefined,
+    q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined, // L: cap length
     genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     statut: allowlistScalar(raw['statut'], CATALOG_STATUTS),
     format: allowlist(raw['format'], CATALOG_FORMATS),

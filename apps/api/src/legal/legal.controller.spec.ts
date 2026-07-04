@@ -29,7 +29,7 @@ describe('LegalController (HTTP)', () => {
     recordConsent: jest.Mock;
     needsCguReconsent: jest.Mock;
   };
-  let redisMock: { get: jest.Mock; set: jest.Mock; incr: jest.Mock; expire: jest.Mock };
+  let redisMock: { get: jest.Mock; getOrThrow: jest.Mock; set: jest.Mock; incr: jest.Mock; expire: jest.Mock };
   let jwtService: JwtService;
 
   beforeAll(async () => {
@@ -42,6 +42,8 @@ describe('LegalController (HTTP)', () => {
     };
     redisMock = {
       get: jest.fn().mockResolvedValue(null),
+      // M3: SessionGuard reads via the strict variant — proxy to `get` so existing mocks apply.
+      getOrThrow: jest.fn((key: string) => redisMock.get(key)),
       set: jest.fn().mockResolvedValue('OK'),
       incr: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),

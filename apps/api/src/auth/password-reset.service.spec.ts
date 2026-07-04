@@ -230,6 +230,23 @@ describe('PasswordResetService', () => {
       );
     });
 
+    it('M7: session-epoch TTL is >= the rememberMe max age (30d), not just 7d', async () => {
+      const { raw, row } = makeTokenRow();
+      prisma.passwordResetToken.findUnique.mockResolvedValue(row);
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: typeof prisma) => Promise<void>) => fn(prisma),
+      );
+
+      await service.confirm(raw, 'newpassword123');
+
+      expect(redisService.set).toHaveBeenCalledWith(
+        'session-epoch-ms:acc-1',
+        expect.any(String),
+        'EX',
+        30 * 24 * 60 * 60, // REMEMBER_ME_MAX_AGE_S
+      );
+    });
+
     it('calls emailService.send with password_changed notice after confirm', async () => {
       const { raw, row } = makeTokenRow();
       prisma.passwordResetToken.findUnique.mockResolvedValue(row);

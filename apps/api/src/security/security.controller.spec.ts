@@ -35,7 +35,14 @@ describe('SecurityController — /me routes (F-18)', () => {
   let sessionStore: { list: jest.Mock; revoke: jest.Mock; reset: jest.Mock; touch: jest.Mock };
   let authService: { rotateOtherSessions: jest.Mock };
   let prismaMock: { account: { findUnique: jest.Mock } };
-  let redisMock: { get: jest.Mock; set: jest.Mock; incr: jest.Mock; expire: jest.Mock; del: jest.Mock };
+  let redisMock: {
+    get: jest.Mock;
+    getOrThrow: jest.Mock;
+    set: jest.Mock;
+    incr: jest.Mock;
+    expire: jest.Mock;
+    del: jest.Mock;
+  };
 
   beforeAll(async () => {
     emailChange = {
@@ -65,6 +72,8 @@ describe('SecurityController — /me routes (F-18)', () => {
     };
     redisMock = {
       get: jest.fn().mockResolvedValue(null),
+      // M3: SessionGuard reads via the strict variant — proxy to `get` so existing mocks apply.
+      getOrThrow: jest.fn((key: string) => redisMock.get(key)),
       set: jest.fn().mockResolvedValue(undefined),
       incr: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(undefined),

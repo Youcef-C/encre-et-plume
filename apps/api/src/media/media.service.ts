@@ -83,8 +83,9 @@ export class MediaService {
       throw new BadRequestException(`size must be between 1 and ${MAX_UPLOAD_BYTES} bytes`);
     }
 
-    // Redis rate-limit: skip when DISABLE_RATE_LIMIT=true (CI / tests)
-    if (process.env['DISABLE_RATE_LIMIT'] !== 'true') {
+    // Redis rate-limit: skip when DISABLE_RATE_LIMIT=true (CI / tests).
+    // M4: NEVER honor this in production — a stray env var must not disable upload throttling.
+    if (!(process.env['DISABLE_RATE_LIMIT'] === 'true' && process.env['NODE_ENV'] !== 'production')) {
       const key = `media:upload:rate:${accountId}`;
       const count = await this.redis.incr(key);
       if (count === 1) await this.redis.expire(key, RATE_LIMIT_WINDOW_S);

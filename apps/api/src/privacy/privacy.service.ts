@@ -11,8 +11,9 @@ import { QueueService } from '../queue/queue.service';
 import { MediaService } from '../media/media.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../email/email.service';
+import { REMEMBER_ME_MAX_AGE_S } from '../auth/session-epoch.constants';
 
-const SESSION_EPOCH_TTL_S = 7 * 24 * 3600; // ≥ max JWT lifetime (7d) — mirrors PasswordResetService
+const SESSION_EPOCH_TTL_S = REMEMBER_ME_MAX_AGE_S; // M7: >= max JWT lifetime (rememberMe = 30d)
 
 function toDto(
   row: {

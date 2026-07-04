@@ -70,6 +70,10 @@ describe('parseCatalogQuery', () => {
     expect(parseCatalogQuery({ q: 'brume' }).q).toBe('brume');
   });
 
+  it('L: caps q at 100 characters (DoS/expensive-ILIKE guard — public unauthenticated endpoint)', () => {
+    expect(parseCatalogQuery({ q: 'a'.repeat(150) }).q).toBe('a'.repeat(100));
+  });
+
   it.each([
     ['0', 1],
     ['-1', 1],

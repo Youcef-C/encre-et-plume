@@ -35,6 +35,7 @@ describe('AuthService', () => {
   let jwtService: { sign: jest.Mock };
   let emailVerificationService: { issueToken: jest.Mock };
   let legalService: { currentVersion: jest.Mock; needsCguReconsent: jest.Mock };
+  let redisService: { set: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -54,6 +55,7 @@ describe('AuthService', () => {
       currentVersion: jest.fn().mockResolvedValue(null),
       needsCguReconsent: jest.fn().mockResolvedValue(false),
     };
+    redisService = { set: jest.fn().mockResolvedValue(undefined) }; // F-18: rotateOtherSessions
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -63,7 +65,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: EmailVerificationService, useValue: emailVerificationService },
         { provide: LegalService, useValue: legalService },
-        { provide: RedisService, useValue: { set: jest.fn().mockResolvedValue(undefined) } }, // F-18: rotateOtherSessions
+        { provide: RedisService, useValue: redisService },
       ],
     }).compile();
 
@@ -595,6 +597,19 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: new Date('1990-01-01') });
       const result = await service.me('cuid-1');
       expect(result.isAdult).toBe(true);
+    });
+  });
+
+  describe('rotateOtherSessions (M7)', () => {
+    it('bumps session-epoch-ms with a TTL >= the rememberMe max age (30d), not just 7d', async () => {
+      await service.rotateOtherSessions('cuid-1');
+
+      expect(redisService.set).toHaveBeenCalledWith(
+        'session-epoch-ms:cuid-1',
+        expect.any(String),
+        'EX',
+        30 * 24 * 60 * 60, // REMEMBER_ME_MAX_AGE_S — a stolen 30d rememberMe token must stay revocable
+      );
     });
   });
 });

@@ -37,6 +37,16 @@ async function bootstrap() {
   // media (S3/CDN URLs) and cross-origin fetches from the web app must keep working.
   app.use(helmet({ crossOriginResourcePolicy: false }));
 
+  // M1: trust proxy set to the EXACT number of hops behind the load balancer — never blanket
+  // `true`. Blanket `true` trusts X-Forwarded-For from anywhere, letting any client spoof its
+  // apparent IP and collapse/bypass per-IP rate limiting; an explicit hop count only trusts the
+  // LB's own hop. Default: 1 hop in production (behind the documented LB), 0 (no proxy) elsewhere;
+  // override via TRUST_PROXY_HOPS if the deploy topology adds more hops (e.g. CDN + LB).
+  app.getHttpAdapter().getInstance().set(
+    'trust proxy',
+    Number(process.env['TRUST_PROXY_HOPS'] ?? (process.env['NODE_ENV'] === 'production' ? 1 : 0)),
+  );
+
   // Cookie-based session transport (D2/D3)
   app.use(cookieParser());
 

@@ -170,7 +170,8 @@ export class EmailChangeService {
       this.logger.warn(`email_change_notice send failed for accountId=${row.accountId}: ${(err as Error).message}`);
     }
 
-    this.logger.log(`Email changed for accountId=${row.accountId} → ${row.newEmail}`);
+    // L: don't log the new email address (PII/RGPD) — accountId is enough to correlate.
+    this.logger.log(`Email changed for accountId=${row.accountId}`);
     return { emailChanged: true };
   }
 

@@ -5,10 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { RedisService } from '../redis/redis.service';
 import { PASSWORD_RESET_TOKEN_INVALID, PASSWORD_RESET_TOKEN_EXPIRED } from '@encre-et-plume/shared';
+import { REMEMBER_ME_MAX_AGE_S } from './session-epoch.constants';
 
 const TOKEN_TTL_MS = 60 * 60 * 1000;   // 1h
 const DEV_STASH_TTL_S = 3600;
-const SESSION_EPOCH_TTL_S = 7 * 24 * 3600; // ≥ max JWT lifetime (7d)
+const SESSION_EPOCH_TTL_S = REMEMBER_ME_MAX_AGE_S; // M7: >= max JWT lifetime (rememberMe = 30d)
 const BCRYPT_ROUNDS = 10;
 
 function sha256(raw: string): string {

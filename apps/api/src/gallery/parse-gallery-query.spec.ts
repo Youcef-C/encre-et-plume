@@ -13,6 +13,10 @@ describe('parseGalleryQuery', () => {
     expect(parseGalleryQuery({ q: '' }).q).toBeUndefined();
   });
 
+  it('L: caps q at 100 characters (DoS/expensive-ILIKE guard — public unauthenticated endpoint)', () => {
+    expect(parseGalleryQuery({ q: 'a'.repeat(150) }).q).toBe('a'.repeat(100));
+  });
+
   it('validates genre against the full F-20 vocabulary (Round 2 — round-trip, DR-2 precedent)', () => {
     expect(parseGalleryQuery({ genre: 'supernatural' }).genre).toEqual(['supernatural']);
   });

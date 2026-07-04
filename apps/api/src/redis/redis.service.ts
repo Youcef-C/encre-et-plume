@@ -26,6 +26,20 @@ export class RedisService implements OnModuleDestroy {
     return this.client.incr(key).catch(() => 0); // fail-open: 0 = under limit
   }
 
+  /**
+   * M3: strict variant — rethrows on Redis error instead of swallowing. Reserved for
+   * security-critical paths only (auth rate-limiter, session denylist/epoch checks): a Redis
+   * outage there must fail CLOSED (deny/block), never silently disable the control.
+   */
+  async getOrThrow(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
+
+  /** M3: strict variant of {@link incr} — rethrows on Redis error. See {@link getOrThrow}. */
+  async incrOrThrow(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
   async expire(key: string, ttl: number): Promise<void> {
     await this.client.expire(key, ttl).catch(() => {}); // fail-open
   }
