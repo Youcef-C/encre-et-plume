@@ -54,7 +54,7 @@ async function signUpViaApi(
 ): Promise<string> {
   const signupRes = await request.post(`${API}/auth/signup`, {
     // F-13: acceptCgu required by the API
-    data: { displayName: 'Reset User', email, password, acceptCgu: true },
+    data: { displayName: 'Reset User', email, password, acceptCgu: true, birthdate: '1990-01-01' },
   });
   expect(signupRes.status()).toBe(201);
   // No session cookie from signup (blocking model)
@@ -82,6 +82,7 @@ async function signUpViaUI(page: Page, email: string, password: string): Promise
   await page.getByLabel(/nom d'utilisateur/i).fill(email.split('@')[0].replace(/[^a-z0-9-]/g, '-'));
   await page.getByLabel(/^mot de passe$/i).fill(password);
   await page.getByLabel(/confirmer le mot de passe/i).fill(password);
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent before submit
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();

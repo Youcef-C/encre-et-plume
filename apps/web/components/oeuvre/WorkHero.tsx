@@ -11,11 +11,12 @@ import type { WorkDetail, AccountSummary, ReactionViewerState } from '@encre-et-
 import { coverStyle } from '../../lib/cover';
 import { formatLikeCount } from '../../lib/home';
 import { ratingLabel } from '../../lib/work';
+import { isMatureContent } from '../../lib/mature';
 import { usePersonalAction } from '../../lib/usePersonalAction';
 import { useResumePosition } from '../../lib/useResumePosition';
 import { useReaction } from '../../lib/useReaction';
 import * as api from '../../lib/api';
-import { CheckIcon, HeartIcon, StarIcon, PlusIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
+import { CheckIcon, HeartIcon, StarIcon, PlusIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon, WarningIcon } from '../icons';
 import ResumeProgress from './ResumeProgress';
 
 const badgeStyle: React.CSSProperties = {
@@ -113,6 +114,11 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
             <span style={{ ...badgeStyle, background: 'var(--accent)', color: '#fff' }}>
               {work.format.toUpperCase()}
             </span>
+            {isMatureContent(work.genre, work.hashtags) && (
+              <span style={{ ...badgeStyle, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                <WarningIcon size={11} /> Contenu mature
+              </span>
+            )}
           </div>
 
           <h1 style={{ fontSize: 48, textTransform: 'uppercase', margin: 0, lineHeight: 0.95 }}>{work.title}</h1>

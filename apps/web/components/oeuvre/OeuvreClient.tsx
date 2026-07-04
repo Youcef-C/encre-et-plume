@@ -5,9 +5,12 @@
 // independently — one failing never blanks the rest of the page (DR-1 pattern).
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { ApiError, WorkDetail, WorkChaptersResponse, PlancheDto } from '@encre-et-plume/shared';
+import { useRouter } from 'next/navigation';
+import { isWork18Plus, type ApiError, type WorkDetail, type WorkChaptersResponse, type PlancheDto } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
+import AgeGate from '../age/AgeGate';
 import WorkHero from './WorkHero';
 import SynopsisBlock from './SynopsisBlock';
 import ChapterList from './ChapterList';
@@ -15,10 +18,12 @@ import PlancheGrid from './PlancheGrid';
 import ReviewsSection from './ReviewsSection';
 import { TeamSidebar, DetailsSidebar, SupportCard, FundingGoals } from './Sidebar';
 
-type State = 'loading' | 'ready' | 'notfound' | 'error';
+type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
 export default function OeuvreClient({ slug }: { slug: string }) {
   const { account } = useSession();
+  const router = useRouter();
+  const cleared = useAgeCleared(account);
   const [state, setState] = useState<State>('loading');
   const [work, setWork] = useState<WorkDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -39,7 +44,7 @@ export default function OeuvreClient({ slug }: { slug: string }) {
       .catch((err: ApiError) => {
         if (cancelled) return;
         setError(err);
-        setState(err.statusCode === 404 ? 'notfound' : 'error');
+        setState(err.error === 'AGE_RESTRICTED' ? 'age-refused' : err.statusCode === 404 ? 'notfound' : 'error');
       });
     return () => {
       cancelled = true;
@@ -110,7 +115,31 @@ export default function OeuvreClient({ slug }: { slug: string }) {
     );
   }
 
+  // DR-10: logged-in minor — server-side hard gate, no retry/bypass.
+  if (state === 'age-refused') {
+    return (
+      <div role="alert" style={{ maxWidth: 1100, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
+        <p style={{ fontWeight: 700, marginBottom: 12 }}>
+          {error?.message ?? 'Ce contenu est réservé aux adultes.'}
+        </p>
+        <Link href="/decouvrir" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
+          ‹ Catalogue
+        </Link>
+      </div>
+    );
+  }
+
   if (!work) return null;
+
+  // DR-10 QA round-1 fix: the gate must SUPPRESS the real content, not just dim it with an
+  // overlay on top of already-mounted markup (synopsis/team/etc never mount while un-cleared).
+  if (isWork18Plus(work.audienceRating) && !cleared) {
+    return (
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px', position: 'relative', minHeight: 400 }}>
+        <AgeGate onBack={() => router.back()} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px' }}>

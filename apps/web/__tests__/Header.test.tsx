@@ -35,6 +35,7 @@ const mockAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 function renderHeader(

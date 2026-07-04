@@ -33,6 +33,7 @@ const account: AccountSummary = {
   emailVerified: true,
   needsCguReconsent: false,
   onboarded: true,
+  isAdult: true,
 };
 
 const listItems: ListItemDto[] = [

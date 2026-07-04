@@ -92,6 +92,7 @@ test('FE-1/FE-6: checking CGU checkbox enables submit; signup succeeds → /veri
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
 
   const btn = page.getByRole('button', { name: /créer mon compte/i });
   await expect(btn).toBeDisabled();
@@ -113,6 +114,7 @@ test('FE-1/FE-6: inline CGU error shown when form submitted with unchecked check
   await page.getByLabel(/e-mail/i).fill('inline-test@test.com');
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // Trigger form submit via requestSubmit (bypasses disabled button)
   await page.evaluate(
     () => (document.querySelector('form') as HTMLFormElement | null)?.requestSubmit(),

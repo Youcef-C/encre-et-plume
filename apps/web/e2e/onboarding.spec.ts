@@ -60,6 +60,7 @@ async function signUpFresh(page: Page, email: string): Promise<void> {
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill(PASSWORD);
   await page.getByLabel(/confirmer le mot de passe/i).fill(PASSWORD);
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
   await expect(page).toHaveURL(/\/verifier-email\/envoye/, { timeout: 10_000 });
@@ -68,7 +69,7 @@ async function signUpFresh(page: Page, email: string): Promise<void> {
 /** Sign up via API only (no browser) — account is unverified. */
 async function signUpViaApi(request: APIRequestContext, email: string): Promise<void> {
   const res = await request.post(`${API}/auth/signup`, {
-    data: { displayName: 'Onboard API', email, password: PASSWORD, acceptCgu: true },
+    data: { displayName: 'Onboard API', email, password: PASSWORD, acceptCgu: true, birthdate: '1990-01-01' },
   });
   expect(res.status()).toBe(201);
 }

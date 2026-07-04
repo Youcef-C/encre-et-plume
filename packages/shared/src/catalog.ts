@@ -21,6 +21,15 @@ export const CATALOG_FORMATS = ['Manga', 'One-shot', 'Roman'] as const;
 // No longer a query facet on its own (see CATALOG_PUBLICS below); kept so the column's valid values
 // stay documented in one place.
 export const CATALOG_AUDIENCE_RATINGS = ['Tous publics', '12+', '16+', '18+'] as const;
+
+// ── DR-10: 18+ gating contracts ───────────────────────────────────────────────
+export const AUDIENCE_RATING_18PLUS = '18+' as const;
+/** A work hard-gates iff its `audienceRating` is exactly '18+' (authoritative, creator-set at publish). */
+export function isWork18Plus(audienceRating: string): boolean {
+  return audienceRating === AUDIENCE_RATING_18PLUS;
+}
+/** Typed `ApiError.error` code for the logged-in-minor 403 (see AgeGateService). */
+export const AGE_RESTRICTED = 'AGE_RESTRICTED';
 // PUBLIC facet (round-2b: multi-select, OR-within like the other facets — 'tous' is NOT part of
 // the wire format, it's just the empty/default state). 'mature' = genre/themes include a
 // vocabulary entry with mature:true; '18plus' = Work.audienceRating === '18+'. Selecting both
@@ -66,6 +75,8 @@ export interface CatalogWorkCard {
   complete: boolean; // -> "Complet" badge
   format: CatalogFormat; // 'Roman' -> Roman badge
   cover: string | null; // null -> CSS halftone placeholder
+  /** DR-10: isWork18Plus(audienceRating) — client blurs + "18+" badges until the viewer is age-cleared. */
+  is18plus: boolean;
 }
 
 export interface CatalogResponse {

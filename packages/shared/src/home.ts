@@ -14,6 +14,8 @@ export interface FeaturedWork {
   cover: string | null;
   meta: string;
   genre: string;
+  /** DR-10: isWork18Plus(audienceRating) — client blurs + "18+" badges until the viewer is age-cleared. */
+  is18plus: boolean;
 }
 
 /** GET /home/trending-this-week item — "Populaires à chaud · cette semaine" card. */
@@ -26,6 +28,8 @@ export interface TrendingWork {
   genre: string;
   likeCount: number;
   growthPct: number;
+  /** DR-10: isWork18Plus(audienceRating) — client blurs + "18+" badges until the viewer is age-cleared. */
+  is18plus: boolean;
 }
 
 /** One creator card ("Top artiste"/"Top scénariste du moment"). */
@@ -62,6 +66,8 @@ export interface RankingRow {
   title: string;
   cover: string | null;
   meta: string;
+  /** DR-10: isWork18Plus(audienceRating) — client blurs + "18+" badges until the viewer is age-cleared. */
+  is18plus: boolean;
 }
 
 /** GET /home/announcements item — "ANNONCES" ribbon tag. */

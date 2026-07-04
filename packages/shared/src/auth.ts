@@ -50,6 +50,12 @@ export interface AccountSummary {
   needsCguReconsent: boolean;
   /** F-17: true once the onboarding wizard was completed or skipped (Account.onboardedAt != null). */
   onboarded: boolean;
+  /**
+   * DR-10: derived from `birthdate`, never the raw date (RGPD — never expose birthdate itself).
+   * `true` = >= 18, `false` = < 18, `null` = no birthdate on file yet (existing account, prompted
+   * on next 18+ access).
+   */
+  isAdult: boolean | null;
 }
 
 /** PATCH /accounts/{id}/role body — admin-only role change (F-2). */
@@ -69,6 +75,13 @@ export interface SignupRequest {
   username?: string;
   /** F-13: must be true; server rejects signup if absent or false. */
   acceptCgu: boolean;
+  /** DR-10: required, 'YYYY-MM-DD'. Server derives age server-side; never trust a client claim. */
+  birthdate: string;
+}
+
+/** DR-10: PATCH /accounts/me/birthdate body — existing-account prompt when isAdult === null. */
+export interface UpdateBirthdateRequest {
+  birthdate: string;
 }
 
 /** POST /auth/login body. */

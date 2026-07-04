@@ -201,3 +201,77 @@ test.describe('Découvrir catalog', () => {
     expect(overflow).toBe(true);
   });
 });
+
+// ── DR-10: 18+ blur + badge on catalog cards ──────────────────────────────────
+test.describe('Découvrir catalog — 18+ listing treatment (DR-10)', () => {
+  test('an is18plus card is blurred with an "18+" badge until the viewer is age-cleared', async ({ page }) => {
+    const gatedWorks = [
+      { ...allWorks[0], is18plus: false },
+      { id: '3', slug: 'le-dernier-ronin', title: 'Le Dernier Ronin', genre: 'Seinen', chapterCount: 8, likeCount: 5700, complete: false, format: 'Manga', cover: null, is18plus: true },
+    ];
+    await page.route(`${API}/catalog/trending`, (route) => route.fulfill({ json: trending }));
+    await page.route(`${API}/contests/active`, (route) => route.fulfill({ json: contest }));
+    await page.route(`${API}/catalog/editor-pick`, (route) => route.fulfill({ json: editorPicks }));
+    await page.route(`${API}/catalog?**`, (route) =>
+      route.fulfill({ json: { items: gatedWorks, total: gatedWorks.length, page: 1, pageSize: 12, totalPages: 1 } }),
+    );
+    await page.route(`${API}/catalog`, (route) =>
+      route.fulfill({ json: { items: gatedWorks, total: gatedWorks.length, page: 1, pageSize: 12, totalPages: 1 } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+    );
+
+    await page.goto('/decouvrir');
+    await expect(page.getByRole('img', { name: 'Œuvre 18+' })).toBeVisible();
+    // The non-18+ card next to it is never blurred/badged.
+    await expect(page.getByRole('link', { name: /lames de brume/i }).getByRole('img', { name: 'Œuvre 18+' })).toHaveCount(0);
+  });
+
+  // QA round-1 regression: Cover18Overlay's old height:'100%' wrapper stretched to the full
+  // CSS-grid row-track height (align-items:stretch), pushing every card's title ~53px into the
+  // next row. This grid is 3 columns, so 6 items force 2 rows — the minimal fixture that can
+  // reproduce the overlap (the earlier 2-item fixture above never had a "next row" to spill into).
+  test('QA round-1 regression: an 18+ card does not stretch its row, pushing row-1 titles into row-2 (>=2 rows)', async ({ page }) => {
+    const gridWorks = Array.from({ length: 6 }, (_, i) => ({
+      id: String(i + 1),
+      slug: `work-${i + 1}`,
+      title: `Work ${i + 1}`,
+      genre: 'Seinen',
+      chapterCount: 10,
+      likeCount: 100,
+      complete: false,
+      format: 'Manga',
+      cover: null,
+      is18plus: i === 1, // second card of row 1 is 18+
+    }));
+    await page.route(`${API}/catalog/trending`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/contests/active`, (route) => route.fulfill({ json: null }));
+    await page.route(`${API}/catalog/editor-pick`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/catalog?**`, (route) =>
+      route.fulfill({ json: { items: gridWorks, total: gridWorks.length, page: 1, pageSize: 12, totalPages: 1 } }),
+    );
+    await page.route(`${API}/catalog`, (route) =>
+      route.fulfill({ json: { items: gridWorks, total: gridWorks.length, page: 1, pageSize: 12, totalPages: 1 } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+    );
+
+    await page.setViewportSize({ width: 1280, height: 1200 });
+    await page.goto('/decouvrir');
+    await expect(page.getByRole('img', { name: 'Œuvre 18+' })).toBeVisible();
+
+    const row1Title = page.getByText('Work 1', { exact: true });
+    const row2FirstCard = page.getByRole('link', { name: /^Work 4/ });
+    await expect(row1Title).toBeVisible();
+    await expect(row2FirstCard).toBeVisible();
+
+    const row1TitleBox = await row1Title.boundingBox();
+    const row2Box = await row2FirstCard.boundingBox();
+    expect(row1TitleBox).not.toBeNull();
+    expect(row2Box).not.toBeNull();
+    // Row 1's title must sit entirely above row 2's box — QA measured a ~53px overlap here.
+    expect(row1TitleBox!.y + row1TitleBox!.height).toBeLessThanOrEqual(row2Box!.y + 1);
+  });
+});

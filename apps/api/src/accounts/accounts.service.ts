@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, MediaVariants } from '@encre-et-plume/shared';
+import { deriveIsAdult } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
 import type { Account } from '@prisma/client';
@@ -26,6 +27,7 @@ function toSummary(account: Account): AccountSummary {
     emailVerified: account.emailVerifiedAt !== null, // F-11
     needsCguReconsent: false, // F-13: accounts endpoints don't compute the live flag; /auth/me does
     onboarded: false, // F-17: ponytail: hardcoded like needsCguReconsent; accounts endpoints don't need live onboarding state
+    isAdult: deriveIsAdult(account.birthdate), // DR-10
   };
 }
 
@@ -48,6 +50,15 @@ export class AccountsService {
     const account = await this.prisma.account.update({
       where: { id: accountId },
       data: { preferences: { theme } },
+    });
+    return toSummary(account);
+  }
+
+  /** DR-10 BE-9: existing-account birthdate prompt — persists and returns the recomputed isAdult. */
+  async setBirthdate(accountId: string, birthdate: string): Promise<AccountSummary> {
+    const account = await this.prisma.account.update({
+      where: { id: accountId },
+      data: { birthdate: new Date(birthdate) },
     });
     return toSummary(account);
   }

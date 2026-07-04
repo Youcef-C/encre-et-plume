@@ -9,6 +9,7 @@ import type {
   TopCreatorsResponse,
   TrendingWork,
 } from '@encre-et-plume/shared';
+import { isWork18Plus } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RANKING_ORDER_BY, toRankingRow } from '../ranking/ranking.util';
@@ -36,7 +37,15 @@ export class HomeService {
         where: { featuredRank: { not: null } },
         orderBy: { featuredRank: 'asc' },
       });
-      return works.map((w) => ({ id: w.id, slug: w.slug, title: w.title, cover: w.coverImage, meta: w.meta, genre: w.genre }));
+      return works.map((w) => ({
+        id: w.id,
+        slug: w.slug,
+        title: w.title,
+        cover: w.coverImage,
+        meta: w.meta,
+        genre: w.genre,
+        is18plus: isWork18Plus(w.audienceRating),
+      }));
     });
   }
 
@@ -55,6 +64,7 @@ export class HomeService {
         genre: w.genre,
         likeCount: w.likeCount,
         growthPct: growthPercent(w.weeklyLikeDelta, w.priorWeekLikeDelta),
+        is18plus: isWork18Plus(w.audienceRating),
       }));
     });
   }

@@ -8,9 +8,20 @@ import Link from 'next/link';
 import type { GalleryFeatureCard } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
 import { coverStyle } from '../../lib/cover';
+import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
 import { FlameIcon, EyeIcon } from '../icons';
+import Cover18Overlay from '../age/Cover18Overlay';
 
-function FeatureCard({ item, onQuickPreview }: { item: GalleryFeatureCard; onQuickPreview: (id: string) => void }) {
+function FeatureCard({
+  item,
+  cleared,
+  onQuickPreview,
+}: {
+  item: GalleryFeatureCard;
+  cleared: boolean;
+  onQuickPreview: (id: string) => void;
+}) {
   const badgeBg = item.rank === 1 ? 'var(--accent)' : '#e8b21c';
   const badgeColor = item.rank === 1 ? '#fff' : 'var(--ink)';
 
@@ -20,6 +31,7 @@ function FeatureCard({ item, onQuickPreview }: { item: GalleryFeatureCard; onQui
           nested inside an <a> is invalid HTML and breaks keyboard/AT behavior. */}
       <Link
         href={`/illustration/${item.id}`}
+        data-testid="trending-feature-cover"
         style={{
           position: 'relative',
           height: 360,
@@ -35,6 +47,7 @@ function FeatureCard({ item, onQuickPreview }: { item: GalleryFeatureCard; onQui
         role="img"
         aria-label={item.title}
       >
+        <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Illustration 18+" />
         <span
           style={{
             position: 'absolute',
@@ -120,6 +133,9 @@ export default function TrendingFeature({
   items: GalleryFeatureCard[];
   onQuickPreview: (id: string) => void;
 }) {
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
+
   if (items.length === 0) return null;
 
   return (
@@ -131,7 +147,7 @@ export default function TrendingFeature({
       </div>
       <div className="ep-gallery-trending" style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
         {items.map((item) => (
-          <FeatureCard key={item.id} item={item} onQuickPreview={onQuickPreview} />
+          <FeatureCard key={item.id} item={item} cleared={cleared} onQuickPreview={onQuickPreview} />
         ))}
       </div>
     </div>

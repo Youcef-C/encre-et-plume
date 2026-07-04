@@ -24,8 +24,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import ClassementClient from '../components/classement/ClassementClient';
 
 const items: RankingRow[] = [
-  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Shōnen · 8,1k ♥' },
-  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, meta: 'Seinen · 5,7k ♥' },
+  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Shōnen · 8,1k ♥', is18plus: false },
+  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, meta: 'Seinen · 5,7k ♥', is18plus: false },
 ];
 
 describe('ClassementClient (DR-7)', () => {

@@ -9,6 +9,8 @@ import { ReadingProgressService } from './reading-progress.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
+import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
+import { AgeGateService } from '../age-gate/age-gate.service';
 
 /** DR-4 reader "Lecteur": public chapter pages route + authenticated /me/favorites, /me/reading-progress. */
 @Module({
@@ -19,6 +21,15 @@ import { SessionGuard } from '../auth/guards/session.guard';
     }),
   ],
   controllers: [ReaderController, FavoritesController, ReadingProgressController],
-  providers: [ReaderService, FavoritesService, ReadingProgressService, PrismaService, RedisService, SessionGuard],
+  providers: [
+    ReaderService,
+    FavoritesService,
+    ReadingProgressService,
+    PrismaService,
+    RedisService,
+    SessionGuard,
+    OptionalSessionGuard,
+    AgeGateService,
+  ],
 })
 export class ReaderModule {}

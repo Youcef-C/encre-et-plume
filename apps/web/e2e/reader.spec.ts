@@ -505,3 +505,45 @@ test.describe('Lecteur — roman (prose) reader', () => {
     expect(box!.height).toBeGreaterThan(300);
   });
 });
+
+/**
+ * DR-10 Age verification & 18+ gating — hermetic, route-mocked. NOT run this session — for
+ * QA/CI to execute.
+ */
+test.describe('Lecteur — 18+ age gate (DR-10)', () => {
+  test('a visitor opening an 18+ work sees the interstitial before the pages', async ({ page }) => {
+    await mockCommon(page);
+    await page.route(`${API}/works/lames-de-brume/chapters**`, (route) => route.fulfill({ json: mangaChapters }));
+    await page.route(`${API}/works/lames-de-brume/chapters/1/pages`, (route) => route.fulfill({ json: mangaPages }));
+    await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: { ...mangaWork, audienceRating: '18+' } }));
+
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await expect(page.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeVisible();
+    await expect(page.getByRole('slider')).not.toBeVisible();
+  });
+
+  test('a logged-in minor gets a refusal (no bypass) via the interstitial, not the Paywall', async ({ page }) => {
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({
+        json: {
+          id: 'minor-1', slug: 'minor', displayName: 'Minor', role: 'utilisateur', verified: false,
+          emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
+          preferences: { theme: 'system' }, needsCguReconsent: false, onboarded: true, isAdult: false,
+        },
+      }),
+    );
+    await page.route(`${API}/me/favorites`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/works/lames-de-brume/chapters**`, (route) => route.fulfill({ json: mangaChapters }));
+    await page.route(`${API}/works/lames-de-brume/chapters/1/pages`, (route) =>
+      route.fulfill({ status: 403, json: { statusCode: 403, message: 'Ce contenu est réservé aux adultes.', error: 'AGE_RESTRICTED' } }),
+    );
+    await page.route(`${API}/works/lames-de-brume`, (route) =>
+      route.fulfill({ status: 403, json: { statusCode: 403, message: 'Ce contenu est réservé aux adultes.', error: 'AGE_RESTRICTED' } }),
+    );
+
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await expect(page.getByText('Ce contenu est réservé aux adultes.')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /chapitre verrouillé/i })).not.toBeVisible();
+    await expect(page.getByRole('slider')).not.toBeVisible();
+  });
+});

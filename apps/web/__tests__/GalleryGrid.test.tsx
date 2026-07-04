@@ -14,6 +14,7 @@ const items: GalleryIllustrationCard[] = [
     categoryLabel: 'Process',
     likeCount: 3400,
     thumbnail: null,
+    is18plus: false,
   },
 ];
 

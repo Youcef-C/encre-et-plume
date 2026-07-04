@@ -147,3 +147,46 @@ test.describe('Illustration detail', () => {
     }
   });
 });
+
+/**
+ * DR-10 Age verification & 18+ gating — hermetic, route-mocked. NOT run this session — for
+ * QA/CI to execute.
+ */
+test.describe('Illustration detail — 18+ age gate (DR-10)', () => {
+  test('a visitor opening an 18+ illustration sees the interstitial before the artwork', async ({ page }) => {
+    await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/illustrations/*/preview`, (route) => route.fulfill({ json: preview }));
+    await page.route(`${API}/illustrations/*/more`, (route) => route.fulfill({ json: more }));
+    await page.route(`${API}/illustrations/i1`, (route) => route.fulfill({ json: { ...detail, is18plus: true } }));
+    await page.route(`${API}/illustrations?**`, (route) =>
+      route.fulfill({ json: { items: galleryItems, total: galleryItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+    );
+
+    await page.goto('/illustration/i1');
+    await expect(page.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeVisible();
+  });
+
+  test('a logged-in minor gets a refusal (no bypass) on a 403 AGE_RESTRICTED response', async ({ page }) => {
+    await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/illustrations/*/more`, (route) => route.fulfill({ json: more }));
+    await page.route(`${API}/illustrations/i1`, (route) =>
+      route.fulfill({ status: 403, json: { statusCode: 403, message: 'Ce contenu est réservé aux adultes.', error: 'AGE_RESTRICTED' } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({
+        json: {
+          id: 'minor-1', slug: 'minor', displayName: 'Minor', role: 'utilisateur', verified: false,
+          emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
+          preferences: { theme: 'system' }, needsCguReconsent: false, onboarded: true, isAdult: false,
+        },
+      }),
+    );
+
+    await page.goto('/illustration/i1');
+    await expect(page.getByText('Ce contenu est réservé aux adultes.')).toBeVisible();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+  });
+});

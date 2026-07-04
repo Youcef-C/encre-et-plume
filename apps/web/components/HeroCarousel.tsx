@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { FeaturedWork, ReactionStateResponse } from '@encre-et-plume/shared';
 import { useSession } from '../lib/session';
+import { useAgeCleared } from '../lib/ageGate';
 import { useReaction } from '../lib/useReaction';
 import * as api from '../lib/api';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
+import Cover18Overlay from './age/Cover18Overlay';
 
 const AUTO_ADVANCE_MS = 6000;
 
@@ -27,6 +29,7 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
   const [active, setActive] = useState(0);
   const [hovered, setHovered] = useState(false);
   const { account } = useSession();
+  const cleared = useAgeCleared(account);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const count = slides.length;
@@ -90,6 +93,7 @@ export default function HeroCarousel({ slides }: { slides: FeaturedWork[] }) {
       }}
     >
       <div style={{ position: 'absolute', inset: 0, ...coverStyle(slide.cover) }} />
+      <Cover18Overlay is18plus={slide.is18plus} cleared={cleared} label="Œuvre 18+" />
       <span
         style={{
           position: 'absolute',

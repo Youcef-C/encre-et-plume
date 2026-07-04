@@ -16,6 +16,7 @@ const DENYLIST = new Set([
   'card',
   'cvc',
   'iban',
+  'birthdate', // DR-10: RGPD PII — never in logs (per-view access is fine; the value itself is not)
 ]);
 
 export function redact(value: unknown): unknown {

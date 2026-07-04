@@ -112,7 +112,7 @@ describe('Auth API (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true })
+        .send({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true })
         .expect(201);
 
       // No session cookie set at signup
@@ -132,7 +132,7 @@ describe('Auth API (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'taken@test.com', password: 'password123', acceptCgu: true })
+        .send({ displayName: 'X', email: 'taken@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true })
         .expect(409);
 
       // NestJS flattens HttpException objects to response root
@@ -167,7 +167,7 @@ describe('Auth API (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', acceptCgu: true })
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true })
         .expect(429);
     });
 
@@ -176,7 +176,7 @@ describe('Auth API (e2e)', () => {
     it('F-13: 400 when acceptCgu is false (French message)', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', acceptCgu: false })
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: false })
         .expect(400);
 
       const messages: string[] = Array.isArray(res.body.message) ? res.body.message : [res.body.message];
@@ -186,8 +186,39 @@ describe('Auth API (e2e)', () => {
     it('F-13: 400 when acceptCgu is missing', async () => {
       await request(app.getHttpServer())
         .post('/auth/signup')
-        .send({ displayName: 'X', email: 'a@b.com', password: 'password123' })
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', birthdate: '1990-01-01' })
         .expect(400);
+    });
+
+    // ── DR-10: birthdate validation ─────────────────────────────────────────
+
+    it('DR-10: 400 "Date invalide" when birthdate is missing', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({ displayName: 'X', email: 'a@b.com', password: 'password123', acceptCgu: true })
+        .expect(400);
+
+      const messages: string[] = Array.isArray(res.body.message) ? res.body.message : [res.body.message];
+      expect(messages.some((m: string) => m.toLowerCase().includes('date invalide'))).toBe(true);
+    });
+
+    it('DR-10: 400 "Date invalide" for a future birthdate', async () => {
+      const future = new Date();
+      future.setFullYear(future.getFullYear() + 1);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          displayName: 'X',
+          email: 'a@b.com',
+          password: 'password123',
+          birthdate: future.toISOString().slice(0, 10),
+          acceptCgu: true,
+        })
+        .expect(400);
+
+      const messages: string[] = Array.isArray(res.body.message) ? res.body.message : [res.body.message];
+      expect(messages.some((m: string) => m.toLowerCase().includes('date invalide'))).toBe(true);
     });
   });
 

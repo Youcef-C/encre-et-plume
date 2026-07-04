@@ -41,6 +41,7 @@ const detail: IllustrationDetail = {
   likeCount: 3400,
   publishedAt: null,
   artist: { id: 'a1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'Dessinateur·rice', city: 'Lyon', avatar: null },
+  is18plus: false,
 };
 
 const admin: AccountSummary = { id: 'u1', slug: 'admin-1', displayName: 'Admin', role: 'admin', verified: true } as AccountSummary;

@@ -20,6 +20,7 @@ const base: CatalogWorkCard = {
   complete: true,
   format: 'Manga',
   cover: null,
+  is18plus: false,
 };
 
 describe('CatalogCard (DR-2 FE-6)', () => {
@@ -52,5 +53,30 @@ describe('CatalogCard (DR-2 FE-6)', () => {
   it('hides the "Roman" badge for other formats', () => {
     render(<CatalogCard work={base} />);
     expect(screen.queryByText('Roman')).not.toBeInTheDocument();
+  });
+
+  // ── DR-10: 18+ blur + badge ──────────────────────────────────────────────────
+
+  it('blurs the cover and shows an "18+" badge for an 18+ work (anon viewer, never cleared)', () => {
+    render(<CatalogCard work={{ ...base, is18plus: true }} />);
+    expect(screen.getByLabelText('Œuvre 18+')).toBeInTheDocument();
+  });
+
+  it('does not blur or badge a non-18+ work', () => {
+    render(<CatalogCard work={base} />);
+    expect(screen.queryByLabelText('Œuvre 18+')).not.toBeInTheDocument();
+  });
+
+  // QA round-1 regression: the 18+ overlay must never change the cover box's own declared
+  // height/width, or its title/meta siblings shift into the next grid row.
+  it('QA round-1 regression: the cover box keeps its exact 212px height when is18plus (no stretch)', () => {
+    render(<CatalogCard work={{ ...base, is18plus: true }} />);
+    expect(screen.getByTestId('catalog-cover')).toHaveStyle({ height: '212px' });
+  });
+
+  it('the cover box is the Link\'s direct first child (Cover18Overlay adds no wrapping element)', () => {
+    render(<CatalogCard work={{ ...base, is18plus: true }} />);
+    const link = screen.getByRole('link');
+    expect(link.firstElementChild).toBe(screen.getByTestId('catalog-cover'));
   });
 });

@@ -31,7 +31,7 @@ import DecouvrirClient from '../components/catalog/DecouvrirClient';
 
 const catalogPage1: CatalogResponse = {
   items: [
-    { id: '1', slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', chapterCount: 12, likeCount: 3400, complete: true, format: 'Manga', cover: null },
+    { id: '1', slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', chapterCount: 12, likeCount: 3400, complete: true, format: 'Manga', cover: null, is18plus: false },
   ],
   total: 47,
   page: 1,
@@ -40,7 +40,7 @@ const catalogPage1: CatalogResponse = {
 };
 
 const trending: TrendingWork[] = [
-  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24 },
+  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24, is18plus: false },
 ];
 const contest: ActiveContest = {
   id: 'c1',
@@ -127,7 +127,7 @@ describe('DecouvrirClient (DR-2 FE-8)', () => {
     render(<DecouvrirClient />);
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
     const nextPage: CatalogResponse = {
-      items: [{ id: '2', slug: 'onibi', title: 'Onibi', genre: 'Fantastique', chapterCount: 14, likeCount: 1900, complete: false, format: 'Manga', cover: null }],
+      items: [{ id: '2', slug: 'onibi', title: 'Onibi', genre: 'Fantastique', chapterCount: 14, likeCount: 1900, complete: false, format: 'Manga', cover: null, is18plus: false }],
       total: 47,
       page: 2,
       pageSize: 12,

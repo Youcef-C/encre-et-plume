@@ -1,6 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { ChapterPagesResponse, ReaderPageDto } from '@encre-et-plume/shared';
+import { isWork18Plus } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgeGateService } from '../age-gate/age-gate.service';
 import { chapterTotalPages } from './chapter-pagination';
 
 /**
@@ -10,9 +12,12 @@ import { chapterTotalPages } from './chapter-pagination';
  */
 @Injectable()
 export class ReaderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ageGate: AgeGateService,
+  ) {}
 
-  async getPages(slug: string, chapterNumber: number): Promise<ChapterPagesResponse> {
+  async getPages(slug: string, chapterNumber: number, accountId?: string): Promise<ChapterPagesResponse> {
     const work = await this.prisma.work.findFirst({ where: { slug, publishedAt: { not: null } } });
     if (!work) throw new NotFoundException('Chapitre introuvable');
 
@@ -20,6 +25,11 @@ export class ReaderService {
       where: { workId: work.id, number: chapterNumber, status: 'published', publishAt: { lte: new Date() } },
     });
     if (!chapter) throw new NotFoundException('Chapitre introuvable');
+
+    // DR-10 BE-6: age gate runs BEFORE the premium check and the readCount bump.
+    if (isWork18Plus(work.audienceRating)) {
+      await this.ageGate.assertMayView18Plus(accountId);
+    }
 
     // B7: premium chapters are locked for everyone until an access/subscription system exists.
     if (chapter.premium) {

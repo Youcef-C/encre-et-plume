@@ -36,6 +36,7 @@ const detail: IllustrationDetail = {
   likeCount: 3400,
   publishedAt: '2026-06-12T00:00:00.000Z',
   artist: { id: 'a1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'Dessinateur·rice', city: 'Lyon', avatar: null },
+  is18plus: false,
 };
 
 const more: GalleryIllustrationCard[] = [];
@@ -68,5 +69,46 @@ describe('IllustrationClient (DR-6 FE-T1)', () => {
     vi.mocked(api.getIllustrationMore).mockResolvedValue([]);
     render(<IllustrationClient id="dr5-illus-1" />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
+  // ── DR-10: 18+ age gate ───────────────────────────────────────────────────────
+
+  it('shows the AgeGate interstitial over an 18+ illustration when the viewer is not cleared', async () => {
+    sessionStorage.clear();
+    vi.mocked(api.getIllustration).mockResolvedValue({ ...detail, is18plus: true });
+    vi.mocked(api.getIllustrationMore).mockResolvedValue(more);
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+  });
+
+  // QA round-1 regression: the real artwork/description must never mount in the DOM while
+  // un-cleared — an overlay dimming already-mounted content is not a real gate.
+  it('QA round-1 regression: does not render the artwork/title/description while the AgeGate is up for an uncleared visitor', async () => {
+    sessionStorage.clear();
+    vi.mocked(api.getIllustration).mockResolvedValue({ ...detail, is18plus: true });
+    vi.mocked(api.getIllustrationMore).mockResolvedValue(more);
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { level: 1, name: 'Pluie de Néons' })).not.toBeInTheDocument();
+    expect(screen.queryByText(detail.description!)).not.toBeInTheDocument();
+  });
+
+  it('does not show the AgeGate for a non-18+ illustration', async () => {
+    mockReady();
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows a refusal (no retry) on a 403 AGE_RESTRICTED response', async () => {
+    vi.mocked(api.getIllustration).mockRejectedValue({
+      statusCode: 403,
+      message: 'Ce contenu est réservé aux adultes.',
+      error: 'AGE_RESTRICTED',
+    });
+    vi.mocked(api.getIllustrationMore).mockResolvedValue([]);
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByText('Ce contenu est réservé aux adultes.')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
   });
 });

@@ -25,6 +25,7 @@ const MOCK_ACCOUNT = {
   passwordHash: 'should-never-appear-in-export', // must NOT be in account.json
   preferences: { theme: 'system' },
   deletedAt: null,
+  birthdate: new Date('1990-01-01'), // DR-10: RGPD PII, included in the export
 };
 
 const MOCK_EXPORT = {
@@ -130,6 +131,16 @@ describe('DataExportProcessor', () => {
     expect(accountJson).not.toHaveProperty('passwordHash');
     expect(accountJson['email']).toBe('yuki@test.com');
     expect(accountJson['displayName']).toBe('Yuki Moreau');
+  });
+
+  it('DR-10: includes birthdate in account.json (RGPD art. 20 portability)', async () => {
+    await processor.process({ accountId: ACCOUNT_ID, exportId: EXPORT_ID }, {} as never);
+
+    const [, buffer] = media.createPrivateArchive.mock.calls[0] as [string, Buffer, string];
+    const zip = await JSZip.loadAsync(buffer);
+    const accountJson = JSON.parse(await zip.files['account.json']!.async('string')) as Record<string, unknown>;
+
+    expect(accountJson['birthdate']).toEqual(MOCK_ACCOUNT.birthdate.toISOString());
   });
 
   it('sets DataExport status to ready with readyAt and expiresAt (+7d)', async () => {

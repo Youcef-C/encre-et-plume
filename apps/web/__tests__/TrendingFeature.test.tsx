@@ -16,6 +16,7 @@ const items: GalleryFeatureCard[] = [
     likeCount: 12400,
     thumbnail: null,
     rank: 1,
+    is18plus: false,
   },
   {
     id: 'i2',
@@ -27,6 +28,7 @@ const items: GalleryFeatureCard[] = [
     likeCount: 9700,
     thumbnail: null,
     rank: 2,
+    is18plus: false,
   },
 ];
 
@@ -46,5 +48,22 @@ describe('TrendingFeature (DR-5 Round 2 — both cards get the eye button)', () 
     render(<TrendingFeature items={items} onQuickPreview={onQuickPreview} />);
     fireEvent.click(screen.getByRole('button', { name: 'Aperçu rapide de Pluie de Néons' }));
     expect(onQuickPreview).toHaveBeenCalledWith('i1');
+  });
+
+  // ── DR-10: 18+ blur + badge ──────────────────────────────────────────────────
+
+  it('blurs the cover and shows an "18+" badge for an 18+ feature card', () => {
+    render(<TrendingFeature items={[{ ...items[0]!, is18plus: true }]} onQuickPreview={() => {}} />);
+    expect(screen.getByLabelText('Illustration 18+')).toBeInTheDocument();
+  });
+
+  it('does not blur or badge a non-18+ feature card', () => {
+    render(<TrendingFeature items={items} onQuickPreview={() => {}} />);
+    expect(screen.queryByLabelText('Illustration 18+')).not.toBeInTheDocument();
+  });
+
+  it('QA round-1 regression: the cover box keeps its exact 360px height when is18plus (no stretch)', () => {
+    render(<TrendingFeature items={[{ ...items[0]!, is18plus: true }]} onQuickPreview={() => {}} />);
+    expect(screen.getByTestId('trending-feature-cover')).toHaveStyle({ height: '360px' });
   });
 });

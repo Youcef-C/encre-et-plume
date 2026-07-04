@@ -20,6 +20,7 @@ const MOCK_ACCOUNT = {
   avatar: null,
   createdAt: new Date('2026-01-01'),
   emailVerifiedAt: null, // F-11: new field; null = unverified
+  birthdate: null, // DR-10: null = not yet declared
 };
 
 describe('AuthService', () => {
@@ -78,6 +79,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
@@ -105,6 +107,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
@@ -117,7 +120,7 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT);
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -135,7 +138,7 @@ describe('AuthService', () => {
       );
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.account.create).toHaveBeenCalledTimes(1); // no pointless retry on email
     });
@@ -160,6 +163,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
@@ -176,7 +180,7 @@ describe('AuthService', () => {
       prisma.account.create.mockRejectedValue(dbDown);
 
       await expect(
-        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
+        service.signup({ displayName: 'X', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true }),
       ).rejects.toBe(dbDown);
     });
 
@@ -184,7 +188,7 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue(null);
       prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
 
-      await service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true });
+      await service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true });
 
       expect(emailVerificationService.issueToken).toHaveBeenCalledWith({
         id: MOCK_ACCOUNT.id,
@@ -200,7 +204,7 @@ describe('AuthService', () => {
 
       // Should not throw
       await expect(
-        service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', acceptCgu: true }),
+        service.signup({ displayName: 'Yuki Moreau', email: 'yuki@test.com', password: 'password123', birthdate: '1990-01-01', acceptCgu: true }),
       ).resolves.toBeDefined();
     });
 
@@ -214,6 +218,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         username: 'yuki-chan',
         acceptCgu: true,
       });
@@ -235,6 +240,7 @@ describe('AuthService', () => {
           displayName: 'X',
           email: 'new@test.com',
           password: 'password123',
+        birthdate: '1990-01-01',
           username: 'yuki-moreau',
           acceptCgu: true,
         }),
@@ -260,6 +266,7 @@ describe('AuthService', () => {
           displayName: 'X',
           email: 'new@test.com',
           password: 'password123',
+        birthdate: '1990-01-01',
           username: 'yuki-moreau',
           acceptCgu: true,
         }),
@@ -277,6 +284,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
@@ -299,6 +307,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       }, '127.0.0.1');
 
@@ -320,6 +329,7 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
@@ -335,10 +345,61 @@ describe('AuthService', () => {
         displayName: 'Yuki Moreau',
         email: 'yuki@test.com',
         password: 'password123',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
 
       expect(result.account.needsCguReconsent).toBe(false);
+    });
+
+    // ── DR-10: birthdate persisted + isAdult derived ───────────────────────────
+
+    it('DR-10: persists birthdate as a Date on account.create', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: new Date('1990-01-01') });
+
+      await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        birthdate: '1990-01-01',
+        acceptCgu: true,
+      });
+
+      const createArg = prisma.account.create.mock.calls[0]?.[0] as { data: { birthdate: Date } };
+      expect(createArg.data.birthdate).toEqual(new Date('1990-01-01'));
+    });
+
+    it('DR-10: signup result has isAdult: true for an adult birthdate', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: new Date('1990-01-01') });
+
+      const result = await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        birthdate: '1990-01-01',
+        acceptCgu: true,
+      });
+
+      expect(result.account.isAdult).toBe(true);
+    });
+
+    it('DR-10: signup result has isAdult: false for a minor birthdate', async () => {
+      const now = new Date();
+      const minorBirthdate = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: minorBirthdate });
+
+      const result = await service.signup({
+        displayName: 'Yuki Moreau',
+        email: 'yuki@test.com',
+        password: 'password123',
+        birthdate: minorBirthdate.toISOString().slice(0, 10),
+        acceptCgu: true,
+      });
+
+      expect(result.account.isAdult).toBe(false);
     });
   });
 
@@ -522,6 +583,18 @@ describe('AuthService', () => {
       prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, onboardedAt: new Date() });
       const result = await service.me('cuid-1');
       expect(result.onboarded).toBe(true);
+    });
+
+    it('DR-10: toSummary returns isAdult: null when birthdate is not on file', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: null });
+      const result = await service.me('cuid-1');
+      expect(result.isAdult).toBeNull();
+    });
+
+    it('DR-10: toSummary returns isAdult: true for an adult birthdate', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...MOCK_ACCOUNT, birthdate: new Date('1990-01-01') });
+      const result = await service.me('cuid-1');
+      expect(result.isAdult).toBe(true);
     });
   });
 });

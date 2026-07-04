@@ -20,9 +20,9 @@ const contest: ActiveContest = {
 };
 
 const trending: TrendingWork[] = [
-  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24 },
-  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, genre: 'Seinen', likeCount: 5700, growthPct: 18 },
-  { id: '3', slug: 'encre-blanche', rank: 3, title: 'Encre Blanche', cover: null, genre: 'Josei', likeCount: 2200, growthPct: 12 },
+  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24, is18plus: false },
+  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, genre: 'Seinen', likeCount: 5700, growthPct: 18, is18plus: false },
+  { id: '3', slug: 'encre-blanche', rank: 3, title: 'Encre Blanche', cover: null, genre: 'Josei', likeCount: 2200, growthPct: 12, is18plus: false },
 ];
 
 const editorPicks: EditorPickItem[] = [

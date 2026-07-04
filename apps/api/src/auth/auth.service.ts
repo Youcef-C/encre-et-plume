@@ -11,7 +11,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on Node version change
 import type { AccountSummary, AccountPreferences, ThemePreference, TwoFactorRequiredResponse } from '@encre-et-plume/shared';
-import { EMAIL_NOT_VERIFIED } from '@encre-et-plume/shared';
+import { EMAIL_NOT_VERIFIED, deriveIsAdult } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
@@ -113,6 +113,7 @@ export class AuthService {
             email: dto.email,
             passwordHash,
             profileSlug,
+            birthdate: new Date(dto.birthdate), // DR-10
             profile: { create: {} }, // BE-9: backing Profile row for F-3
             // F-13: consent rows created atomically with the account (BE-4, BE-5)
             ...(consentRows.length > 0 ? { consents: { create: consentRows } } : {}),
@@ -287,6 +288,7 @@ export class AuthService {
       emailVerified: account.emailVerifiedAt !== null, // F-11
       needsCguReconsent: false, // F-13: default for signup/login; me() overrides with live value
       onboarded: account.onboardedAt !== null, // F-17
+      isAdult: deriveIsAdult(account.birthdate), // DR-10: derived only — never expose the raw birthdate
     };
   }
 }

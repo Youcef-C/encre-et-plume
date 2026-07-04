@@ -107,6 +107,7 @@ model Account {
   preferences              Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
   createdAt                DateTime                 @default(now())
   emailVerifiedAt          DateTime?                // F-11: null = unverified; set on confirmation
+  birthdate                DateTime?                @db.Date // DR-10: RGPD PII, never public; null = not yet declared (prompt on next 18+ access)
   deletedAt                DateTime?                // F-14: null = active; non-null = tombstoned (RGPD erasure)
   onboardedAt              DateTime?                // F-17: null = show onboarding wizard; set on completion/skip
   profile                  Profile?

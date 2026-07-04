@@ -5,18 +5,23 @@
 // failure there never blanks the rest of the page (DR-1 pattern).
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ApiError, IllustrationDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
+import AgeGate from '../age/AgeGate';
 import IllustrationViewer from './IllustrationViewer';
 import IllustrationMeta from './IllustrationMeta';
 import IllustrationComments from './IllustrationComments';
 import ArtistSidebar from './ArtistSidebar';
 
-type State = 'loading' | 'ready' | 'notfound' | 'error';
+type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
 export default function IllustrationClient({ id }: { id: string }) {
   const { account } = useSession();
+  const router = useRouter();
+  const cleared = useAgeCleared(account);
   const [state, setState] = useState<State>('loading');
   const [detail, setDetail] = useState<IllustrationDetail | null>(null);
   const [more, setMore] = useState<GalleryIllustrationCard[]>([]);
@@ -36,7 +41,7 @@ export default function IllustrationClient({ id }: { id: string }) {
       .catch((err: ApiError) => {
         if (cancelled) return;
         setError(err);
-        setState(err.statusCode === 404 ? 'notfound' : 'error');
+        setState(err.error === 'AGE_RESTRICTED' ? 'age-refused' : err.statusCode === 404 ? 'notfound' : 'error');
       });
     return () => {
       cancelled = true;
@@ -100,7 +105,32 @@ export default function IllustrationClient({ id }: { id: string }) {
     );
   }
 
+  // DR-10: logged-in minor — server-side hard gate, no retry/bypass.
+  if (state === 'age-refused') {
+    return (
+      <div role="alert" style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
+        <p style={{ fontWeight: 700, marginBottom: 12 }}>
+          {error?.message ?? 'Ce contenu est réservé aux adultes.'}
+        </p>
+        <Link href="/galerie" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
+          ‹ Galerie
+        </Link>
+      </div>
+    );
+  }
+
   if (!detail) return null;
+
+  // DR-10 QA round-1 fix: the gate must SUPPRESS the real content, not just dim it with an
+  // overlay on top of already-mounted markup (artwork/title/description never mount while
+  // un-cleared).
+  if (detail.is18plus && !cleared) {
+    return (
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px', position: 'relative', minHeight: 400 }}>
+        <AgeGate onBack={() => router.back()} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px' }}>

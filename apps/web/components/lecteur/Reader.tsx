@@ -6,9 +6,11 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { ApiError, WorkChapterDto, WorkDetail, ChapterPagesResponse, FavoriteWorkDto, ReactionViewerState } from '@encre-et-plume/shared';
+import { isWork18Plus, type ApiError, type WorkChapterDto, type WorkDetail, type ChapterPagesResponse, type FavoriteWorkDto, type ReactionViewerState } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
+import AgeGate from '../age/AgeGate';
 import Topbar from './Topbar';
 import ChapterAside from './ChapterAside';
 import Stage, { type PagesState } from './Stage';
@@ -17,7 +19,7 @@ import ReactionsAside from './ReactionsAside';
 import Paywall from './Paywall';
 import ImmersiveBar from './ImmersiveBar';
 
-type WorkState = 'loading' | 'ready' | 'notfound' | 'error';
+type WorkState = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
 function useMatchMedia(query: string): boolean {
   const [matches, setMatches] = useState(false);
@@ -35,6 +37,7 @@ export default function Reader({ slug }: { slug: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { account } = useSession();
+  const cleared = useAgeCleared(account);
   const isNarrow = useMatchMedia('(max-width: 768px)');
   const forceSingleSpread = useMatchMedia('(max-width: 900px)');
   const stageRef = useRef<HTMLDivElement>(null);
@@ -81,7 +84,7 @@ export default function Reader({ slug }: { slug: string }) {
       })
       .catch((err: ApiError) => {
         if (cancelled) return;
-        setWorkState(err.statusCode === 404 ? 'notfound' : 'error');
+        setWorkState(err.error === 'AGE_RESTRICTED' ? 'age-refused' : err.statusCode === 404 ? 'notfound' : 'error');
       });
     api
       .getWorkChapters(slug, 1)
@@ -116,7 +119,11 @@ export default function Reader({ slug }: { slug: string }) {
       })
       .catch((err: ApiError) => {
         if (cancelled) return;
-        if (err.statusCode === 403) {
+        // DR-10: AGE_RESTRICTED and premium-lock are both 403s but mutually exclusive — branch
+        // on the error code, not just the status, so a blocked minor never sees the Paywall.
+        if (err.error === 'AGE_RESTRICTED') {
+          setPagesState('age-restricted');
+        } else if (err.statusCode === 403) {
           const ch = chapters.find((c) => c.number === chapterNumber);
           setPaywallChapter({ number: chapterNumber, title: ch?.title ?? null });
           setPagesState('locked');
@@ -250,6 +257,18 @@ export default function Reader({ slug }: { slug: string }) {
     );
   }
 
+  // DR-10: logged-in minor — server-side hard gate, no retry/bypass.
+  if (workState === 'age-refused') {
+    return (
+      <div role="alert" style={{ background: 'var(--ink)', minHeight: 'calc(100vh - 69px)', color: '#f1ece1', textAlign: 'center', padding: '80px 20px' }}>
+        <p>Ce contenu est réservé aux adultes.</p>
+        <Link href={`/oeuvre/${slug}`} style={{ color: 'var(--accent)', fontWeight: 700 }}>
+          ‹ Retour à l&apos;œuvre
+        </Link>
+      </div>
+    );
+  }
+
   if (workState === 'error' || !work) {
     return (
       <div role="alert" style={{ background: 'var(--ink)', minHeight: 'calc(100vh - 69px)', color: '#f1ece1', textAlign: 'center', padding: '80px 20px' }}>
@@ -279,6 +298,17 @@ export default function Reader({ slug }: { slug: string }) {
     setRightCollapsed(next);
   }
 
+  // DR-10: gate the whole reader (both normal and fullscreen layouts) behind a single overlay —
+  // takes priority over the Paywall (a blocked minor/unconfirmed viewer never sees the premium
+  // upsell for content they can't open yet).
+  const showAgeGate = isWork18Plus(work.audienceRating) && !cleared;
+  // QA round-1 fix: the server does not block a visitor's page fetch (D3 — self-declaration is
+  // the client gate), so `pagesData` can be real content even while `showAgeGate` is true. Force
+  // Stage into the SAME "no content mounted" placeholder it already uses for a locked chapter
+  // (Paywall) — the real pages/slider must never render underneath the gate, only dim it.
+  const displayPagesState = showAgeGate ? 'locked' : pagesState;
+  const displayPagesData = showAgeGate ? null : pagesData;
+
   return (
     <div
       ref={stageRef}
@@ -289,6 +319,7 @@ export default function Reader({ slug }: { slug: string }) {
         position: 'relative',
       }}
     >
+      {showAgeGate && <AgeGate onBack={() => router.push(`/oeuvre/${slug}`)} />}
       {fullscreen ? (
         // "Plein écran" immersive mode (story update, 2026-07-04): topbar + both asides are
         // unmounted entirely (not just visually hidden). QA (round 2) caught that giving
@@ -305,14 +336,33 @@ export default function Reader({ slug }: { slug: string }) {
               workTitle={work.title}
               chapterNumber={chapterNumber}
               chapterTitle={currentChapter?.title ?? null}
-              pagesState={pagesState}
-              pagesData={pagesData}
+              pagesState={displayPagesState}
+              pagesData={displayPagesData}
               page={page}
               spreadMode={effectiveSpreadMode}
               onRetry={() => setPagesRetryKey((k) => k + 1)}
             />
-            {paywallChapter && (
+            {!showAgeGate && paywallChapter && (
               <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
+            )}
+            {!showAgeGate && pagesState === 'age-restricted' && (
+              <div
+                role="alert"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 16,
+                  background: 'rgba(22,19,15,.7)',
+                  color: '#f1ece1',
+                  textAlign: 'center',
+                  zIndex: 40,
+                }}
+              >
+                <p style={{ fontWeight: 700 }}>Ce contenu est réservé aux adultes.</p>
+              </div>
             )}
           </div>
           <ImmersiveBar
@@ -377,17 +427,36 @@ export default function Reader({ slug }: { slug: string }) {
                   workTitle={work.title}
                   chapterNumber={chapterNumber}
                   chapterTitle={currentChapter?.title ?? null}
-                  pagesState={pagesState}
-                  pagesData={pagesData}
+                  pagesState={displayPagesState}
+                  pagesData={displayPagesData}
                   page={page}
                   spreadMode={effectiveSpreadMode}
                   onRetry={() => setPagesRetryKey((k) => k + 1)}
                 />
-                {paywallChapter && (
+                {!showAgeGate && paywallChapter && (
                   <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
                 )}
+                {!showAgeGate && pagesState === 'age-restricted' && (
+                  <div
+                    role="alert"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 16,
+                      background: 'rgba(22,19,15,.7)',
+                      color: '#f1ece1',
+                      textAlign: 'center',
+                      zIndex: 40,
+                    }}
+                  >
+                    <p style={{ fontWeight: 700 }}>Ce contenu est réservé aux adultes.</p>
+                  </div>
+                )}
               </div>
-              {pagesState === 'ready' && (
+              {displayPagesState === 'ready' && (
                 <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
               )}
             </div>

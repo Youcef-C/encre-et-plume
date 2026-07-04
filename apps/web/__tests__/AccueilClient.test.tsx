@@ -35,11 +35,11 @@ vi.mock('../lib/api', () => ({
 import * as api from '../lib/api';
 import AccueilClient from '../components/AccueilClient';
 
-const featured: FeaturedWork[] = [{ id: '1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'meta', genre: 'Shōnen' }];
-const trending: TrendingWork[] = [{ id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24 }];
+const featured: FeaturedWork[] = [{ id: '1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'meta', genre: 'Shōnen', is18plus: false }];
+const trending: TrendingWork[] = [{ id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, growthPct: 24, is18plus: false }];
 const topCreators: TopCreatorsResponse = { artist: null, scenarist: null };
 const scheduled: ScheduledRelease[] = [];
-const ranking: RankingRow[] = [{ id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'meta' }];
+const ranking: RankingRow[] = [{ id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'meta', is18plus: false }];
 const announcements: Announcement[] = [];
 
 function renderClient() {

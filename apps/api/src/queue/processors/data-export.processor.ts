@@ -70,6 +70,7 @@ export class DataExportProcessor implements JobProcessor<DataExportJob> {
         createdAt: account['createdAt'],
         emailVerifiedAt: account['emailVerifiedAt'],
         preferences: account['preferences'],
+        birthdate: account['birthdate'], // DR-10: RGPD PII — included here (portability), never public
         // passwordHash intentionally omitted
       };
 

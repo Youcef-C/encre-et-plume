@@ -14,6 +14,7 @@ const preview: GalleryPreview = {
   categoryLabel: 'Couvertures',
   likeCount: 12400,
   image: null,
+  is18plus: false,
 };
 
 describe('QuickPreview (DR-5 FE-10)', () => {
@@ -68,6 +69,23 @@ describe('QuickPreview (DR-5 FE-10)', () => {
     const closeButton = screen.getByRole('button', { name: 'Fermer' });
     expect(closeButton).toHaveStyle({ position: 'absolute' });
     expect(closeButton).not.toHaveStyle({ float: 'right' });
+  });
+
+  // ── DR-10: 18+ blur + badge ──────────────────────────────────────────────────
+
+  it('blurs the preview image and shows an "18+" badge for an 18+ illustration', () => {
+    render(<QuickPreview id="dr5-illus-1" state="ready" preview={{ ...preview, is18plus: true }} onClose={() => {}} />);
+    expect(screen.getByRole('img', { name: 'Illustration 18+' })).toBeInTheDocument();
+  });
+
+  it('does not blur or badge a non-18+ illustration preview', () => {
+    render(<QuickPreview id="dr5-illus-1" state="ready" preview={preview} onClose={() => {}} />);
+    expect(screen.queryByRole('img', { name: 'Illustration 18+' })).not.toBeInTheDocument();
+  });
+
+  it('QA round-1 regression: the cover box keeps its exact 320px height when is18plus (no stretch)', () => {
+    render(<QuickPreview id="dr5-illus-1" state="ready" preview={{ ...preview, is18plus: true }} onClose={() => {}} />);
+    expect(screen.getByTestId('quick-preview-cover')).toHaveStyle({ height: '320px' });
   });
 
   it('the close button renders and dismisses identically across loading/error/ready states', () => {

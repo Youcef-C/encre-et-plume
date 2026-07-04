@@ -18,6 +18,7 @@ const detail: IllustrationDetail = {
   likeCount: 3400,
   publishedAt: '2026-06-12T00:00:00.000Z',
   artist: { id: 'a1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'Dessinateur·rice', city: 'Lyon', avatar: null },
+  is18plus: false,
 };
 
 describe('IllustrationMeta (DR-6 FE-4)', () => {

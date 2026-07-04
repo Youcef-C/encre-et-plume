@@ -1,4 +1,5 @@
 import type { RankingRow } from '@encre-et-plume/shared';
+import { isWork18Plus } from '@encre-et-plume/shared';
 
 /** Bounded top-N; the prototype draws no pager for the all-time ranking (YAGNI). */
 export const RANKING_LIMIT = 50;
@@ -16,6 +17,17 @@ export function rankingWhere(genre?: string): { genre?: string } {
   return genre && genre.trim() ? { genre } : {};
 }
 
-export function toRankingRow(w: { id: string; slug: string; title: string; coverImage: string | null; meta: string }, index: number): RankingRow {
-  return { id: w.id, slug: w.slug, rank: index + 1, title: w.title, cover: w.coverImage, meta: w.meta };
+export function toRankingRow(
+  w: { id: string; slug: string; title: string; coverImage: string | null; meta: string; audienceRating: string },
+  index: number,
+): RankingRow {
+  return {
+    id: w.id,
+    slug: w.slug,
+    rank: index + 1,
+    title: w.title,
+    cover: w.coverImage,
+    meta: w.meta,
+    is18plus: isWork18Plus(w.audienceRating),
+  };
 }

@@ -160,8 +160,27 @@ describe('GalleryService', () => {
         categoryLabel: 'Couvertures',
         likeCount: 12400,
         thumbnail: null,
+        is18plus: false,
       },
     ]);
+  });
+
+  it('DR-10: maps is18plus true when genres include a plus18 vocabulary entry (e.g. Érotique)', async () => {
+    prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW({ genres: ['Érotique'] })]);
+    prisma.illustration.count.mockResolvedValue(1);
+
+    const result = await service.findIllustrations(EMPTY_QUERY);
+
+    expect(result.items[0]?.is18plus).toBe(true);
+  });
+
+  it('DR-10: is18plus false when genres include only mature-but-not-plus18 entries (e.g. Gore)', async () => {
+    prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW({ genres: ['Gore'] })]);
+    prisma.illustration.count.mockResolvedValue(1);
+
+    const result = await service.findIllustrations(EMPTY_QUERY);
+
+    expect(result.items[0]?.is18plus).toBe(false);
   });
 
   it('maps artistSlug to null when there is no linked artist account', async () => {
@@ -214,6 +233,7 @@ describe('GalleryService', () => {
       categoryLabel: 'Couvertures',
       likeCount: 12400,
       image: null,
+      is18plus: false,
     });
   });
 
@@ -330,6 +350,22 @@ describe('GalleryService', () => {
       const result = await service.getIllustration('nope');
 
       expect(result).toBeNull();
+    });
+
+    it('DR-10: is18plus true when genres include a plus18 vocabulary entry', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ genres: ['Hentai'] }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.is18plus).toBe(true);
+    });
+
+    it('DR-10: is18plus false when genres are empty or mature-only', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ genres: ['Gore'] }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.is18plus).toBe(false);
     });
   });
 

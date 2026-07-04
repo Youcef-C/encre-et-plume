@@ -1,11 +1,21 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { GalleryController } from './gallery.controller';
 import { GalleryService } from './gallery.service';
+import { AgeGateService } from '../age-gate/age-gate.service';
+import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
 @Module({
+  imports: [
+    // DR-10: OptionalSessionGuard verifies the ep_session cookie when present.
+    JwtModule.register({
+      secret: process.env['JWT_SECRET'] ?? 'dev-secret-change-in-prod',
+      signOptions: { expiresIn: '7d' },
+    }),
+  ],
   controllers: [GalleryController],
-  providers: [GalleryService, PrismaService, RedisService],
+  providers: [GalleryService, AgeGateService, OptionalSessionGuard, PrismaService, RedisService],
 })
 export class GalleryModule {}

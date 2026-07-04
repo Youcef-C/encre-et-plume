@@ -6,7 +6,10 @@ import Link from 'next/link';
 import type { GalleryIllustrationCard } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
 import { coverStyle } from '../../lib/cover';
+import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
 import { EyeIcon, HeartIcon } from '../icons';
+import Cover18Overlay from '../age/Cover18Overlay';
 
 export default function GalleryCard({
   illustration,
@@ -15,7 +18,9 @@ export default function GalleryCard({
   illustration: GalleryIllustrationCard;
   onQuickPreview: (id: string) => void;
 }) {
-  const { id, title, artistName, artistSlug, likeCount, thumbnail } = illustration;
+  const { id, title, artistName, artistSlug, likeCount, thumbnail, is18plus } = illustration;
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -24,6 +29,7 @@ export default function GalleryCard({
           outer div's position:relative coordinate space. */}
       <Link href={`/illustration/${id}`} style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}>
         <div
+          data-testid="gallery-cover"
           style={{
             position: 'relative',
             height: 230,
@@ -35,7 +41,9 @@ export default function GalleryCard({
           }}
           role="img"
           aria-label={title}
-        />
+        >
+          <Cover18Overlay is18plus={is18plus} cleared={cleared} label="Illustration 18+" />
+        </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 9 }}>
           <b style={{ fontSize: 14 }}>{title}</b>
         </div>

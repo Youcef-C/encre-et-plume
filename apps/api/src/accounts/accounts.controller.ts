@@ -7,6 +7,7 @@ import { AccountsService } from './accounts.service';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { SetAvatarDto } from './dto/set-avatar.dto';
+import { UpdateBirthdateDto } from './dto/update-birthdate.dto';
 
 @Controller('accounts')
 @UseGuards(SessionGuard, RolesGuard)
@@ -44,5 +45,14 @@ export class AccountsController {
   @HttpCode(200)
   deleteAvatar(@Req() req: AuthRequest): Promise<AccountSummary> {
     return this.accountsService.deleteAvatar(req.accountId);
+  }
+
+  // DR-10 BE-9: existing-account birthdate prompt (any authenticated user, own-only via session).
+  @Patch('me/birthdate')
+  setBirthdate(
+    @Req() req: AuthRequest,
+    @Body() dto: UpdateBirthdateDto,
+  ): Promise<AccountSummary> {
+    return this.accountsService.setBirthdate(req.accountId, dto.birthdate);
   }
 }

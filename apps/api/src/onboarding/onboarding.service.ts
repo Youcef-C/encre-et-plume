@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AccountSummary, AccountPreferences, ThemePreference, LookingForStatus } from '@encre-et-plume/shared';
+import { deriveIsAdult } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Account } from '@prisma/client';
 import type { OnboardingDto } from './dto/onboarding.dto';
@@ -28,6 +29,7 @@ function toSummary(account: Account): AccountSummary {
     emailVerified: account.emailVerifiedAt !== null,
     needsCguReconsent: false, // accounts endpoints default; /auth/me has live flag
     onboarded: account.onboardedAt !== null, // F-17
+    isAdult: deriveIsAdult(account.birthdate), // DR-10
   };
 }
 

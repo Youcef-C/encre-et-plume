@@ -2,11 +2,13 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PROSE_PARAGRAPHS_PER_PAGE } from '@encre-et-plume/shared';
 import { ReaderService } from './reader.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AgeGateService } from '../age-gate/age-gate.service';
 
 const WORK_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'w1',
   slug: 'lames-de-brume',
   format: 'Manga',
+  audienceRating: 'Tous publics',
   publishedAt: new Date('2026-01-01'),
   ...overrides,
 });
@@ -27,6 +29,7 @@ describe('ReaderService', () => {
     chapter: { findFirst: jest.Mock };
     planche: { findMany: jest.Mock };
   };
+  let ageGate: { assertMayView18Plus: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -34,7 +37,8 @@ describe('ReaderService', () => {
       chapter: { findFirst: jest.fn().mockResolvedValue(null) },
       planche: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new ReaderService(prisma as unknown as PrismaService);
+    ageGate = { assertMayView18Plus: jest.fn().mockResolvedValue(undefined) };
+    service = new ReaderService(prisma as unknown as PrismaService, ageGate as unknown as AgeGateService);
   });
 
   it('throws 404 when the work is missing/unpublished', async () => {
@@ -109,5 +113,47 @@ describe('ReaderService', () => {
 
     expect(prisma.work.update).toHaveBeenCalledTimes(1);
     expect(prisma.work.update).toHaveBeenCalledWith({ where: { id: 'w1' }, data: { readCount: { increment: 1 } } });
+  });
+
+  // ── DR-10 BE-6: 18+ age gate ────────────────────────────────────────────────
+
+  describe('DR-10: 18+ age gate', () => {
+    it('does not call the age gate for a non-18+ work', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ audienceRating: 'Tous publics' }));
+      prisma.chapter.findFirst.mockResolvedValue(CHAPTER_ROW());
+
+      await service.getPages('lames-de-brume', 1, 'acc-1');
+
+      expect(ageGate.assertMayView18Plus).not.toHaveBeenCalled();
+    });
+
+    it('calls the age gate with the accountId for an 18+ work', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ audienceRating: '18+' }));
+      prisma.chapter.findFirst.mockResolvedValue(CHAPTER_ROW());
+
+      await service.getPages('lames-de-brume', 1, 'acc-1');
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+    });
+
+    it('runs the age gate BEFORE the premium check and BEFORE the readCount bump', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ audienceRating: '18+' }));
+      prisma.chapter.findFirst.mockResolvedValue(CHAPTER_ROW({ premium: true }));
+      ageGate.assertMayView18Plus.mockRejectedValue(new ForbiddenException({ error: 'AGE_RESTRICTED' }));
+
+      await expect(service.getPages('lames-de-brume', 1, 'acc-minor')).rejects.toMatchObject({
+        response: expect.objectContaining({ error: 'AGE_RESTRICTED' }),
+      });
+      expect(prisma.work.update).not.toHaveBeenCalled();
+    });
+
+    it('propagates the 403 AGE_RESTRICTED thrown by the age gate for a logged-in minor', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ audienceRating: '18+' }));
+      prisma.chapter.findFirst.mockResolvedValue(CHAPTER_ROW());
+      ageGate.assertMayView18Plus.mockRejectedValue(new ForbiddenException({ error: 'AGE_RESTRICTED' }));
+
+      await expect(service.getPages('lames-de-brume', 1, 'acc-minor')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.work.update).not.toHaveBeenCalled();
+    });
   });
 });

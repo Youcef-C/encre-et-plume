@@ -108,7 +108,7 @@ async function signUpVerifyAndLogin(
   const slug = slugFrom(email);
 
   const signupRes = await page.request.post(`${API}/auth/signup`, {
-    data: { email, displayName, username: slug, password: PASSWORD, acceptCgu: true },
+    data: { email, displayName, username: slug, password: PASSWORD, birthdate: '1990-01-01', acceptCgu: true },
   });
   if (!signupRes.ok()) {
     throw new Error(`signup failed: ${signupRes.status()} ${await signupRes.text()}`);
@@ -156,7 +156,7 @@ async function signUpVerifyAndLoginApi(
 ): Promise<{ accountId: string }> {
   const slug = slugFrom(email);
   await request.post(`${API}/auth/signup`, {
-    data: { email, displayName, username: slug, password: PASSWORD, acceptCgu: true },
+    data: { email, displayName, username: slug, password: PASSWORD, birthdate: '1990-01-01', acceptCgu: true },
   });
 
   let token: string | null = null;

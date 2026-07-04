@@ -1,11 +1,19 @@
 // DR-7 FE-3 — ranked list row. Replica of prototype CLASSEMENT lines 1081-1090: rank badge
 // (top-3 accent, else paper), cover, title + meta, "Lire" action. Title and "Lire" are two
 // separate links (no nested interactive elements inside the <li>).
+'use client';
+
 import Link from 'next/link';
 import type { RankingRow } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
+import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
+import Cover18Overlay from '../age/Cover18Overlay';
 
 export default function RankingList({ items }: { items: RankingRow[] }) {
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
+
   return (
     <ol
       style={{
@@ -50,10 +58,13 @@ export default function RankingList({ items }: { items: RankingRow[] }) {
           >
             {item.rank}
           </span>
-          <span
-            aria-hidden="true"
-            style={{ width: 52, height: 70, flex: 'none', border: '2px solid var(--ink)', borderRadius: 5, ...coverStyle(item.id, item.cover) }}
-          />
+          <div data-testid="ranking-cover" style={{ position: 'relative', width: 52, height: 70, flex: 'none' }}>
+            <div
+              aria-hidden="true"
+              style={{ width: '100%', height: '100%', border: '2px solid var(--ink)', borderRadius: 5, ...coverStyle(item.id, item.cover) }}
+            />
+            <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Œuvre 18+" />
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <Link href={`/oeuvre/${item.slug}`} style={{ color: 'inherit', textDecoration: 'none' }}>
               <b style={{ fontSize: 17 }}>{item.title}</b>

@@ -168,6 +168,51 @@ test.describe('Œuvre work page', () => {
 });
 
 /**
+ * DR-10 Age verification & 18+ gating — hermetic, route-mocked (anon visitor via /auth/me 401,
+ * same pattern as mockWorkFeeds). NOT run this session — for QA/CI to execute.
+ */
+const workAdult = { ...work, audienceRating: '18+' as const };
+const workMature = { ...work, genre: 'Yaoi' };
+
+async function mock18PlusWorkFeeds(page: Page) {
+  await page.route(`${API}/works/lames-de-brume/chapters**`, (route) => route.fulfill({ json: chaptersPage1 }));
+  await page.route(`${API}/works/lames-de-brume/planches`, (route) => route.fulfill({ json: [] }));
+  await page.route(`${API}/auth/me`, (route) =>
+    route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+  );
+}
+
+test.describe('Œuvre work page — 18+ age gate (DR-10)', () => {
+  test('a visitor opening an 18+ work sees the interstitial; self-declaring reveals the content and is not re-prompted this session', async ({ page }) => {
+    await mock18PlusWorkFeeds(page);
+    await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: workAdult }));
+
+    await page.goto('/oeuvre/lames-de-brume');
+    const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByRole('button', { name: /j'ai 18 ans ou plus/i }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeVisible();
+
+    // Refresh within the same session — not re-prompted (sessionStorage self-declaration).
+    await page.reload();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeVisible();
+  });
+
+  test('a mature-but-not-18+ work is never blurred and shows no interstitial, only a "Contenu mature" tag', async ({ page }) => {
+    await mock18PlusWorkFeeds(page);
+    await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: workMature }));
+
+    await page.goto('/oeuvre/lames-de-brume');
+    await expect(page.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeVisible();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(page.getByText('Contenu mature')).toBeVisible();
+  });
+});
+
+/**
  * DR-11 Reading history & resume — hermetic, route-mocked. Overrides /auth/me (signed-in) and
  * /me/reading-history/:slug from mockWorkFeeds's anon default. NOT run this session — for
  * QA/CI to execute per the plan's §6 acceptance flow.

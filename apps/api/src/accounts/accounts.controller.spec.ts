@@ -20,10 +20,10 @@ const SUMMARY = {
 
 describe('AccountsController', () => {
   let controller: AccountsController;
-  let service: { updateRole: jest.Mock; updatePreferences: jest.Mock; setAvatar: jest.Mock; deleteAvatar: jest.Mock };
+  let service: { updateRole: jest.Mock; updatePreferences: jest.Mock; setAvatar: jest.Mock; deleteAvatar: jest.Mock; setBirthdate: jest.Mock };
 
   beforeEach(async () => {
-    service = { updateRole: jest.fn(), updatePreferences: jest.fn(), setAvatar: jest.fn(), deleteAvatar: jest.fn() };
+    service = { updateRole: jest.fn(), updatePreferences: jest.fn(), setAvatar: jest.fn(), deleteAvatar: jest.fn(), setBirthdate: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AccountsController],
@@ -111,6 +111,25 @@ describe('AccountsController', () => {
       service.deleteAvatar.mockRejectedValue(new Error('should not be called'));
       // No fakeReq — guard would block before reaching controller in production.
       expect(true).toBe(true); // Guard behavior tested in session.guard.spec
+    });
+  });
+
+  describe('DR-10 BE-9: PATCH me/birthdate', () => {
+    it('calls setBirthdate with accountId from session and birthdate from body, returns AccountSummary', async () => {
+      const updated = { ...SUMMARY, isAdult: true };
+      service.setBirthdate.mockResolvedValue(updated);
+      const fakeReq = { accountId: 'cuid-1' } as AuthRequest;
+
+      const result = await controller.setBirthdate(fakeReq, { birthdate: '1990-01-01' });
+
+      expect(service.setBirthdate).toHaveBeenCalledWith('cuid-1', '1990-01-01');
+      expect(result).toEqual(updated);
+    });
+
+    it('passes through service errors', async () => {
+      service.setBirthdate.mockRejectedValue(new NotFoundException());
+      const fakeReq = { accountId: 'cuid-1' } as AuthRequest;
+      await expect(controller.setBirthdate(fakeReq, { birthdate: '1990-01-01' })).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

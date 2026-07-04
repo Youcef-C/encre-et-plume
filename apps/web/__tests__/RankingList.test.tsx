@@ -11,13 +11,28 @@ vi.mock('next/link', () => ({
 import RankingList from '../components/classement/RankingList';
 
 const items: RankingRow[] = [
-  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Shōnen · 8,1k ♥' },
-  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, meta: 'Seinen · 5,7k ♥' },
-  { id: '3', slug: 'onibi', rank: 3, title: 'Onibi', cover: null, meta: 'Fantastique · 3,2k ♥' },
-  { id: '4', slug: 'encre-blanche', rank: 4, title: 'Encre Blanche', cover: 'https://cdn/e.png', meta: 'Josei · 1,1k ♥' },
+  { id: '1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Shōnen · 8,1k ♥', is18plus: false },
+  { id: '2', slug: 'le-dernier-ronin', rank: 2, title: 'Le Dernier Ronin', cover: null, meta: 'Seinen · 5,7k ♥', is18plus: false },
+  { id: '3', slug: 'onibi', rank: 3, title: 'Onibi', cover: null, meta: 'Fantastique · 3,2k ♥', is18plus: false },
+  { id: '4', slug: 'encre-blanche', rank: 4, title: 'Encre Blanche', cover: 'https://cdn/e.png', meta: 'Josei · 1,1k ♥', is18plus: false },
 ];
 
 describe('RankingList', () => {
+  it('blurs the cover and shows an "18+" badge for an 18+ ranked work', () => {
+    render(<RankingList items={[{ ...items[0]!, is18plus: true }]} />);
+    expect(screen.getByLabelText('Œuvre 18+')).toBeInTheDocument();
+  });
+
+  it('does not blur or badge a non-18+ ranked work', () => {
+    render(<RankingList items={items} />);
+    expect(screen.queryByLabelText('Œuvre 18+')).not.toBeInTheDocument();
+  });
+
+  it('QA round-1 regression: the cover box keeps its exact 70px height when is18plus (no stretch)', () => {
+    render(<RankingList items={[{ ...items[0]!, is18plus: true }]} />);
+    expect(screen.getByTestId('ranking-cover')).toHaveStyle({ height: '70px' });
+  });
+
   it('renders an ordered list with a row per item in given order', () => {
     render(<RankingList items={items} />);
     const list = screen.getByRole('list');

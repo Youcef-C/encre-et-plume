@@ -18,6 +18,7 @@ const base: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 // Minimal consumer to expose context values in tests

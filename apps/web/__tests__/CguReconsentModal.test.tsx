@@ -32,6 +32,7 @@ const baseAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 function renderModal(needsReconsent: boolean) {

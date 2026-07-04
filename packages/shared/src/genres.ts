@@ -8,9 +8,19 @@ export interface Genre {
   fr: string;
   en: string;
   mature: boolean;
+  /** DR-10: hard 18+ gate signal (distinct from `mature`, which is warning-only). */
+  plus18: boolean;
 }
 
 export const GENRES: Genre[] = genresData;
+
+/** DR-10: fr labels of vocabulary entries carrying the hard 18+ gate flag. */
+export const PLUS18_GENRE_LABELS: string[] = GENRES.filter((g) => g.plus18).map((g) => g.fr);
+
+/** DR-10: true when any of the given fr labels (e.g. Illustration.genres) is a plus18 entry. */
+export function hasPlus18Genre(frLabels: string[]): boolean {
+  return frLabels.some((label) => PLUS18_GENRE_LABELS.includes(label));
+}
 
 /** NFD fold: strips diacritics (incl. the ō macron), lowercases, trims. */
 function foldGenre(s: string): string {

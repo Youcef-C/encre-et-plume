@@ -14,6 +14,7 @@ const BASE_ACCOUNT = {
   avatar: null,
   preferences: { theme: 'system' },
   createdAt: new Date('2026-01-01'),
+  birthdate: null, // DR-10: null = not yet declared
 };
 
 const READY_MEDIA = {
@@ -63,6 +64,48 @@ describe('AccountsService', () => {
   it('throws NotFoundException for unknown account id (BE-AC5 404 branch)', async () => {
     prisma.account.findUnique.mockResolvedValue(null);
     await expect(service.updateRole('bad-id', 'admin')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('DR-10: isAdult derivation', () => {
+    it('returns isAdult: null when birthdate is not on file', async () => {
+      prisma.account.findUnique.mockResolvedValue(BASE_ACCOUNT);
+      prisma.account.update.mockResolvedValue(BASE_ACCOUNT);
+      const result = await service.updateRole('cuid-1', 'utilisateur');
+      expect(result.isAdult).toBeNull();
+    });
+
+    it('returns isAdult: true for an adult birthdate', async () => {
+      const updated = { ...BASE_ACCOUNT, birthdate: new Date('1990-01-01') };
+      prisma.account.findUnique.mockResolvedValue(BASE_ACCOUNT);
+      prisma.account.update.mockResolvedValue(updated);
+      const result = await service.updateRole('cuid-1', 'utilisateur');
+      expect(result.isAdult).toBe(true);
+    });
+  });
+
+  describe('DR-10 BE-9: setBirthdate', () => {
+    it('persists the birthdate as a Date and returns the refreshed AccountSummary with recomputed isAdult', async () => {
+      const updated = { ...BASE_ACCOUNT, birthdate: new Date('1990-01-01') };
+      prisma.account.update.mockResolvedValue(updated);
+
+      const result = await service.setBirthdate('cuid-1', '1990-01-01');
+
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 'cuid-1' },
+        data: { birthdate: new Date('1990-01-01') },
+      });
+      expect(result.isAdult).toBe(true);
+    });
+
+    it('recomputes isAdult: false for a minor birthdate', async () => {
+      const now = new Date();
+      const minorBirthdate = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate());
+      prisma.account.update.mockResolvedValue({ ...BASE_ACCOUNT, birthdate: minorBirthdate });
+
+      const result = await service.setBirthdate('cuid-1', minorBirthdate.toISOString().slice(0, 10));
+
+      expect(result.isAdult).toBe(false);
+    });
   });
 
   describe('F-6: updatePreferences', () => {

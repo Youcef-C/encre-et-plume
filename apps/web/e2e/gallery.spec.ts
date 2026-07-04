@@ -206,3 +206,72 @@ test.describe('Galerie illustration gallery', () => {
     expect(overflow).toBe(true);
   });
 });
+
+// ── DR-10: 18+ blur + badge on gallery cards ──────────────────────────────────
+test.describe('Galerie — 18+ listing treatment (DR-10)', () => {
+  test('an is18plus illustration card is blurred with an "18+" badge until the viewer is age-cleared', async ({ page }) => {
+    const gatedItems = [
+      { ...allItems[0], is18plus: false },
+      { id: 'i9', title: 'Nuit close', artistName: 'Yuki Moreau', artistSlug: 'dr1-yuki-moreau', category: 'process', categoryLabel: 'Process', likeCount: 200, thumbnail: null, is18plus: true },
+    ];
+    await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/illustrations?**`, (route) =>
+      route.fulfill({ json: { items: gatedItems, total: gatedItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
+    );
+    await page.route(`${API}/illustrations`, (route) =>
+      route.fulfill({ json: { items: gatedItems, total: gatedItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+    );
+
+    await page.goto('/galerie');
+    await expect(page.getByRole('img', { name: 'Illustration 18+' })).toBeVisible();
+  });
+
+  // QA round-1 regression: Cover18Overlay's old height:'100%' wrapper stretched to the full
+  // CSS-grid row-track height (align-items:stretch), pushing every card's title ~53px into the
+  // next row. This grid is `repeat(auto-fill, minmax(210px,1fr))` — a narrow viewport forces a
+  // small, predictable column count so 10 items guarantee 2+ rows (the earlier 1-row fixtures
+  // above never had a "next row" to spill into).
+  test('QA round-1 regression: an 18+ card does not stretch its row, pushing row-1 titles into row-2 (>=2 rows)', async ({ page }) => {
+    const gridItems = Array.from({ length: 10 }, (_, i) => ({
+      id: `g${i + 1}`,
+      title: `Illust ${i + 1}`,
+      artistName: 'Yuki Moreau',
+      artistSlug: 'dr1-yuki-moreau',
+      category: 'process',
+      categoryLabel: 'Process',
+      likeCount: 100,
+      thumbnail: null,
+      is18plus: i === 1, // second card of row 1 is 18+
+    }));
+    await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
+    await page.route(`${API}/illustrations?**`, (route) =>
+      route.fulfill({ json: { items: gridItems, total: gridItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
+    );
+    await page.route(`${API}/illustrations`, (route) =>
+      route.fulfill({ json: { items: gridItems, total: gridItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
+    );
+    await page.route(`${API}/auth/me`, (route) =>
+      route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
+    );
+
+    // Narrow viewport -> minmax(210px,1fr) auto-fill resolves to ~3 columns, guaranteeing >=2 rows.
+    await page.setViewportSize({ width: 700, height: 1400 });
+    await page.goto('/galerie');
+    await expect(page.getByRole('img', { name: 'Illustration 18+' })).toBeVisible();
+
+    const row1Title = page.getByText('Illust 1', { exact: true });
+    const row2FirstCard = page.getByRole('link', { name: /^Illust 4/ });
+    await expect(row1Title).toBeVisible();
+    await expect(row2FirstCard).toBeVisible();
+
+    const row1TitleBox = await row1Title.boundingBox();
+    const row2Box = await row2FirstCard.boundingBox();
+    expect(row1TitleBox).not.toBeNull();
+    expect(row2Box).not.toBeNull();
+    // Row 1's title must sit entirely above row 2's box — QA measured a ~53px overlap here.
+    expect(row1TitleBox!.y + row1TitleBox!.height).toBeLessThanOrEqual(row2Box!.y + 1);
+  });
+});

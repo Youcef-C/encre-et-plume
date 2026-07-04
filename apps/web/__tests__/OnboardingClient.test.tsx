@@ -33,6 +33,7 @@ const baseAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 const onboardedAccount: AccountSummary = { ...baseAccount, onboarded: true };

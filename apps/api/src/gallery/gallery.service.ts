@@ -10,7 +10,7 @@ import type {
   IllustrationArtist,
   IllustrationDetail,
 } from '@encre-et-plume/shared';
-import { GALLERY_PAGE_SIZE, catalogGenreLabel, galleryCategoryLabel } from '@encre-et-plume/shared';
+import { GALLERY_PAGE_SIZE, catalogGenreLabel, galleryCategoryLabel, hasPlus18Genre } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -94,6 +94,7 @@ export class GalleryService {
       categoryLabel: galleryCategoryLabel(row.category),
       likeCount: row.likeCount,
       image: row.image,
+      is18plus: hasPlus18Genre(row.genres),
     };
   }
 
@@ -169,6 +170,7 @@ interface IllustrationRow {
   title: string;
   artistName: string;
   category: string;
+  genres: string[];
   likeCount: number;
   image: string | null;
   artist?: { profileSlug: string } | null;
@@ -184,6 +186,7 @@ function mapToCard(row: IllustrationRow): GalleryIllustrationCard {
     categoryLabel: galleryCategoryLabel(row.category),
     likeCount: row.likeCount,
     thumbnail: row.image,
+    is18plus: hasPlus18Genre(row.genres),
   };
 }
 
@@ -213,6 +216,7 @@ function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
     likeCount: row.likeCount,
     publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     artist: mapArtist(row),
+    is18plus: hasPlus18Genre(row.genres),
   };
 }
 

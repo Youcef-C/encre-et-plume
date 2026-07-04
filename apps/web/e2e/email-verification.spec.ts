@@ -33,6 +33,7 @@ async function signUpFresh(page: Page, email: string): Promise<void> {
   await page.getByLabel(/nom d'utilisateur/i).fill(email.split('@')[0].replace(/[^a-z0-9-]/g, '-'));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent before submit
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -44,7 +45,7 @@ async function signUpFresh(page: Page, email: string): Promise<void> {
 async function signUpViaApi(request: APIRequestContext, email: string): Promise<void> {
   const res = await request.post(`${API}/auth/signup`, {
     // F-13: acceptCgu required by the API
-    data: { displayName: 'API Vérif', email, password: 'password123', acceptCgu: true },
+    data: { displayName: 'API Vérif', email, password: 'password123', acceptCgu: true, birthdate: '1990-01-01' },
   });
   expect(res.status()).toBe(201);
 }
@@ -213,7 +214,7 @@ test('F-11 BE: POST /auth/signup → 201 { verificationRequired: true, email } w
   const email = uniqueEmail();
   const res = await request.post(`${API}/auth/signup`, {
     // F-13: acceptCgu required
-    data: { displayName: 'Smoke Test', email, password: 'password123', acceptCgu: true },
+    data: { displayName: 'Smoke Test', email, password: 'password123', acceptCgu: true, birthdate: '1990-01-01' },
   });
   expect(res.status()).toBe(201);
   const body = await res.json() as { verificationRequired: boolean; email: string };
@@ -277,7 +278,7 @@ test('F-11 BE: happy path via API — signup → dev-latest → confirm → { em
   // Signup: no session
   const signupRes = await request.post(`${API}/auth/signup`, {
     // F-13: acceptCgu required
-    data: { displayName: 'API Vérif', email, password: 'password123', acceptCgu: true },
+    data: { displayName: 'API Vérif', email, password: 'password123', acceptCgu: true, birthdate: '1990-01-01' },
   });
   expect(signupRes.status()).toBe(201);
   expect((signupRes.headers()['set-cookie'] ?? '')).not.toContain('ep_session');

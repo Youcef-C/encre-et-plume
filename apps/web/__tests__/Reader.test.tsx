@@ -334,6 +334,66 @@ describe('Reader (DR-4 FE-1)', () => {
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   });
 
+  // ── DR-10: 18+ age gate ───────────────────────────────────────────────────────
+
+  it('shows the AgeGate interstitial over an 18+ work when the viewer is not cleared', async () => {
+    sessionStorage.clear();
+    vi.mocked(api.getWork).mockResolvedValue({ ...work, audienceRating: '18+' });
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+    vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
+    vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+  });
+
+  // QA round-1 regression (reader.spec.ts:514): the real chapter pages/slider must never mount
+  // in the DOM while un-cleared, even though the server itself does not block a visitor's fetch
+  // (D3 — self-declaration is the client gate). An overlay dimming already-mounted content is not
+  // a real gate.
+  it('QA round-1 regression: does not render the real page slider while the AgeGate is up for an uncleared visitor', async () => {
+    sessionStorage.clear();
+    vi.mocked(api.getWork).mockResolvedValue({ ...work, audienceRating: '18+' });
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+    vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
+    vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+  });
+
+  it('does not show the AgeGate for a non-18+ work', async () => {
+    mockReady();
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('getWork 403 AGE_RESTRICTED shows a refusal, not the generic "impossible de charger" error', async () => {
+    vi.mocked(api.getWork).mockRejectedValue({
+      statusCode: 403,
+      message: 'Ce contenu est réservé aux adultes.',
+      error: 'AGE_RESTRICTED',
+    });
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByText('Ce contenu est réservé aux adultes.')).toBeInTheDocument());
+    expect(screen.queryByText('Impossible de charger ce lecteur.')).not.toBeInTheDocument();
+  });
+
+  it('chapter-pages 403 AGE_RESTRICTED shows a refusal, not the Paywall', async () => {
+    vi.mocked(api.getWork).mockResolvedValue(work);
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+    vi.mocked(api.getChapterPages).mockRejectedValue({
+      statusCode: 403,
+      message: 'Ce contenu est réservé aux adultes.',
+      error: 'AGE_RESTRICTED',
+    });
+    vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByText('Ce contenu est réservé aux adultes.')).toBeInTheDocument());
+    expect(screen.queryByRole('dialog', { name: /chapitre verrouillé/i })).not.toBeInTheDocument();
+  });
+
   it('persists reading progress (debounced) for a signed-in reader once pages are ready', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     sessionAccount = account;

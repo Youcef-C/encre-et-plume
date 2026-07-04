@@ -50,9 +50,15 @@ describe('HomeService', () => {
         orderBy: { featuredRank: 'asc' },
       });
       expect(result).toEqual([
-        { id: 'w1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen' },
-        { id: 'w2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen' },
+        { id: 'w1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen', is18plus: false },
+        { id: 'w2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen', is18plus: false },
       ]);
+    });
+
+    it('DR-10: is18plus true when audienceRating is 18+', async () => {
+      prisma.work.findMany.mockResolvedValue([WORK({ id: 'w1', audienceRating: '18+' })]);
+      const result = await service.getFeatured();
+      expect(result[0]?.is18plus).toBe(true);
     });
   });
 
@@ -84,6 +90,12 @@ describe('HomeService', () => {
       expect(result[0].growthPct).toBe(100);
       expect(result[1].growthPct).toBe(0);
     });
+
+    it('DR-10: is18plus true when audienceRating is 18+', async () => {
+      prisma.work.findMany.mockResolvedValue([WORK({ id: 'w1', audienceRating: '18+' })]);
+      const result = await service.getTrendingThisWeek();
+      expect(result[0]?.is18plus).toBe(true);
+    });
   });
 
   describe('getRankingAllTime', () => {
@@ -97,8 +109,8 @@ describe('HomeService', () => {
         take: 8,
       });
       expect(result).toEqual([
-        { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.' },
-        { id: 'w2', slug: 'neon-sutra', rank: 2, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.' },
+        { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
+        { id: 'w2', slug: 'neon-sutra', rank: 2, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
       ]);
     });
   });

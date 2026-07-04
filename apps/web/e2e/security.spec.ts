@@ -94,6 +94,7 @@ async function signUpVerifyAndLogin(
       displayName,
       username: slugFrom(email),
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });
@@ -133,6 +134,7 @@ async function signUpVerifyLoginViaCtx(
       displayName,
       username: slugFrom(email),
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });

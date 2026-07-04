@@ -29,6 +29,7 @@ const adminAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 const mockHealth: QueueHealthResponse = {

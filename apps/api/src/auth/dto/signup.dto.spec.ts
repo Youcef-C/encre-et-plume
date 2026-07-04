@@ -7,6 +7,7 @@ const BASE = {
   email: 'yuki@test.com',
   password: 'password123',
   acceptCgu: true, // F-13: required
+  birthdate: '1990-01-01', // DR-10: required
 };
 
 async function errorsFor(username?: unknown) {
@@ -62,5 +63,47 @@ describe('SignupDto — acceptCgu (F-13)', () => {
     const errors = await validate(dto);
     expect(errors).toHaveLength(1);
     expect(errors[0].property).toBe('acceptCgu');
+  });
+});
+
+// ── DR-10: birthdate validation ──────────────────────────────────────────────
+
+describe('SignupDto — birthdate (DR-10)', () => {
+  async function errorsForBirthdate(birthdate: unknown) {
+    const dto = plainToInstance(SignupDto, { ...BASE, birthdate });
+    return validate(dto);
+  }
+
+  it('accepts a plausible adult birthdate', async () => {
+    expect(await errorsForBirthdate('1990-01-01')).toHaveLength(0);
+  });
+
+  it('accepts a plausible minor birthdate (D4: no minimum signup age)', async () => {
+    expect(await errorsForBirthdate('2015-01-01')).toHaveLength(0);
+  });
+
+  it('rejects a missing birthdate with "Date invalide"', async () => {
+    const errors = await errorsForBirthdate(undefined);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].property).toBe('birthdate');
+    expect(Object.values(errors[0].constraints ?? {}).join(' ')).toMatch(/date invalide/i);
+  });
+
+  it('rejects a malformed date string with "Date invalide"', async () => {
+    const errors = await errorsForBirthdate('not-a-date');
+    expect(errors).toHaveLength(1);
+    expect(Object.values(errors[0].constraints ?? {}).join(' ')).toMatch(/date invalide/i);
+  });
+
+  it('rejects a future date with "Date invalide"', async () => {
+    const future = new Date();
+    future.setFullYear(future.getFullYear() + 1);
+    const errors = await errorsForBirthdate(future.toISOString().slice(0, 10));
+    expect(errors).toHaveLength(1);
+    expect(Object.values(errors[0].constraints ?? {}).join(' ')).toMatch(/date invalide/i);
+  });
+
+  it('rejects a date more than 120 years ago with "Date invalide"', async () => {
+    expect(await errorsForBirthdate('1900-01-01')).toHaveLength(1);
   });
 });

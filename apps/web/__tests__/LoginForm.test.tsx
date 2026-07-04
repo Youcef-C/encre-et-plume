@@ -150,6 +150,7 @@ describe('LoginForm', () => {
         role: 'utilisateur', verified: false, emailVerified: true,
         slug: 'yuki', avatar: null, createdAt: new Date().toISOString(),
         preferences: { theme: 'system' as const }, needsCguReconsent: false, onboarded: true,
+        isAdult: true,
       },
     });
     mockRefresh.mockResolvedValue(undefined);
@@ -250,6 +251,7 @@ describe('LoginForm', () => {
         role: 'utilisateur', verified: false, emailVerified: true,
         slug: 'yuki', avatar: null, createdAt: new Date().toISOString(),
         preferences: { theme: 'system' as const }, needsCguReconsent: false, onboarded: true,
+        isAdult: true,
       },
     });
     mockRefresh.mockResolvedValue(undefined);
@@ -280,6 +282,7 @@ describe('LoginForm', () => {
         preferences: { theme: 'system' as const },
         needsCguReconsent: false,
   onboarded: false,
+        isAdult: true,
       },
     });
     mockRefresh.mockResolvedValue(undefined);

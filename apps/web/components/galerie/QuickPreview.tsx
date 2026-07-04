@@ -9,7 +9,10 @@ import Link from 'next/link';
 import type { GalleryPreview } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
 import { coverStyle } from '../../lib/cover';
+import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
 import { XIcon } from '../icons';
+import Cover18Overlay from '../age/Cover18Overlay';
 
 export type QuickPreviewState = 'loading' | 'error' | 'ready';
 
@@ -25,6 +28,8 @@ export default function QuickPreview({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -112,16 +117,20 @@ export default function QuickPreview({
           {state === 'ready' && preview && (
             <>
               <div
+                data-testid="quick-preview-cover"
                 role="img"
                 aria-label={preview.title}
                 style={{
+                  position: 'relative',
                   height: 320,
                   border: '3px solid var(--ink)',
                   borderRadius: 10,
                   overflow: 'hidden',
                   ...coverStyle(id, preview.image),
                 }}
-              />
+              >
+                <Cover18Overlay is18plus={preview.is18plus} cleared={cleared} label="Illustration 18+" />
+              </div>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, textTransform: 'uppercase', marginTop: 14, lineHeight: 1 }}>
                 {preview.title}
               </div>

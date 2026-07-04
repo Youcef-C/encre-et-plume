@@ -16,6 +16,7 @@ const BASE_ACCOUNT = {
   createdAt: new Date('2026-01-01'),
   emailVerifiedAt: new Date('2026-01-02'),
   deletedAt: null,
+  birthdate: null, // DR-10
 };
 
 // ─── OnboardingService tests ──────────────────────────────────────────────────

@@ -61,4 +61,9 @@ describe('redact()', () => {
     const r = redact({ passwordHash: '$2b$10$abc' }) as Record<string, unknown>;
     expect(r['passwordHash']).toBe('[REDACTED]');
   });
+
+  it('DR-10: redacts birthdate (RGPD PII — never logged)', () => {
+    const r = redact({ birthdate: '1990-01-01' }) as Record<string, unknown>;
+    expect(r['birthdate']).toBe('[REDACTED]');
+  });
 });

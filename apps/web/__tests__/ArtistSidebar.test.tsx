@@ -41,6 +41,7 @@ const more: GalleryIllustrationCard[] = [
     categoryLabel: 'Process',
     likeCount: 1300,
     thumbnail: null,
+    is18plus: false,
   },
 ];
 

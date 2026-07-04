@@ -265,13 +265,31 @@ const ILLUSTRATIONS = [
   { id: 'dr5-illus-14', title: 'Forêt de bambous', artistName: 'Léa B.', category: 'decors', genres: ['Aventure'], likeCount: 1900, weeklyLikeDelta: 150, publishAt: inDays(-50),
     description: 'Décor de forêt de bambous baignée de lumière — étude de perspective et de profondeur.',
     hashtags: ['decor', 'bambous', 'foret'], width: 3000, height: 2000, tools: 'Photoshop', license: '© Tous droits réservés' },
+  // DR-10: genres includes 'Érotique' (genres.json id 'erotica', plus18:true) — gives the
+  // illustration 18+ hard-gate (hasPlus18Genre) a fixture, distinct from Onibi/Gore above (mature
+  // but NOT plus18 — never blurred, only warning-tagged).
+  { id: 'dr10-illus-plus18', title: 'Nuit close', artistName: 'Camille D.', category: 'personnages', genres: ['Érotique'], likeCount: 640, weeklyLikeDelta: 40, publishAt: inDays(-12),
+    description: 'Illustration réservée aux adultes (18+) — fixture DR-10 pour le hard-gate illustration.',
+    hashtags: ['mature'], width: 2000, height: 2800, tools: 'Procreate', license: '© Tous droits réservés' },
 ];
 
 // Top artiste/scénariste du moment — also the (fictional) creative duo behind "Lames de Brume".
+// DR-10: birthdate seeded as adult (isAdult:true) — dr1-camille-roux is the login-tested account
+// (FAVORITES/READING_PROGRESS/WATCHLIST/REACTIONS above), so it must be age-cleared by default.
 const CREATORS = [
-  { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur' },
-  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste' },
+  { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', birthdate: new Date('1996-04-12') },
+  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03') },
 ];
+
+// DR-10: a real, loginable minor test account (password `password123`, like dr1-camille-roux) —
+// isAdult:false so QA/e2e can exercise the "logged-in minor" 403/refusal branch of the age gate
+// without inventing a new login helper. No creator profile/role: a plain reader account.
+const MINOR_ACCOUNT = {
+  email: 'minor.testeur@seed.encre-et-plume.local',
+  displayName: 'Compte Mineur (test)',
+  slug: 'dr10-minor-testeur',
+  birthdate: new Date(new Date().getFullYear() - 12, 0, 1), // ~12 years old, always a minor
+};
 
 async function main() {
   const hash = bcrypt.hashSync('password123', 10);
@@ -309,8 +327,8 @@ async function main() {
   for (const c of CREATORS) {
     const account = await prisma.account.upsert({
       where: { email: c.email },
-      create: { email: c.email, displayName: c.displayName, passwordHash: hash, profileSlug: c.slug, role: 'utilisateur' },
-      update: { displayName: c.displayName, profileSlug: c.slug },
+      create: { email: c.email, displayName: c.displayName, passwordHash: hash, profileSlug: c.slug, role: 'utilisateur', birthdate: c.birthdate },
+      update: { displayName: c.displayName, profileSlug: c.slug, birthdate: c.birthdate },
     });
     // DR-3: city 'Lyon' matches the prototype's "Scénariste · Lyon" / "Dessinateur · Lyon" sidebar rows.
     await prisma.profile.upsert({
@@ -319,6 +337,27 @@ async function main() {
       update: { creatorRoles: [c.role], trendingScore: 100, city: 'Lyon' },
     });
   }
+
+  // DR-10: minor test account (no creator profile — a plain reader). emailVerifiedAt is set at
+  // creation so it is immediately loginable (F-11 blocks login otherwise) for QA/e2e.
+  await prisma.account.upsert({
+    where: { email: MINOR_ACCOUNT.email },
+    create: {
+      email: MINOR_ACCOUNT.email,
+      displayName: MINOR_ACCOUNT.displayName,
+      passwordHash: hash,
+      profileSlug: MINOR_ACCOUNT.slug,
+      role: 'utilisateur',
+      birthdate: MINOR_ACCOUNT.birthdate,
+      emailVerifiedAt: new Date(),
+    },
+    update: {
+      displayName: MINOR_ACCOUNT.displayName,
+      profileSlug: MINOR_ACCOUNT.slug,
+      birthdate: MINOR_ACCOUNT.birthdate,
+      emailVerifiedAt: new Date(),
+    },
+  });
 
   // DR-3: wire the creative team (WorkCreator) onto the showcase manga.
   for (const wc of WORK_CREATORS) {

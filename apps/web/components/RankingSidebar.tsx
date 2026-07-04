@@ -1,7 +1,12 @@
 // DR-1 — sidebar "Populaire · Classement de tous les temps". Replica of prototype ACCUEIL lines 476-493.
+'use client';
+
 import Link from 'next/link';
 import type { RankingRow } from '@encre-et-plume/shared';
+import { useSession } from '../lib/session';
+import { useAgeCleared } from '../lib/ageGate';
 import { CrownIcon } from './icons';
+import Cover18Overlay from './age/Cover18Overlay';
 
 function coverStyle(cover: string | null): React.CSSProperties {
   if (cover) return { backgroundImage: `url(${cover})`, backgroundSize: 'cover' };
@@ -13,6 +18,9 @@ function coverStyle(cover: string | null): React.CSSProperties {
 }
 
 export default function RankingSidebar({ items }: { items: RankingRow[] }) {
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
+
   return (
     <aside
       style={{
@@ -68,10 +76,13 @@ export default function RankingSidebar({ items }: { items: RankingRow[] }) {
               >
                 {item.rank}
               </span>
-              <span
-                aria-hidden="true"
-                style={{ width: 36, height: 48, flex: 'none', border: '2px solid var(--ink)', borderRadius: 4, ...coverStyle(item.cover) }}
-              />
+              <div data-testid="ranking-sidebar-cover" style={{ position: 'relative', width: 36, height: 48, flex: 'none' }}>
+                <div
+                  aria-hidden="true"
+                  style={{ width: '100%', height: '100%', border: '2px solid var(--ink)', borderRadius: 4, ...coverStyle(item.cover) }}
+                />
+                <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Œuvre 18+" />
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <b style={{ fontSize: 14, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {item.title}

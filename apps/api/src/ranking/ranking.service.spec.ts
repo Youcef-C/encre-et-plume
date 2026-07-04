@@ -68,8 +68,8 @@ describe('RankingService', () => {
     const result = await service.getAllTime(undefined, RANKING_LIMIT);
 
     expect(result).toEqual([
-      { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.' },
-      { id: 'w2', slug: 'lames-de-brume', rank: 2, title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.' },
+      { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
+      { id: 'w2', slug: 'lames-de-brume', rank: 2, title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
     ]);
   });
 

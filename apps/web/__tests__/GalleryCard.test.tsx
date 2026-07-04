@@ -13,6 +13,7 @@ const card: GalleryIllustrationCard = {
   categoryLabel: 'Process',
   likeCount: 3400,
   thumbnail: null,
+  is18plus: false,
 };
 
 const cardNoSlug: GalleryIllustrationCard = {
@@ -64,5 +65,24 @@ describe('GalleryCard (DR-5 FE-9)', () => {
     render(<GalleryCard illustration={card} onQuickPreview={onQuickPreview} />);
     fireEvent.click(screen.getByRole('button', { name: 'Aperçu rapide de Lames de Brume — Ch.2' }));
     expect(onQuickPreview).toHaveBeenCalledWith('dr5-illus-1');
+  });
+
+  // ── DR-10: 18+ blur + badge ──────────────────────────────────────────────────
+
+  it('blurs the thumbnail and shows an "18+" badge for an 18+ illustration', () => {
+    render(<GalleryCard illustration={{ ...card, is18plus: true }} onQuickPreview={() => {}} />);
+    expect(screen.getByLabelText('Illustration 18+')).toBeInTheDocument();
+  });
+
+  it('does not blur or badge a non-18+ illustration', () => {
+    render(<GalleryCard illustration={card} onQuickPreview={() => {}} />);
+    expect(screen.queryByLabelText('Illustration 18+')).not.toBeInTheDocument();
+  });
+
+  // QA round-1 regression: the 18+ overlay must never change the cover box's own declared
+  // height, or its title/meta siblings shift into the next grid row.
+  it('QA round-1 regression: the cover box keeps its exact 230px height when is18plus (no stretch)', () => {
+    render(<GalleryCard illustration={{ ...card, is18plus: true }} onQuickPreview={() => {}} />);
+    expect(screen.getByTestId('gallery-cover')).toHaveStyle({ height: '230px' });
   });
 });

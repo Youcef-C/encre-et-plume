@@ -48,6 +48,7 @@ const mockAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 describe('ParametresPage', () => {

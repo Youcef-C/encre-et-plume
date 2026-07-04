@@ -40,6 +40,8 @@ export interface GalleryIllustrationCard {
   categoryLabel: string; // French display label
   likeCount: number; // formatted client-side ("3,4k")
   thumbnail: string | null; // null -> CSS halftone placeholder
+  /** DR-10: true iff any of `genres` is a plus18 vocabulary entry (hasPlus18Genre) — client blurs + badges. */
+  is18plus: boolean;
 }
 
 export interface GalleryFeatureCard extends GalleryIllustrationCard {
@@ -70,6 +72,8 @@ export interface GalleryPreview {
   categoryLabel: string;
   likeCount: number;
   image: string | null; // larger image (null -> halftone placeholder)
+  /** DR-10: same signal as GalleryIllustrationCard.is18plus. */
+  is18plus: boolean;
 }
 
 // DR-6: illustration detail screen ("/illustration/:id"). Additive — nothing above changes.
@@ -99,4 +103,6 @@ export interface IllustrationDetail {
   likeCount: number;
   publishedAt: string | null; // ISO 8601
   artist: IllustrationArtist;
+  /** DR-10: true iff any genre is a plus18 entry — hard-gates the read via AgeGateService. */
+  is18plus: boolean;
 }

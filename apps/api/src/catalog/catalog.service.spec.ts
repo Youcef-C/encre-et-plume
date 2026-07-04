@@ -231,8 +231,18 @@ describe('CatalogService', () => {
         complete: true,
         format: 'Manga',
         cover: null,
+        is18plus: false,
       },
     ]);
+  });
+
+  it('DR-10: maps is18plus true when audienceRating is 18+', async () => {
+    prisma.work.findMany.mockResolvedValue([WORK_ROW({ audienceRating: '18+' })]);
+    prisma.work.count.mockResolvedValue(1);
+
+    const result = await service.findWorks(EMPTY_QUERY);
+
+    expect(result.items[0]?.is18plus).toBe(true);
   });
 
   describe('getTrending', () => {
@@ -253,6 +263,12 @@ describe('CatalogService', () => {
       expect(result[0]).toMatchObject({ id: 'w1', rank: 1, growthPct: 24 });
       expect(result[1]).toMatchObject({ id: 'w2', rank: 2, growthPct: 18 });
       expect(result[2]).toMatchObject({ id: 'w3', rank: 3, growthPct: 12 });
+    });
+
+    it('DR-10: is18plus true when audienceRating is 18+', async () => {
+      prisma.work.findMany.mockResolvedValue([WORK_ROW({ audienceRating: '18+' })]);
+      const result = await service.getTrending();
+      expect(result[0]?.is18plus).toBe(true);
     });
   });
 

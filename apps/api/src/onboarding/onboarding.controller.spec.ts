@@ -24,6 +24,7 @@ const SUMMARY: AccountSummary = {
   emailVerified: true,
   needsCguReconsent: false,
   onboarded: true,
+  isAdult: null,
 };
 
 describe('OnboardingController', () => {

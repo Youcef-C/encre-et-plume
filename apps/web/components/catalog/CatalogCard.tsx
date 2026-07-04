@@ -1,14 +1,23 @@
 // DR-2 FE-6 — catalog work card. Replica of prototype DÉCOUVRIR lines 568-576.
+'use client';
+
 import Link from 'next/link';
 import type { CatalogWorkCard } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
 import { coverStyle } from '../../lib/cover';
+import { useSession } from '../../lib/session';
+import { useAgeCleared } from '../../lib/ageGate';
 import { CheckIcon, BookIcon, HeartIcon } from '../icons';
+import Cover18Overlay from '../age/Cover18Overlay';
 
 export default function CatalogCard({ work }: { work: CatalogWorkCard }) {
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
+
   return (
     <Link href={`/oeuvre/${work.slug}`} style={{ color: 'inherit', textDecoration: 'none' }}>
       <div
+        data-testid="catalog-cover"
         style={{
           position: 'relative',
           height: 212,
@@ -19,6 +28,7 @@ export default function CatalogCard({ work }: { work: CatalogWorkCard }) {
           ...coverStyle(work.id, work.cover),
         }}
       >
+        <Cover18Overlay is18plus={work.is18plus} cleared={cleared} label="Œuvre 18+" />
         {work.format === 'Roman' && (
           <span
             style={{

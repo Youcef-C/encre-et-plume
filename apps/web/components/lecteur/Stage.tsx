@@ -4,7 +4,7 @@
 // Replica of LECTEUR lines 780-816. F7 (loading placeholder) / F9 (error+retry) states live here.
 import { PROSE_PARAGRAPHS_PER_PAGE, type ChapterPagesResponse, type ReaderPageDto } from '@encre-et-plume/shared';
 
-export type PagesState = 'loading' | 'ready' | 'locked' | 'error';
+export type PagesState = 'loading' | 'ready' | 'locked' | 'error' | 'age-restricted';
 
 type Props = {
   workTitle: string;
@@ -245,8 +245,9 @@ export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesSta
     );
   }
 
-  if (pagesState === 'locked' || !pagesData) {
-    // Content stays hidden; the parent renders the Paywall overlay on top of this placeholder.
+  if (pagesState === 'locked' || pagesState === 'age-restricted' || !pagesData) {
+    // Content stays hidden; the parent renders the Paywall/AgeGate refusal overlay on top of
+    // this placeholder.
     return <div aria-hidden="true" style={{ width: 260, height: 340 }} />;
   }
 

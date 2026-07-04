@@ -89,6 +89,7 @@ const mockAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 function renderProfile(slug: string, account: AccountSummary | null = null) {

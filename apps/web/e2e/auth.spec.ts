@@ -43,6 +43,7 @@ async function signUpAndVerify(
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent before submit
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -75,7 +76,7 @@ function uniqueUsername(email: string): string {
 // ---------------------------------------------------------------------------
 // FE-1 Sign-up form renders required fields
 // ---------------------------------------------------------------------------
-test('FE-1: /inscription shows displayName + email + username + password + confirm fields', async ({ page }) => {
+test('FE-1: /inscription shows displayName + email + username + password + confirm + birthdate fields', async ({ page }) => {
   await page.goto('/inscription');
 
   await expect(page.getByLabel(/nom d'affichage/i)).toBeVisible();
@@ -83,6 +84,8 @@ test('FE-1: /inscription shows displayName + email + username + password + confi
   await expect(page.getByLabel(/nom d'utilisateur/i)).toBeVisible();
   await expect(page.getByLabel(/^mot de passe$/i)).toBeVisible();
   await expect(page.getByLabel(/confirmer le mot de passe/i)).toBeVisible();
+  // DR-10: required "Date de naissance" field
+  await expect(page.getByLabel(/date de naissance/i)).toBeVisible();
   await expect(page.getByRole('button', { name: /créer mon compte/i })).toBeVisible();
 });
 
@@ -119,6 +122,7 @@ test('FE-4b: /inscription shows "E-mail invalide" for bad email format', async (
   await page.getByLabel(/e-mail/i).fill('not-an-email');
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU to enable submit
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -147,6 +151,7 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -160,6 +165,7 @@ test('FE-5a: /inscription shows "Cet e-mail est déjà utilisé" on duplicate em
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email) + '-2');
   await page.getByLabel(/^mot de passe$/i).fill('password456');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password456');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -180,6 +186,7 @@ test('FE-5b + FE-6: sign up → lands on /verifier-email/envoye, header shows "S
   await page.getByLabel(/nom d'utilisateur/i).fill(uniqueUsername(email));
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();
@@ -275,7 +282,7 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
 
   await page.goto('/inscription');
 
-  // Tab through displayName → email → username → password → confirm → CGU checkbox → submit
+  // Tab through displayName → email → username → password → confirm → birthdate → CGU checkbox → submit
   await page.getByLabel(/nom d'affichage/i).focus();
   await page.keyboard.type('Keyboard User');
   await page.keyboard.press('Tab');
@@ -288,6 +295,11 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
   await page.keyboard.type('password123');
   await page.keyboard.press('Tab');
   await page.keyboard.type('password123');
+  await page.keyboard.press('Tab'); // DR-10: birthdate — native date input, digits fill mm/dd/yyyy segments
+  await page.keyboard.type('01011990');
+  // Chromium's <input type="date"> shadow DOM consumes one Tab press internally after typing
+  // (focus stays on the control) before a second Tab actually exits it — two presses are needed.
+  await page.keyboard.press('Tab');
   // F-13: Tab to CGU checkbox, Space to check; the label contains two links
   // (CGU + Politique de confidentialité) that sit in the tab order before the submit.
   await page.keyboard.press('Tab'); // move to CGU checkbox
@@ -318,6 +330,7 @@ test('FE-5 loading state: submit button shows "Création…" while submitting', 
   await page.getByLabel(/e-mail/i).fill(uniqueEmail());
   await page.getByLabel(/^mot de passe$/i).fill('password123');
   await page.getByLabel(/confirmer le mot de passe/i).fill('password123');
+  await page.getByLabel(/date de naissance/i).fill('1990-01-01');
   // F-13: check CGU consent to enable submit
   await page.getByRole('checkbox', { name: /j'accepte les/i }).check();
   await page.getByRole('button', { name: /créer mon compte/i }).click();

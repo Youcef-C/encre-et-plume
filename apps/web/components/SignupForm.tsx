@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ApiError } from '@encre-et-plume/shared';
+import { isPlausibleBirthdate } from '@encre-et-plume/shared';
 import { signup } from '../lib/api';
 import OnBrandCheckbox from './form/OnBrandCheckbox';
 
@@ -12,6 +13,7 @@ interface FieldErrors {
   username?: string;
   password?: string;
   confirmPassword?: string;
+  birthdate?: string;
 }
 
 const USERNAME_RE = /^[a-z0-9-]{3,30}$/;
@@ -33,6 +35,7 @@ function validate(
   username: string,
   password: string,
   confirmPassword: string,
+  birthdate: string,
 ): FieldErrors {
   const errors: FieldErrors = {};
   if (!displayName.trim()) errors.displayName = 'Le nom est requis';
@@ -53,6 +56,11 @@ function validate(
   if (password && confirmPassword !== password) {
     errors.confirmPassword = 'Les mots de passe ne correspondent pas.';
   }
+  // DR-10: required, plausible (not future, not > 120 years ago) — mirrors the server rule
+  // (packages/shared/src/age.ts) so client and server never disagree.
+  if (!birthdate || !isPlausibleBirthdate(birthdate)) {
+    errors.birthdate = 'Date invalide';
+  }
   return errors;
 }
 
@@ -66,6 +74,8 @@ export default function SignupForm() {
   const [usernameTouched, setUsernameTouched] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  // DR-10: required "Date de naissance" field
+  const [birthdate, setBirthdate] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -79,6 +89,7 @@ export default function SignupForm() {
   const usernameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
+  const birthdateRef = useRef<HTMLInputElement>(null);
 
   const fieldRefs = {
     displayName: displayNameRef,
@@ -86,6 +97,7 @@ export default function SignupForm() {
     username: usernameRef,
     password: passwordRef,
     confirmPassword: confirmPasswordRef,
+    birthdate: birthdateRef,
   };
 
   const handleDisplayNameChange = (value: string) => {
@@ -104,7 +116,7 @@ export default function SignupForm() {
     }
     setCguError(null);
 
-    const errors = validate(displayName, email, username, password, confirmPassword);
+    const errors = validate(displayName, email, username, password, confirmPassword, birthdate);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       // Move focus to first invalid field (FE-7)
@@ -123,6 +135,7 @@ export default function SignupForm() {
         email,
         password,
         ...(username ? { username } : {}),
+        birthdate,
         acceptCgu: true,
       });
       router.push('/verifier-email/envoye?email=' + encodeURIComponent(email));
@@ -298,6 +311,31 @@ export default function SignupForm() {
         {fieldErrors.confirmPassword && (
           <span id="confirmPassword-error" className="ep-error" role="alert">
             {fieldErrors.confirmPassword}
+          </span>
+        )}
+      </div>
+
+      {/* DR-10: required "Date de naissance" field — native date input covers accessible
+          French date entry (ponytail: platform-first, no picker library). */}
+      <div style={{ marginBottom: 24 }}>
+        <label htmlFor="birthdate" className="ep-label">
+          Date de naissance
+        </label>
+        <input
+          ref={birthdateRef}
+          id="birthdate"
+          name="birthdate"
+          type="date"
+          autoComplete="bday"
+          value={birthdate}
+          onChange={(e) => setBirthdate(e.target.value)}
+          aria-invalid={!!fieldErrors.birthdate}
+          aria-describedby={fieldErrors.birthdate ? 'birthdate-error' : undefined}
+          className="ep-input"
+        />
+        {fieldErrors.birthdate && (
+          <span id="birthdate-error" className="ep-error" role="alert">
+            {fieldErrors.birthdate}
           </span>
         )}
       </div>

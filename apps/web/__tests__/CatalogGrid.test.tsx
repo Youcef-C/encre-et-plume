@@ -12,8 +12,8 @@ vi.mock('next/link', () => ({
 import CatalogGrid from '../components/catalog/CatalogGrid';
 
 const items: CatalogWorkCard[] = [
-  { id: '1', slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', chapterCount: 12, likeCount: 3400, complete: true, format: 'Manga', cover: null },
-  { id: '2', slug: 'neon-sutra', title: 'Néon Sutra', genre: 'Shōnen', chapterCount: 20, likeCount: 8100, complete: false, format: 'Manga', cover: null },
+  { id: '1', slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', chapterCount: 12, likeCount: 3400, complete: true, format: 'Manga', cover: null, is18plus: false },
+  { id: '2', slug: 'neon-sutra', title: 'Néon Sutra', genre: 'Shōnen', chapterCount: 20, likeCount: 8100, complete: false, format: 'Manga', cover: null, is18plus: false },
 ];
 
 describe('CatalogGrid (DR-2 FE-6)', () => {

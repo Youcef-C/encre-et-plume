@@ -1,8 +1,13 @@
 // DR-1 — "Populaires à chaud · cette semaine" grid. Replica of prototype ACCUEIL lines 424-443.
+'use client';
+
 import Link from 'next/link';
 import type { TrendingWork } from '@encre-et-plume/shared';
 import { formatLikeCount, growthLabel } from '../lib/home';
+import { useSession } from '../lib/session';
+import { useAgeCleared } from '../lib/ageGate';
 import { HeartIcon } from './icons';
+import Cover18Overlay from './age/Cover18Overlay';
 
 function coverGradient(seed: number): React.CSSProperties {
   const angles = [125, 215, 60, 150];
@@ -15,6 +20,9 @@ function coverGradient(seed: number): React.CSSProperties {
 }
 
 export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
+  const { account } = useSession();
+  const cleared = useAgeCleared(account);
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '14px 0 18px', flexWrap: 'wrap' }}>
@@ -45,6 +53,7 @@ export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
               style={{ color: 'inherit', textDecoration: 'none' }}
             >
               <div
+                data-testid="trending-cover"
                 style={{
                   position: 'relative',
                   height: 290,
@@ -55,6 +64,7 @@ export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
                   ...coverGradient(item.rank - 1),
                 }}
               >
+                <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Œuvre 18+" />
                 <span
                   style={{
                     position: 'absolute',

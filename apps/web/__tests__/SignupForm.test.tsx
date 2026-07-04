@@ -33,6 +33,7 @@ const mockAccount: AccountSummary = {
   preferences: { theme: 'system' },
   needsCguReconsent: false,
   onboarded: false,
+  isAdult: true,
 };
 
 // Minimal session context provider for tests
@@ -57,6 +58,8 @@ const emailField = () => screen.getByLabelText(/e-mail/i);
 const usernameField = () => screen.getByLabelText(/nom d'utilisateur/i);
 const passwordField = () => screen.getByLabelText(/^mot de passe$/i);
 const confirmField = () => screen.getByLabelText(/confirmer le mot de passe/i);
+// DR-10: required "Date de naissance" field
+const birthdateField = () => screen.getByLabelText(/date de naissance/i);
 const submitBtn = () => screen.getByRole('button', { name: /créer mon compte/i });
 // F-13: CGU consent checkbox
 const cguCheckbox = () => screen.getByRole('checkbox', { name: /j'accepte les/i });
@@ -66,13 +69,15 @@ describe('SignupForm', () => {
     vi.clearAllMocks();
   });
 
-  it('renders five labelled fields: Nom d\'affichage, E-mail, Nom d\'utilisateur (@), Mot de passe, Confirmer', () => {
+  it('renders six labelled fields: Nom d\'affichage, E-mail, Nom d\'utilisateur (@), Mot de passe, Confirmer, Date de naissance', () => {
     renderForm();
     expect(nameField()).toBeInTheDocument();
     expect(emailField()).toBeInTheDocument();
     expect(usernameField()).toBeInTheDocument();
     expect(passwordField()).toBeInTheDocument();
     expect(confirmField()).toBeInTheDocument();
+    expect(birthdateField()).toBeInTheDocument();
+    expect(birthdateField()).toHaveAttribute('type', 'date');
   });
 
   it('shows French required errors on empty submit (after accepting CGU to enable button)', async () => {
@@ -86,6 +91,8 @@ describe('SignupForm', () => {
     expect(await screen.findByText('Le nom est requis')).toBeInTheDocument();
     expect(await screen.findByText('E-mail requis')).toBeInTheDocument();
     expect(await screen.findByText('Mot de passe requis')).toBeInTheDocument();
+    // DR-10: birthdate is required too — empty submit shows "Date invalide"
+    expect(await screen.findByText('Date invalide')).toBeInTheDocument();
   });
 
   it('shows "E-mail invalide" for a malformed email', async () => {
@@ -96,6 +103,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'not-an-email');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -130,6 +138,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -148,6 +157,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -189,6 +199,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -198,6 +209,7 @@ describe('SignupForm', () => {
         email: 'yuki@example.com',
         password: 'password123',
         username: 'yuki-moreau',
+        birthdate: '1990-01-01',
         acceptCgu: true,
       });
     });
@@ -212,6 +224,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -234,6 +247,7 @@ describe('SignupForm', () => {
     await user.type(usernameField(), 'Yü ki!');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -257,6 +271,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -276,6 +291,7 @@ describe('SignupForm', () => {
     await user.type(emailField(), 'yuki@example.com');
     await user.type(passwordField(), 'password123');
     await user.type(confirmField(), 'password456');
+    await user.type(birthdateField(), '1990-01-01');
     await user.click(cguCheckbox());
     await user.click(submitBtn());
 
@@ -319,5 +335,39 @@ describe('SignupForm', () => {
     const form = document.querySelector('form')!;
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await screen.findByText('Vous devez accepter les conditions pour créer un compte.');
+  });
+
+  // ── DR-10: required "Date de naissance" field ───────────────────────────────
+
+  it('DR-10: shows "Date invalide" for a future birthdate', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '2999-01-01');
+    await user.click(cguCheckbox());
+    await user.click(submitBtn());
+
+    expect(await screen.findByText('Date invalide')).toBeInTheDocument();
+    expect(api.signup).not.toHaveBeenCalled();
+  });
+
+  it('DR-10: shows "Date invalide" for a birthdate more than 120 years ago', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Yuki Moreau');
+    await user.type(emailField(), 'yuki@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), '1850-01-01');
+    await user.click(cguCheckbox());
+    await user.click(submitBtn());
+
+    expect(await screen.findByText('Date invalide')).toBeInTheDocument();
+    expect(api.signup).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { Equals, IsEmail, IsNotEmpty, IsOptional, Matches, MinLength } from 'class-validator';
 import type { SignupRequest } from '@encre-et-plume/shared';
+import { IsPlausibleBirthdate } from '../../age-gate/is-plausible-birthdate.validator';
 
 export class SignupDto implements SignupRequest {
   @IsNotEmpty({ message: 'Le nom est requis' })
@@ -22,4 +23,8 @@ export class SignupDto implements SignupRequest {
   /** F-13: must be true; server enforces legal consent at signup. */
   @Equals(true, { message: 'Vous devez accepter les conditions pour créer un compte.' })
   acceptCgu!: boolean;
+
+  /** DR-10: required, 'YYYY-MM-DD'. No minimum signup age (D4) — plausibility only. */
+  @IsPlausibleBirthdate({ message: 'Date invalide' })
+  birthdate!: string;
 }

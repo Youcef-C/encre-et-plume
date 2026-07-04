@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { ActiveContest, CatalogQuery, CatalogResponse, CatalogWorkCard, CatalogFormat, EditorPickItem, TrendingWork } from '@encre-et-plume/shared';
-import { CATALOG_PAGE_SIZE, catalogGenreLabel, GENRES } from '@encre-et-plume/shared';
+import { CATALOG_PAGE_SIZE, catalogGenreLabel, GENRES, isWork18Plus } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { growthPercent } from '../home/home.service';
@@ -58,6 +58,7 @@ export class CatalogService {
       genre: w.genre,
       likeCount: w.likeCount,
       growthPct: growthPercent(w.weeklyLikeDelta, w.priorWeekLikeDelta),
+      is18plus: isWork18Plus(w.audienceRating),
     }));
   }
 
@@ -175,6 +176,7 @@ interface WorkRow {
   complete: boolean;
   format: string;
   coverImage: string | null;
+  audienceRating: string;
 }
 
 function mapToCard(w: WorkRow): CatalogWorkCard {
@@ -188,5 +190,6 @@ function mapToCard(w: WorkRow): CatalogWorkCard {
     complete: w.complete,
     format: w.format as CatalogFormat,
     cover: w.coverImage,
+    is18plus: isWork18Plus(w.audienceRating),
   };
 }

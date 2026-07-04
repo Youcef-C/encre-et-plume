@@ -77,6 +77,15 @@ export const logout = (): Promise<void> =>
 export const getMe = (): Promise<AccountSummary> =>
   request<AccountSummary>('/auth/me');
 
+// ─── Age verification & 18+ gating (DR-10) ───────────────────────────────────
+import type { UpdateBirthdateRequest } from '@encre-et-plume/shared';
+
+export const updateMyBirthdate = (birthdate: string): Promise<AccountSummary> =>
+  request<AccountSummary>('/accounts/me/birthdate', {
+    method: 'PATCH',
+    body: JSON.stringify({ birthdate } satisfies UpdateBirthdateRequest),
+  });
+
 export const getProfile = (slug: string): Promise<ProfileResponse> =>
   request<ProfileResponse>(`/profiles/${slug}`);
 

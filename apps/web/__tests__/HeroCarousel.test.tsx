@@ -23,9 +23,11 @@ import * as api from '../lib/api';
 import HeroCarousel from '../components/HeroCarousel';
 
 const slides: FeaturedWork[] = [
-  { id: '1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 20 ch.', genre: 'Shōnen' },
-  { id: '2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Camille R. · 12 ch.', genre: 'Seinen' },
+  { id: '1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 20 ch.', genre: 'Shōnen', is18plus: false },
+  { id: '2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Camille R. · 12 ch.', genre: 'Seinen', is18plus: false },
 ];
+
+const slides18: FeaturedWork[] = [{ ...slides[0]!, is18plus: true }];
 
 function renderCarousel(account: null | { id: string } = null) {
   return render(
@@ -128,5 +130,16 @@ describe('HeroCarousel', () => {
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
     expect(api.saveReaction).toHaveBeenCalledWith({ targetType: 'work', targetId: 'neon-sutra' });
+  });
+
+  // ── DR-10: 18+ blur + badge ──────────────────────────────────────────────────
+
+  it('blurs the slide cover and shows an "18+" badge for an 18+ featured work', () => {
+    render(
+      <SessionContext.Provider value={{ account: null, loading: false, refresh: vi.fn(), logout: vi.fn() }}>
+        <HeroCarousel slides={slides18} />
+      </SessionContext.Provider>,
+    );
+    expect(screen.getByLabelText('Œuvre 18+')).toBeInTheDocument();
   });
 });

@@ -56,6 +56,7 @@ async function signUpVerifyAndLogin(
       displayName,
       username: slug,
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });
@@ -241,6 +242,7 @@ test('F14-E2E-4: export ready → "system" notification created', async ({ reque
       displayName: 'F14 Notif',
       username: slugFrom(email),
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });
@@ -287,6 +289,7 @@ test('F14-E2E-5: POST /me/data-export twice returns the same pending export', as
       displayName: 'F14 Idempotent',
       username: slugFrom(email),
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });
@@ -441,7 +444,7 @@ async function signUpVerifyLoginViaApi(
   displayName: string,
 ): Promise<{ slug: string }> {
   const su = await ctx.post(`${API}/auth/signup`, {
-    data: { email, displayName, username: slugFrom(email), password: PASSWORD, acceptCgu: true },
+    data: { email, displayName, username: slugFrom(email), password: PASSWORD, birthdate: '1990-01-01', acceptCgu: true },
   });
   if (!su.ok()) throw new Error(`signup failed: ${su.status()} ${await su.text()}`);
 
@@ -543,6 +546,7 @@ test('F14-E2E-13: re-signup with the deleted email succeeds after erasure (email
       displayName: 'F14 Respawn V2',
       username: newSlug,
       password: PASSWORD,
+      birthdate: '1990-01-01',
       acceptCgu: true,
     },
   });

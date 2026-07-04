@@ -212,4 +212,16 @@ describe('WorkHero (DR-3 FE-2)', () => {
     expect(screen.getByText('Lire').closest('a')).toHaveAttribute('href', '/lecteur/lames-de-brume');
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
+
+  // ── DR-10: mature content warning tag (never blurred, distinct from 18+) ────
+
+  it('shows no "Contenu mature" tag for all-ages content', () => {
+    render(<WorkHero work={work} account={null} />);
+    expect(screen.queryByText('Contenu mature')).not.toBeInTheDocument();
+  });
+
+  it('shows a "Contenu mature" warning tag when the genre/hashtags are mature (never blurred)', () => {
+    render(<WorkHero work={{ ...work, genre: 'Yaoi' }} account={null} />);
+    expect(screen.getByText('Contenu mature')).toBeInTheDocument();
+  });
 });
