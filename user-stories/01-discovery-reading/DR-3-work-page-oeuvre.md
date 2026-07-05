@@ -8,7 +8,7 @@
 - **Header**: back link "‹ Catalogue" (→ [[DR-2]]); cover; badges ("✓ Complet", genre, type); title.
 - **Stat row**: "3,4k ♥ · 128k lectures · 340 ★ favoris · X/5 · N avis" (formatted counters).
 - **Action buttons**: "Lire" (→ reader [[DR-4]]), "＋ Ma liste" (save, [[DR-8]]/[[DR-9]]), "★ Soutenir" ([[MR-1]]), "Proposer une collab" ([[MC-3]]), "↗ Partager" ([[PUB-5]]), "⚑ Signaler" ([[PUB-6]]).
-- **Synopsis** + hashtag chips.
+- **Synopsis** + a tag row of the work's **genre + themes as clickable genre chips** (F-22) linking to the Découvrir genre facet; the freetext work hashtags are no longer displayed (they still feed the « Contenu mature » signal).
 - **Prose excerpt block** (roman type only): "Extrait · Chapitre 1" with "Lire la suite →".
 - **Chapter list**: rows (cover, "Ch. N — title", planche count + date, ♥, "Lire →"); collapsible "Voir les 12 chapitres ▾".
 - **"Illustrations & planches"**: 3-col grid (→ illustration detail [[DR-6]]).
@@ -29,6 +29,11 @@
 - **Business rules**: prose excerpt only for roman format; chapter list default collapses to a preview count; funding progress = pledged / goal.
 - **Authorization**: public read. Moderation bar requires Admin [[AD-4]]. Personal actions require auth [[F-1]].
 - **Side effects**: read count may increment on chapter open (see [[DR-4]]), not on work-page view.
+
+## Shipped refinements (2026-07-05)
+- The ♥ « j'aime » control is enlarged (bigger heart, ≥44px tap target, bold border + hard offset shadow) and drives a real like toggle; the « ＋ Ma liste » save toggle swaps its icon with a short pop animation (＋ ↔ ✓, label « Ma liste » ↔ « Dans ma liste »), disabled under reduced-motion (DR-9).
+- When the viewer has DR-11 reading history for the work, a red **resume progress bar** renders under the CTA (« Ch. N · {Titre} — page X/Y ») and « Lire » becomes « Reprendre la lecture », deep-linking to the saved chapter + page.
+- (F-22) the tag row under the synopsis is the work's genre + themes as clickable genre chips linking to the Découvrir facet; freetext hashtags are dropped from display but still feed the « Contenu mature » badge.
 
 ## Dependencies
 - [[DR-2]] — back to catalog.

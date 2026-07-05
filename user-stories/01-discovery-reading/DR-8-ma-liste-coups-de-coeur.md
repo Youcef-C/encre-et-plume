@@ -22,6 +22,9 @@
 - **Authorization**: all endpoints require auth and operate on the current user only [[F-1]].
 - **Side effects**: remove deletes the watchlist item; like toggle adjusts aggregate counters.
 
+## Shipped refinements (2026-07-05)
+- Saved **illustrations** now appear in the « Ma liste » tab and liked illustrations in the « Coups de cœur » tab, under an « Illustrations » sub-heading below the works; each is **removable inline** (top-right ✕) with the same optimistic-remove + « Annuler » undo affordance as works, and the tab counts include them. Backed by `GET /me/illustrations/saved` · `GET /me/illustrations/liked` and `DELETE /reactions/save` · `DELETE /reactions/like` on `targetType: "illustration"` (Request A).
+
 ## Dependencies
 - [[F-1]] — auth required.
 - [[DR-9]] — like toggle and counters.

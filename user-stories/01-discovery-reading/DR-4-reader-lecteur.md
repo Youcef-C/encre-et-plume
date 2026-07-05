@@ -29,6 +29,12 @@
 - **Authorization**: public can read unlocked chapters; locked chapters require active support/subscription; like/favorite/comment require auth [[F-1]].
 - **Side effects**: increments read count; updates per-user reading progress; emits reaction/comment events.
 
+## Shipped refinements (2026-07-05)
+- The immersive bottom control bar auto-hides after ~2.8s of idle and re-reveals on pointer move / key press / touch; it stays visible while hovered or while a control has keyboard focus.
+- The « ◳ Studio » clear-view control ships labeled **« Vue dégagée »** (Studio icon) with `aria-pressed`; it collapses both asides for a distraction-free panel while the topbar stays (distinct from « Plein écran »).
+- The site legal footer renders **dark** on the reader route (matching the ink stage) via `body:has([data-ep-reader])`.
+- Narrow viewports are viewport-anchored: the « Chapitres » aside collapses behind a bar but « Réactions » stays **expanded** below the stage (a collapsed 32px bar read as the module disappearing on mobile).
+
 ## Dependencies
 
 - [[DR-3]] — entered from work page.

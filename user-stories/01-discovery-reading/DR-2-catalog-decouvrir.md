@@ -33,6 +33,10 @@
 - **Authorization**: public read. Editor pick managed by Publisher/Editor role.
 - **Side effects**: none (read-only).
 
+## Shipped refinements (2026-07-05)
+- The 2026-07-03/04 sidebar revisions all shipped as written: « Trier » is a dropdown at the top of the menu; the name/author text search auto-applies with a ~350ms debounce (no « Appliquer les filtres » button); GENRE is a tag searchbar (GenreSuggestInput + red GenreChip over the F-20 vocabulary); PUBLIC is multi-select (« Tous public » clears, « Mature » and « +18 » combine); the « Thèmes » section and Langue's « Traduit » option are gone.
+- (F-22) genre/theme chips on the œuvre page [[DR-3]] deep-link into this genre facet (`/decouvrir?genre=…`), so the catalog is reachable directly from a work's tags.
+
 ## Dependencies
 - [[DR-3]] — work cards link to work pages.
 - [[F-7]] — shares text-search semantics with global search.

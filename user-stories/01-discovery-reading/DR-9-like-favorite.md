@@ -20,6 +20,9 @@
 - **Authorization**: auth required [[F-1]]; a user can only toggle their own reactions.
 - **Side effects**: updates aggregate counters; `save` on a work adds it to the user's watchlist ([[DR-8]]).
 
+## Shipped refinements (2026-07-05)
+- On the œuvre page [[DR-3]] the ♥ « j'aime » toggle is **enlarged** (bigger heart glyph, ≥44px min tap target, bold border + hard offset shadow) and the « ＋ Ma liste » save toggle shows an **animated icon change** on toggle (＋ ↔ ✓ with a short pop, disabled under `prefers-reduced-motion`) (Request A).
+
 ## Dependencies
 - [[F-1]] — auth required for all reactions.
 - [[DR-8]] — save populates Ma liste; like populates Coups de cœur.
