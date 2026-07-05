@@ -6,11 +6,16 @@
 
 ## Frontend
 - **Entry points**: a "＋ Nouvel article" action in the admin console ([[AD-1]]) for staff; and, for a verified editor, a "Rédiger l'actualité du concours" action on their branded contest ([[PE-6]]).
-- **Article editor** — replica of the prototype `ARTICLE — ÉDITEUR` modal (focus-trapped dialog):
+- **Article editor** — the prototype `ARTICLE — ÉDITEUR` modal is the *floor*; the editor must be **very complete**, producing at least everything the prototype's rendered `ARTICLE` page displays (and richer where sensible — the drawn 6-button toolbar is a starting point, not the ceiling):
   - **Titre** input.
   - **Catégorie** — on-brand select ([[F-20]] rule overrides the prototype's free-text input): `Concours` / `À chaud` / `Événement`.
-  - **Corps de l'article** — a markdown body editor with the drawn toolbar: **Gras**, **Italique**, **Titre (H2)**, **Liste**, **Citation**, **Lien** (each wraps/inserts the markdown token), and a **live "APERÇU"** panel rendering the markdown as it's typed (sanitized).
-  - Footer actions: **Annuler** / **Brouillon** (save draft) / **Publier** — the publish action is role-aware (see authorization).
+  - **Image de couverture (héro)** — an optional banner image via the media system ([[F-10]] presigned upload + CDN), matching the 320px hero the rendered article draws.
+  - **Byline** — author + publish date + an auto-computed **temps de lecture** ("N min de lecture"), as shown on the article page.
+  - **Corps de l'article** — a full rich-text / markdown editor whose formatting covers **at least** what the rendered articles use, with a toolbar for each: **Gras**, **Italique**, headings **H2 / H3**, **listes** (à puces + numérotées), **lien**, **citation en exergue** (the accent-bordered display-font pull-quote block the article page renders), **image / figure inline with caption** ([[F-10]]), **séparateur**, and inline **code** — extensible beyond the prototype (e.g. embeds) without regressing any of these.
+  - **Concours lié** (for an editor's contest article, and optionally staff): attach the owning contest ([[PE-6]]) so the article renders the "CONCOURS LIÉ" sidebar (title, thème, dates, récompenses, "Voir le concours →").
+  - **Live "APERÇU"** — renders the body exactly as the public [[PUB-8]] article page will (same components/typography, sanitized), not an approximation, so what the author previews is what publishes.
+  - Footer actions: **Annuler** / **Brouillon** (save draft) / **Publier** — publish is role-aware (see authorization).
+  - The same rich-text core is shared with the creation-studio editor ([[CS-4]]) so both editors offer a consistent, complete editing experience (extract one editor component; don't fork two half-featured ones).
 - **Article list** (staff): rows with title, catégorie, statut (`Brouillon` / `En attente` / `Publié`), author, date; per-row edit / delete; a **"En attente d'approbation"** filter/queue surfacing editor-submitted drafts for admin review with **Approuver** / **Refuser (avec motif)** actions.
 - **States**: empty ("Aucun article"); saving spinner (editor keeps content on failure); error toast; markdown preview updates live; 404 on a missing article id.
 - **Accessibility**: editor is a labelled, focus-trapped dialog; toolbar buttons have `title`/`aria-label`; the preview is a live region; category select and actions labelled.
@@ -22,7 +27,7 @@
 - **POST /admin/articles/{id}/publish** — publish (staff), or **approve** an editor's pending article (admin).
 - **POST /admin/articles/{id}/reject** — admin rejects a pending article with a motif (back to the editor as `draft`).
 - **DELETE /admin/articles/{id}** — remove (author while unpublished; staff any time).
-- **Entity `Article`**: `id, title, category (concours|a_chaud|evenement), body (markdown), excerpt (derived), status (draft|pending_review|published), authorId, contestId?, publishedAt?, reviewedById?, rejectionReason?, createdAt, updatedAt`.
+- **Entity `Article`**: `id, title, category (concours|a_chaud|evenement), body (rich text/markdown), excerpt (derived), coverImage? (media), readMinutes (derived), status (draft|pending_review|published), authorId, contestId?, publishedAt?, reviewedById?, rejectionReason?, createdAt, updatedAt`.
 - **Business rules**:
   - Only `published` articles appear in the public feed / resolve publicly ([[PUB-8]]); `category` drives the feed badge + home ribbon.
   - **maintainer / admin**: create + publish directly (`draft` → `published`).
@@ -36,7 +41,7 @@
 - [[PUB-8]] — the public "Actualités" feed + article page consume published articles.
 - [[PE-6]] — a verified editor's branded contest is the only context in which they may author an article.
 - [[AD-1]] — admin console hosts the list + editor; [[AD-10]] — action log.
-- [[F-2]] — role gating (maintainer/admin/editor-verified); [[F-4]] — header "Actualités" link routes to the feed; [[F-5]] — optional news notification; [[F-20]] — on-brand category select.
+- [[F-2]] — role gating (maintainer/admin/editor-verified); [[F-4]] — header "Actualités" link routes to the feed; [[F-5]] — optional news notification; [[F-10]] — hero / inline images; [[F-20]] — on-brand category select; [[CS-4]] — shares the rich-text editor core.
 
 ## Notes
 - **Fidelity correction (2026-07-05)**: the prototype DOES draw this — the `ARTICLE — ÉDITEUR (rédaction)` modal (`data-article-modal`: Titre, Catégorie, markdown toolbar B/I/H/list/quote/link, live APERÇU, Annuler/Brouillon/Publier), plus the `ACTUALITÉS` feed and `ARTICLE` screens. This story and [[PUB-8]] were previously marked "not drawn / Inferred" — that was wrong.

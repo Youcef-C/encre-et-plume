@@ -34,3 +34,4 @@
 
 ## Notes
 - Explicit: header, toolbar, file dropdown contents, planche/case canvas, live cursors, sidebar presence/comments/typing. CRDT vs OT left tech-agnostic.
+- Editing completeness (user-specified 2026-07-05): the "Éditeur" must be a **very complete** editor — at minimum matching the formatting the prototype demonstrates (and richer where it helps), and sharing the rich-text core with the article editor ([[AD-8]]) so both feel consistent and full-featured rather than two thin toolbars.

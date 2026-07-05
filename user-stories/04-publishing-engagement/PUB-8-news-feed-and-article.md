@@ -8,7 +8,7 @@
 - News feed (prototype `ACTUALITÉS` screen), reached from the header **Actualités** link ([[F-4]]) — lists articles with category badges:
   - "Concours", "À chaud", "Événement".
   - Each item: title, category badge, short excerpt, timestamp, link to the article.
-- Article page (prototype `ARTICLE` screen): title, category, publish date, author, rendered (markdown) body, back-to-Actualités link.
+- Article page (prototype `ARTICLE` screen) — renders the full richness the [[AD-8]] editor produces: category badge, H1 title, **author byline** (avatar + name + date + "N min de lecture"), optional **hero image**, and a rich body (headings H2/H3, paragraphs incl. a bold lead, **pull-quotes**, inline figures with captions, lists, links, dividers). When the article has a **linked contest** ([[PE-6]]), a sticky "CONCOURS LIÉ" sidebar shows the contest title/thème/dates/récompenses + "Voir le concours →". Back-to-Actualités link.
 - Surfaces that DO exist and feed this:
   - Home announcement ribbon ("ANNONCES").
   - Découvrir "Actualités" column.
