@@ -1,52 +1,84 @@
-// F-22 — debounced, auto-applied freetext hashtag filter for Galerie (no submit button, F-20 rule).
-// Mirrors GallerySearchInput; the active tag shows as a removable GenreChip.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// F-22 — multi-tag freetext hashtag filter for Galerie (token field). Enter / comma / space commit
+// the current text as a normalized #tag; Backspace on an empty input removes the last chip; each
+// chip is individually removable. Commit/remove applies immediately (no debounce, no submit button).
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import GalleryTagFilter from '../components/galerie/GalleryTagFilter';
 
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+const input = () => screen.getByLabelText('#hashtag…');
+const type = (value: string) => fireEvent.change(input(), { target: { value } });
 
-describe('GalleryTagFilter (F-22)', () => {
-  it('renders with the current tag prefilled', () => {
-    render(<GalleryTagFilter tag="yokai" onChange={() => {}} />);
-    expect(screen.getByLabelText('#hashtag…')).toHaveValue('yokai');
-  });
-
-  it('does not call onChange immediately while typing (no submit button)', () => {
-    const onChange = vi.fn();
-    render(<GalleryTagFilter tag={undefined} onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText('#hashtag…'), { target: { value: 'yokai' } });
-    expect(onChange).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /Appliquer/ })).not.toBeInTheDocument();
-  });
-
-  it('auto-applies the normalized tag ~350ms after the last keystroke', () => {
-    const onChange = vi.fn();
-    render(<GalleryTagFilter tag={undefined} onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText('#hashtag…'), { target: { value: '#Yokai ' } });
-    vi.advanceTimersByTime(400);
-    expect(onChange).toHaveBeenCalledWith('yokai');
-  });
-
-  it('clears cleanly — empty text auto-applies as undefined', () => {
-    const onChange = vi.fn();
-    render(<GalleryTagFilter tag="yokai" onChange={onChange} />);
-    fireEvent.change(screen.getByLabelText('#hashtag…'), { target: { value: '' } });
-    vi.advanceTimersByTime(400);
-    expect(onChange).toHaveBeenCalledWith(undefined);
-  });
-
-  it('shows the active tag as a removable #chip and removing it clears the filter', () => {
-    const onChange = vi.fn();
-    render(<GalleryTagFilter tag="yokai" onChange={onChange} />);
+describe('GalleryTagFilter (F-22 multi-tag)', () => {
+  it('renders existing tags as removable #chips', () => {
+    render(<GalleryTagFilter tags={['yokai', 'encre']} onChange={() => {}} />);
     expect(screen.getByText('#yokai')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retirer #yokai' }));
-    expect(onChange).toHaveBeenCalledWith(undefined);
+    expect(screen.getByText('#encre')).toBeInTheDocument();
   });
 
-  it('shows no active chip when there is no tag', () => {
-    render(<GalleryTagFilter tag={undefined} onChange={() => {}} />);
+  it('Enter commits the current text as a normalized tag', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={[]} onChange={onChange} />);
+    type('#Yokai ');
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith(['yokai']);
+  });
+
+  it('a comma commits the current tag (appending, not replacing)', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={['yokai']} onChange={onChange} />);
+    type('encre');
+    fireEvent.keyDown(input(), { key: ',' });
+    expect(onChange).toHaveBeenCalledWith(['yokai', 'encre']);
+  });
+
+  it('a space commits the current tag', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={[]} onChange={onChange} />);
+    type('naruto');
+    fireEvent.keyDown(input(), { key: ' ' });
+    expect(onChange).toHaveBeenCalledWith(['naruto']);
+  });
+
+  it('does not add a duplicate tag', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={['yokai']} onChange={onChange} />);
+    type('yokai');
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('Backspace on an empty input removes the last chip', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={['yokai', 'encre']} onChange={onChange} />);
+    fireEvent.keyDown(input(), { key: 'Backspace' });
+    expect(onChange).toHaveBeenCalledWith(['yokai']);
+  });
+
+  it('Backspace does NOT remove a chip while there is text', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={['yokai']} onChange={onChange} />);
+    type('en');
+    fireEvent.keyDown(input(), { key: 'Backspace' });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('removing a chip via its ✕ drops that tag', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={['yokai', 'encre']} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer #yokai' }));
+    expect(onChange).toHaveBeenCalledWith(['encre']);
+  });
+
+  it('blur commits pending text', () => {
+    const onChange = vi.fn();
+    render(<GalleryTagFilter tags={[]} onChange={onChange} />);
+    type('yokai');
+    fireEvent.blur(input());
+    expect(onChange).toHaveBeenCalledWith(['yokai']);
+  });
+
+  it('shows no chip when there are no tags', () => {
+    render(<GalleryTagFilter tags={[]} onChange={() => {}} />);
     expect(screen.queryByRole('button', { name: /Retirer/ })).not.toBeInTheDocument();
   });
 });

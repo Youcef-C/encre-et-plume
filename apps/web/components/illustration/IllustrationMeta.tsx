@@ -59,7 +59,7 @@ export default function IllustrationMeta({ detail }: { detail: IllustrationDetai
           {detail.hashtags.map((tag) => (
             <TagChipLink
               key={tag}
-              href={`/galerie?${filtersToGalleryQuery({ ...EMPTY_GALLERY_FILTERS, tag })}`}
+              href={`/galerie?${filtersToGalleryQuery({ ...EMPTY_GALLERY_FILTERS, tags: [tag] })}`}
               label={`#${tag}`}
               ariaLabel={`Rechercher le hashtag #${tag}`}
             />

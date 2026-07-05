@@ -19,7 +19,7 @@ import {
 
 export const EMPTY_GALLERY_FILTERS: GalleryQuery = {
   q: undefined,
-  tag: undefined,
+  tags: [],
   genre: [],
   category: undefined,
   tri: 'tendance',
@@ -41,9 +41,9 @@ export const TRI_LABELS: Record<GalleryTri, string> = {
 /** Parse the URL query (or a raw URLSearchParams) into a validated GalleryQuery. */
 export function parseGalleryFilters(params: URLSearchParams): GalleryQuery {
   const q = params.get('q')?.trim() || undefined;
-  // F-22: freetext hashtag, normalized through the shared helper so the chip label / query param
-  // always agree with the BE `tag` filter. '' / '#' -> undefined (silent-drop, like the BE).
-  const tag = normalizeHashtag(params.get('tag') ?? '') || undefined;
+  // F-22: freetext hashtags, each normalized through the shared helper so chip labels / query
+  // params always agree with the BE `tags` filter; empties are dropped and duplicates deduped.
+  const tags = [...new Set(params.getAll('tags').map((t) => normalizeHashtag(t)).filter(Boolean))];
   const genre = params.getAll('genre').filter((id) => GENRES.some((g) => g.id === id));
   const categoryRaw = params.get('category');
   const category = (GALLERY_CATEGORY_KEYS as readonly string[]).includes(categoryRaw ?? '')
@@ -54,14 +54,14 @@ export function parseGalleryFilters(params: URLSearchParams): GalleryQuery {
   const pageRaw = Number.parseInt(params.get('page') ?? '1', 10);
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
 
-  return { q, tag, genre, category, tri, page };
+  return { q, tags, genre, category, tri, page };
 }
 
 /** Serialize a GalleryQuery back into a URLSearchParams — omits defaults so shared/empty URLs stay clean. */
 export function filtersToGalleryQuery(filters: GalleryQuery): URLSearchParams {
   const params = new URLSearchParams();
   if (filters.q) params.set('q', filters.q);
-  if (filters.tag) params.set('tag', filters.tag);
+  for (const t of filters.tags) params.append('tags', t);
   for (const g of filters.genre) params.append('genre', g);
   if (filters.category) params.set('category', filters.category);
   if (filters.tri !== 'tendance') params.set('tri', filters.tri);

@@ -1,5 +1,5 @@
 // DR-6 FE-4 — meta block: title, byline, description, hashtag chips.
-// F-22 — genres row (clickable -> /galerie?genre=<id>) + hashtag chips as links (-> /galerie?tag=<tag>).
+// F-22 — genres row (clickable -> /galerie?genre=<id>) + hashtag chips as links (-> /galerie?tags=<tag>).
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { IllustrationDetail } from '@encre-et-plume/shared';
@@ -55,9 +55,9 @@ describe('IllustrationMeta (DR-6 FE-4 / F-22)', () => {
   it('renders hashtags as # chips linking to the Galerie freetext hashtag search', () => {
     render(<IllustrationMeta detail={detail} />);
     const link = screen.getByRole('link', { name: 'Rechercher le hashtag #encre' });
-    expect(link).toHaveAttribute('href', '/galerie?tag=encre');
+    expect(link).toHaveAttribute('href', '/galerie?tags=encre');
     expect(link).toHaveTextContent('#encre');
-    expect(screen.getByRole('link', { name: 'Rechercher le hashtag #néon' })).toHaveAttribute('href', '/galerie?tag=n%C3%A9on');
+    expect(screen.getByRole('link', { name: 'Rechercher le hashtag #néon' })).toHaveAttribute('href', '/galerie?tags=n%C3%A9on');
   });
 
   it('omits the genres row when there are no genres', () => {

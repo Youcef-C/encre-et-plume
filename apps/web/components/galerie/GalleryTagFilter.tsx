@@ -1,66 +1,85 @@
 'use client';
 
-// F-22 — debounced, auto-applied freetext hashtag filter for Galerie. Mirrors GallerySearchInput
-// (no submit button, ~350ms debounce, resyncs on external value change) but commits the normalized
-// hashtag via the shared normalizeHashtag, and shows the active tag as a removable GenreChip.
-import { useEffect, useRef, useState } from 'react';
+// F-22 — multi-tag freetext hashtag filter for Galerie. Token-field UX: Enter / comma / space
+// commit the current text as a normalized #tag chip; Backspace on an empty input removes the last
+// chip; each chip is individually removable. Commit/remove applies the filter immediately (each
+// change narrows the gallery — the tags AND-match, hasEvery, server-side). No vocabulary: hashtags
+// are freetext by design (fan-art of existing licenses, techniques, characters).
+import { useState } from 'react';
 import { normalizeHashtag } from '@encre-et-plume/shared';
 import { TagIcon } from '../icons';
 import GenreChip from '../GenreChip';
 
-const TAG_DEBOUNCE_MS = 350;
-
 export default function GalleryTagFilter({
-  tag,
+  tags,
   onChange,
 }: {
-  tag: string | undefined;
-  onChange: (tag: string | undefined) => void;
+  tags: string[];
+  onChange: (tags: string[]) => void;
 }) {
-  const [text, setText] = useState(tag ?? '');
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  const [text, setText] = useState('');
 
-  useEffect(() => {
-    setText(tag ?? '');
-  }, [tag]);
+  function commit() {
+    const tag = normalizeHashtag(text);
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+    setText('');
+  }
 
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const next = normalizeHashtag(text) || undefined;
-      if (next !== (tag || undefined)) onChangeRef.current(next);
-    }, TAG_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  function remove(tag: string) {
+    onChange(tags.filter((t) => t !== tag));
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+      // Enter / comma / space all commit the current token (and never get typed into the field).
+      e.preventDefault();
+      commit();
+    } else if (e.key === 'Backspace' && text === '' && tags.length > 0) {
+      // Backspace on an empty input deletes the previous chip.
+      e.preventDefault();
+      remove(tags[tags.length - 1]);
+    }
+  }
 
   return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <div
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 6,
+        fontSize: 13,
+        color: 'var(--ink2)',
+        background: 'var(--card)',
+        border: '2px solid var(--ink)',
+        borderRadius: 6,
+        padding: '6px 10px',
+        fontWeight: 500,
+        minWidth: 200,
+      }}
+    >
+      <TagIcon size={14} />
+      {tags.map((t) => (
+        <GenreChip key={t} label={`#${t}`} onRemove={() => remove(t)} />
+      ))}
+      <input
+        aria-label="#hashtag…"
+        placeholder={tags.length ? '' : '#hashtag…'}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={commit}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 7,
+          border: 'none',
+          background: 'none',
+          outline: 'none',
+          flex: 1,
+          minWidth: 90,
           fontSize: 13,
-          color: 'var(--ink2)',
-          background: 'var(--card)',
-          border: '2px solid var(--ink)',
-          borderRadius: 6,
-          padding: '7px 11px',
-          fontWeight: 500,
-          minWidth: 160,
+          color: 'inherit',
+          font: 'inherit',
         }}
-      >
-        <TagIcon size={14} />
-        <input
-          aria-label="#hashtag…"
-          placeholder="#hashtag…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          style={{ border: 'none', background: 'none', outline: 'none', width: '100%', fontSize: 13, color: 'inherit', font: 'inherit' }}
-        />
-      </div>
-      {tag && <GenreChip label={`#${tag}`} onRemove={() => onChangeRef.current(undefined)} />}
+      />
     </div>
   );
 }

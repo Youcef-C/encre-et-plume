@@ -117,7 +117,7 @@ export default function GalerieClient() {
             value={filters.q ?? ''}
             onChange={(q) => navigate({ ...filters, q, page: 1 })}
           />
-          <GalleryTagFilter tag={filters.tag} onChange={(tag) => navigate({ ...filters, tag, page: 1 })} />
+          <GalleryTagFilter tags={filters.tags} onChange={(tags) => navigate({ ...filters, tags, page: 1 })} />
           <GalleryGenreFilter genre={filters.genre} onChange={(genre) => navigate({ ...filters, genre, page: 1 })} />
         </div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>

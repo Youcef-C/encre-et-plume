@@ -86,29 +86,31 @@ describe('parseGalleryFilters / filtersToGalleryQuery — q + genre (Round 2)', 
   });
 });
 
-// F-22 — freetext hashtag `tag` filter (exact match on Illustration.hashtags). Normalized through
-// the shared normalizeHashtag so the chip label and the query param always agree with the BE filter.
-describe('parseGalleryFilters / filtersToGalleryQuery — tag (F-22)', () => {
-  it('parses tag, normalized (lowercased, # stripped, diacritics kept)', () => {
-    expect(parseGalleryFilters(new URLSearchParams('tag=%23Néon')).tag).toBe('néon');
-    expect(parseGalleryFilters(new URLSearchParams('tag=Naruto')).tag).toBe('naruto');
+// F-22 — freetext hashtag `tags` filter (exact tokens, AND-matched on Illustration.hashtags). Each
+// is normalized through the shared normalizeHashtag so chip labels / query params always agree with
+// the BE filter, and the multi-value param mirrors `genre` (repeated `tags=` entries).
+describe('parseGalleryFilters / filtersToGalleryQuery — tags (F-22)', () => {
+  it('parses tags, each normalized (lowercased, # stripped, diacritics kept)', () => {
+    expect(parseGalleryFilters(new URLSearchParams('tags=%23Néon')).tags).toEqual(['néon']);
+    expect(parseGalleryFilters(new URLSearchParams('tags=Naruto&tags=Sasuke')).tags).toEqual(['naruto', 'sasuke']);
   });
 
-  it('drops an empty / hash-only tag to undefined', () => {
-    expect(parseGalleryFilters(new URLSearchParams('tag=')).tag).toBeUndefined();
-    expect(parseGalleryFilters(new URLSearchParams('tag=%23')).tag).toBeUndefined();
-    expect(parseGalleryFilters(new URLSearchParams('')).tag).toBeUndefined();
+  it('drops empty / hash-only tags and dedupes', () => {
+    expect(parseGalleryFilters(new URLSearchParams('tags=')).tags).toEqual([]);
+    expect(parseGalleryFilters(new URLSearchParams('tags=%23')).tags).toEqual([]);
+    expect(parseGalleryFilters(new URLSearchParams('')).tags).toEqual([]);
+    expect(parseGalleryFilters(new URLSearchParams('tags=naruto&tags=Naruto')).tags).toEqual(['naruto']);
   });
 
-  it('serializes tag and round-trips', () => {
-    const filters = parseGalleryFilters(new URLSearchParams('tag=yokai&genre=seinen&q=onibi'));
+  it('serializes tags (repeated param) and round-trips', () => {
+    const filters = parseGalleryFilters(new URLSearchParams('tags=yokai&tags=encre&genre=seinen&q=onibi'));
     const query = filtersToGalleryQuery(filters);
-    expect(query.get('tag')).toBe('yokai');
+    expect(query.getAll('tags')).toEqual(['yokai', 'encre']);
     expect(parseGalleryFilters(query)).toEqual(filters);
   });
 
-  it('omits tag from the query string when absent (default)', () => {
-    expect(filtersToGalleryQuery(EMPTY_GALLERY_FILTERS).has('tag')).toBe(false);
+  it('omits tags from the query string when empty (default)', () => {
+    expect(filtersToGalleryQuery(EMPTY_GALLERY_FILTERS).has('tags')).toBe(false);
   });
 });
 

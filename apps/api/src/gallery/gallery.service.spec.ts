@@ -27,7 +27,7 @@ const ILLUSTRATION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => (
   ...overrides,
 });
 
-const EMPTY_QUERY: GalleryQuery = { q: undefined, tag: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 };
+const EMPTY_QUERY: GalleryQuery = { q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1 };
 
 describe('GalleryService', () => {
   let service: GalleryService;
@@ -107,14 +107,14 @@ describe('GalleryService', () => {
     expect(where.genres).toBeUndefined();
   });
 
-  it('F-22 tag facet: exact hashtag match via `has` (no partial/contains)', async () => {
-    await service.findIllustrations({ ...EMPTY_QUERY, tag: 'yokai' });
+  it('F-22 tag facet: exact hashtag tokens AND-matched via `hasEvery` (no partial/contains)', async () => {
+    await service.findIllustrations({ ...EMPTY_QUERY, tags: ['yokai', 'encre'] });
 
     const where = prisma.illustration.findMany.mock.calls[0][0].where;
-    expect(where.hashtags).toEqual({ has: 'yokai' });
+    expect(where.hashtags).toEqual({ hasEvery: ['yokai', 'encre'] });
   });
 
-  it('F-22 tag facet: no clause when absent (regression — undefined tag)', async () => {
+  it('F-22 tag facet: no clause when absent (regression — empty tags)', async () => {
     await service.findIllustrations(EMPTY_QUERY);
 
     const where = prisma.illustration.findMany.mock.calls[0][0].where;
@@ -122,10 +122,10 @@ describe('GalleryService', () => {
   });
 
   it('F-22 tag facet: composes (AND) with genre and q', async () => {
-    await service.findIllustrations({ ...EMPTY_QUERY, tag: 'yokai', genre: ['supernatural'], q: 'onibi' });
+    await service.findIllustrations({ ...EMPTY_QUERY, tags: ['yokai'], genre: ['supernatural'], q: 'onibi' });
 
     const where = prisma.illustration.findMany.mock.calls[0][0].where;
-    expect(where.hashtags).toEqual({ has: 'yokai' });
+    expect(where.hashtags).toEqual({ hasEvery: ['yokai'] });
     expect(where.genres).toEqual({ hasSome: ['Fantastique'] });
     expect(where.OR).toEqual([
       { title: { contains: 'onibi', mode: 'insensitive' } },

@@ -16,8 +16,16 @@ const GENRE_IDS = new Set(GENRES.map((g) => g.id));
 export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
   return {
     q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined, // L: cap length
-    // F-22: freetext hashtag, normalized (length cap comes from the normalizer). Array-shaped -> dropped.
-    tag: typeof raw['tag'] === 'string' && normalizeHashtag(raw['tag']) !== '' ? normalizeHashtag(raw['tag']) : undefined,
+    // F-22: freetext hashtags (multi), each normalized (length cap from the normalizer), empties
+    // dropped, deduped. Accepts a single value or a repeated `tags` param (string | string[]).
+    tags: [
+      ...new Set(
+        toArray(raw['tags'])
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => normalizeHashtag(v))
+          .filter((v) => v !== ''),
+      ),
+    ],
     genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     category: allowlistScalar(raw['category'], GALLERY_CATEGORY_KEYS),
     tri: allowlistScalar(raw['tri'], GALLERY_TRIS) ?? 'tendance',

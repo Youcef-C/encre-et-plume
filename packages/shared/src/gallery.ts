@@ -25,7 +25,7 @@ export const GALLERY_PAGE_SIZE = 12;
 /** Parsed, validated query (BE input after allowlist filtering). */
 export interface GalleryQuery {
   q?: string; // free text, matches title OR artistName (case/diacritics-insensitive contains)
-  tag?: string; // F-22: freetext hashtag, normalized (normalizeHashtag) — EXACT match on Illustration.hashtags (`has`)
+  tags: string[]; // F-22: freetext hashtags, each normalized (normalizeHashtag) — EXACT tokens AND-matched on Illustration.hashtags (`hasEvery`)
   genre: string[]; // F-20 vocabulary ids, OR-within, AND with other facets; validated against the full vocabulary
   category?: GalleryCategoryKey; // undefined = "Tout" (all categories)
   tri: GalleryTri; // default 'tendance'

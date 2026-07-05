@@ -1,25 +1,26 @@
 import { parseGalleryQuery } from './parse-gallery-query';
 
 describe('parseGalleryQuery', () => {
-  it('defaults to no category (Tout), no q, empty genre, no tag, tri=tendance, page=1 when nothing is provided', () => {
-    expect(parseGalleryQuery({})).toEqual({ q: undefined, tag: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 });
+  it('defaults to no category (Tout), no q, empty genre, empty tags, tri=tendance, page=1 when nothing is provided', () => {
+    expect(parseGalleryQuery({})).toEqual({ q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1 });
   });
 
-  it('F-22: normalizes a tag (strips #, lowercases, trims)', () => {
-    expect(parseGalleryQuery({ tag: '#Naruto ' }).tag).toBe('naruto');
+  it('F-22: normalizes a tag (strips #, lowercases, trims) and coerces a scalar into an array', () => {
+    expect(parseGalleryQuery({ tags: '#Naruto ' }).tags).toEqual(['naruto']);
   });
 
   it('F-22: caps a tag at 30 characters (via the shared normalizer)', () => {
-    expect(parseGalleryQuery({ tag: 'a'.repeat(40) }).tag).toBe('a'.repeat(30));
+    expect(parseGalleryQuery({ tags: 'a'.repeat(40) }).tags).toEqual(['a'.repeat(30)]);
   });
 
-  it('F-22: treats an empty/bare-# tag as undefined', () => {
-    expect(parseGalleryQuery({ tag: '' }).tag).toBeUndefined();
-    expect(parseGalleryQuery({ tag: '#' }).tag).toBeUndefined();
+  it('F-22: drops empty/bare-# tags', () => {
+    expect(parseGalleryQuery({ tags: '' }).tags).toEqual([]);
+    expect(parseGalleryQuery({ tags: '#' }).tags).toEqual([]);
+    expect(parseGalleryQuery({ tags: ['naruto', '', '#'] }).tags).toEqual(['naruto']);
   });
 
-  it('F-22: drops an array-shaped tag (wrong shape -> undefined)', () => {
-    expect(parseGalleryQuery({ tag: ['a', 'b'] }).tag).toBeUndefined();
+  it('F-22: keeps multiple hashtags (AND-within) and dedupes', () => {
+    expect(parseGalleryQuery({ tags: ['#Naruto', 'sasuke', 'naruto'] }).tags).toEqual(['naruto', 'sasuke']);
   });
 
   it('passes through q untouched', () => {

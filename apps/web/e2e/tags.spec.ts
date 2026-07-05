@@ -105,10 +105,10 @@ async function mockIllustrationAndGalleryFeeds(page: Page) {
   await page.route(`${API}/illustrations?**`, (route) => {
     const url = new URL(route.request().url());
     const genre = url.searchParams.getAll('genre');
-    const tag = url.searchParams.get('tag');
+    const tags = url.searchParams.getAll('tags');
     let items = allGalleryItems;
     if (genre.includes('yokai')) items = onibiOnly;
-    if (tag === 'encre') items = encreOnly;
+    if (tags.includes('encre')) items = encreOnly;
     route.fulfill({ json: { items, total: items.length, page: 1, pageSize: 12, totalPages: 1, summary } });
   });
   await page.route(`${API}/illustrations`, (route) =>
@@ -150,25 +150,27 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
 
     await page.getByRole('link', { name: 'Rechercher le hashtag #encre' }).click();
 
-    await expect(page).toHaveURL('/galerie?tag=encre');
+    await expect(page).toHaveURL('/galerie?tags=encre');
     await expect(page.getByText('Lames de Brume — Ch.2')).toBeVisible();
     await expect(page.getByText('Couverture · Néon Sutra')).not.toBeVisible();
 
     const removeChip = page.getByRole('button', { name: 'Retirer #encre' });
     await expect(removeChip).toBeVisible();
     await removeChip.click();
-    await expect(page).not.toHaveURL(/tag=/);
+    await expect(page).not.toHaveURL(/tags=/);
     await expect(page.getByText('Couverture · Néon Sutra')).toBeVisible();
   });
 
-  test('4. typing a hashtag in the Galerie tag filter narrows the grid (auto-applied, debounced)', async ({ page }) => {
+  test('4. typing a hashtag in the Galerie tag filter and pressing Enter narrows the grid', async ({ page }) => {
     await mockIllustrationAndGalleryFeeds(page);
     await page.goto('/galerie');
     await expect(page.getByText('Couverture · Néon Sutra')).toBeVisible();
 
-    await page.getByLabel('#hashtag…').fill('encre');
+    const tagInput = page.getByLabel('#hashtag…');
+    await tagInput.fill('encre');
+    await tagInput.press('Enter');
 
-    await expect(page).toHaveURL(/tag=encre/, { timeout: 2000 });
+    await expect(page).toHaveURL(/tags=encre/, { timeout: 2000 });
     await expect(page.getByText('Couverture · Néon Sutra')).not.toBeVisible();
     await expect(page.getByText('Lames de Brume — Ch.2')).toBeVisible();
   });
@@ -179,7 +181,7 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await page.goto('/illustration/i1');
 
     await page.getByRole('link', { name: 'Rechercher le hashtag #encre' }).click();
-    await expect(page).toHaveURL('/galerie?tag=encre');
+    await expect(page).toHaveURL('/galerie?tags=encre');
     const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth + 1);
     expect(overflow).toBe(true);
   });
@@ -204,7 +206,7 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
       route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
     );
 
-    await page.goto('/galerie?tag=encre');
+    await page.goto('/galerie?tags=encre');
     await expect(page.getByRole('img', { name: 'Illustration 18+' })).toBeVisible();
   });
 
