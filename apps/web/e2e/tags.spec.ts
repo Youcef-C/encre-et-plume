@@ -196,8 +196,8 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await tagInput.press('Enter');
     await expect(page).toHaveURL(/tags=encre/, { timeout: 2000 });
 
-    // Trending is gone; the grid is relabelled "Résultats".
-    await expect(page.getByText('Résultats', { exact: true })).toBeVisible();
+    // Trending is gone; the grid is relabelled "Résultats pour <search>".
+    await expect(page.getByText('Résultats pour #encre', { exact: true })).toBeVisible();
     await expect(page.getByText('Tendances cette semaine', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Toutes les illustrations', { exact: true })).toHaveCount(0);
   });
