@@ -27,7 +27,7 @@ const ILLUSTRATION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => (
   ...overrides,
 });
 
-const EMPTY_QUERY: GalleryQuery = { q: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 };
+const EMPTY_QUERY: GalleryQuery = { q: undefined, tag: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 };
 
 describe('GalleryService', () => {
   let service: GalleryService;
@@ -105,6 +105,32 @@ describe('GalleryService', () => {
 
     const where = prisma.illustration.findMany.mock.calls[0][0].where;
     expect(where.genres).toBeUndefined();
+  });
+
+  it('F-22 tag facet: exact hashtag match via `has` (no partial/contains)', async () => {
+    await service.findIllustrations({ ...EMPTY_QUERY, tag: 'yokai' });
+
+    const where = prisma.illustration.findMany.mock.calls[0][0].where;
+    expect(where.hashtags).toEqual({ has: 'yokai' });
+  });
+
+  it('F-22 tag facet: no clause when absent (regression — undefined tag)', async () => {
+    await service.findIllustrations(EMPTY_QUERY);
+
+    const where = prisma.illustration.findMany.mock.calls[0][0].where;
+    expect(where.hashtags).toBeUndefined();
+  });
+
+  it('F-22 tag facet: composes (AND) with genre and q', async () => {
+    await service.findIllustrations({ ...EMPTY_QUERY, tag: 'yokai', genre: ['supernatural'], q: 'onibi' });
+
+    const where = prisma.illustration.findMany.mock.calls[0][0].where;
+    expect(where.hashtags).toEqual({ has: 'yokai' });
+    expect(where.genres).toEqual({ hasSome: ['Fantastique'] });
+    expect(where.OR).toEqual([
+      { title: { contains: 'onibi', mode: 'insensitive' } },
+      { artistName: { contains: 'onibi', mode: 'insensitive' } },
+    ]);
   });
 
   it('combines category + genre + q with AND (each a distinct where key)', async () => {
@@ -278,6 +304,22 @@ describe('GalleryService', () => {
       expect(result?.license).toBe('© Tous droits réservés');
       expect(result?.description).toBe('Encrage traditionnel rehaussé de trames numériques.');
       expect(result?.hashtags).toEqual(['encre', 'noir', 'néon', 'pluie']);
+    });
+
+    it('F-22: returns the F-20 genre fr labels on the detail response', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ genres: ['Yōkai', 'Fantastique'] }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.genres).toEqual(['Yōkai', 'Fantastique']);
+    });
+
+    it('F-22: genres defaults to an empty array when the illustration has none', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ genres: [] }));
+
+      const result = await service.getIllustration('i1');
+
+      expect(result?.genres).toEqual([]);
     });
 
     it('maps the scenariste role to its French label "Scénariste"', async () => {

@@ -15,6 +15,9 @@ const work = {
   title: 'Lames de Brume',
   cover: null,
   genre: 'Seinen',
+  // F-22: WorkDetail gained `themes` (Œuvre tag row = genre + themes) — regression fixture keeps
+  // this suite's DR-3 fixtures aligned with the real contract.
+  themes: ['Aventure'],
   format: 'Manga',
   complete: true,
   audienceRating: '16+',

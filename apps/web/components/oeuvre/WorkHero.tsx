@@ -7,7 +7,8 @@
 // mirroring the save toggle's live count.
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { WorkDetail, AccountSummary, ReactionViewerState } from '@encre-et-plume/shared';
+import { resolveGenreId, type WorkDetail, type AccountSummary, type ReactionViewerState } from '@encre-et-plume/shared';
+import { EMPTY_FILTERS, filtersToQuery } from '../../lib/catalog';
 import { coverStyle } from '../../lib/cover';
 import { formatLikeCount } from '../../lib/home';
 import { ratingLabel } from '../../lib/work';
@@ -46,6 +47,8 @@ const actionBase: React.CSSProperties = {
 export default function WorkHero({ work, account }: { work: WorkDetail; account: AccountSummary | null }) {
   const { trigger, notice } = usePersonalAction(account);
   const resume = useResumePosition(work.slug, account);
+  // F-22: genre badge links to the Découvrir genre facet when the label resolves to a vocabulary id.
+  const genreId = resolveGenreId(work.genre);
 
   const [reactionState, setReactionState] = useState<ReactionViewerState>({ liked: false, saved: false });
   useEffect(() => {
@@ -110,7 +113,18 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
                 <CheckIcon size={11} /> Complet
               </span>
             )}
-            <span style={badgeStyle}>{work.genre}</span>
+            {genreId ? (
+              <Link
+                href={`/decouvrir?${filtersToQuery({ ...EMPTY_FILTERS, genre: [genreId] })}`}
+                aria-label={`Filtrer par ${work.genre}`}
+                className="ep-tag-chip"
+                style={{ ...badgeStyle, color: 'var(--ink)', textDecoration: 'none' }}
+              >
+                {work.genre}
+              </Link>
+            ) : (
+              <span style={badgeStyle}>{work.genre}</span>
+            )}
             <span style={{ ...badgeStyle, background: 'var(--accent)', color: '#fff' }}>
               {work.format.toUpperCase()}
             </span>

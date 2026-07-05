@@ -25,6 +25,7 @@ export const GALLERY_PAGE_SIZE = 12;
 /** Parsed, validated query (BE input after allowlist filtering). */
 export interface GalleryQuery {
   q?: string; // free text, matches title OR artistName (case/diacritics-insensitive contains)
+  tag?: string; // F-22: freetext hashtag, normalized (normalizeHashtag) — EXACT match on Illustration.hashtags (`has`)
   genre: string[]; // F-20 vocabulary ids, OR-within, AND with other facets; validated against the full vocabulary
   category?: GalleryCategoryKey; // undefined = "Tout" (all categories)
   tri: GalleryTri; // default 'tendance'
@@ -95,6 +96,7 @@ export interface IllustrationDetail {
   description: string | null;
   category: GalleryCategoryKey;
   categoryLabel: string; // galleryCategoryLabel()
+  genres: string[]; // F-22: F-20 vocabulary fr labels — clickable genre chips -> /galerie?genre=<id> (was server-side-only for is18plus)
   hashtags: string[]; // rendered as "#{tag}" chips
   image: string | null; // large artwork (null -> halftone)
   dimensionsLabel: string | null; // "2480 × 3508" when both width & height set, else null

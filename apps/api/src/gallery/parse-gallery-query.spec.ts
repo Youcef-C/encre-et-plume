@@ -1,8 +1,25 @@
 import { parseGalleryQuery } from './parse-gallery-query';
 
 describe('parseGalleryQuery', () => {
-  it('defaults to no category (Tout), no q, empty genre, tri=tendance, page=1 when nothing is provided', () => {
-    expect(parseGalleryQuery({})).toEqual({ q: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 });
+  it('defaults to no category (Tout), no q, empty genre, no tag, tri=tendance, page=1 when nothing is provided', () => {
+    expect(parseGalleryQuery({})).toEqual({ q: undefined, tag: undefined, genre: [], category: undefined, tri: 'tendance', page: 1 });
+  });
+
+  it('F-22: normalizes a tag (strips #, lowercases, trims)', () => {
+    expect(parseGalleryQuery({ tag: '#Naruto ' }).tag).toBe('naruto');
+  });
+
+  it('F-22: caps a tag at 30 characters (via the shared normalizer)', () => {
+    expect(parseGalleryQuery({ tag: 'a'.repeat(40) }).tag).toBe('a'.repeat(30));
+  });
+
+  it('F-22: treats an empty/bare-# tag as undefined', () => {
+    expect(parseGalleryQuery({ tag: '' }).tag).toBeUndefined();
+    expect(parseGalleryQuery({ tag: '#' }).tag).toBeUndefined();
+  });
+
+  it('F-22: drops an array-shaped tag (wrong shape -> undefined)', () => {
+    expect(parseGalleryQuery({ tag: ['a', 'b'] }).tag).toBeUndefined();
   });
 
   it('passes through q untouched', () => {

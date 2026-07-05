@@ -37,6 +37,7 @@ export interface WorkDetail {
   title: string;
   cover: string | null;
   genre: string; // fr display label
+  themes: string[]; // F-22: F-20 vocabulary fr labels (Work.themes) — Œuvre tag row = genre + themes, clickable -> /decouvrir?genre=<id>
   format: string; // "Manga" | "One-shot" | "Roman" (type badge / DÉTAILS Type)
   complete: boolean; // "✓ Complet" badge + DÉTAILS Statut
   audienceRating: string; // DÉTAILS Public, e.g. "16+"

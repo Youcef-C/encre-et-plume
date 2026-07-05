@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { WorkDetail } from '@encre-et-plume/shared';
+
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import SynopsisBlock from '../components/oeuvre/SynopsisBlock';
 
 const base: WorkDetail = {
@@ -9,6 +18,7 @@ const base: WorkDetail = {
   title: 'Lames de Brume',
   cover: null,
   genre: 'Seinen',
+  themes: ['Action', 'Aventure'],
   format: 'Manga',
   complete: true,
   audienceRating: '16+',
@@ -30,17 +40,35 @@ const base: WorkDetail = {
   reviews: [],
 };
 
-describe('SynopsisBlock (DR-3 FE-3)', () => {
-  it('renders the synopsis and hashtag chips', () => {
+describe('SynopsisBlock (F-22 genre tag row)', () => {
+  it('renders the synopsis', () => {
     render(<SynopsisBlock work={base} />);
     expect(screen.getByText("L'histoire d'un scribe.")).toBeInTheDocument();
-    expect(screen.getByText('#fantasy')).toBeInTheDocument();
-    expect(screen.getByText('#duo')).toBeInTheDocument();
   });
 
-  it('does not render the prose excerpt for a manga', () => {
+  it('renders genre + themes as clickable genre chips linking to the Découvrir facet', () => {
     render(<SynopsisBlock work={base} />);
-    expect(screen.queryByText(/Extrait/)).not.toBeInTheDocument();
+    // Seinen -> seinen, Action -> action, Aventure -> adventure (fr->id is not identity)
+    expect(screen.getByRole('link', { name: 'Filtrer par Seinen' })).toHaveAttribute('href', '/decouvrir?genre=seinen');
+    expect(screen.getByRole('link', { name: 'Filtrer par Action' })).toHaveAttribute('href', '/decouvrir?genre=action');
+    expect(screen.getByRole('link', { name: 'Filtrer par Aventure' })).toHaveAttribute('href', '/decouvrir?genre=adventure');
+  });
+
+  it('does NOT render the work freetext hashtags as chips anymore', () => {
+    render(<SynopsisBlock work={base} />);
+    expect(screen.queryByText('#fantasy')).not.toBeInTheDocument();
+    expect(screen.queryByText('#duo')).not.toBeInTheDocument();
+  });
+
+  it('dedupes a theme equal to the genre to a single chip', () => {
+    render(<SynopsisBlock work={{ ...base, themes: ['Seinen', 'Action'] }} />);
+    expect(screen.getAllByRole('link', { name: 'Filtrer par Seinen' })).toHaveLength(1);
+  });
+
+  it('renders an unresolvable label as a plain (non-linked) chip', () => {
+    render(<SynopsisBlock work={{ ...base, genre: 'PasUnGenre', themes: [] }} />);
+    expect(screen.getByText('PasUnGenre')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Filtrer par PasUnGenre' })).not.toBeInTheDocument();
   });
 
   it('renders the prose excerpt for a roman with an excerpt', () => {
@@ -50,8 +78,8 @@ describe('SynopsisBlock (DR-3 FE-3)', () => {
     expect(screen.getByText('Lire la suite →')).toBeInTheDocument();
   });
 
-  it('does not render the excerpt for a roman with no stored excerpt', () => {
-    render(<SynopsisBlock work={{ ...base, format: 'Roman', proseExcerpt: null }} />);
+  it('does not render the prose excerpt for a manga', () => {
+    render(<SynopsisBlock work={base} />);
     expect(screen.queryByText(/Extrait/)).not.toBeInTheDocument();
   });
 });

@@ -246,6 +246,20 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 6px;
 }
 
+/* F-22 clickable tag chip (genre facet / freetext hashtag links): paper bg → accent fill on
+   hover/focus, mirroring the prototype nav-link style-hover. */
+.ep-tag-chip {
+  transition: background 0.12s, color 0.12s;
+}
+.ep-tag-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.ep-tag-chip:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Auth-gated nav pill buttons (♥ Ma liste, Projets): card bg → accent on hover/active */
 .ep-pill-btn {
   background: var(--card);

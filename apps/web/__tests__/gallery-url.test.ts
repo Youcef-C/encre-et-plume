@@ -86,6 +86,32 @@ describe('parseGalleryFilters / filtersToGalleryQuery — q + genre (Round 2)', 
   });
 });
 
+// F-22 — freetext hashtag `tag` filter (exact match on Illustration.hashtags). Normalized through
+// the shared normalizeHashtag so the chip label and the query param always agree with the BE filter.
+describe('parseGalleryFilters / filtersToGalleryQuery — tag (F-22)', () => {
+  it('parses tag, normalized (lowercased, # stripped, diacritics kept)', () => {
+    expect(parseGalleryFilters(new URLSearchParams('tag=%23Néon')).tag).toBe('néon');
+    expect(parseGalleryFilters(new URLSearchParams('tag=Naruto')).tag).toBe('naruto');
+  });
+
+  it('drops an empty / hash-only tag to undefined', () => {
+    expect(parseGalleryFilters(new URLSearchParams('tag=')).tag).toBeUndefined();
+    expect(parseGalleryFilters(new URLSearchParams('tag=%23')).tag).toBeUndefined();
+    expect(parseGalleryFilters(new URLSearchParams('')).tag).toBeUndefined();
+  });
+
+  it('serializes tag and round-trips', () => {
+    const filters = parseGalleryFilters(new URLSearchParams('tag=yokai&genre=seinen&q=onibi'));
+    const query = filtersToGalleryQuery(filters);
+    expect(query.get('tag')).toBe('yokai');
+    expect(parseGalleryFilters(query)).toEqual(filters);
+  });
+
+  it('omits tag from the query string when absent (default)', () => {
+    expect(filtersToGalleryQuery(EMPTY_GALLERY_FILTERS).has('tag')).toBe(false);
+  });
+});
+
 describe('CATEGORY_CHIPS', () => {
   it('leads with "Tout" (undefined key) then the 5 canonical categories, verbatim French labels', () => {
     expect(CATEGORY_CHIPS.map((c) => c.label)).toEqual([

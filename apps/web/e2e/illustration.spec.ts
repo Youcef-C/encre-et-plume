@@ -32,6 +32,9 @@ const detail = {
   description: 'Encrage traditionnel rehaussé de trames numériques.',
   category: 'process',
   categoryLabel: 'Process',
+  // F-22: IllustrationDetail gained `genres` (clickable genre chips, above the hashtag row) —
+  // regression fixture keeps this suite's DR-6 fixtures aligned with the real contract.
+  genres: [],
   hashtags: ['encre', 'noir', 'néon', 'pluie'],
   image: null,
   dimensionsLabel: '2480 × 3508',

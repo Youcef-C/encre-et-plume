@@ -197,6 +197,18 @@ export function SearchIcon(p: IconProps) {
   );
 }
 
+// F-22 — hashtag glyph for the Galerie freetext tag filter (distinct from the SearchIcon `q` input).
+export function TagIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M9.5 4L7.5 20" />
+      <path d="M16.5 4L14.5 20" />
+      <path d="M4.5 9H20" />
+      <path d="M4 15H19.5" />
+    </Svg>
+  );
+}
+
 export function CheckIcon(p: IconProps) {
   return (
     <Svg {...p}>

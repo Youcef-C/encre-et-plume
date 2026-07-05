@@ -1,4 +1,4 @@
-import { GALLERY_CATEGORY_KEYS, GALLERY_TRIS, GENRES, type GalleryQuery } from '@encre-et-plume/shared';
+import { GALLERY_CATEGORY_KEYS, GALLERY_TRIS, GENRES, normalizeHashtag, type GalleryQuery } from '@encre-et-plume/shared';
 
 /** Raw Express/Nest query object — every value may be a string, a string[], or undefined. */
 type RawQuery = Record<string, unknown>;
@@ -16,6 +16,8 @@ const GENRE_IDS = new Set(GENRES.map((g) => g.id));
 export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
   return {
     q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined, // L: cap length
+    // F-22: freetext hashtag, normalized (length cap comes from the normalizer). Array-shaped -> dropped.
+    tag: typeof raw['tag'] === 'string' && normalizeHashtag(raw['tag']) !== '' ? normalizeHashtag(raw['tag']) : undefined,
     genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     category: allowlistScalar(raw['category'], GALLERY_CATEGORY_KEYS),
     tri: allowlistScalar(raw['tri'], GALLERY_TRIS) ?? 'tendance',

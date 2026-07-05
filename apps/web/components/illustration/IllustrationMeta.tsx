@@ -1,8 +1,12 @@
 // DR-6 FE-T3 (FE-4) — meta block. Replica of prototype ILLUSTRATION lines 675-683: title, byline
 // (artist · category · ♥), description paragraph (omitted when null), hashtag chips.
-import type { IllustrationDetail } from '@encre-et-plume/shared';
+// F-22: two visually-distinct tag layers — controlled genre chips (-> /galerie?genre=<id> facet)
+// and freetext `#hashtag` chips (-> /galerie?tag=<tag> search).
+import { resolveGenreId, type IllustrationDetail } from '@encre-et-plume/shared';
+import { EMPTY_GALLERY_FILTERS, filtersToGalleryQuery } from '../../lib/gallery';
 import { formatLikeCount } from '../../lib/home';
 import { HeartIcon } from '../icons';
+import TagChipLink from '../TagChipLink';
 
 const chipStyle: React.CSSProperties = {
   background: 'var(--paper)',
@@ -31,12 +35,34 @@ export default function IllustrationMeta({ detail }: { detail: IllustrationDetai
       {detail.description && (
         <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--ink)', margin: '0 0 14px' }}>{detail.description}</p>
       )}
+      {(detail.genres ?? []).length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {(detail.genres ?? []).map((label) => {
+            const id = resolveGenreId(label);
+            return id ? (
+              <TagChipLink
+                key={label}
+                href={`/galerie?${filtersToGalleryQuery({ ...EMPTY_GALLERY_FILTERS, genre: [id] })}`}
+                label={label}
+                ariaLabel={`Filtrer par ${label}`}
+              />
+            ) : (
+              <span key={label} style={chipStyle}>
+                {label}
+              </span>
+            );
+          })}
+        </div>
+      )}
       {detail.hashtags.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 30 }}>
           {detail.hashtags.map((tag) => (
-            <span key={tag} style={chipStyle}>
-              #{tag}
-            </span>
+            <TagChipLink
+              key={tag}
+              href={`/galerie?${filtersToGalleryQuery({ ...EMPTY_GALLERY_FILTERS, tag })}`}
+              label={`#${tag}`}
+              ariaLabel={`Rechercher le hashtag #${tag}`}
+            />
           ))}
         </div>
       )}

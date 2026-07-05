@@ -46,6 +46,7 @@ const work: WorkDetail = {
   title: 'Lames de Brume',
   cover: null,
   genre: 'Seinen',
+  themes: [],
   format: 'Manga',
   complete: true,
   audienceRating: '16+',

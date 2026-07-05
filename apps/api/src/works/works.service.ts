@@ -135,6 +135,7 @@ interface WorkRow {
   meta: string;
   publishedAt: Date | null;
   synopsis: string | null;
+  themes: string[];
   hashtags: string[];
   proseExcerpt: string | null;
   likeCount: number;
@@ -167,6 +168,7 @@ function mapWorkDetail(work: WorkRow, chapterCount: number): WorkDetail {
     title: work.title,
     cover: work.coverImage,
     genre: work.genre,
+    themes: work.themes, // F-22: F-20 fr labels for the Œuvre clickable tag row
     format: work.format,
     complete: work.complete,
     audienceRating: work.audienceRating,

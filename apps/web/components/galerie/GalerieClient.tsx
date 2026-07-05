@@ -13,6 +13,7 @@ import GalerieHeader from './GalerieHeader';
 import CategoryChips from './CategoryChips';
 import SortSelect from './SortSelect';
 import GallerySearchInput from './GallerySearchInput';
+import GalleryTagFilter from './GalleryTagFilter';
 import GalleryGenreFilter from './GalleryGenreFilter';
 import TrendingFeature from './TrendingFeature';
 import GalleryGrid, { type GalleryGridState } from './GalleryGrid';
@@ -116,6 +117,7 @@ export default function GalerieClient() {
             value={filters.q ?? ''}
             onChange={(q) => navigate({ ...filters, q, page: 1 })}
           />
+          <GalleryTagFilter tag={filters.tag} onChange={(tag) => navigate({ ...filters, tag, page: 1 })} />
           <GalleryGenreFilter genre={filters.genre} onChange={(genre) => navigate({ ...filters, genre, page: 1 })} />
         </div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>

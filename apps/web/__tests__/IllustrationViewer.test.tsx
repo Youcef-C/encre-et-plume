@@ -33,6 +33,7 @@ const detail: IllustrationDetail = {
   description: null,
   category: 'process',
   categoryLabel: 'Process',
+  genres: [],
   hashtags: [],
   image: null,
   dimensionsLabel: null,

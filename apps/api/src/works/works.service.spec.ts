@@ -15,6 +15,7 @@ const WORK_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   meta: 'Camille R. × Yuki M. · 20 ch.',
   publishedAt: new Date('2026-06-01'),
   synopsis: 'Une histoire de brume.',
+  themes: ['Action'],
   hashtags: ['#seinen', '#brume'],
   proseExcerpt: null,
   likeCount: 3400,
@@ -97,6 +98,7 @@ describe('WorksService', () => {
         audienceRating: 'Tous publics',
         meta: 'Camille R. × Yuki M. · 20 ch.',
         synopsis: 'Une histoire de brume.',
+        themes: ['Action'],
         hashtags: ['#seinen', '#brume'],
         proseExcerpt: null,
         likeCount: 3400,
@@ -107,6 +109,15 @@ describe('WorksService', () => {
         fundingGoals: [],
         reviews: [],
       });
+    });
+
+    it('F-22: returns themes (F-20 fr labels) and keeps hashtags (mature derivation input)', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ themes: ['Action', 'Aventure'], hashtags: ['#seinen'] }));
+
+      const result = await service.getWork('lames-de-brume');
+
+      expect(result?.themes).toEqual(['Action', 'Aventure']);
+      expect(result?.hashtags).toEqual(['#seinen']);
     });
 
     it('maps team from WorkCreator rows (name/slug/role/city/avatar)', async () => {

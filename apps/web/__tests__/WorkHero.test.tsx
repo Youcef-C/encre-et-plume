@@ -35,6 +35,7 @@ const work: WorkDetail = {
   title: 'Lames de Brume',
   cover: null,
   genre: 'Seinen',
+  themes: [],
   format: 'Manga',
   complete: true,
   audienceRating: '16+',
@@ -88,6 +89,13 @@ describe('WorkHero (DR-3 FE-2)', () => {
     expect(screen.getByText('Seinen')).toBeInTheDocument();
     expect(screen.getByText('MANGA')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeInTheDocument();
+  });
+
+  it('F-22: the genre badge is a link to the Découvrir genre facet', () => {
+    render(<WorkHero work={work} account={null} />);
+    const link = screen.getByRole('link', { name: 'Filtrer par Seinen' });
+    expect(link).toHaveAttribute('href', '/decouvrir?genre=seinen');
+    expect(link).toHaveTextContent('Seinen');
   });
 
   it('hides the Complet badge when not complete', () => {

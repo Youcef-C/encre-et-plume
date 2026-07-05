@@ -143,6 +143,9 @@ function buildWhere(query: GalleryQuery): Record<string, any> {
   // Round 2: genre[] facet, OR-within a single hasSome (Illustration has no scalar genre column
   // to OR against, unlike Work — genres is its only genre-bearing field, so no AND-nesting needed).
   if (query.genre.length > 0) where['genres'] = { hasSome: query.genre.map((id) => catalogGenreLabel(id)) };
+  // F-22: exact hashtag token match — Prisma String[] supports has/hasSome only, no partial contains.
+  // `query.tag` is already normalized by parseGalleryQuery.
+  if (query.tag) where['hashtags'] = { has: query.tag };
   // Round 2: q facet, same OR-on-title-and-secondary-text convention as the catalog's `q`.
   if (query.q) {
     where['OR'] = [
@@ -208,6 +211,7 @@ function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
     description: row.description,
     category: row.category as GalleryCategoryKey,
     categoryLabel: galleryCategoryLabel(row.category),
+    genres: row.genres, // F-22: F-20 fr labels for clickable genre chips (also feeds is18plus below)
     hashtags: row.hashtags,
     image: row.image,
     dimensionsLabel: row.width != null && row.height != null ? `${row.width} × ${row.height}` : null,

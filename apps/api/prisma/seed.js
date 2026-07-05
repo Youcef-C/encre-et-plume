@@ -11,6 +11,8 @@
  */
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+// F-22: single source of truth for hashtag shape — seeded tags match the BE `tag` filter & FE chips.
+const { normalizeHashtags } = require('@encre-et-plume/shared');
 
 const prisma = new PrismaClient();
 
@@ -513,7 +515,7 @@ async function main() {
       width: i.width ?? null,
       height: i.height ?? null,
       description: i.description ?? null,
-      hashtags: i.hashtags ?? [],
+      hashtags: normalizeHashtags(i.hashtags ?? []),
       tools: i.tools ?? null,
       license: i.license ?? null,
       likeCount: i.likeCount,

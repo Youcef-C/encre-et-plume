@@ -28,6 +28,7 @@ const detail: IllustrationDetail = {
   description: 'Une description.',
   category: 'process',
   categoryLabel: 'Process',
+  genres: [],
   hashtags: ['encre'],
   image: null,
   dimensionsLabel: '2480 × 3508',
