@@ -47,12 +47,18 @@ import type {
 const BASE =
   (process.env.NEXT_PUBLIC_API_URL as string | undefined) ?? 'http://localhost:3001';
 
+// F-9/F-21: the last API response's correlation id, read from the x-request-id header
+// (needs CORS `exposedHeaders: ['x-request-id']`). Enriches the bug-report context.
+let lastRequestId: string | null = null;
+export const getLastRequestId = (): string | null => lastRequestId;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
+  lastRequestId = res.headers.get('x-request-id') ?? lastRequestId;
   if (!res.ok) {
     // Surface the French message from ApiError when available
     const err: ApiError = await res
@@ -439,3 +445,14 @@ export const getReactionState = (targetType: ReactionTargetType, ids: string[]):
   ids.length === 0
     ? Promise.resolve({})
     : request<ReactionStateResponse>(`/reactions/state?targetType=${targetType}&ids=${ids.map(encodeURIComponent).join(',')}`);
+
+// ─── Support & contact (F-21) ─────────────────────────────────────────────────
+import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
+
+export const createSupportTicket = (
+  body: CreateSupportTicketRequest,
+): Promise<CreateSupportTicketResponse> =>
+  request<CreateSupportTicketResponse>('/support/tickets', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });

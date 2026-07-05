@@ -47,6 +47,7 @@ function makePrisma() {
     notification: makeTxModel('notification'),
     media: makeTxModel('media'),
     notificationPreference: makeTxModel('notificationPreference'), // F-15
+    supportTicket: makeTxModel('supportTicket'), // F-21
     emailVerificationToken: makeTxModel('emailVerificationToken'),
     passwordResetToken: makeTxModel('passwordResetToken'),
     account: makeTxModel('account'),
@@ -200,6 +201,14 @@ describe('AccountErasureProcessor', () => {
     await processor.process({ accountId: ACCOUNT_ID }, {} as never);
 
     expect(prisma._tx.notificationPreference.deleteMany).toHaveBeenCalledWith({
+      where: { accountId: ACCOUNT_ID },
+    });
+  });
+
+  it('CHECKLIST: SupportTicket rows deleted (F-21 RGPD)', async () => {
+    await processor.process({ accountId: ACCOUNT_ID }, {} as never);
+
+    expect(prisma._tx.supportTicket.deleteMany).toHaveBeenCalledWith({
       where: { accountId: ACCOUNT_ID },
     });
   });

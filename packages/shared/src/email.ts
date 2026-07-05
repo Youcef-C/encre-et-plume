@@ -13,7 +13,8 @@ export type EmailTemplateKey =
   | 'welcome'
   | 'data_export_ready'      // F-14: notifies when a data export archive is ready
   | 'email_change_verification' // F-18: sent to new address during email-change flow
-  | 'email_change_notice';   // F-18: sent to old address after email-change commits
+  | 'email_change_notice'    // F-18: sent to old address after email-change commits
+  | 'support_ticket_received'; // F-21: notifies the staff inbox of a new support ticket
 
 export interface EmailCatalogEntry {
   key: EmailTemplateKey;
@@ -33,6 +34,7 @@ export const EMAIL_TEMPLATES: Record<EmailTemplateKey, EmailCatalogEntry> = {
   data_export_ready: { key: 'data_export_ready', group: 'compte', mandatory: true }, // F-14
   email_change_verification: { key: 'email_change_verification', group: 'compte', mandatory: true }, // F-18
   email_change_notice: { key: 'email_change_notice', group: 'compte', mandatory: true }, // F-18
+  support_ticket_received: { key: 'support_ticket_received', group: 'compte', mandatory: true }, // F-21 (staff inbox → skips F-15 preference check)
 };
 
 // ── Per-template typed payload shapes ────────────────────────────────────────
@@ -70,6 +72,16 @@ export interface EmailChangeNoticeEmailData {
   newEmail: string;
 }
 
+export interface SupportTicketReceivedEmailData {
+  ticketId: string;
+  category: string;
+  name: string;
+  email: string;
+  message: string;
+  /** Pre-joined "url: … / UA: … / requestId: …" (or '') — keeps params Record<string,string>. */
+  contextSummary: string;
+}
+
 /**
  * Map from EmailTemplateKey → its typed params.
  * Used by EmailService.send<K>(template: K, to, data: EmailDataByTemplate[K]).
@@ -82,4 +94,5 @@ export type EmailDataByTemplate = {
   data_export_ready: DataExportReadyEmailData; // F-14
   email_change_verification: EmailChangeVerificationEmailData; // F-18
   email_change_notice: EmailChangeNoticeEmailData; // F-18
+  support_ticket_received: SupportTicketReceivedEmailData; // F-21
 };

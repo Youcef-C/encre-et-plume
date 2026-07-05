@@ -50,6 +50,7 @@ function makePrisma() {
     consentRecord: { findMany: jest.fn().mockResolvedValue([]) },
     notification: { findMany: jest.fn().mockResolvedValue([]) },
     media: { findMany: jest.fn().mockResolvedValue([]) },
+    supportTicket: { findMany: jest.fn().mockResolvedValue([{ id: 'tkt-1', category: 'general' }]) }, // F-21
   };
 }
 
@@ -124,7 +125,11 @@ describe('DataExportProcessor', () => {
     expect(files).toContain('consents.json');
     expect(files).toContain('notifications.json');
     expect(files).toContain('media-manifest.json');
+    expect(files).toContain('support-tickets.json'); // F-21
     expect(files).toContain('README.txt');
+
+    const tickets = JSON.parse(await zip.files['support-tickets.json']!.async('string')) as unknown[];
+    expect(tickets).toHaveLength(1);
 
     // passwordHash must never appear in account.json
     const accountJson = JSON.parse(await zip.files['account.json']!.async('string')) as Record<string, unknown>;

@@ -63,6 +63,7 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
     // ✓ EmailVerificationToken (accountId) — deleteMany
     // ✓ PasswordResetToken (accountId) — deleteMany
     // ✓ NotificationPreference (accountId, required) — deleteMany (F-15)
+    // ✓ SupportTicket (accountId, nullable) — deleteMany (F-21)
     // ✓ ConsentRecord (accountId) — KEPT (legal proof)
     // ✓ Account — TOMBSTONE (keep row so ConsentRecord FK is valid; free email+slug for re-signup)
 
@@ -91,6 +92,9 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
       // 6. NotificationPreference (F-15)
       await (p as never as { notificationPreference: { deleteMany: (q: unknown) => Promise<unknown> } })
         .notificationPreference.deleteMany({ where: { accountId } });
+
+      // 6b. SupportTicket (F-21) — delete outright; no staff inbox yet to lose history from
+      await p.supportTicket.deleteMany({ where: { accountId } });
 
       // 7. Tokens
       await p.emailVerificationToken.deleteMany({ where: { accountId } });

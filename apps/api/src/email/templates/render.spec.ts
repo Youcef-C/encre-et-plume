@@ -89,6 +89,38 @@ describe('renderEmail — password_changed', () => {
   });
 });
 
+describe('renderEmail — support_ticket_received (F-21)', () => {
+  const SUPPORT_PARAMS = {
+    ticketId: 'tkt-123',
+    category: 'bug',
+    name: 'Yuki Moreau',
+    email: 'yuki@test.com',
+    message: 'La page ne charge pas.',
+    contextSummary: 'url: /oeuvre/x / UA: Firefox / requestId: req-9',
+  };
+
+  it('subject tags the ticket with category and id', () => {
+    const { subject } = renderEmail('support_ticket_received', SUPPORT_PARAMS);
+    expect(subject).toContain('[Support]');
+    expect(subject).toContain('bug');
+    expect(subject).toContain('tkt-123');
+  });
+
+  it('text carries name, reply-to email, message and contextSummary', () => {
+    const { text } = renderEmail('support_ticket_received', SUPPORT_PARAMS);
+    expect(text).toContain('Yuki Moreau');
+    expect(text).toContain('yuki@test.com');
+    expect(text).toContain('La page ne charge pas.');
+    expect(text).toContain('url: /oeuvre/x / UA: Firefox / requestId: req-9');
+  });
+
+  it('html is well-formed', () => {
+    const { html } = renderEmail('support_ticket_received', SUPPORT_PARAMS);
+    expect(html).toContain('<html');
+    expect(html).toContain('</html>');
+  });
+});
+
 describe('renderEmail — welcome', () => {
   it('French subject (Bienvenue) contains "Encre & Plume"', () => {
     const { subject } = renderEmail('welcome', WELCOME_PARAMS);

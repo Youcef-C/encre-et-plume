@@ -22,3 +22,4 @@ export * from './gallery.js';
 export * from './list.js';
 export * from './reactions.js';
 export * from './age.js';
+export * from './support.js';

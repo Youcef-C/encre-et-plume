@@ -48,7 +48,7 @@ export class DataExportProcessor implements JobProcessor<DataExportJob> {
 
     try {
       // ── Gather (only existing models; future files seam below) ────────────
-      const [profile, portfolio, consents, notifications, mediaManifest] = await Promise.all([
+      const [profile, portfolio, consents, notifications, mediaManifest, supportTickets] = await Promise.all([
         this.prisma.profile.findUnique({ where: { accountId } }),
         this.prisma.portfolioItem.findMany({ where: { profile: { accountId } } }),
         this.prisma.consentRecord.findMany({ where: { accountId } }),
@@ -57,6 +57,7 @@ export class DataExportProcessor implements JobProcessor<DataExportJob> {
           where: { ownerId: accountId },
           select: { id: true, kind: true, contentType: true, size: true, width: true, height: true, visibility: true, createdAt: true },
         }),
+        this.prisma.supportTicket.findMany({ where: { accountId }, orderBy: { createdAt: 'desc' } }), // F-21
       ]);
 
       // account.json — never include passwordHash
@@ -87,6 +88,7 @@ export class DataExportProcessor implements JobProcessor<DataExportJob> {
         '  consents.json     — Historique des consentements',
         '  notifications.json — Notifications reçues',
         '  media-manifest.json — Métadonnées des médias (pas les fichiers bruts)',
+        '  support-tickets.json — Messages au support',
         '',
         // seam: future files (works, chapters, comments, reviews, messages, subscriptions,
         // donations, action-log) added as their epics land — no placeholders emitted.
@@ -100,6 +102,7 @@ export class DataExportProcessor implements JobProcessor<DataExportJob> {
       zip.file('consents.json', JSON.stringify(consents, null, 2));
       zip.file('notifications.json', JSON.stringify(notifications, null, 2));
       zip.file('media-manifest.json', JSON.stringify(mediaManifest, null, 2));
+      zip.file('support-tickets.json', JSON.stringify(supportTickets, null, 2)); // F-21
       zip.file('README.txt', README);
 
       const buffer = await zip.generateAsync({ type: 'nodebuffer' });

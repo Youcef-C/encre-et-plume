@@ -38,6 +38,12 @@ describe('LegalFooter', () => {
     expect(link).toHaveAttribute('href', '/mentions-legales');
   });
 
+  it('renders "Aide & contact" link pointing to /contact', () => {
+    renderFooter();
+    const link = screen.getByRole('link', { name: /aide & contact/i });
+    expect(link).toHaveAttribute('href', '/contact');
+  });
+
   it('renders © Encre & Plume', () => {
     renderFooter();
     expect(screen.getByText(/© encre & plume/i)).toBeInTheDocument();

@@ -60,7 +60,9 @@ async function bootstrap() {
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
-  app.enableCors({ origin: webOrigin, credentials: true });
+  // exposedHeaders: let the browser read the F-9 correlation id (x-request-id) so the
+  // F-21 bug-report form can attach it as reproduction context.
+  app.enableCors({ origin: webOrigin, credentials: true, exposedHeaders: ['x-request-id'] });
 
   // Local-dev convenience: run the BullMQ job workers IN this API process so `pnpm dev` processes
   // jobs (e.g. F-10 image-processing → Media.status `ready`) without a separate worker. In prod leave

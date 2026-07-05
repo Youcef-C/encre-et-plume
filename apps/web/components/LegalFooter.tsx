@@ -65,6 +65,17 @@ export default function LegalFooter() {
 
         <span aria-hidden="true" style={{ color: 'var(--tone)' }}>·</span>
 
+        <Link
+          href="/contact"
+          style={{ color: 'var(--ink2)', textDecoration: 'none' }}
+          onMouseOver={(e) => (e.currentTarget.style.color = 'var(--ink)')}
+          onMouseOut={(e) => (e.currentTarget.style.color = 'var(--ink2)')}
+        >
+          Aide &amp; contact
+        </Link>
+
+        <span aria-hidden="true" style={{ color: 'var(--tone)' }}>·</span>
+
         <button
           onClick={reopen}
           aria-label="Gérer les cookies"

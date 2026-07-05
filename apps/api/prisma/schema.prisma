@@ -127,6 +127,7 @@ model Account {
   illustrations            Illustration[]           // DR-5: gallery illustrations credited to this artist
   watchlist                WatchlistItem[]          // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
   reactions                Reaction[]               // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
+  supportTickets           SupportTicket[]          // F-21: help/contact/bug tickets submitted while signed in
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -576,4 +577,24 @@ model Illustration {
   @@index([weeklyLikeDelta])
   @@index([likeCount])
   @@index([category])
+}
+
+// ── F-21: support & contact tickets (help/contact/bug channel) ────────────────
+// Submit is public (visitors + members). Reading/triage is AD-14's job — this model +
+// the [status, createdAt] index make tickets staff-listable; no read endpoint ships here.
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  category  String   // allowlisted in DTO: general | account | bug | other
+  accountId String?  // nullable — visitors submit too
+  account   Account? @relation(fields: [accountId], references: [id])
+  name      String
+  email     String
+  message   String
+  context   Json?    // { url?, userAgent?, requestId? } for bug reports
+  status    String   @default("new") // new | open | resolved (AD-14 owns transitions)
+  createdAt DateTime @default(now())
+
+  @@index([accountId])
+  @@index([status, createdAt]) // AD-14 staff triage listing
 }

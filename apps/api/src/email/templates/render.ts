@@ -131,6 +131,26 @@ export function renderEmailChangeNoticeEmail(params: Record<string, string>): { 
   };
 }
 
+export function renderSupportTicketReceivedEmail(params: Record<string, string>): { subject: string; text: string } {
+  const contextSummary = params['contextSummary'] ?? '';
+  return {
+    subject: `[Support] ${params['category'] ?? ''} — ticket ${params['ticketId'] ?? ''}`,
+    text: [
+      `Nouveau message reçu via le formulaire d'aide & contact.`,
+      ``,
+      `Catégorie : ${params['category'] ?? ''}`,
+      `Nom : ${params['name'] ?? ''}`,
+      `Répondre à : ${params['email'] ?? ''}`,
+      ``,
+      `Message :`,
+      params['message'] ?? '',
+      ``,
+      ...(contextSummary ? [`Contexte technique : ${contextSummary}`, ``] : []),
+      `Ticket : ${params['ticketId'] ?? ''}`,
+    ].join('\n'),
+  };
+}
+
 // ── html helper ───────────────────────────────────────────────────────────────
 
 /** Convert newline-delimited plain text to simple HTML paragraphs (e-mail-safe). */
@@ -173,6 +193,9 @@ export function renderEmail(
       break;
     case 'email_change_notice': // F-18
       raw = renderEmailChangeNoticeEmail(params);
+      break;
+    case 'support_ticket_received': // F-21
+      raw = renderSupportTicketReceivedEmail(params);
       break;
     default:
       raw = renderVerificationEmail(params);

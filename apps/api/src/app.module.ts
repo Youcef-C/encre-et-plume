@@ -21,6 +21,7 @@ import { ReadingHistoryModule } from './reading-history/reading-history.module';
 import { GalleryModule } from './gallery/gallery.module';
 import { ListModule } from './list/list.module';
 import { ReactionsModule } from './reactions/reactions.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -41,6 +42,7 @@ import { ReactionsModule } from './reactions/reactions.module';
   // ListModule (DR-8): GET /me/list, GET /me/likes — "Ma liste & coups de cœur" (removeFromList
   //   moved to ReactionsModule's DELETE /reactions/save, B5 — single unsave implementation).
   // ReactionsModule (DR-9): POST/DELETE /reactions/{like,save} + GET /reactions/state.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule],
+  // SupportModule (F-21): public POST /support/tickets — help/contact/bug channel.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule],
 })
 export class AppModule {}
