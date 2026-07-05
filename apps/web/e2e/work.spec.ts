@@ -172,7 +172,7 @@ test.describe('Œuvre work page', () => {
  * same pattern as mockWorkFeeds). NOT run this session — for QA/CI to execute.
  */
 const workAdult = { ...work, audienceRating: '18+' as const };
-const workMature = { ...work, genre: 'Yaoi' };
+const workMature = { ...work, genre: 'Gore' };
 
 async function mock18PlusWorkFeeds(page: Page) {
   await page.route(`${API}/works/lames-de-brume/chapters**`, (route) => route.fulfill({ json: chaptersPage1 }));

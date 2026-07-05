@@ -249,7 +249,7 @@ describe('WorkHero (DR-3 FE-2)', () => {
   });
 
   it('shows a "Contenu mature" warning tag when the genre/hashtags are mature (never blurred)', () => {
-    render(<WorkHero work={{ ...work, genre: 'Yaoi' }} account={null} />);
+    render(<WorkHero work={{ ...work, genre: 'Gore' }} account={null} />);
     expect(screen.getByText('Contenu mature')).toBeInTheDocument();
   });
 });

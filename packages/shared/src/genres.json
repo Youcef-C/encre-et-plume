@@ -108,9 +108,9 @@
   { "id": "reverse-harem", "fr": "Harem inversé", "en": "Reverse Harem", "mature": false, "plus18": false },
   { "id": "boys-love", "fr": "Boys' Love", "en": "Boys' Love", "mature": false, "plus18": false },
   { "id": "girls-love", "fr": "Girls' Love", "en": "Girls' Love", "mature": false, "plus18": false },
-  { "id": "yaoi", "fr": "Yaoi", "en": "Yaoi", "mature": true, "plus18": false },
-  { "id": "yuri", "fr": "Yuri", "en": "Yuri", "mature": true, "plus18": false },
-  { "id": "ecchi", "fr": "Ecchi", "en": "Ecchi", "mature": true, "plus18": false },
+  { "id": "yaoi", "fr": "Yaoi", "en": "Yaoi", "mature": true, "plus18": true },
+  { "id": "yuri", "fr": "Yuri", "en": "Yuri", "mature": true, "plus18": true },
+  { "id": "ecchi", "fr": "Ecchi", "en": "Ecchi", "mature": true, "plus18": true },
   { "id": "hentai", "fr": "Hentai", "en": "Hentai", "mature": true, "plus18": true },
   { "id": "erotica", "fr": "Érotique", "en": "Erotica", "mature": true, "plus18": true },
   { "id": "smut", "fr": "Smut", "en": "Smut", "mature": true, "plus18": true },
@@ -191,5 +191,7 @@
   { "id": "craftsmanship", "fr": "Artisanat", "en": "Craftsmanship", "mature": false, "plus18": false },
   { "id": "archaeology", "fr": "Archéologie", "en": "Archaeology", "mature": false, "plus18": false },
   { "id": "science", "fr": "Sciences", "en": "Science", "mature": false, "plus18": false },
-  { "id": "space-exploration", "fr": "Exploration spatiale", "en": "Space Exploration", "mature": false, "plus18": false }
+  { "id": "space-exploration", "fr": "Exploration spatiale", "en": "Space Exploration", "mature": false, "plus18": false },
+  { "id": "weapon", "fr": "Armes", "en": "Weapons", "mature": false, "plus18": false },
+  { "id": "sword", "fr": "Épée", "en": "Sword", "mature": false, "plus18": false }
 ]
