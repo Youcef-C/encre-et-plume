@@ -26,5 +26,7 @@
 - [[PUB-7]] — community submits participations.
 - [[AD-9]] — admin contest administration/oversight.
 
+- [[AD-8]] — the contest owner may draft a linked "Actualités" article for the contest (published only after admin approval).
+
 ## Notes
 - Inferred: only the `data-contest-modal` hook and the pitch line "concours sponsorisé · présenté par [votre maison]" exist; engagement figures ("+800 participations", "30 j de visibilité") are illustrative. Field set and moderation flow must be confirmed with design.

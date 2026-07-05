@@ -106,7 +106,7 @@ Publish chapters, comments, reviews, follow, share, report, contests, news.
 - [PUB-5](04-publishing-engagement/PUB-5-share.md) — Share
 - [PUB-6](04-publishing-engagement/PUB-6-report-content.md) — Report content "Signaler"
 - [PUB-7](04-publishing-engagement/PUB-7-contest-participation.md) — Contest participation *(partly inferred)*
-- [PUB-8](04-publishing-engagement/PUB-8-news-feed-and-article.md) — News feed & article *(inferred)*
+- [PUB-8](04-publishing-engagement/PUB-8-news-feed-and-article.md) — News feed & article
 
 ### [05 · Publisher Space](05-publisher-space/_epic.md) — `PE`
 Editor talent-scouting space: radar, shortlist, contracts, trends, contests, editorial board.
@@ -137,7 +137,7 @@ Admin console: reports, editor verification, content/comment moderation, users, 
 - [AD-5](07-admin-moderation/AD-5-comment-review-moderation.md) — Comment & review moderation
 - [AD-6](07-admin-moderation/AD-6-user-management-ban.md) — User management & ban
 - [AD-7](07-admin-moderation/AD-7-platform-stats.md) — Platform stats *(inferred)*
-- [AD-8](07-admin-moderation/AD-8-article-news-management.md) — Article / news management *(inferred)*
+- [AD-8](07-admin-moderation/AD-8-article-news-management.md) — Article / news management (rédaction editor)
 - [AD-9](07-admin-moderation/AD-9-contest-administration.md) — Contest administration *(inferred)*
 - [AD-10](07-admin-moderation/AD-10-user-action-log.md) — User action log "Journal d'activité" *(inferred)*
 - [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages & salon chat) *(inferred)*

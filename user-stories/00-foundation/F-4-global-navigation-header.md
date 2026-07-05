@@ -6,11 +6,11 @@
 
 ## Frontend
 - [ ] Logo "Encre & Plume" (links to home).
-- [ ] Primary nav links: "Accueil · Découvrir · Lire · Écrire · Projets · Messages"; active link underlined in red.
+- [ ] Primary nav links (prototype TOP NAV, seven items): "Accueil · Découvrir · Galerie · Actualités · Lire · Trouver · Calendrier"; active link filled red on hover/active. The **"Actualités"** link routes to the news feed ([[PUB-8]]).
 - [ ] "Rechercher…" field invoking global search ([[F-7]]).
 - [ ] Round avatar opening a dropdown with: "Mon profil", "Likes & ma liste" ([[DR-8]]), "Notifications" with unread badge ([[F-5]]), "Mes candidatures" ([[MC-6]]), "Candidatures reçues" ([[MC-7]]), role-gated "Espace éditeur" / "Espace rédaction" / "Panneau admin" (see [[F-2]]), theme toggle ([[F-6]]), and logout ([[F-1]]).
 - [ ] Some pages add a dark "＋ Poster" button (e.g. "Découvrir").
-- [ ] Known routes: /decouvrir, /ma-liste, /tableau-de-bord, /contacts, /admin, /editeur/talents.
+- [ ] Known routes: /decouvrir, /galerie, /actualites ([[PUB-8]]), /ma-liste, /tableau-de-bord, /contacts, /admin, /editeur/talents.
 - [ ] States: badges show unread counts; gated links hidden by role; active route highlighted; dropdown open/closed.
 - [ ] Accessibility: nav landmark, dropdown as a labelled menu, keyboard open/close and arrow navigation, visible focus.
 
@@ -22,6 +22,7 @@
 ## Dependencies
 - [[F-1]] — auth state + logout.
 - [[F-2]] — role-gated links.
+- [[PUB-8]] — the "Actualités" nav link routes to the news feed / article page.
 - [[F-5]] — notification badge counts.
 - [[F-6]] — theme toggle.
 - [[F-7]] — search field.
