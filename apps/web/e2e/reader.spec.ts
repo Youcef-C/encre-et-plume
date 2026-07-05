@@ -534,7 +534,7 @@ test.describe('Lecteur — 18+ age gate (DR-10)', () => {
 
     // User-specified 2026-07-05: fullscreen fixed backdrop below the navbar, page scroll locked.
     const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
-    const backdrop = page.locator('div').filter({ has: dialog }).first();
+    const backdrop = page.getByTestId('age-gate-backdrop');
     await expect(backdrop).toHaveCSS('position', 'fixed');
     await expect(backdrop).toHaveCSS('top', '69px');
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');

@@ -217,7 +217,7 @@ test.describe('Œuvre work page — 18+ age gate (DR-10)', () => {
     const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
     await expect(dialog).toBeVisible();
 
-    const backdrop = page.locator('div').filter({ has: dialog }).first();
+    const backdrop = page.getByTestId('age-gate-backdrop');
     await expect(backdrop).toHaveCSS('position', 'fixed');
     await expect(backdrop).toHaveCSS('top', '69px');
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');

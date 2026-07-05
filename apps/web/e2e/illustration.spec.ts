@@ -172,16 +172,16 @@ test.describe('Illustration detail — 18+ age gate (DR-10)', () => {
 
     // Presentation update (user-specified 2026-07-05): the artwork is present in the DOM (blurred
     // behind the interstitial), not absent — the server let it load (visitor/self-declaration).
-    const heading = page.locator('h1', { hasText: 'Pluie de Néons' });
+    const heading = page.locator('h1', { hasText: 'Lames de Brume — Ch.2' });
     await expect(heading).toHaveCount(1);
-    await expect(page.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Lames de Brume — Ch.2' })).toHaveCount(0);
     const wrapper = page.locator('[aria-hidden="true"]').filter({ has: heading });
     await expect(wrapper).toHaveCSS('filter', /blur/);
     await expect(wrapper).toHaveCSS('pointer-events', 'none');
 
     // User-specified 2026-07-05: fullscreen fixed backdrop below the navbar, page scroll locked.
     const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
-    const backdrop = page.locator('div').filter({ has: dialog }).first();
+    const backdrop = page.getByTestId('age-gate-backdrop');
     await expect(backdrop).toHaveCSS('position', 'fixed');
     await expect(backdrop).toHaveCSS('top', '69px');
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');

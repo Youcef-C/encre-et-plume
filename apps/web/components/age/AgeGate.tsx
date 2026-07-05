@@ -88,6 +88,7 @@ export default function AgeGate({ onBack }: Props) {
 
   return (
     <div
+      data-testid="age-gate-backdrop"
       style={{
         // User-specified 2026-07-05: fullscreen viewport-fixed backdrop (not just the page's own
         // content wrapper) so it can never be scrolled past, but stopping below the sticky navbar
