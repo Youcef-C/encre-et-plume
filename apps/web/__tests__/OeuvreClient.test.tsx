@@ -110,18 +110,29 @@ describe('OeuvreClient (DR-3 FE-1)', () => {
     await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
   });
 
-  // QA round-1 regression: the real content must never mount in the DOM while un-cleared —
-  // an overlay dimming already-mounted content is not a real gate.
-  it('QA round-1 regression: does not render the synopsis/title/team while the AgeGate is up for an uncleared visitor', async () => {
+  // Presentation update (user-specified 2026-07-05): the interstitial now shows the page BLURRED
+  // behind it instead of a flat backdrop, so the real content is present in the DOM again (it just
+  // isn't reachable/announced) — superseding the earlier "content never mounts" regression test.
+  it('renders the work content behind the gate, blurred + aria-hidden + non-interactive (not absent)', async () => {
     sessionStorage.clear();
     vi.mocked(api.getWork).mockResolvedValue({ ...work, audienceRating: '18+' });
     vi.mocked(api.getWorkChapters).mockResolvedValue(chapters);
     vi.mocked(api.getWorkPlanches).mockResolvedValue(planches);
     render(<OeuvreClient slug="lames-de-brume" />);
     await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+
+    // Present in the DOM...
+    const heading = screen.getByText('Lames de Brume', { selector: 'h1' });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText('Camille Roux')).toBeInTheDocument();
+    // ...but hidden from the accessibility tree (role queries filter aria-hidden subtrees)...
     expect(screen.queryByRole('heading', { level: 1, name: 'Lames de Brume' })).not.toBeInTheDocument();
-    expect(screen.queryByText(work.synopsis!)).not.toBeInTheDocument();
-    expect(screen.queryByText('Camille Roux')).not.toBeInTheDocument();
+    // ...wrapped in a blurred, non-interactive, aria-hidden container.
+    const wrapper = heading.closest('[aria-hidden="true"]') as HTMLElement | null;
+    expect(wrapper).toBeInTheDocument();
+    expect(wrapper!.style.filter).toContain('blur');
+    expect(wrapper!.style.pointerEvents).toBe('none');
+    expect(wrapper!.style.userSelect).toBe('none');
   });
 
   it('does not show the AgeGate for a non-18+ work', async () => {

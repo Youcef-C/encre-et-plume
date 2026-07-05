@@ -121,19 +121,13 @@ export default function IllustrationClient({ id }: { id: string }) {
 
   if (!detail) return null;
 
-  // DR-10 QA round-1 fix: the gate must SUPPRESS the real content, not just dim it with an
-  // overlay on top of already-mounted markup (artwork/title/description never mount while
-  // un-cleared).
-  if (detail.is18plus && !cleared) {
-    return (
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px', position: 'relative', minHeight: 400 }}>
-        <AgeGate onBack={() => router.back()} />
-      </div>
-    );
-  }
+  // DR-10 (user-specified 2026-07-05): the gate now shows the page BLURRED behind it rather than
+  // suppressing the content outright — real content only exists here once the server actually let
+  // it load (visitor/self-declaration), unlike the 403 'age-refused' minor case above.
+  const gated = detail.is18plus && !cleared;
 
-  return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px' }}>
+  const content = (
+    <>
       <Link href="/galerie" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
         ‹ Galerie
       </Link>
@@ -156,6 +150,22 @@ export default function IllustrationClient({ id }: { id: string }) {
           account={account}
         />
       </div>
+    </>
+  );
+
+  return (
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '22px 28px 80px' }}>
+      {/* AgeGate is a viewport-fixed overlay (no positioned ancestor needed), first in DOM order —
+          see OeuvreClient for why this keeps the blurred content unreachable via the keyboard trap
+          without extra `inert` plumbing. */}
+      {gated && <AgeGate onBack={() => router.back()} />}
+      {gated ? (
+        <div aria-hidden="true" style={{ filter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' }}>
+          {content}
+        </div>
+      ) : (
+        content
+      )}
     </div>
   );
 }

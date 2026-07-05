@@ -319,7 +319,19 @@ export default function Reader({ slug }: { slug: string }) {
         position: 'relative',
       }}
     >
+      {/* AgeGate rendered BEFORE the (optionally blurred) body below: its own Tab-wrap trap only
+          guards forward navigation past its last control, so keeping it first in DOM order means
+          a Shift+Tab from the auto-focused title escapes above the reader (pre-existing
+          behavior), never into the blurred chrome below — no extra `inert` plumbing needed. */}
       {showAgeGate && <AgeGate onBack={() => router.push(`/oeuvre/${slug}`)} />}
+      {/* Presentation update (user-specified 2026-07-05): while un-cleared, the reader chrome
+          (topbar/asides) renders BLURRED behind the gate instead of a flat backdrop — the actual
+          chapter pages stay suppressed via displayPagesState/displayPagesData above regardless. */}
+      <div
+        {...(showAgeGate
+          ? { 'aria-hidden': true, style: { filter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' } }
+          : {})}
+      >
       {fullscreen ? (
         // "Plein écran" immersive mode (story update, 2026-07-04): topbar + both asides are
         // unmounted entirely (not just visually hidden). QA (round 2) caught that giving
@@ -475,6 +487,7 @@ export default function Reader({ slug }: { slug: string }) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

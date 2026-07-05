@@ -519,7 +519,25 @@ test.describe('Lecteur — 18+ age gate (DR-10)', () => {
 
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
     await expect(page.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeVisible();
+    // The real chapter pages/slider still never mount underneath the gate (server-side content is
+    // still force-suppressed via displayPagesState/Data — no leak of premium/adult page images).
     await expect(page.getByRole('slider')).not.toBeVisible();
+
+    // Presentation update (user-specified 2026-07-05): the surrounding reader chrome (topbar/
+    // asides) is present in the DOM, blurred behind the interstitial, not absent.
+    const chrome = page.getByText('Chapitres');
+    await expect(chrome).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Vue dégagée' })).toHaveCount(0);
+    const wrapper = page.locator('[aria-hidden="true"]').filter({ has: chrome });
+    await expect(wrapper).toHaveCSS('filter', /blur/);
+    await expect(wrapper).toHaveCSS('pointer-events', 'none');
+
+    // User-specified 2026-07-05: fullscreen fixed backdrop below the navbar, page scroll locked.
+    const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
+    const backdrop = page.locator('div').filter({ has: dialog }).first();
+    await expect(backdrop).toHaveCSS('position', 'fixed');
+    await expect(backdrop).toHaveCSS('top', '69px');
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
   });
 
   test('a logged-in minor gets a refusal (no bypass) via the interstitial, not the Paywall', async ({ page }) => {
@@ -545,5 +563,8 @@ test.describe('Lecteur — 18+ age gate (DR-10)', () => {
     await expect(page.getByText('Ce contenu est réservé aux adultes.')).toBeVisible();
     await expect(page.getByRole('dialog', { name: /chapitre verrouillé/i })).not.toBeVisible();
     await expect(page.getByRole('slider')).not.toBeVisible();
+    // Unchanged by the blur presentation update: the server 403s before the work/pages fetch
+    // resolves, so there is nothing to blur — no reader chrome mounts for a blocked minor either.
+    await expect(page.getByText('Chapitres')).toHaveCount(0);
   });
 });

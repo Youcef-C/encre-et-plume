@@ -27,6 +27,16 @@ export default function AgeGate({ onBack }: Props) {
     titleRef.current?.focus();
   }, []);
 
+  // User-specified 2026-07-05: a true modal — the page behind must not scroll while the
+  // interstitial is up. Restore whatever overflow value was already set on unmount/refusal.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   // Focus trap + Escape-to-back (mirrors Paywall.tsx's Escape handling, plus Tab wrapping since
   // this overlay isn't a native <dialog>).
   useEffect(() => {
@@ -79,13 +89,25 @@ export default function AgeGate({ onBack }: Props) {
   return (
     <div
       style={{
-        position: 'absolute',
-        inset: 0,
+        // User-specified 2026-07-05: fullscreen viewport-fixed backdrop (not just the page's own
+        // content wrapper) so it can never be scrolled past, but stopping below the sticky navbar
+        // (68px header + border, matching the `calc(100vh - 69px)` convention used elsewhere) so
+        // it never overlays the nav — and the underlying page is scroll-locked (see the
+        // document.body.style.overflow effect above).
+        position: 'fixed',
+        top: 69,
+        left: 0,
+        right: 0,
+        bottom: 0,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 16,
-        background: 'rgba(22,19,15,.7)',
+        overflowY: 'auto',
+        // Presentation update (user-specified 2026-07-05): the page now shows BLURRED behind this
+        // overlay (see OeuvreClient/Reader/IllustrationClient) instead of a flat dark backdrop, so
+        // the scrim is lightened to let it show through while the dialog box stays fully opaque.
+        background: 'rgba(22,19,15,.45)',
         zIndex: 50,
       }}
     >

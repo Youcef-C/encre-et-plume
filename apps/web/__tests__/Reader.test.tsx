@@ -361,6 +361,28 @@ describe('Reader (DR-4 FE-1)', () => {
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   });
 
+  // Presentation update (user-specified 2026-07-05): the interstitial now shows the reader chrome
+  // BLURRED behind it instead of a flat backdrop. The real chapter pages/slider still never mount
+  // (regression test above) — only the surrounding topbar/asides chrome is now present-but-hidden.
+  it('renders the reader chrome behind the gate, blurred + aria-hidden + non-interactive (not absent)', async () => {
+    sessionStorage.clear();
+    vi.mocked(api.getWork).mockResolvedValue({ ...work, audienceRating: '18+' });
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+    vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
+    vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+    render(<Reader slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+
+    const chrome = screen.getByText('Chapitres');
+    expect(chrome).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Vue dégagée' })).not.toBeInTheDocument();
+    const wrapper = chrome.closest('[aria-hidden="true"]') as HTMLElement | null;
+    expect(wrapper).toBeInTheDocument();
+    expect(wrapper!.style.filter).toContain('blur');
+    expect(wrapper!.style.pointerEvents).toBe('none');
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+  });
+
   it('does not show the AgeGate for a non-18+ work', async () => {
     mockReady();
     render(<Reader slug="lames-de-brume" />);

@@ -52,6 +52,29 @@ describe('AgeGate (DR-10 FE-3)', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
   });
 
+  // User-specified 2026-07-05: the dark backdrop must take the full viewport (fixed, not confined
+  // to the page's content wrapper) but stop below the sticky navbar (68px header — see
+  // globals.css .ep-header / the `calc(100vh - 69px)` reader convention), not overlay it.
+  it('the backdrop is a viewport-fixed overlay that starts below the 69px sticky navbar', () => {
+    render(<AgeGate onBack={vi.fn()} />);
+    const backdrop = screen.getByRole('dialog', { name: /contenu réservé aux adultes/i }).parentElement as HTMLElement;
+    expect(backdrop.style.position).toBe('fixed');
+    expect(backdrop.style.top).toBe('69px');
+    expect(backdrop.style.left).toBe('0px');
+    expect(backdrop.style.right).toBe('0px');
+    expect(backdrop.style.bottom).toBe('0px');
+  });
+
+  // User-specified 2026-07-05: the underlying page must not be scrollable while the interstitial
+  // is up (a true modal), restored once the gate unmounts (confirmed/refused).
+  it('locks page scroll while mounted and restores it on unmount', () => {
+    document.body.style.overflow = '';
+    const { unmount } = render(<AgeGate onBack={vi.fn()} />);
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe('');
+  });
+
   it('focuses the title on mount', async () => {
     render(<AgeGate onBack={vi.fn()} />);
     await waitFor(() => {

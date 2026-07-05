@@ -81,16 +81,24 @@ describe('IllustrationClient (DR-6 FE-T1)', () => {
     await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
   });
 
-  // QA round-1 regression: the real artwork/description must never mount in the DOM while
-  // un-cleared — an overlay dimming already-mounted content is not a real gate.
-  it('QA round-1 regression: does not render the artwork/title/description while the AgeGate is up for an uncleared visitor', async () => {
+  // Presentation update (user-specified 2026-07-05): the interstitial now shows the page BLURRED
+  // behind it instead of a flat backdrop, so the real content is present in the DOM again (it just
+  // isn't reachable/announced) — superseding the earlier "content never mounts" regression test.
+  it('renders the illustration content behind the gate, blurred + aria-hidden + non-interactive (not absent)', async () => {
     sessionStorage.clear();
     vi.mocked(api.getIllustration).mockResolvedValue({ ...detail, is18plus: true });
     vi.mocked(api.getIllustrationMore).mockResolvedValue(more);
     render(<IllustrationClient id="dr5-illus-1" />);
     await waitFor(() => expect(screen.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeInTheDocument());
+
+    const heading = screen.getByText('Pluie de Néons', { selector: 'h1' });
+    expect(heading).toBeInTheDocument();
+    expect(screen.getByText(detail.description!)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 1, name: 'Pluie de Néons' })).not.toBeInTheDocument();
-    expect(screen.queryByText(detail.description!)).not.toBeInTheDocument();
+    const wrapper = heading.closest('[aria-hidden="true"]') as HTMLElement | null;
+    expect(wrapper).toBeInTheDocument();
+    expect(wrapper!.style.filter).toContain('blur');
+    expect(wrapper!.style.pointerEvents).toBe('none');
   });
 
   it('does not show the AgeGate for a non-18+ illustration', async () => {

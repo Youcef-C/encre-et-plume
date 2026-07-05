@@ -183,6 +183,48 @@ async function mock18PlusWorkFeeds(page: Page) {
 }
 
 test.describe('Œuvre work page — 18+ age gate (DR-10)', () => {
+  // Presentation update (user-specified 2026-07-05): the interstitial shows the page BLURRED
+  // behind it (not a flat backdrop) — the work content is now present in the DOM while gated
+  // (previously it never mounted at all), just visually blurred, non-interactive
+  // (pointer-events: none) and aria-hidden so it's unreachable by mouse, keyboard or AT. This
+  // only applies here (visitor/self-declaration, content the server let load) — the logged-in
+  // minor 403 case below never fetches content, so there is nothing to blur.
+  test('a visitor opening an 18+ work sees the page content blurred + non-interactive behind the interstitial', async ({ page }) => {
+    await mock18PlusWorkFeeds(page);
+    await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: workAdult }));
+
+    await page.goto('/oeuvre/lames-de-brume');
+    await expect(page.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeVisible();
+
+    // Present in the DOM (not suppressed)...
+    const heading = page.locator('h1', { hasText: 'Lames de Brume' });
+    await expect(heading).toHaveCount(1);
+    // ...but not exposed to the accessibility tree...
+    await expect(page.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toHaveCount(0);
+    // ...wrapped in the blurred, non-interactive, aria-hidden container.
+    const wrapper = page.locator('[aria-hidden="true"]').filter({ has: heading });
+    await expect(wrapper).toHaveCSS('filter', /blur/);
+    await expect(wrapper).toHaveCSS('pointer-events', 'none');
+  });
+
+  // User-specified 2026-07-05: the dark backdrop is a fullscreen fixed overlay that stops below
+  // the sticky navbar (never overlays it), and the page behind cannot be scrolled while it's up.
+  test('the backdrop is a fullscreen fixed overlay below the navbar, and locks page scroll', async ({ page }) => {
+    await mock18PlusWorkFeeds(page);
+    await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: workAdult }));
+
+    await page.goto('/oeuvre/lames-de-brume');
+    const dialog = page.getByRole('dialog', { name: /contenu réservé aux adultes/i });
+    await expect(dialog).toBeVisible();
+
+    const backdrop = page.locator('div').filter({ has: dialog }).first();
+    await expect(backdrop).toHaveCSS('position', 'fixed');
+    await expect(backdrop).toHaveCSS('top', '69px');
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
+    // The sticky navbar stays above/unaffected — still visible and clickable.
+    await expect(page.getByRole('link', { name: 'Accueil' })).toBeVisible();
+  });
+
   test('a visitor opening an 18+ work sees the interstitial; self-declaring reveals the content and is not re-prompted this session', async ({ page }) => {
     await mock18PlusWorkFeeds(page);
     await page.route(`${API}/works/lames-de-brume`, (route) => route.fulfill({ json: workAdult }));

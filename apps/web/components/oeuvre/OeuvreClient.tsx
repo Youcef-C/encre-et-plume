@@ -131,18 +131,14 @@ export default function OeuvreClient({ slug }: { slug: string }) {
 
   if (!work) return null;
 
-  // DR-10 QA round-1 fix: the gate must SUPPRESS the real content, not just dim it with an
-  // overlay on top of already-mounted markup (synopsis/team/etc never mount while un-cleared).
-  if (isWork18Plus(work.audienceRating) && !cleared) {
-    return (
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px', position: 'relative', minHeight: 400 }}>
-        <AgeGate onBack={() => router.back()} />
-      </div>
-    );
-  }
+  // DR-10 (user-specified 2026-07-05): the gate now shows the page BLURRED behind it rather than
+  // suppressing the content outright — real content only exists here once the server actually
+  // let it load (visitor/self-declaration), so there is something to blur (unlike the 403
+  // 'age-refused' minor case above, which never fetches content at all).
+  const gated = isWork18Plus(work.audienceRating) && !cleared;
 
-  return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px' }}>
+  const content = (
+    <>
       <WorkHero work={work} account={account} />
 
       <div className="ep-oeuvre-columns" style={{ display: 'flex', gap: 26, marginTop: 30, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -166,6 +162,24 @@ export default function OeuvreClient({ slug }: { slug: string }) {
           <FundingGoals goals={work.fundingGoals} />
         </aside>
       </div>
+    </>
+  );
+
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px' }}>
+      {/* AgeGate is a viewport-fixed overlay (no positioned ancestor needed) rendered BEFORE the
+          blurred content in DOM order: its own Tab-wrap trap only guards forward navigation past
+          its last control, so keeping it first means a Shift+Tab from the auto-focused title
+          escapes to the page chrome above (pre-existing behavior), never into the blurred content
+          below — no extra `inert` plumbing needed. */}
+      {gated && <AgeGate onBack={() => router.back()} />}
+      {gated ? (
+        <div aria-hidden="true" style={{ filter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' }}>
+          {content}
+        </div>
+      ) : (
+        content
+      )}
     </div>
   );
 }

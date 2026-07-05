@@ -11,6 +11,7 @@
   - Logged-in adult (birthdate ⇒ ≥ 18): confirmation shown once, choice remembered ("Ne plus me demander").
   - Logged-in minor: access refused — "Ce contenu est réservé aux adultes." (no bypass).
   - Visitor (no account): confirmation interstitial each session (self-declaration), plus a sign-in prompt.
+  - **Presentation** (user-specified 2026-07-05): the interstitial displays over the page shown **blurred in the background** (not a flat dark backdrop). This applies only where the content actually loaded (visitor / self-declaration / no-birthdate the server allowed); a **confirmed logged-in minor** (server `403 AGE_RESTRICTED`) still gets the fully-blocked state with **no 18+ content rendered in the DOM** — nothing to blur, no leak.
 - **Listing treatment**: 18+ covers/thumbnails are blurred with an "18+" badge in catalog/gallery/ranking/home rails ([[DR-1]], [[DR-2]], [[DR-5]], [[DR-7]]) until the viewer is age-cleared; the existing "PUBLIC" filter chips ([[DR-2]]) keep working.
 - Mature content: Mature content and +18 content are two separate things. Mature content should only have a tag that warns the user that this content is mature and may not be suitable for all audiences. Include trigger warnings based on the genre and its tags. For mature content, the content should not be blurred.
 - States: interstitial confirm/refused; remembered choice; blurred/unblurred listings.
