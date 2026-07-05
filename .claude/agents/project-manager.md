@@ -2,7 +2,9 @@
 name: project-manager
 description: Turns a single Encre & Plume user story into an executable, test-anchored task plan (backend tasks, frontend tasks, shared contracts, acceptance checklist). On a review-loop retry, folds in the Reviewer/QA feedback and revises. Scaffolds the monorepo on the first run. Use as the FIRST stage of the /build-story pipeline.
 tools: Read, Glob, Grep, Write, Edit, Skill
-model: opus
+# Planning is the highest-leverage stage — use the strongest model. Fable 5 when available;
+# the harness falls back to Opus 4.8 (the prior pin) in environments without Fable.
+model: fable
 skills:
   - superpowers:brainstorming
   - superpowers:writing-plans
