@@ -2,7 +2,7 @@
 // / in-memory (adult, current tab only) clearance tracking.
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { AccountSummary } from '@encre-et-plume/shared';
-import { isAgeCleared, clearAge, resetAgeGateForTests } from '../lib/ageGate';
+import { isAgeCleared, clearAge, revokeAge, resetAgeGateForTests } from '../lib/ageGate';
 
 const adult: AccountSummary = {
   id: 'a1',
@@ -70,5 +70,20 @@ describe('ageGate (DR-10 FE-2)', () => {
     clearAge(adult, true);
     const otherAdult: AccountSummary = { ...adult, id: 'a2' };
     expect(isAgeCleared(otherAdult)).toBe(false);
+  });
+
+  it('revokeAge flips a remembered adult clearance back to false (localStorage + in-memory)', () => {
+    clearAge(adult, true);
+    expect(isAgeCleared(adult)).toBe(true);
+    revokeAge(adult);
+    expect(isAgeCleared(adult)).toBe(false);
+    expect(localStorage.getItem(`ep_age_cleared:${adult.id}`)).toBeNull();
+  });
+
+  it('revokeAge clears a visitor session flag too', () => {
+    clearAge(null);
+    expect(isAgeCleared(null)).toBe(true);
+    revokeAge(null);
+    expect(isAgeCleared(null)).toBe(false);
   });
 });

@@ -17,10 +17,14 @@
   --tone: #ded7c7;
   --shadow: #16130f;
   --dot: 6px;
+  /* Native form controls (date picker, selects, scrollbars) must follow OUR theme, not the OS
+     setting — otherwise `<input type="date">` renders a black picker under OS dark mode. */
+  color-scheme: light;
 }
 
 /* Explicit dark: user chose dark regardless of OS setting */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --paper: #1d1813;
   --card: #26211b;
   --ink: #f1ece1;
@@ -38,6 +42,7 @@
    selector without a build step. Eight lines; not worth it. */
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
+    color-scheme: dark;
     --paper: #1d1813;
     --card: #26211b;
     --ink: #f1ece1;

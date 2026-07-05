@@ -15,6 +15,7 @@ import SecuritySessions from '../../components/security/SecuritySessions';
 import SecurityTwoFactor from '../../components/security/SecurityTwoFactor';
 import CookiesSettings from '../../components/settings/CookiesSettings';
 import SettingsNav from '../../components/settings/SettingsNav';
+import AdultContentSettings from '../../components/settings/AdultContentSettings';
 
 export default function ParametresPage() {
   const { account, loading } = useSession();
@@ -153,6 +154,21 @@ export default function ParametresPage() {
           </p>
           <SecurityTwoFactor />
         </div>
+      </details>
+
+      {/* Contenu 18+ section (DR-10) */}
+      <details
+        id="contenu-adulte"
+        className="ep-card ep-settings-section"
+        open
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <summary className="ep-settings-summary">
+          <h2 id="contenu-adulte-heading" style={sectionHeadingStyle}>
+            Contenu 18+
+          </h2>
+        </summary>
+        <AdultContentSettings />
       </details>
 
       {/* Mes données section */}

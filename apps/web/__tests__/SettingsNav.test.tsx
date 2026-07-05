@@ -8,15 +8,16 @@ describe('SettingsNav', () => {
     expect(screen.getByRole('navigation', { name: 'Sections des paramètres' })).toBeInTheDocument();
   });
 
-  it('renders the four section links, in order, with correct anchors', () => {
+  it('renders the five section links, in order, with correct anchors', () => {
     render(<SettingsNav />);
     const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
 
     const expected = [
       ['Préférences de notification', '#notifications'],
       ['Cookies', '#cookies'],
       ['Sécurité', '#securite'],
+      ['Contenu 18+', '#contenu-adulte'],
       ['Mes données', '#mes-donnees'],
     ];
 

@@ -29,6 +29,9 @@ vi.mock('../components/security/SecurityTwoFactor', () => ({
 vi.mock('../components/MesDonnees', () => ({
   default: () => <div>MesDonnees stub</div>,
 }));
+vi.mock('../components/settings/AdultContentSettings', () => ({
+  default: () => <div>AdultContentSettings stub</div>,
+}));
 vi.mock('../components/SupprimerCompteModal', () => ({
   default: () => <div>SupprimerCompteModal stub</div>,
 }));
@@ -65,13 +68,14 @@ describe('ParametresPage', () => {
     expect(h1s[0]).toHaveTextContent('Paramètres');
   });
 
-  it('renders the four h2 section headings in order', () => {
+  it('renders the five h2 section headings in order', () => {
     render(<ParametresPage />);
     const h2s = screen.getAllByRole('heading', { level: 2 });
     expect(h2s.map((h) => h.textContent)).toEqual([
       'Préférences de notification',
       'Cookies',
       'Sécurité',
+      'Contenu 18+',
       'Mes données',
     ]);
   });
@@ -81,13 +85,14 @@ describe('ParametresPage', () => {
     expect(screen.getByRole('navigation', { name: 'Sections des paramètres' })).toBeInTheDocument();
   });
 
-  it('renders the four sections as collapsible <details>, expanded by default', () => {
+  it('renders the five sections as collapsible <details>, expanded by default', () => {
     const { container } = render(<ParametresPage />);
     const sections = container.querySelectorAll('details.ep-settings-section');
     expect(Array.from(sections).map((d) => d.id)).toEqual([
       'notifications',
       'cookies',
       'securite',
+      'contenu-adulte',
       'mes-donnees',
     ]);
     sections.forEach((d) => {

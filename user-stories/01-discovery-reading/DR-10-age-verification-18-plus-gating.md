@@ -14,6 +14,8 @@
 - **Listing treatment**: 18+ covers/thumbnails are blurred with an "18+" badge in catalog/gallery/ranking/home rails ([[DR-1]], [[DR-2]], [[DR-5]], [[DR-7]]) until the viewer is age-cleared; the existing "PUBLIC" filter chips ([[DR-2]]) keep working.
 - Mature content: Mature content and +18 content are two separate things. Mature content should only have a tag that warns the user that this content is mature and may not be suitable for all audiences. Include trigger warnings based on the genre and its tags. For mature content, the content should not be blurred.
 - States: interstitial confirm/refused; remembered choice; blurred/unblurred listings.
+- **Paramètres control** (user-specified 2026-07-05): a "Contenu pour adultes (18+)" section in Paramètres ([[F-19]]) lets a signed-in user **define** their access (view/set/update their birthdate via `PATCH /accounts/me/birthdate`, which determines adult access) and **revoke** the remembered "Ne plus me demander" clearance so 18+ content is gated again on this device. Shows the current status (accès autorisé / restreint / date de naissance non renseignée).
+- **Native controls follow the app theme** (user-specified 2026-07-05): the birthdate date-picker (and all native form controls) render with the app's light color-scheme, never the OS dark picker — set `color-scheme` on the theme root.
 - Accessibility: interstitial is a focus-trapped dialog with explicit title; blurred items name their rating ("Œuvre 18+") for screen readers; date input labelled.
 - Responsive: interstitial and badges usable at 375/768/1280 px.
 

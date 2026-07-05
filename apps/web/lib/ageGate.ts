@@ -56,6 +56,21 @@ export function clearAge(account: AccountSummary | null, remember = true): void 
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENT));
 }
 
+/**
+ * Revoke a previously-granted clearance (Paramètres "Réactiver la confirmation 18+"): removes
+ * the persisted flag (localStorage for a logged-in adult, sessionStorage for a visitor) and the
+ * in-memory session entry, then notifies useAgeCleared listeners.
+ */
+export function revokeAge(account: AccountSummary | null): void {
+  if (account) {
+    sessionClearedAccountIds.delete(account.id);
+    if (typeof window !== 'undefined') window.localStorage.removeItem(localKey(account.id));
+  } else if (typeof window !== 'undefined') {
+    window.sessionStorage.removeItem(SESSION_KEY);
+  }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENT));
+}
+
 /** React hook: re-renders when the clearance state changes (storage event or same-tab clearAge()). */
 export function useAgeCleared(account: AccountSummary | null): boolean {
   const [cleared, setCleared] = useState(() => isAgeCleared(account));
