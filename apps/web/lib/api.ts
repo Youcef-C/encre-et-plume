@@ -315,6 +315,12 @@ export const getAnnouncements = (): Promise<Announcement[]> =>
 export const getRanking = (genre?: string): Promise<RankingRow[]> =>
   request<RankingRow[]>(`/ranking/all-time${genre ? `?genre=${encodeURIComponent(genre)}` : ''}`);
 
+// Category tabs (user-requested 2026-07-05 — replaces the genre-filter chips on /classement).
+import type { RankingCategory, RankingEntry } from '@encre-et-plume/shared';
+
+export const getRankingByCategory = (category: RankingCategory): Promise<RankingEntry[]> =>
+  request<RankingEntry[]>(`/ranking?category=${encodeURIComponent(category)}`);
+
 /** Build a srcset string from MediaVariants for responsive img rendering (no next/image). */
 export function buildSrcSet(variants: MediaVariants): string {
   const parts: string[] = [];

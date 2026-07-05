@@ -42,6 +42,9 @@ const WORKS = [
   // DR-2: new Roman card (prototype "FORMAT" facet — Manga/One-shot/Roman). DR-3: gets proseExcerpt
   // (the prototype's "Extrait · Chapitre 1" paragraph, verbatim) to exercise the roman-only branch.
   { slug: 'dr2-le-murmure-des-cendres', title: 'Le Murmure des Cendres', genre: 'Fantastique', meta: 'Inès P. · 8 ch.', likeCount: 1200, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Aventure'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: true, chapterCount: 8, ratingAvg: 4.8, publishedAt: inDays(-2), synopsis: 'Dans les cendres d’une bibliothèque incendiée, une archiviste entend les voix de ceux qui y sont morts — et l’une d’elles réclame vengeance.', hashtags: ['roman', 'fantastique'], proseExcerpt: "La pluie n'avait pas cessé depuis trois jours. Elwen poussa la porte de l'archive, et l'odeur du papier humide la prit à la gorge — une odeur qu'elle connaissait par cœur, et qui pourtant, ce matin-là, lui sembla mentir. « Vous cherchez un souvenir précis ? » murmura le gardien, sans lever les yeux…" },
+  // DR-7: second Roman-format work — so the Classement "Romans" category tab has more than one
+  // entry to order (the prototype-user-requested category tab, not just DR-2's format facet fixture).
+  { slug: 'dr7-les-heures-de-verre', title: 'Les Heures de Verre', genre: 'Josei', meta: 'Sana K. · 6 ch.', likeCount: 900, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 6, ratingAvg: 4.1, publishedAt: inDays(-6), synopsis: 'Une horlogère répare le temps des autres et n’a jamais osé remonter le sien — jusqu’à ce qu’un client lui rapporte une montre qui s’arrête toujours à la même heure.', hashtags: ['roman', 'romance'] },
 ];
 
 // DR-3: creative team for the showcase manga (Lames de Brume) — the same two top-creator profiles

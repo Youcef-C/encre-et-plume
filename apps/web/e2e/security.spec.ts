@@ -212,8 +212,8 @@ test('F18-E2E-1: 2FA full cycle — enable → TOTP login step → disable → s
   // Initial state: disabled
   await expect(page.getByText(/désactivée/i)).toBeVisible({ timeout: 6_000 });
 
-  // Click "Activer"
-  await page.getByRole('button', { name: /activer/i }).click();
+  // Click "Activer" (exact — avoid matching the DR-10 "Réactiver…" / 2FA "Désactiver" buttons)
+  await page.getByRole('button', { name: 'Activer', exact: true }).click();
 
   // QR code should appear
   await expect(page.getByRole('img', { name: /qr code/i })).toBeVisible({ timeout: 8_000 });
@@ -651,7 +651,7 @@ for (const vp of VIEWPORTS) {
     // Key controls are visible and within viewport
     await expect(page.getByLabel(/nouvelle adresse e-mail/i)).toBeVisible();
     await expect(page.getByText(/session actuelle|sessions actives/i).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /activer/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Activer', exact: true })).toBeVisible();
 
     // Screenshot for evidence (relative path — CI-safe)
     await page.screenshot({

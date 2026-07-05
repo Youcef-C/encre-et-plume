@@ -1,16 +1,27 @@
 // DR-7 FE-3 — ranked list row. Replica of prototype CLASSEMENT lines 1081-1090: rank badge
-// (top-3 accent, else paper), cover, title + meta, "Lire" action. Title and "Lire" are two
+// (top-3 accent, else paper), cover, title + meta, row action. Title and the action are two
 // separate links (no nested interactive elements inside the <li>).
+//
+// Category tabs (user-requested 2026-07-05): rows are now the unified cross-entity RankingEntry
+// (mangas/romans/illustrations/createurs) — `href` is already category-correct from the backend,
+// no more hardcoded /oeuvre/. The 18+ overlay label is derived from the href shape since the
+// entity type isn't otherwise carried on the row (createurs' is18plus is always false anyway).
+// The action verb ("Lire"/"Voir"/"Voir le profil") depends on the category, so ClassementClient
+// passes it down as `actionLabel` (default "Lire" for other RankingList call sites, if any).
 'use client';
 
 import Link from 'next/link';
-import type { RankingRow } from '@encre-et-plume/shared';
+import type { RankingEntry } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
 import { useSession } from '../../lib/session';
 import { useAgeCleared } from '../../lib/ageGate';
 import Cover18Overlay from '../age/Cover18Overlay';
 
-export default function RankingList({ items }: { items: RankingRow[] }) {
+function overlayLabel(href: string): string {
+  return href.startsWith('/illustration/') ? 'Illustration 18+' : 'Œuvre 18+';
+}
+
+export default function RankingList({ items, actionLabel = 'Lire' }: { items: RankingEntry[]; actionLabel?: string }) {
   const { account } = useSession();
   const cleared = useAgeCleared(account);
 
@@ -63,17 +74,17 @@ export default function RankingList({ items }: { items: RankingRow[] }) {
               aria-hidden="true"
               style={{ width: '100%', height: '100%', border: '2px solid var(--ink)', borderRadius: 5, ...coverStyle(item.id, item.cover) }}
             />
-            <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Œuvre 18+" />
+            <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label={overlayLabel(item.href)} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Link href={`/oeuvre/${item.slug}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+            <Link href={item.href} style={{ color: 'inherit', textDecoration: 'none' }}>
               <b style={{ fontSize: 17 }}>{item.title}</b>
             </Link>
             <div style={{ fontSize: 13, color: 'var(--ink2)', marginTop: 2 }}>{item.meta}</div>
           </div>
           <Link
-            href={`/oeuvre/${item.slug}`}
-            aria-label={`Lire — ${item.title}`}
+            href={item.href}
+            aria-label={`${actionLabel} — ${item.title}`}
             className="ep-lire-pill"
             style={{
               fontSize: 13,
@@ -86,7 +97,7 @@ export default function RankingList({ items }: { items: RankingRow[] }) {
               textDecoration: 'none',
             }}
           >
-            Lire
+            {actionLabel}
           </Link>
         </li>
       ))}

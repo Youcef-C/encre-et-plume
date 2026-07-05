@@ -80,6 +80,7 @@ Find a partner, calls, applications, contacts, messaging.
 - [MC-8](02-matching-collaboration/MC-8-contacts-connexions.md) — Contacts & connexions
 - [MC-9](02-matching-collaboration/MC-9-messaging-widget.md) — Messaging (floating widget)
 - [MC-10](02-matching-collaboration/MC-10-block-mute-users.md) — Block & mute users *(inferred)*
+- [MC-11](02-matching-collaboration/MC-11-community-salon-comptoir.md) — Community salon "Le Comptoir" (dock widget)
 
 ### [03 · Creation Studio](03-creation-studio/_epic.md) — `CS`
 Project creation, workspace, files, collaborative editor, nemu, arrangement, publishing prep.

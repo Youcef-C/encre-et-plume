@@ -3,6 +3,25 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RANKING_LIMIT, RANKING_ORDER_BY } from './ranking.util';
 
+const ILLUSTRATION = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  id: 'illus-1',
+  title: 'Pluie de Néons',
+  artistName: 'Yuki Moreau',
+  category: 'couvertures',
+  genres: ['Shōnen'],
+  likeCount: 12401,
+  image: 'https://cdn/illus.jpg',
+  ...overrides,
+});
+
+const PROFILE = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  id: 'profile-1',
+  trendingScore: 100,
+  creatorRoles: ['dessinateur'],
+  account: { id: 'acc-1', displayName: 'Yuki Moreau', profileSlug: 'dr1-yuki-moreau', avatar: null },
+  ...overrides,
+});
+
 const WORK = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'work-1',
   slug: 'neon-sutra',
@@ -16,11 +35,11 @@ const WORK = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 describe('RankingService', () => {
   let service: RankingService;
-  let prisma: { work: { findMany: jest.Mock } };
+  let prisma: { work: { findMany: jest.Mock }; illustration: { findMany: jest.Mock }; profile: { findMany: jest.Mock } };
   let redis: { get: jest.Mock; set: jest.Mock };
 
   beforeEach(() => {
-    prisma = { work: { findMany: jest.fn() } };
+    prisma = { work: { findMany: jest.fn() }, illustration: { findMany: jest.fn() }, profile: { findMany: jest.fn() } };
     // Cache miss on every read so tests exercise the Prisma path deterministically (mirrors HomeService tests).
     redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
     service = new RankingService(prisma as unknown as PrismaService, redis as unknown as RedisService);
@@ -121,6 +140,91 @@ describe('RankingService', () => {
 
       expect(redis.get).toHaveBeenCalledWith('ranking:all-time:all');
       expect(prisma.work.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }));
+    });
+  });
+
+  describe('getByCategory (DR-7 Classement category tabs)', () => {
+    it('mangas: queries Work with format Manga, the shared ranking order, and maps to RankingEntry', async () => {
+      prisma.work.findMany.mockResolvedValue([WORK({ id: 'w1' })]);
+
+      const result = await service.getByCategory('mangas', RANKING_LIMIT);
+
+      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Manga' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT });
+      expect(result).toEqual([{ rank: 1, id: 'w1', title: 'Néon Sutra', meta: 'Léa B. × Hugo D. · 24 ch.', cover: null, href: '/oeuvre/neon-sutra', is18plus: false }]);
+    });
+
+    it('romans: queries Work with format Roman', async () => {
+      prisma.work.findMany.mockResolvedValue([]);
+
+      await service.getByCategory('romans', RANKING_LIMIT);
+
+      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Roman' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT });
+    });
+
+    it('illustrations: queries published Illustration ordered by likeCount desc, id asc, and maps to RankingEntry', async () => {
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION()]);
+
+      const result = await service.getByCategory('illustrations', RANKING_LIMIT);
+
+      expect(prisma.illustration.findMany).toHaveBeenCalledWith({
+        where: { publishedAt: { not: null } },
+        orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+        take: RANKING_LIMIT,
+      });
+      expect(result).toEqual([{ rank: 1, id: 'illus-1', title: 'Pluie de Néons', meta: 'Yuki Moreau · Couvertures · 12401 ♥', cover: 'https://cdn/illus.jpg', href: '/illustration/illus-1', is18plus: false }]);
+    });
+
+    it('createurs: queries Profile with a creator role, ordered by trendingScore desc, id asc, and maps to RankingEntry', async () => {
+      prisma.profile.findMany.mockResolvedValue([PROFILE()]);
+
+      const result = await service.getByCategory('createurs', RANKING_LIMIT);
+
+      expect(prisma.profile.findMany).toHaveBeenCalledWith({
+        where: { creatorRoles: { hasSome: ['scenariste', 'dessinateur'] }, trendingScore: { gt: 0 } },
+        orderBy: [{ trendingScore: 'desc' }, { id: 'asc' }],
+        take: RANKING_LIMIT,
+        include: { account: true },
+      });
+      expect(result).toEqual([{ rank: 1, id: 'acc-1', title: 'Yuki Moreau', meta: 'Dessinateur·rice', cover: null, href: '/dr1-yuki-moreau', is18plus: false }]);
+    });
+
+    it('createurs: excludes zero-trendingScore profiles via the where-filter (real DB won\'t return them)', async () => {
+      prisma.profile.findMany.mockResolvedValue([]);
+
+      const result = await service.getByCategory('createurs', RANKING_LIMIT);
+
+      expect(prisma.profile.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { creatorRoles: { hasSome: ['scenariste', 'dessinateur'] }, trendingScore: { gt: 0 } } }));
+      expect(result).toEqual([]);
+    });
+
+    it('returns an empty array for an unknown category, without querying Prisma', async () => {
+      const result = await service.getByCategory('inconnu', RANKING_LIMIT);
+
+      expect(result).toEqual([]);
+      expect(prisma.work.findMany).not.toHaveBeenCalled();
+      expect(prisma.illustration.findMany).not.toHaveBeenCalled();
+      expect(prisma.profile.findMany).not.toHaveBeenCalled();
+    });
+
+    describe('caching (fail-open Redis, 60s TTL, keyed per category)', () => {
+      it('caches under "ranking:cat:<category>"', async () => {
+        prisma.work.findMany.mockResolvedValue([]);
+
+        await service.getByCategory('mangas', RANKING_LIMIT);
+
+        expect(redis.get).toHaveBeenCalledWith('ranking:cat:mangas');
+        expect(redis.set).toHaveBeenCalledWith('ranking:cat:mangas', expect.any(String), 'EX', 60);
+      });
+
+      it('returns the cached value and skips Prisma on a cache hit', async () => {
+        const cached = [{ rank: 1, id: 'w1', title: 'Néon Sutra', meta: 'meta', cover: null, href: '/oeuvre/neon-sutra', is18plus: false }];
+        redis.get.mockResolvedValue(JSON.stringify(cached));
+
+        const result = await service.getByCategory('mangas', RANKING_LIMIT);
+
+        expect(result).toEqual(cached);
+        expect(prisma.work.findMany).not.toHaveBeenCalled();
+      });
     });
   });
 });

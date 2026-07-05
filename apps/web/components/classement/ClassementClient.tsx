@@ -1,31 +1,50 @@
 'use client';
 
-// DR-7 — "Classement" all-time ranking page. Replica of prototype CLASSEMENT lines 1068-1092.
-// URL is the source of truth for the active genre (?genre=, "Tout" = no param); chips are
-// toggle buttons (single active), auto-apply on click (no text input, no debounce needed).
+// DR-7 — "Classement" all-time ranking page. Replica of prototype CLASSEMENT lines 1068-1092,
+// with the genre-filter chips replaced by CATEGORY tabs (user-requested 2026-07-05): Mangas,
+// Romans, Illustrations, Dessinateurs & Scénaristes each rank a different entity type via the
+// unified GET /ranking?category= endpoint. URL is the source of truth (?category=, "mangas" is
+// the default and needs no param); tabs are toggle buttons (single active), auto-apply on click.
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import type { RankingRow } from '@encre-et-plume/shared';
+import type { RankingCategory, RankingEntry } from '@encre-et-plume/shared';
+import { isRankingCategory } from '@encre-et-plume/shared';
 import { CrownIcon } from '../icons';
 import * as api from '../../lib/api';
 import RankingList from './RankingList';
 
-const GENRE_CHIPS = ['Tout', 'Shōnen', 'Seinen', 'Fantastique', 'Josei'] as const;
+const DEFAULT_CATEGORY: RankingCategory = 'mangas';
+
+const CATEGORY_TABS: { key: RankingCategory; label: string }[] = [
+  { key: 'mangas', label: 'Mangas' },
+  { key: 'romans', label: 'Romans' },
+  { key: 'illustrations', label: 'Illustrations' },
+  { key: 'createurs', label: 'Dessinateurs & Scénaristes' },
+];
+
+// Row action verb (user-requested polish, 2026-07-05): you can't "read" an illustration or a
+// person, so the CTA depends on what the category ranks.
+const ACTION_LABELS: Record<RankingCategory, string> = {
+  mangas: 'Lire',
+  romans: 'Lire',
+  illustrations: 'Voir',
+  createurs: 'Voir le profil',
+};
 
 type ListState = 'loading' | 'ready' | 'empty' | 'error';
 
-function GenreChips({ active, onSelect }: { active: string; onSelect: (genre: string) => void }) {
+function CategoryTabs({ active, onSelect }: { active: RankingCategory; onSelect: (category: RankingCategory) => void }) {
   return (
     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 24, fontSize: 13, fontWeight: 700 }}>
-      {GENRE_CHIPS.map((chip) => {
-        const isActive = chip === active;
+      {CATEGORY_TABS.map((tab) => {
+        const isActive = tab.key === active;
         return (
           <button
-            key={chip}
+            key={tab.key}
             type="button"
             aria-pressed={isActive}
-            onClick={() => onSelect(chip)}
+            onClick={() => onSelect(tab.key)}
             className="ep-chip-toggle"
             style={{
               background: isActive ? 'var(--accent)' : 'var(--card)',
@@ -39,7 +58,7 @@ function GenreChips({ active, onSelect }: { active: string; onSelect: (genre: st
               fontFamily: 'inherit',
             }}
           >
-            {chip}
+            {tab.label}
           </button>
         );
       })}
@@ -69,10 +88,10 @@ function SkeletonList() {
 export default function ClassementClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const genreParam = searchParams.get('genre') ?? undefined;
-  const active = genreParam ?? 'Tout';
+  const categoryParam = searchParams.get('category');
+  const active = isRankingCategory(categoryParam) ? categoryParam : DEFAULT_CATEGORY;
 
-  const [items, setItems] = useState<RankingRow[]>([]);
+  const [items, setItems] = useState<RankingEntry[]>([]);
   const [state, setState] = useState<ListState>('loading');
   const [retryKey, setRetryKey] = useState(0);
 
@@ -80,7 +99,7 @@ export default function ClassementClient() {
     let cancelled = false;
     setState('loading');
     api
-      .getRanking(genreParam)
+      .getRankingByCategory(active)
       .then((rows) => {
         if (cancelled) return;
         setItems(rows);
@@ -92,10 +111,10 @@ export default function ClassementClient() {
     return () => {
       cancelled = true;
     };
-  }, [genreParam, retryKey]);
+  }, [active, retryKey]);
 
-  function selectGenre(chip: string) {
-    router.push(chip === 'Tout' ? '/classement' : `/classement?genre=${encodeURIComponent(chip)}`);
+  function selectCategory(category: RankingCategory) {
+    router.push(category === DEFAULT_CATEGORY ? '/classement' : `/classement?category=${category}`);
   }
 
   return (
@@ -116,7 +135,7 @@ export default function ClassementClient() {
         Les œuvres les plus populaires depuis toujours, tous genres confondus.
       </div>
 
-      <GenreChips active={active} onSelect={selectGenre} />
+      <CategoryTabs active={active} onSelect={selectCategory} />
 
       <div aria-live="polite">
         {state === 'loading' && <SkeletonList />}
@@ -136,10 +155,10 @@ export default function ClassementClient() {
         )}
         {state === 'empty' && (
           <div style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 12, padding: '30px 0', textAlign: 'center', boxShadow: '6px 6px 0 var(--shadow)' }}>
-            <p style={{ color: 'var(--ink2)', fontSize: 15, margin: 0 }}>Aucune œuvre dans ce genre pour l&apos;instant.</p>
+            <p style={{ color: 'var(--ink2)', fontSize: 15, margin: 0 }}>Aucune entrée dans ce classement pour l&apos;instant.</p>
           </div>
         )}
-        {state === 'ready' && <RankingList items={items} />}
+        {state === 'ready' && <RankingList items={items} actionLabel={ACTION_LABELS[active]} />}
       </div>
     </div>
   );

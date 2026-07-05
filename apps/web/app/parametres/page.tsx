@@ -27,7 +27,11 @@ export default function ParametresPage() {
     }
   }, [account, loading, router]);
 
-  if (loading) {
+  // Only the INITIAL session fetch shows the skeleton. A background refresh() (e.g. after the
+  // Contenu-18+ birthdate update or a 2FA enable/disable) flips loading=true while `account` is
+  // still present — gating on `loading` alone would unmount every section mid-action and discard
+  // their local state (the "Date de naissance mise à jour." toast never rendered — see CI e2e).
+  if (loading && !account) {
     return (
       <main
         aria-busy="true"

@@ -6,10 +6,13 @@ import { RANKING_LIMIT } from './ranking.util';
 
 describe('RankingController', () => {
   let controller: RankingController;
-  let service: { getAllTime: jest.Mock };
+  let service: { getAllTime: jest.Mock; getByCategory: jest.Mock };
 
   beforeEach(async () => {
-    service = { getAllTime: jest.fn().mockResolvedValue([{ id: 'w1', rank: 1 }]) };
+    service = {
+      getAllTime: jest.fn().mockResolvedValue([{ id: 'w1', rank: 1 }]),
+      getByCategory: jest.fn().mockResolvedValue([{ id: 'w1', rank: 1 }]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RankingController],
@@ -35,5 +38,18 @@ describe('RankingController', () => {
     await controller.allTime('Shōnen');
 
     expect(service.getAllTime).toHaveBeenCalledWith('Shōnen', RANKING_LIMIT);
+  });
+
+  it('GET /ranking?category=mangas delegates to getByCategory with RANKING_LIMIT', async () => {
+    const result = await controller.byCategory('mangas');
+
+    expect(service.getByCategory).toHaveBeenCalledWith('mangas', RANKING_LIMIT);
+    expect(result).toEqual([{ id: 'w1', rank: 1 }]);
+  });
+
+  it('GET /ranking with no category passes undefined through (service resolves the empty/unknown case)', async () => {
+    await controller.byCategory(undefined);
+
+    expect(service.getByCategory).toHaveBeenCalledWith(undefined, RANKING_LIMIT);
   });
 });

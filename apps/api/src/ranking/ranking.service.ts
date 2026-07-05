@@ -1,8 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { RankingRow } from '@encre-et-plume/shared';
+import type { RankingCategory, RankingEntry, RankingRow } from '@encre-et-plume/shared';
+import { CREATOR_ROLES, isRankingCategory } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
-import { RANKING_ORDER_BY, rankingWhere, toRankingRow } from './ranking.util';
+import {
+  RANKING_ORDER_BY,
+  rankingWhere,
+  toRankingRow,
+  toRankingEntryFromWork,
+  toRankingEntryFromIllustration,
+  toRankingEntryFromProfile,
+} from './ranking.util';
 
 const CACHE_TTL_S = 60; // ponytail: 60s TTL, mirrors HomeService; DR-9 invalidates on like events.
 
@@ -31,6 +39,54 @@ export class RankingService {
       });
       return works.map(toRankingRow);
     });
+  }
+
+  /**
+   * DR-7 Classement category tabs — a single ranking entity per category (Work/Illustration/
+   * Profile), unified into `RankingEntry`. Unknown category → empty array (public read endpoint,
+   * same "no 400s, silently drop" convention as GalleryService's parseGalleryQuery).
+   */
+  async getByCategory(category: string | undefined, limit: number): Promise<RankingEntry[]> {
+    if (!isRankingCategory(category)) return [];
+    return this.cached(`ranking:cat:${category}`, () => this.queryCategory(category, limit));
+  }
+
+  private queryCategory(category: RankingCategory, limit: number): Promise<RankingEntry[]> {
+    switch (category) {
+      case 'mangas':
+        return this.rankWorksByFormat('Manga', limit);
+      case 'romans':
+        return this.rankWorksByFormat('Roman', limit);
+      case 'illustrations':
+        return this.rankIllustrations(limit);
+      case 'createurs':
+        return this.rankCreators(limit);
+    }
+  }
+
+  private async rankWorksByFormat(format: string, limit: number): Promise<RankingEntry[]> {
+    const works = await this.prisma.work.findMany({ where: { format }, orderBy: RANKING_ORDER_BY, take: limit });
+    return works.map(toRankingEntryFromWork);
+  }
+
+  private async rankIllustrations(limit: number): Promise<RankingEntry[]> {
+    const rows = await this.prisma.illustration.findMany({
+      where: { publishedAt: { not: null } },
+      orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+      take: limit,
+    });
+    return rows.map(toRankingEntryFromIllustration);
+  }
+
+  private async rankCreators(limit: number): Promise<RankingEntry[]> {
+    const rows = await this.prisma.profile.findMany({
+      // trendingScore: { gt: 0 } — excludes zero-engagement onboarding/test profiles from the ranking.
+      where: { creatorRoles: { hasSome: [...CREATOR_ROLES] }, trendingScore: { gt: 0 } },
+      orderBy: [{ trendingScore: 'desc' }, { id: 'asc' }],
+      take: limit,
+      include: { account: true },
+    });
+    return rows.map(toRankingEntryFromProfile);
   }
 
   /** Fail-open Redis cache: any read/write error falls through to `fn` — never errors the request. */

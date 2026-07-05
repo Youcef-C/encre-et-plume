@@ -5,7 +5,9 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   timeout: 30_000,
-  retries: 0,
+  // CI retries absorb known parallel-worker flakes (e.g. profile.spec F20 tests share the seeded
+  // UTILISATEUR account); locally 0 so a real failure surfaces immediately.
+  retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
