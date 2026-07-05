@@ -51,7 +51,7 @@ The monorepo **root config is already provided** (`package.json`, `pnpm-workspac
 the root config. Use the latest stack majors (Next.js 15, NestJS 11, Prisma 6) on Node 24.
 
 ## The backlog (`user-stories/`)
-88 stories across 8 epics, indexed by `user-stories/README.md`. Each story is `As a … I want … so that …`
+89 stories across 8 epics, indexed by `user-stories/README.md`. Each story is `As a … I want … so that …`
 with separate **Frontend** and **Backend** acceptance criteria, **Dependencies** as `[[ID]]` cross-refs,
 and a **Fidelity** flag (`Explicit` = drawn in the design; `Inferred` = intended but not fully drawn —
 treat its criteria conservatively and confirm open questions). IDs: `F-` foundation, `DR-` discovery &

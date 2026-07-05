@@ -53,6 +53,7 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-18](00-foundation/F-18-account-security.md) — Account security (credentials, sessions, 2FA) *(inferred)*
 - [F-19](00-foundation/F-19-application-settings.md) — Application settings "Paramètres" *(inferred)*
 - [F-20](00-foundation/F-20-genre-vocabulary-tag-picker.md) — Genre vocabulary & tag picker *(inferred)*
+- [F-21](00-foundation/F-21-support-contact-bug-report.md) — Support & contact (aide, contact form, bug report) *(inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
