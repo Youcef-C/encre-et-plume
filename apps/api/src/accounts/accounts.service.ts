@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, MediaVariants } from '@encre-et-plume/shared';
+import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, MediaVariants, BirthdateResponse } from '@encre-et-plume/shared';
 import { deriveIsAdult } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
@@ -61,6 +61,18 @@ export class AccountsService {
       data: { birthdate: new Date(birthdate) },
     });
     return toSummary(account);
+  }
+
+  /**
+   * Owner-only read of the caller's OWN raw birthdate, so the 18+ settings panel can prefill its
+   * input — not a PII leak (DR-10's concern is birthdate in PUBLIC/other-user responses like
+   * AccountSummary, which stays derived-only via isAdult). Never logged: the raw value only ever
+   * flows into this response body, and `redaction.ts` already scrubs any `birthdate` key from logs.
+   */
+  async getBirthdate(accountId: string): Promise<BirthdateResponse> {
+    const account = await this.prisma.account.findUnique({ where: { id: accountId }, select: { birthdate: true } });
+    if (!account) throw new NotFoundException();
+    return { birthdate: account.birthdate ? account.birthdate.toISOString().slice(0, 10) : null };
   }
 
   /**

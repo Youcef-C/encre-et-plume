@@ -1,8 +1,8 @@
 // DR-10 Paramètres control — "Contenu 18+" section: shows current isAdult status, lets a
 // signed-in user set/update their birthdate (PATCH /accounts/me/birthdate), and revoke the
 // remembered "Ne plus me demander" 18+ clearance on this device.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AccountSummary } from '@encre-et-plume/shared';
 
@@ -15,6 +15,7 @@ vi.mock('../lib/session', () => ({
 
 vi.mock('../lib/api', () => ({
   updateMyBirthdate: vi.fn(),
+  getMyBirthdate: vi.fn().mockResolvedValue({ birthdate: null }),
 }));
 
 import * as api from '../lib/api';
@@ -43,10 +44,15 @@ const minor: AccountSummary = { ...base, isAdult: false };
 describe('AdultContentSettings (DR-10 Paramètres control)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.getMyBirthdate).mockResolvedValue({ birthdate: null });
     sessionStorage.clear();
     localStorage.clear();
     resetAgeGateForTests();
     mockAccount.current = null;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders nothing for a visitor (no account)', () => {
@@ -118,5 +124,41 @@ describe('AdultContentSettings (DR-10 Paramètres control)', () => {
     mockAccount.current = minor;
     render(<AdultContentSettings />);
     expect(screen.queryByRole('button', { name: /réactiver la confirmation 18\+/i })).not.toBeInTheDocument();
+  });
+
+  // ── Issue 4: prefill from GET /accounts/me/birthdate + success toast ────────
+
+  it('prefills the date input from GET /accounts/me/birthdate on mount', async () => {
+    mockAccount.current = base;
+    vi.mocked(api.getMyBirthdate).mockResolvedValue({ birthdate: '1990-05-12' });
+    render(<AdultContentSettings />);
+    await waitFor(() => expect(screen.getByLabelText(/date de naissance/i)).toHaveValue('1990-05-12'));
+  });
+
+  it('keeps the birthdate value in the input after a successful update (does not clear it)', async () => {
+    mockAccount.current = base;
+    vi.mocked(api.updateMyBirthdate).mockResolvedValue({ ...adult });
+    const user = userEvent.setup();
+    render(<AdultContentSettings />);
+    await user.type(screen.getByLabelText(/date de naissance/i), '1990-01-01');
+    await user.click(screen.getByRole('button', { name: /définir|mettre à jour/i }));
+    await waitFor(() => expect(screen.getByText('Date de naissance mise à jour.')).toBeInTheDocument());
+    expect(screen.getByLabelText(/date de naissance/i)).toHaveValue('1990-01-01');
+  });
+
+  it('the success message auto-clears after ~4s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockAccount.current = base;
+    vi.mocked(api.updateMyBirthdate).mockResolvedValue({ ...adult });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<AdultContentSettings />);
+    await user.type(screen.getByLabelText(/date de naissance/i), '1990-01-01');
+    await user.click(screen.getByRole('button', { name: /définir|mettre à jour/i }));
+    await waitFor(() => expect(screen.getByText('Date de naissance mise à jour.')).toBeInTheDocument());
+
+    await act(async () => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(screen.queryByText('Date de naissance mise à jour.')).not.toBeInTheDocument();
   });
 });

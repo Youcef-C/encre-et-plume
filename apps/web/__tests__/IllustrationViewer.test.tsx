@@ -106,6 +106,20 @@ describe('IllustrationViewer (DR-6)', () => {
     expect(api.saveReaction).toHaveBeenCalledWith({ targetType: 'illustration', targetId: 'dr5-illus-1' });
   });
 
+  it('DR-9 UI: "Enregistrer" swaps the plus icon for a check icon and updates the label when toggled on', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.saveReaction).mockResolvedValue({ active: true, count: 1 });
+    render(<IllustrationViewer detail={detail} account={reader} />);
+
+    const saveBtn = screen.getByRole('button', { name: 'Ajouter à ma liste' });
+    expect(saveBtn).toHaveTextContent('Enregistrer');
+    await user.click(saveBtn);
+
+    const toggledBtn = screen.getByRole('button', { name: 'Retirer de ma liste' });
+    expect(toggledBtn).toHaveTextContent('Enregistré');
+    expect(toggledBtn.querySelector('svg')).toHaveClass('ep-icon-pop');
+  });
+
   it('DR-9: a rejected like toggle reverts and shows an inline error', async () => {
     const user = userEvent.setup();
     vi.mocked(api.likeReaction).mockRejectedValue(new Error('boom'));

@@ -133,7 +133,9 @@ test.describe('Illustration detail', () => {
 
     const saveBtn = page.getByRole('button', { name: 'Ajouter à ma liste' });
     await saveBtn.click();
-    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+    const savedBtn = page.getByRole('button', { name: 'Retirer de ma liste' });
+    await expect(savedBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect(savedBtn).toContainText('Enregistré');
   });
 
   test('responsive: no horizontal overflow at 375 / 768 / 1280', async ({ page }) => {

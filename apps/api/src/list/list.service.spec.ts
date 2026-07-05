@@ -21,12 +21,29 @@ const FAVORITE_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
+const REACTION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  targetId: 'illus-1',
+  ...overrides,
+});
+
+const ILLUSTRATION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  id: 'illus-1',
+  title: 'Pluie de Néons',
+  artistName: 'Yuki Moreau',
+  category: 'couvertures',
+  image: null,
+  likeCount: 12401,
+  ...overrides,
+});
+
 describe('ListService', () => {
   let service: ListService;
   let prisma: {
     watchlistItem: { findMany: jest.Mock };
     readingProgress: { findMany: jest.Mock };
     favorite: { findMany: jest.Mock };
+    reaction: { findMany: jest.Mock };
+    illustration: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
@@ -34,6 +51,8 @@ describe('ListService', () => {
       watchlistItem: { findMany: jest.fn().mockResolvedValue([]) },
       readingProgress: { findMany: jest.fn().mockResolvedValue([]) },
       favorite: { findMany: jest.fn().mockResolvedValue([]) },
+      reaction: { findMany: jest.fn().mockResolvedValue([]) },
+      illustration: { findMany: jest.fn().mockResolvedValue([]) },
     };
     service = new ListService(prisma as unknown as PrismaService);
   });
@@ -131,6 +150,113 @@ describe('ListService', () => {
 
     it('returns an empty array when nothing is liked', async () => {
       const result = await service.getLikes('acc-1');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getLikedIllustrations', () => {
+    it('maps a liked-illustration Reaction row to a LikedIllustrationDto', async () => {
+      prisma.reaction.findMany.mockResolvedValue([REACTION_ROW()]);
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW()]);
+
+      const result = await service.getLikedIllustrations('acc-1');
+
+      expect(result).toEqual([
+        {
+          id: 'illus-1',
+          title: 'Pluie de Néons',
+          artistName: 'Yuki Moreau',
+          category: 'couvertures',
+          categoryLabel: 'Couvertures',
+          image: null,
+          likeCount: 12401,
+        },
+      ]);
+    });
+
+    it('queries Reaction scoped to the account, targetType illustration, kind like, ordered createdAt desc', async () => {
+      await service.getLikedIllustrations('acc-1');
+
+      expect(prisma.reaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { accountId: 'acc-1', targetType: 'illustration', kind: 'like' },
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+    });
+
+    it('drops reactions whose illustration is unpublished or deleted', async () => {
+      prisma.reaction.findMany.mockResolvedValue([REACTION_ROW({ targetId: 'illus-1' }), REACTION_ROW({ targetId: 'illus-gone' })]);
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW()]);
+
+      const result = await service.getLikedIllustrations('acc-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe('illus-1');
+    });
+
+    it('only fetches published illustrations (publishedAt not null)', async () => {
+      prisma.reaction.findMany.mockResolvedValue([REACTION_ROW()]);
+
+      await service.getLikedIllustrations('acc-1');
+
+      expect(prisma.illustration.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ publishedAt: { not: null } }) }),
+      );
+    });
+
+    it('preserves Reaction order (createdAt desc) rather than illustration query order', async () => {
+      prisma.reaction.findMany.mockResolvedValue([REACTION_ROW({ targetId: 'illus-2' }), REACTION_ROW({ targetId: 'illus-1' })]);
+      prisma.illustration.findMany.mockResolvedValue([
+        ILLUSTRATION_ROW({ id: 'illus-1' }),
+        ILLUSTRATION_ROW({ id: 'illus-2', title: 'Onibi' }),
+      ]);
+
+      const result = await service.getLikedIllustrations('acc-1');
+
+      expect(result.map((r: { id: string }) => r.id)).toEqual(['illus-2', 'illus-1']);
+    });
+
+    it('returns an empty array when nothing is liked', async () => {
+      const result = await service.getLikedIllustrations('acc-1');
+      expect(result).toEqual([]);
+      expect(prisma.illustration.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getSavedIllustrations', () => {
+    it('queries Reaction scoped to the account, targetType illustration, kind save', async () => {
+      await service.getSavedIllustrations('acc-1');
+
+      expect(prisma.reaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { accountId: 'acc-1', targetType: 'illustration', kind: 'save' },
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+    });
+
+    it('maps a saved-illustration Reaction row to a LikedIllustrationDto', async () => {
+      prisma.reaction.findMany.mockResolvedValue([REACTION_ROW()]);
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW()]);
+
+      const result = await service.getSavedIllustrations('acc-1');
+
+      expect(result).toEqual([
+        {
+          id: 'illus-1',
+          title: 'Pluie de Néons',
+          artistName: 'Yuki Moreau',
+          category: 'couvertures',
+          categoryLabel: 'Couvertures',
+          image: null,
+          likeCount: 12401,
+        },
+      ]);
+    });
+
+    it('returns an empty array when nothing is saved', async () => {
+      const result = await service.getSavedIllustrations('acc-1');
       expect(result).toEqual([]);
     });
   });

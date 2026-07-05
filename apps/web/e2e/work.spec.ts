@@ -305,7 +305,9 @@ test.describe('Œuvre work page — resume (DR-11)', () => {
 
     const saveBtn = page.getByRole('button', { name: 'Ajouter à ma liste' });
     await saveBtn.click();
-    await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
+    const savedBtn = page.getByRole('button', { name: 'Retirer de ma liste' });
+    await expect(savedBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect(savedBtn).toContainText('Dans ma liste');
 
     await page.reload();
     await expect(page.getByRole('button', { name: 'Retirer le j\'aime' })).toHaveAttribute('aria-pressed', 'true');

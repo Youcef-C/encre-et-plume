@@ -48,6 +48,14 @@ const likeItems = [
   { slug: 'neon-sutra', title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, likedAt: '2026-06-01T00:00:00.000Z' },
 ];
 
+// DR-8/DR-9 addendum: illustrations shown alongside works in the same tabs.
+const savedIllustrations = [
+  { id: 'i1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', category: 'process', categoryLabel: 'Process', image: null, likeCount: 3400 },
+];
+const likedIllustrations = [
+  { id: 'i2', title: 'Étude d’encre', artistName: 'Yuki Moreau', category: 'process', categoryLabel: 'Process', image: null, likeCount: 1300 },
+];
+
 async function mockSignedOut(page: Page) {
   await page.route(`${API}/auth/me`, (route) =>
     route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
@@ -61,6 +69,9 @@ async function mockSignedIn(page: Page) {
     return route.continue();
   });
   await page.route(`${API}/me/likes`, (route) => route.fulfill({ json: likeItems }));
+  // DR-8/DR-9 addendum: illustrations sub-section — empty by default, overridden per test.
+  await page.route(`${API}/me/illustrations/saved`, (route) => route.fulfill({ json: [] }));
+  await page.route(`${API}/me/illustrations/liked`, (route) => route.fulfill({ json: [] }));
   // DR-9 B5/FE7: "Ma liste" remove + "Coups de cœur" unlike both re-point onto the reactions
   // endpoints (the old DELETE /me/list/:slug route was removed).
   await page.route(`${API}/reactions/save`, (route) => {
@@ -132,6 +143,55 @@ test.describe('Ma liste & coups de cœur', () => {
     await page.waitForTimeout(5200);
     await expect(page.getByText('Néon Sutra')).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Coups de cœur · 0' })).toBeVisible();
+  });
+
+  test('DR-8/DR-9 addendum: saved/liked illustrations render in their matching tab and count toward it', async ({ page }) => {
+    await mockSignedIn(page);
+    await page.route(`${API}/me/illustrations/saved`, (route) => route.fulfill({ json: savedIllustrations }));
+    await page.route(`${API}/me/illustrations/liked`, (route) => route.fulfill({ json: likedIllustrations }));
+    await page.goto('/ma-liste');
+
+    await expect(page.getByRole('tab', { name: 'Ma liste · 3' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Pluie de Néons/ })).toHaveAttribute('href', '/illustration/i1');
+
+    await page.getByRole('tab', { name: 'Coups de cœur · 2' }).click();
+    await expect(page.getByRole('link', { name: /Étude d.encre/ })).toHaveAttribute('href', '/illustration/i2');
+  });
+
+  test('coordinator follow-up: removing a saved illustration decrements the tab count and stays removed after the undo window (DELETE /reactions/save persists)', async ({ page }) => {
+    await mockSignedIn(page);
+    await page.route(`${API}/me/illustrations/saved`, (route) => route.fulfill({ json: savedIllustrations }));
+    await page.goto('/ma-liste');
+    await expect(page.getByRole('tab', { name: 'Ma liste · 3' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Retirer Pluie de Néons' }).click();
+    await expect(page.getByRole('tab', { name: 'Ma liste · 2' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Annuler' })).toBeVisible();
+
+    await page.waitForTimeout(5200);
+    await expect(page.getByText('Pluie de Néons')).toHaveCount(0);
+
+    // Stays gone after reload (the DELETE persisted server-side)
+    await page.route(`${API}/me/illustrations/saved`, (route) => route.fulfill({ json: [] }));
+    await page.reload();
+    await expect(page.getByRole('tab', { name: 'Ma liste · 2' })).toBeVisible();
+    await expect(page.getByText('Pluie de Néons')).toHaveCount(0);
+  });
+
+  test('coordinator follow-up: removing a liked illustration (Coups de cœur) calls unlikeReaction and decrements the tab count', async ({ page }) => {
+    await mockSignedIn(page);
+    await page.route(`${API}/me/illustrations/liked`, (route) => route.fulfill({ json: likedIllustrations }));
+    await page.goto('/ma-liste');
+    await page.getByRole('tab', { name: 'Coups de cœur · 2' }).click();
+    await expect(page.getByRole('link', { name: /Étude d.encre/ })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Retirer Étude d’encre' }).click();
+    await expect(page.getByRole('tab', { name: 'Coups de cœur · 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Annuler' })).toBeVisible();
+
+    await page.waitForTimeout(5200);
+    await expect(page.getByText('Étude d’encre')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Coups de cœur · 1' })).toBeVisible();
   });
 
   test('375px viewport has no horizontal overflow', async ({ page }) => {

@@ -154,9 +154,14 @@ const WATCHLIST = [
 // per-user table; work like/save reuse the already-seeded FAVORITES/WATCHLIST above). Same demo
 // account (dr1-camille-roux) so QA can see the active->inactive path immediately, not just
 // inactive->active. WORK_CHAPTERS/ILLUSTRATIONS likeCount above already include these rows.
+// Additive: a couple of `save` reactions too, so /ma-liste's "Illustrations" tabs (liked + saved)
+// are non-empty out of the box for QA (dr5-illus-2 is liked-only, dr5-illus-1/7 are saved).
 const REACTIONS = [
   { accountSlug: 'dr1-camille-roux', targetType: 'chapter', workSlug: 'lames-de-brume', chapterNumber: 1, kind: 'like' },
   { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-1', kind: 'like' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-2', kind: 'like' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-1', kind: 'save' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-7', kind: 'save' },
 ];
 
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).

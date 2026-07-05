@@ -1,5 +1,5 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
-import type { ListItemDto, LikedWorkDto } from '@encre-et-plume/shared';
+import type { ListItemDto, LikedWorkDto, LikedIllustrationDto } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { ListService } from './list.service';
 
@@ -21,5 +21,15 @@ export class ListController {
   @Get('likes')
   getLikes(@Req() req: AuthRequest): Promise<LikedWorkDto[]> {
     return this.service.getLikes(req.accountId);
+  }
+
+  @Get('illustrations/liked')
+  getLikedIllustrations(@Req() req: AuthRequest): Promise<LikedIllustrationDto[]> {
+    return this.service.getLikedIllustrations(req.accountId);
+  }
+
+  @Get('illustrations/saved')
+  getSavedIllustrations(@Req() req: AuthRequest): Promise<LikedIllustrationDto[]> {
+    return this.service.getSavedIllustrations(req.accountId);
   }
 }

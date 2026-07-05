@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
@@ -20,10 +21,24 @@ const SUMMARY = {
 
 describe('AccountsController', () => {
   let controller: AccountsController;
-  let service: { updateRole: jest.Mock; updatePreferences: jest.Mock; setAvatar: jest.Mock; deleteAvatar: jest.Mock; setBirthdate: jest.Mock };
+  let service: {
+    updateRole: jest.Mock;
+    updatePreferences: jest.Mock;
+    setAvatar: jest.Mock;
+    deleteAvatar: jest.Mock;
+    setBirthdate: jest.Mock;
+    getBirthdate: jest.Mock;
+  };
 
   beforeEach(async () => {
-    service = { updateRole: jest.fn(), updatePreferences: jest.fn(), setAvatar: jest.fn(), deleteAvatar: jest.fn(), setBirthdate: jest.fn() };
+    service = {
+      updateRole: jest.fn(),
+      updatePreferences: jest.fn(),
+      setAvatar: jest.fn(),
+      deleteAvatar: jest.fn(),
+      setBirthdate: jest.fn(),
+      getBirthdate: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AccountsController],
@@ -130,6 +145,32 @@ describe('AccountsController', () => {
       service.setBirthdate.mockRejectedValue(new NotFoundException());
       const fakeReq = { accountId: 'cuid-1' } as AuthRequest;
       await expect(controller.setBirthdate(fakeReq, { birthdate: '1990-01-01' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('GET me/birthdate', () => {
+    it('is guarded by SessionGuard (401 without a session)', () => {
+      const guards = Reflect.getMetadata(GUARDS_METADATA, AccountsController) as unknown[] | undefined;
+      expect(guards).toContain(SessionGuard);
+    });
+
+    it('calls getBirthdate with accountId from session and returns the BirthdateResponse', async () => {
+      service.getBirthdate.mockResolvedValue({ birthdate: '1990-01-01' });
+      const fakeReq = { accountId: 'cuid-1' } as AuthRequest;
+
+      const result = await controller.getBirthdate(fakeReq);
+
+      expect(service.getBirthdate).toHaveBeenCalledWith('cuid-1');
+      expect(result).toEqual({ birthdate: '1990-01-01' });
+    });
+
+    it('never uses a client-supplied accountId — always the session one', async () => {
+      service.getBirthdate.mockResolvedValue({ birthdate: null });
+      const fakeReq = { accountId: 'acc-owner' } as AuthRequest;
+
+      await controller.getBirthdate(fakeReq);
+
+      expect(service.getBirthdate).toHaveBeenCalledWith('acc-owner');
     });
   });
 });

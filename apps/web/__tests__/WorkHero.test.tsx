@@ -215,6 +215,34 @@ describe('WorkHero (DR-3 FE-2)', () => {
 
   // ── DR-10: mature content warning tag (never blurred, distinct from 18+) ────
 
+  // ── Issue 1: bigger, clearer ♥ "j'aime" button ──────────────────────────────
+
+  it('the ♥ "j\'aime" control is a clearly-clickable button (≥44px tap target, on-brand affordance)', () => {
+    render(<WorkHero work={work} account={null} />);
+    const likeBtn = screen.getByRole('button', { name: "J'aime" });
+    expect(likeBtn).toHaveClass('ep-like-btn');
+    expect(likeBtn).toHaveStyle({ minHeight: '44px' });
+    const icon = likeBtn.querySelector('svg');
+    expect(icon).toHaveAttribute('width', '20');
+    expect(icon).toHaveAttribute('height', '20');
+  });
+
+  // ── Issue 2: animated icon swap on the "Ma liste" save toggle ───────────────
+
+  it('DR-9 UI: "Ma liste" swaps the plus icon for a check icon and updates the label when toggled on', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.saveReaction).mockResolvedValue({ active: true, count: 341 });
+    render(<WorkHero work={work} account={admin} />);
+
+    const saveBtn = screen.getByRole('button', { name: 'Ajouter à ma liste' });
+    expect(saveBtn).toHaveTextContent('Ma liste');
+    await user.click(saveBtn);
+
+    const toggledBtn = screen.getByRole('button', { name: 'Retirer de ma liste' });
+    expect(toggledBtn).toHaveTextContent('Dans ma liste');
+    expect(toggledBtn.querySelector('svg')).toHaveClass('ep-icon-pop');
+  });
+
   it('shows no "Contenu mature" tag for all-ages content', () => {
     render(<WorkHero work={work} account={null} />);
     expect(screen.queryByText('Contenu mature')).not.toBeInTheDocument();

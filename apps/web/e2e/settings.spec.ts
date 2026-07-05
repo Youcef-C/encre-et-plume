@@ -132,11 +132,24 @@ test('DR-10: Contenu 18+ section lets a signed-in adult set their birthdate and 
     section.getByText('Vous avez accès au contenu réservé aux adultes (18+).'),
   ).toBeVisible();
 
+  // Prefilled from GET /accounts/me/birthdate with the signup value
+  await expect(section.getByLabel(/date de naissance/i)).toHaveValue('1990-01-01', {
+    timeout: 10_000,
+  });
+
   // Update birthdate to a fresh valid value
   await section.getByLabel(/date de naissance/i).fill('1985-05-05');
   await section.getByRole('button', { name: /mettre à jour/i }).click();
   await expect(section.getByText('Date de naissance mise à jour.')).toBeVisible({
     timeout: 5_000,
+  });
+
+  // The typed value stays in the input (not cleared) after the successful update
+  await expect(section.getByLabel(/date de naissance/i)).toHaveValue('1985-05-05');
+
+  // The success message auto-clears after ~4s
+  await expect(section.getByText('Date de naissance mise à jour.')).toBeHidden({
+    timeout: 6_000,
   });
 
   // Revoke affordance starts disabled (no remembered clearance on this device yet)

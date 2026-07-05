@@ -11,7 +11,7 @@ import { formatLikeCount } from '../../lib/home';
 import { usePersonalAction } from '../../lib/usePersonalAction';
 import { useReaction } from '../../lib/useReaction';
 import * as api from '../../lib/api';
-import { HeartIcon, PlusIcon, FullscreenIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
+import { HeartIcon, PlusIcon, CheckIcon, FullscreenIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
 import IllustrationFullscreen from './IllustrationFullscreen';
 
 const actionBase: React.CSSProperties = {
@@ -115,7 +115,12 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
           aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
           style={{ ...actionBase, background: save.active ? 'var(--accent)' : 'var(--card)', color: save.active ? '#fff' : 'var(--ink)' }}
         >
-          <PlusIcon size={14} /> Enregistrer
+          {save.active ? (
+            <CheckIcon key="check" size={14} className="ep-icon-pop" />
+          ) : (
+            <PlusIcon key="plus" size={14} className="ep-icon-pop" />
+          )}{' '}
+          {save.active ? 'Enregistré' : 'Enregistrer'}
         </button>
         <button type="button" onClick={() => setFullscreen(true)} style={actionBase}>
           <FullscreenIcon size={14} /> Plein écran

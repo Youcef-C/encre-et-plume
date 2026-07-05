@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { ListItemDto, LikedWorkDto } from '@encre-et-plume/shared';
+import type { ListItemDto, LikedWorkDto, LikedIllustrationDto } from '@encre-et-plume/shared';
+import { galleryCategoryLabel } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 type WatchlistRow = {
@@ -17,6 +18,17 @@ type ProgressRow = {
 type FavoriteRow = {
   createdAt: Date;
   work: { slug: string; title: string; coverImage: string | null; genre: string; likeCount: number };
+};
+
+type IllustrationReactionRow = { targetId: string };
+
+type IllustrationRow = {
+  id: string;
+  title: string;
+  artistName: string;
+  category: string;
+  image: string | null;
+  likeCount: number;
 };
 
 /**
@@ -87,5 +99,49 @@ export class ListService {
       likeCount: row.work.likeCount,
       likedAt: row.createdAt.toISOString(),
     }));
+  }
+
+  getLikedIllustrations(accountId: string): Promise<LikedIllustrationDto[]> {
+    return this.getIllustrationReactions(accountId, 'like');
+  }
+
+  getSavedIllustrations(accountId: string): Promise<LikedIllustrationDto[]> {
+    return this.getIllustrationReactions(accountId, 'save');
+  }
+
+  /**
+   * Additive: liked/saved ILLUSTRATIONS for /ma-liste. Reaction has no FK to Illustration (targetId
+   * is a plain string, shared with 'chapter'), so this is two queries — Reaction rows (ordered,
+   * owner-scoped) then a batch Illustration lookup — instead of an `include` join. Order comes from
+   * the Reaction query; illustrations unpublished/deleted since the reaction was recorded are
+   * dropped (mirrors DR-8/DR-11's stale-row handling).
+   */
+  private async getIllustrationReactions(accountId: string, kind: 'like' | 'save'): Promise<LikedIllustrationDto[]> {
+    const reactions = (await this.prisma.reaction.findMany({
+      where: { accountId, targetType: 'illustration', kind },
+      orderBy: { createdAt: 'desc' },
+      select: { targetId: true },
+    })) as unknown as IllustrationReactionRow[];
+
+    if (reactions.length === 0) return [];
+
+    const illustrations = (await this.prisma.illustration.findMany({
+      where: { id: { in: reactions.map((r) => r.targetId) }, publishedAt: { not: null } },
+      select: { id: true, title: true, artistName: true, category: true, image: true, likeCount: true },
+    })) as unknown as IllustrationRow[];
+    const byId = new Map(illustrations.map((i) => [i.id, i]));
+
+    return reactions
+      .map((r) => byId.get(r.targetId))
+      .filter((i): i is IllustrationRow => i != null)
+      .map((i) => ({
+        id: i.id,
+        title: i.title,
+        artistName: i.artistName,
+        category: i.category,
+        categoryLabel: galleryCategoryLabel(i.category),
+        image: i.image,
+        likeCount: i.likeCount,
+      }));
   }
 }

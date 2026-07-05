@@ -3,10 +3,10 @@
 // DR-10 — Paramètres "Contenu 18+" section: shows the current isAdult status derived from the
 // account's birthdate, lets the viewer set/update that birthdate (PATCH /accounts/me/birthdate),
 // and revoke the remembered "Ne plus me demander" clearance on this device (lib/ageGate.ts).
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isPlausibleBirthdate } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
-import { updateMyBirthdate } from '../../lib/api';
+import { getMyBirthdate, updateMyBirthdate } from '../../lib/api';
 import { revokeAge, useAgeCleared } from '../../lib/ageGate';
 
 export default function AdultContentSettings() {
@@ -17,6 +17,26 @@ export default function AdultContentSettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [revoked, setRevoked] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Prefill from the account's own saved birthdate so a previously-set date stays visible
+  // instead of showing a blank input every time the panel mounts.
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    getMyBirthdate()
+      .then((res) => {
+        if (!cancelled && res.birthdate) setBirthdate(res.birthdate);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account]);
+
+  useEffect(() => () => {
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+  }, []);
 
   if (!account) return null;
 
@@ -33,7 +53,8 @@ export default function AdultContentSettings() {
       await updateMyBirthdate(birthdate);
       await refresh();
       setSaved(true);
-      setBirthdate('');
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaved(false), 4000);
     } catch {
       setError('Date invalide');
     } finally {

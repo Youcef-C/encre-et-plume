@@ -84,6 +84,16 @@ export interface UpdateBirthdateRequest {
   birthdate: string;
 }
 
+/**
+ * GET /accounts/me/birthdate response — owner-only read so the 18+ settings panel can prefill its
+ * input. Not a PII leak: the authenticated caller reads their OWN birthdate over an owner-scoped
+ * endpoint (the DR-10 concern is birthdate in PUBLIC/other-user responses, e.g. AccountSummary,
+ * which never carries it — only the derived `isAdult`).
+ */
+export interface BirthdateResponse {
+  birthdate: string | null; // 'YYYY-MM-DD', null when not yet declared
+}
+
 /** POST /auth/login body. */
 export interface LoginRequest {
   email: string;

@@ -20,3 +20,16 @@ export interface LikedWorkDto {
   likeCount: number; // Work.likeCount (app-wide ♥ counter) → "♥ 8,1k" via formatLikes()
   likedAt: string; // ISO — Favorite.createdAt
 }
+
+// Additive: liked/saved ILLUSTRATIONS (DR-5/DR-9's Reaction rows, targetType='illustration') on the
+// same "Ma liste & coups de cœur" page — a gallery card, not a work card. Reused for both GET
+// /me/illustrations/liked (kind='like') and GET /me/illustrations/saved (kind='save').
+export interface LikedIllustrationDto {
+  id: string; // Illustration.id -> /illustration/:id (DR-6)
+  title: string;
+  artistName: string;
+  category: string; // GalleryCategoryKey
+  categoryLabel: string; // galleryCategoryLabel(category)
+  image: string | null; // null -> CSS halftone placeholder
+  likeCount: number;
+}

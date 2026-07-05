@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ListItemDto, LikedWorkDto, AccountSummary } from '@encre-et-plume/shared';
+import type { ListItemDto, LikedWorkDto, LikedIllustrationDto, AccountSummary } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getMyList: vi.fn(), getMyLikes: vi.fn(), unsaveReaction: vi.fn(), unlikeReaction: vi.fn() };
+  return {
+    ...actual,
+    getMyList: vi.fn(),
+    getMyLikes: vi.fn(),
+    unsaveReaction: vi.fn(),
+    unlikeReaction: vi.fn(),
+    getSavedIllustrations: vi.fn().mockResolvedValue([]),
+    getLikedIllustrations: vi.fn().mockResolvedValue([]),
+  };
 });
 
 vi.mock('next/link', () => ({
@@ -61,6 +69,14 @@ const listItems: ListItemDto[] = [
 
 const likeItems: LikedWorkDto[] = [
   { slug: 'neon-sutra', title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, likedAt: '2026-06-01T00:00:00.000Z' },
+];
+
+const savedIllustrations: LikedIllustrationDto[] = [
+  { id: 'i1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', category: 'process', categoryLabel: 'Process', image: null, likeCount: 3400 },
+];
+
+const likedIllustrations: LikedIllustrationDto[] = [
+  { id: 'i2', title: 'Étude d’encre', artistName: 'Yuki Moreau', category: 'process', categoryLabel: 'Process', image: null, likeCount: 1300 },
 ];
 
 function renderClient(acc: AccountSummary | null = account) {
@@ -204,6 +220,102 @@ describe('MaListeClient (DR-8)', () => {
     vi.mocked(api.getMyLikes).mockResolvedValue([]);
     renderClient();
     await waitFor(() => expect(screen.getByText('Votre liste est vide')).toBeInTheDocument());
+  });
+
+  // ── Issue 3: liked/saved illustrations rendered within their matching tab ──
+
+  it('saved illustrations render under "Ma liste" and count toward its tab count', async () => {
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue(savedIllustrations);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue([]);
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Ma liste · 1' })).toBeInTheDocument());
+    const link = screen.getByRole('link', { name: /Pluie de Néons/ });
+    expect(link).toHaveAttribute('href', '/illustration/i1');
+    expect(screen.queryByText('Votre liste est vide')).not.toBeInTheDocument();
+  });
+
+  it('liked illustrations render under "Coups de cœur" and count toward its tab count', async () => {
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue([]);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue(likedIllustrations);
+    const user = userEvent.setup();
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Coups de cœur · 1' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Coups de cœur · 1' }));
+    const link = screen.getByRole('link', { name: /Étude d.encre/ });
+    expect(link).toHaveAttribute('href', '/illustration/i2');
+  });
+
+  // ── Coordinator follow-up: illustration remove/unlike, mirroring the work cards ──
+
+  it('saved illustration remove ✕: hides the card and shows Annuler; undo restores it without calling the API', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue(savedIllustrations);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue([]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderClient();
+    await waitFor(() => expect(screen.getByText('Pluie de Néons')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Retirer Pluie de Néons' }));
+    expect(screen.queryByText('Pluie de Néons')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Annuler' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.getByText('Pluie de Néons')).toBeInTheDocument();
+    expect(api.unsaveReaction).not.toHaveBeenCalled();
+  });
+
+  it('saved illustration remove ✕: lapsing the undo window calls unsaveReaction with the illustration id and decrements the tab count', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue(savedIllustrations);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue([]);
+    vi.mocked(api.unsaveReaction).mockResolvedValue({ active: false, count: 0 });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Ma liste · 1' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Retirer Pluie de Néons' }));
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    await waitFor(() =>
+      expect(api.unsaveReaction).toHaveBeenCalledWith({ targetType: 'illustration', targetId: 'i1' }),
+    );
+    expect(screen.getByRole('tab', { name: 'Ma liste · 0' })).toBeInTheDocument();
+  });
+
+  it('liked illustration remove ✕ (Coups de cœur): hides the card, undo restores it, and lapsing the window calls unlikeReaction with the illustration id', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue([]);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue(likedIllustrations);
+    vi.mocked(api.unlikeReaction).mockResolvedValue({ active: false, count: 0 });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Coups de cœur · 1' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Coups de cœur · 1' }));
+    await waitFor(() => expect(screen.getByText('Étude d’encre')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Retirer Étude d’encre' }));
+    expect(screen.queryByText('Étude d’encre')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Annuler' })).toBeInTheDocument();
+    expect(api.unlikeReaction).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    await waitFor(() =>
+      expect(api.unlikeReaction).toHaveBeenCalledWith({ targetType: 'illustration', targetId: 'i2' }),
+    );
+    expect(screen.getByRole('tab', { name: 'Coups de cœur · 0' })).toBeInTheDocument();
   });
 
   it('shows an error state with a working "Réessayer" retry', async () => {

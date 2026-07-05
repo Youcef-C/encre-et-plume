@@ -86,6 +86,11 @@ export const updateMyBirthdate = (birthdate: string): Promise<AccountSummary> =>
     body: JSON.stringify({ birthdate } satisfies UpdateBirthdateRequest),
   });
 
+import type { BirthdateResponse } from '@encre-et-plume/shared';
+
+export const getMyBirthdate = (): Promise<BirthdateResponse> =>
+  request<BirthdateResponse>('/accounts/me/birthdate');
+
 export const getProfile = (slug: string): Promise<ProfileResponse> =>
   request<ProfileResponse>(`/profiles/${slug}`);
 
@@ -399,6 +404,15 @@ export const getMyLikes = (): Promise<LikedWorkDto[]> => request<LikedWorkDto[]>
 
 // removeFromMyList (DELETE /me/list/:slug) removed — DR-9 B5 consolidated unsave onto the
 // counter-aware DELETE /reactions/save (below), the route this wrapper called no longer exists.
+
+// Liked/saved ILLUSTRATIONS shown alongside works in the same tabs (DR-8/DR-9 addendum).
+import type { LikedIllustrationDto } from '@encre-et-plume/shared';
+
+export const getLikedIllustrations = (): Promise<LikedIllustrationDto[]> =>
+  request<LikedIllustrationDto[]>('/me/illustrations/liked');
+
+export const getSavedIllustrations = (): Promise<LikedIllustrationDto[]> =>
+  request<LikedIllustrationDto[]>('/me/illustrations/saved');
 
 // ─── Reactions ♥/★ (DR-9) ──────────────────────────────────────────────────────
 import type { ReactionTargetType, ReactionToggleRequest, ReactionToggleResponse, ReactionStateResponse } from '@encre-et-plume/shared';

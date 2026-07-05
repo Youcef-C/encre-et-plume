@@ -108,6 +108,37 @@ describe('AccountsService', () => {
     });
   });
 
+  describe('getBirthdate', () => {
+    it('returns the caller own birthdate formatted as YYYY-MM-DD', async () => {
+      prisma.account.findUnique.mockResolvedValue({ birthdate: new Date('1990-01-01') });
+
+      const result = await service.getBirthdate('cuid-1');
+
+      expect(result).toEqual({ birthdate: '1990-01-01' });
+    });
+
+    it('returns birthdate: null when not yet declared', async () => {
+      prisma.account.findUnique.mockResolvedValue({ birthdate: null });
+
+      const result = await service.getBirthdate('cuid-1');
+
+      expect(result).toEqual({ birthdate: null });
+    });
+
+    it('scopes the lookup to the given accountId only (never another account)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ birthdate: null });
+
+      await service.getBirthdate('cuid-1');
+
+      expect(prisma.account.findUnique).toHaveBeenCalledWith({ where: { id: 'cuid-1' }, select: { birthdate: true } });
+    });
+
+    it('throws NotFoundException for an unknown account id', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      await expect(service.getBirthdate('bad-id')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
   describe('F-6: updatePreferences', () => {
     it('persists theme and returns AccountSummary with updated preference', async () => {
       const updated = { ...BASE_ACCOUNT, preferences: { theme: 'dark' } };

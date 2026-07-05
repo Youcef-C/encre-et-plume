@@ -2,11 +2,12 @@
 // every pictogram is drawn here with chunky strokes matching the bold ink borders.
 import type { CSSProperties, ReactNode } from 'react';
 
-type IconProps = { size?: number; style?: CSSProperties };
+type IconProps = { size?: number; style?: CSSProperties; className?: string };
 
 function Svg({
   size = 18,
   style,
+  className,
   filled = false,
   children,
 }: IconProps & { filled?: boolean; children: ReactNode }) {
@@ -21,6 +22,7 @@ function Svg({
       strokeWidth={2.2}
       strokeLinecap="round"
       strokeLinejoin="round"
+      className={className}
       style={{ display: 'block', flexShrink: 0, ...style }}
     >
       {children}

@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
-import type { AccountSummary } from '@encre-et-plume/shared';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import type { AccountSummary, BirthdateResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -54,5 +54,12 @@ export class AccountsController {
     @Body() dto: UpdateBirthdateDto,
   ): Promise<AccountSummary> {
     return this.accountsService.setBirthdate(req.accountId, dto.birthdate);
+  }
+
+  // 18+ settings panel prefill: owner-only read of the caller's OWN birthdate (own-only via
+  // session, never a path param — not a PII leak, see accounts.service.getBirthdate).
+  @Get('me/birthdate')
+  getBirthdate(@Req() req: AuthRequest): Promise<BirthdateResponse> {
+    return this.accountsService.getBirthdate(req.accountId);
   }
 }

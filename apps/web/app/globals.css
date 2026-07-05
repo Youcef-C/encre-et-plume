@@ -288,6 +288,40 @@ h1, h2, h3, h4, h5, h6 {
   outline-offset: 2px;
 }
 
+/* Frontend request A, item 1 — ♥ "j'aime" toggle (WorkHero): reads as a real button, not a stat.
+   Base look (border/padding/tap-target) is set inline per-instance; this class only layers the
+   hard-offset-shadow hover/press affordance, same idiom as .ep-btn-primary/.ep-btn-secondary. */
+.ep-like-btn {
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.ep-like-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+.ep-like-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.ep-like-btn:focus-visible {
+  outline: 2.5px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Frontend request A, item 2 — save-toggle icon swap (WorkHero "Ma liste", IllustrationViewer
+   "Enregistrer"): PlusIcon <-> CheckIcon re-mount on toggle, each mount gets a brief pop-in.
+   Reduced motion -> no animation (icon just appears, still correct). */
+@keyframes ep-icon-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.ep-icon-pop {
+  animation: ep-icon-pop 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-icon-pop { animation: none; }
+}
+
 /* Dropdown menu items: accent-soft hover, matching prototype §dropdown */
 .ep-menu-item {
   transition: background 0.08s;

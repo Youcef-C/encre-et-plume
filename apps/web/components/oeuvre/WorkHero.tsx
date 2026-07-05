@@ -124,18 +124,32 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
           <h1 style={{ fontSize: 48, textTransform: 'uppercase', margin: 0, lineHeight: 0.95 }}>{work.title}</h1>
           <div style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500, margin: '8px 0 14px' }}>{work.meta}</div>
 
-          <div style={{ display: 'flex', gap: 24, marginBottom: 16, fontSize: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: 14, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               onClick={like.toggle}
               aria-pressed={like.active}
               aria-label={like.active ? "Retirer le j'aime" : "J'aime"}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit' }}
+              className="ep-like-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                minHeight: 44,
+                padding: '10px 16px',
+                border: '3px solid var(--ink)',
+                borderRadius: 8,
+                boxShadow: '3px 3px 0 var(--shadow)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontWeight: 700,
+                background: like.active ? 'var(--accent)' : 'var(--card)',
+                color: like.active ? '#fff' : 'var(--ink)',
+              }}
             >
+              <HeartIcon size={20} style={{ fill: like.active ? 'currentColor' : 'none' }} />
               <b>{formatLikeCount(like.count)}</b>
-              <span style={{ color: 'var(--ink2)', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                <HeartIcon size={12} style={{ color: like.active ? 'var(--accent)' : 'var(--ink2)', fill: like.active ? 'var(--accent)' : 'none' }} /> j&apos;aime
-              </span>
+              <span style={{ fontWeight: 600 }}>j&apos;aime</span>
             </button>
             <span>
               <b>{formatLikeCount(work.readCount)}</b> <span style={{ color: 'var(--ink2)', fontSize: 12 }}>lectures</span>
@@ -171,7 +185,12 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
               aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
               style={{ ...actionBase, background: save.active ? 'var(--accent)' : 'var(--card)', color: save.active ? '#fff' : 'var(--ink)' }}
             >
-              <PlusIcon size={14} /> Ma liste
+              {save.active ? (
+                <CheckIcon key="check" size={14} className="ep-icon-pop" />
+              ) : (
+                <PlusIcon key="plus" size={14} className="ep-icon-pop" />
+              )}{' '}
+              {save.active ? 'Dans ma liste' : 'Ma liste'}
             </button>
             <button type="button" onClick={trigger} style={{ ...actionBase, background: 'var(--card)', color: 'var(--ink)' }}>
               <StarIcon size={14} style={{ color: 'var(--accent)' }} /> Soutenir
