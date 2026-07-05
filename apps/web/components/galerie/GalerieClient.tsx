@@ -6,10 +6,10 @@
 // independent feed (one failing feed never blanks the grid — DR-1 pattern).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { catalogGenreLabel } from '@encre-et-plume/shared';
+import { catalogGenreLabel, galleryCategoryLabel } from '@encre-et-plume/shared';
 import type { GalleryIllustrationCard, GalleryFeatureCard, GalleryPreview, GalleryQuery, GallerySummary } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
-import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS } from '../../lib/gallery';
+import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS, TRI_LABELS } from '../../lib/gallery';
 import GalerieHeader from './GalerieHeader';
 import CategoryChips from './CategoryChips';
 import SortSelect from './SortSelect';
@@ -27,14 +27,17 @@ export default function GalerieClient() {
   const searchParams = useSearchParams();
   const filters = parseGalleryFilters(new URLSearchParams(searchParams.toString()));
   const facetKey = filtersToGalleryQuery({ ...filters, page: 1 }).toString();
-  // A title/tag/genre search overrides the "Tendances" feature and relabels the grid as
-  // "Résultats pour <terms>" — the title in guillemets, hashtags as #tag, genres as their fr labels.
-  const searchTerms = [
+  // Any non-default view (search, category, or a changed sort) overrides the "Tendances" feature
+  // and relabels the grid "Résultats pour <terms>": title in guillemets, hashtags as #tag, genres
+  // + category by their labels, and the sort label when it isn't the default "Tendance".
+  const activeTerms = [
     ...(filters.q ? [`« ${filters.q} »`] : []),
     ...filters.tags.map((t) => `#${t}`),
     ...filters.genre.map((id) => catalogGenreLabel(id)),
+    ...(filters.category ? [galleryCategoryLabel(filters.category)] : []),
+    ...(filters.tri !== 'tendance' ? [TRI_LABELS[filters.tri]] : []),
   ];
-  const isSearching = searchTerms.length > 0;
+  const isFiltered = activeTerms.length > 0;
 
   const [items, setItems] = useState<GalleryIllustrationCard[]>([]);
   const [summary, setSummary] = useState<GallerySummary>(EMPTY_SUMMARY);
@@ -136,11 +139,11 @@ export default function GalerieClient() {
         </div>
       </div>
 
-      {!isSearching && <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />}
+      {!isFiltered && <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase' }}>
-          {isSearching ? `Résultats pour ${searchTerms.join(' · ')}` : 'Toutes les illustrations'}
+          {isFiltered ? `Résultats pour ${activeTerms.join(' · ')}` : 'Toutes les illustrations'}
         </span>
       </div>
 

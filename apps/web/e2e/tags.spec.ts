@@ -202,6 +202,31 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.getByText('Toutes les illustrations', { exact: true })).toHaveCount(0);
   });
 
+  test('6. a category or a changed sort also overrides Tendances with a named Résultats heading', async ({ page }) => {
+    await mockIllustrationAndGalleryFeeds(page);
+    await page.route(`${API}/illustrations/trending`, (route) =>
+      route.fulfill({
+        json: [
+          { id: 't1', rank: 1, title: 'Tendance Un', artistName: 'Aya', artistSlug: null, category: 'couvertures', categoryLabel: 'Couvertures', likeCount: 9000, thumbnail: null, is18plus: false },
+          { id: 't2', rank: 2, title: 'Tendance Deux', artistName: 'Bo', artistSlug: null, category: 'process', categoryLabel: 'Process', likeCount: 8000, thumbnail: null, is18plus: false },
+        ],
+      }),
+    );
+
+    // Category chip → "Résultats pour Couvertures", trending hidden.
+    await page.goto('/galerie');
+    await expect(page.getByText('Tendances cette semaine', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Couvertures' }).click();
+    await expect(page).toHaveURL(/category=couvertures/);
+    await expect(page.getByText('Résultats pour Couvertures', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tendances cette semaine', { exact: true })).toHaveCount(0);
+
+    // A pure sort change also overrides → "Résultats pour Populaires".
+    await page.goto('/galerie?tri=populaires');
+    await expect(page.getByText('Résultats pour Populaires', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tendances cette semaine', { exact: true })).toHaveCount(0);
+  });
+
   test('3b. at 375px, the hashtag chip is clickable and wraps without overflow', async ({ page }) => {
     await mockIllustrationAndGalleryFeeds(page);
     await page.setViewportSize({ width: 375, height: 900 });
