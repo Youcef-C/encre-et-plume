@@ -1,8 +1,8 @@
 'use client';
 
-// F-22 — multi-tag freetext hashtag filter for Galerie. Token-field UX: Enter / comma / space
-// commit the current text as a normalized #tag chip; Backspace on an empty input removes the last
-// chip; each chip is individually removable. Commit/remove applies the filter immediately (each
+// F-22 — multi-tag freetext hashtag filter for Galerie. Enter / comma / space commit the current
+// text as a normalized #tag; Backspace on an empty input removes the last chip. Validated hashtags
+// render as removable chips OUTSIDE the input. Commit/remove applies the filter immediately (each
 // change narrows the gallery — the tags AND-match, hasEvery, server-side). No vocabulary: hashtags
 // are freetext by design (fan-art of existing licenses, techniques, characters).
 import { useState } from 'react';
@@ -42,44 +42,46 @@ export default function GalleryTagFilter({
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 6,
-        fontSize: 13,
-        color: 'var(--ink2)',
-        background: 'var(--card)',
-        border: '2px solid var(--ink)',
-        borderRadius: 6,
-        padding: '6px 10px',
-        fontWeight: 500,
-        minWidth: 200,
-      }}
-    >
-      <TagIcon size={14} />
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 7,
+          fontSize: 13,
+          color: 'var(--ink2)',
+          background: 'var(--card)',
+          border: '2px solid var(--ink)',
+          borderRadius: 6,
+          padding: '7px 11px',
+          fontWeight: 500,
+          minWidth: 160,
+        }}
+      >
+        <TagIcon size={14} />
+        <input
+          aria-label="#hashtag…"
+          placeholder="#hashtag…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={commit}
+          style={{
+            border: 'none',
+            background: 'none',
+            outline: 'none',
+            width: '100%',
+            minWidth: 90,
+            fontSize: 13,
+            color: 'inherit',
+            font: 'inherit',
+          }}
+        />
+      </div>
+      {/* Validated hashtags render outside the input, as removable chips. */}
       {tags.map((t) => (
         <GenreChip key={t} label={`#${t}`} onRemove={() => remove(t)} />
       ))}
-      <input
-        aria-label="#hashtag…"
-        placeholder={tags.length ? '' : '#hashtag…'}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={commit}
-        style={{
-          border: 'none',
-          background: 'none',
-          outline: 'none',
-          flex: 1,
-          minWidth: 90,
-          fontSize: 13,
-          color: 'inherit',
-          font: 'inherit',
-        }}
-      />
     </div>
   );
 }
