@@ -14,11 +14,14 @@ Do this in the main thread; keep your own context small (work from file paths, n
   matches the dependency spine in `user-stories/README.md` (foundation first; works/profiles before the
   features that consume them). Before running a story, read its `[[dependencies]]`; if a dependency has
   not PASSED yet, defer the story until after its deps (re-order rather than fail it).
+- Pipeline artifacts are grouped by epic: each story's dir is `.claude/pipeline/<epic>/<ID>/` (where
+  `<epic>` is the story file's epic folder, e.g. `01-discovery-reading`). Cross-cutting scratch (the batch
+  ledger, audit notes) stays at the top level of `.claude/pipeline/`.
 - Maintain a batch ledger at `.claude/pipeline/_batch.json`:
   `{ "scope": "$1|all", "results": { "<ID>": "passed|failed|skipped" } }`.
 
 ## 1 · Resume
-Skip any story already marked `passed` in `_batch.json`, or whose `.claude/pipeline/<ID>/state.json` has
+Skip any story already marked `passed` in `_batch.json`, or whose `.claude/pipeline/<epic>/<ID>/state.json` has
 `verdict: "PASS"`. This makes re-running `/build-all` resume where it left off instead of redoing work.
 
 ## 2 · Per story — run the /build-story loop
@@ -50,7 +53,7 @@ said to run straight through, skip the prompt.)
 
 ## 3 · Final report
 When the list is exhausted, summarize to the user: counts of passed / failed / skipped, the list of
-failed stories with a one-line reason + their `.claude/pipeline/<ID>/review.md` path, and the skipped
+failed stories with a one-line reason + their `.claude/pipeline/<epic>/<ID>/review.md` path, and the skipped
 stories with the failed dependency that blocked each. Remind them that re-running `/build-all` resumes
 and will retry the failed/skipped ones (after they address the blockers).
 

@@ -11,7 +11,10 @@ thread (you hold the loop state; the agents start fresh and hand off through fil
 - If `$1` is an epic folder (e.g. `00-foundation`), list its `*.md` stories (skip `_epic.md`), order by
   dependency, and run the full pipeline below for each story in turn. Otherwise treat `$1` as a story ID.
 - Find the story file: `user-stories/**/$1-*.md`. Read it, its `[[dependencies]]`, and the epic `_epic.md`.
-- Create `.claude/pipeline/$1/` and write `state.json` = `{ "story": "$1", "iteration": 1, "verdict": null }`.
+  The story's **epic folder** is the parent directory of that file (e.g. `01-discovery-reading`) — call it `<epic>`.
+- Pipeline artifacts are grouped by epic for readability: the pipeline dir for this story is
+  **`.claude/pipeline/<epic>/$1/`** (create it) and write `state.json` = `{ "story": "$1", "iteration": 1, "verdict": null }`
+  there. Everywhere below, `.claude/pipeline/$1/` means `.claude/pipeline/<epic>/$1/`.
 - If `apps/` does not exist, the repo is greenfield — tell the Manager (step 1) to scaffold the monorepo
   (per `CLAUDE.md`) before planning.
 
