@@ -89,6 +89,35 @@ describe('GenreSuggestInput', () => {
     expect(input).toHaveValue('');
   });
 
+  describe('Backspace removes the previous chip', () => {
+    it('Backspace on an empty input calls onRemoveLast', async () => {
+      const user = userEvent.setup();
+      const onRemoveLast = vi.fn();
+      render(<GenreSuggestInput ariaLabel="Nouveau genre" onAdd={vi.fn()} onCancel={vi.fn()} onRemoveLast={onRemoveLast} />);
+      await user.click(screen.getByRole('combobox'));
+      await user.keyboard('{Backspace}');
+      expect(onRemoveLast).toHaveBeenCalledTimes(1);
+    });
+
+    it('Backspace does NOT call onRemoveLast while there is text', async () => {
+      const user = userEvent.setup();
+      const onRemoveLast = vi.fn();
+      render(<GenreSuggestInput ariaLabel="Nouveau genre" onAdd={vi.fn()} onCancel={vi.fn()} onRemoveLast={onRemoveLast} />);
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'ab');
+      await user.keyboard('{Backspace}');
+      expect(onRemoveLast).not.toHaveBeenCalled();
+    });
+
+    it('Backspace on empty is a no-op when onRemoveLast is not provided', async () => {
+      const user = userEvent.setup();
+      render(<GenreSuggestInput ariaLabel="Nouveau genre" onAdd={vi.fn()} onCancel={vi.fn()} />);
+      await user.click(screen.getByRole('combobox'));
+      await user.keyboard('{Backspace}');
+      expect(screen.getByRole('combobox')).toHaveValue('');
+    });
+  });
+
   describe('blur commits (round 1b)', () => {
     it('blurring with a resolvable value adds the tag (same path as Enter)', async () => {
       const user = userEvent.setup();

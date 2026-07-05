@@ -15,6 +15,8 @@ type Props = {
   onCancel: () => void;
   ariaLabel: string;
   placeholder?: string;
+  /** Backspace on an empty input removes the previous chip (parity with the hashtag filter). */
+  onRemoveLast?: () => void;
 };
 
 const MAX_SUGGESTIONS = 8;
@@ -25,7 +27,7 @@ function fold(s: string): string {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 }
 
-export default function GenreSuggestInput({ onAdd, onCancel, ariaLabel, placeholder }: Props) {
+export default function GenreSuggestInput({ onAdd, onCancel, ariaLabel, placeholder, onRemoveLast }: Props) {
   const [value, setValue] = useState('');
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -83,6 +85,10 @@ export default function GenreSuggestInput({ onAdd, onCancel, ariaLabel, placehol
       setValue('');
       setOpen(false);
       onCancel();
+    } else if (e.key === 'Backspace' && value === '' && onRemoveLast) {
+      // Backspace on an empty input deletes the previous chip.
+      e.preventDefault();
+      onRemoveLast();
     }
   }
 

@@ -714,6 +714,10 @@ export default function ProfilePageClient({ slug }: Props) {
                           placeholder="Genre…"
                           onCancel={() => {}}
                           onAdd={(fr) => addSeekingGenre(fr)}
+                          onRemoveLast={() => {
+                            const gs = editData.seeking.genres;
+                            if (gs.length > 0) removeSeekingGenre(gs[gs.length - 1]);
+                          }}
                         />
                       </div>
                     </div>

@@ -289,7 +289,13 @@ export default function FilterSidebar({
           {filters.genre.map((id) => (
             <GenreChip key={id} label={catalogGenreLabel(id)} onRemove={() => removeGenre(id)} />
           ))}
-          <GenreSuggestInput ariaLabel="Ajouter un genre" placeholder="Genre…" onCancel={() => {}} onAdd={addGenre} />
+          <GenreSuggestInput
+            ariaLabel="Ajouter un genre"
+            placeholder="Genre…"
+            onCancel={() => {}}
+            onAdd={addGenre}
+            onRemoveLast={() => filters.genre.length > 0 && removeGenre(filters.genre[filters.genre.length - 1])}
+          />
         </div>
       </div>
 

@@ -29,7 +29,13 @@ export default function GalleryGenreFilter({
       {genre.map((id) => (
         <GenreChip key={id} label={catalogGenreLabel(id)} onRemove={() => removeGenre(id)} />
       ))}
-      <GenreSuggestInput ariaLabel="Ajouter un genre" placeholder="Genre…" onCancel={() => {}} onAdd={addGenre} />
+      <GenreSuggestInput
+        ariaLabel="Ajouter un genre"
+        placeholder="Genre…"
+        onCancel={() => {}}
+        onAdd={addGenre}
+        onRemoveLast={() => genre.length > 0 && removeGenre(genre[genre.length - 1])}
+      />
     </div>
   );
 }

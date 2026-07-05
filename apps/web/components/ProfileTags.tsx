@@ -72,6 +72,7 @@ export default function ProfileTags({ tags: initialTags, isOwner }: Props) {
           placeholder="Genre…"
           onCancel={() => setAddingTag(false)}
           onAdd={(fr) => void handleAddTag(fr)}
+          onRemoveLast={() => tags.length > 0 && void handleRemoveTag(tags[tags.length - 1])}
         />
       ) : (
         <button
