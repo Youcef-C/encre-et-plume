@@ -10,8 +10,8 @@
 - **Search bar** (user-specified 2026-07-04): debounced text search over illustration title/artist — auto-applies while typing (no submit button), URL-synced like the other facets.
 - **Genre filter** (user-specified 2026-07-04): searchbar-to-add-tags picker over the full [[F-20]] vocabulary (same GenreSuggestInput + red GenreChip pattern as the profile page and [[DR-2]]), multi-select, OR within the facet; illustrations carry vocabulary genres.
 - **Sort control**: "Trié par : Tendance ▾" (e.g. Tendance / Nouveautés / Populaires).
-- **"🔥 Tendances cette semaine"**: 2 feature cards — **both** carry the "👁 Aperçu rapide" quick-preview affordance (user note 2026-07-04: #1 was missing it).
-- **"Toutes les illustrations"**: masonry grid cards (title, artist, category, ♥) with "👁 Aperçu rapide" quick-preview overlay → opens detail [[DR-6]]. The preview's close « ✕ » control must not disturb the overlay layout (user note 2026-07-04).
+- **"🔥 Tendances cette semaine"**: 2 feature cards — **both** carry the "👁 Aperçu rapide" quick-preview affordance (user note 2026-07-04: #1 was missing it). When a search is active (title `q` / hashtag `tags` / `genre`), this feature is **hidden** — the search overrides the trending feature (user-specified 2026-07-05).
+- **"Toutes les illustrations"** grid: masonry grid cards (title, artist, category, ♥) with "👁 Aperçu rapide" quick-preview overlay → opens detail [[DR-6]]. Its heading becomes **"Résultats"** when a search is active (title/tag/genre), so the results replace the trending feature rather than sitting under it. The preview's close « ✕ » control must not disturb the overlay layout (user note 2026-07-04).
 - **States**: loading skeleton masonry; empty state per category; error/retry; quick-preview overlay shows larger image + minimal meta and a path into [[DR-6]].
 - **Accessibility**: category chips as toggle buttons with `aria-pressed`; quick-preview reachable by keyboard and dismissible with Esc; images have alt text; ♥ counts have accessible labels.
 

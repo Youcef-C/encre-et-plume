@@ -26,6 +26,8 @@ export default function GalerieClient() {
   const searchParams = useSearchParams();
   const filters = parseGalleryFilters(new URLSearchParams(searchParams.toString()));
   const facetKey = filtersToGalleryQuery({ ...filters, page: 1 }).toString();
+  // A title/tag/genre search overrides the "Tendances" feature and relabels the grid as results.
+  const isSearching = !!filters.q || filters.tags.length > 0 || filters.genre.length > 0;
 
   const [items, setItems] = useState<GalleryIllustrationCard[]>([]);
   const [summary, setSummary] = useState<GallerySummary>(EMPTY_SUMMARY);
@@ -127,11 +129,11 @@ export default function GalerieClient() {
         </div>
       </div>
 
-      <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />
+      {!isSearching && <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase' }}>
-          Toutes les illustrations
+          {isSearching ? 'Résultats' : 'Toutes les illustrations'}
         </span>
       </div>
 

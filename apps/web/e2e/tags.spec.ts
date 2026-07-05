@@ -175,6 +175,33 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.getByText('Lames de Brume — Ch.2')).toBeVisible();
   });
 
+  test('5. an active search overrides the "Tendances cette semaine" feature with a "Résultats" heading', async ({ page }) => {
+    await mockIllustrationAndGalleryFeeds(page);
+    // Non-empty trending (last-registered route wins) so the feature would render when NOT searching.
+    await page.route(`${API}/illustrations/trending`, (route) =>
+      route.fulfill({
+        json: [
+          { id: 't1', rank: 1, title: 'Tendance Un', artistName: 'Aya', artistSlug: null, category: 'couvertures', categoryLabel: 'Couvertures', likeCount: 9000, thumbnail: null, is18plus: false },
+          { id: 't2', rank: 2, title: 'Tendance Deux', artistName: 'Bo', artistSlug: null, category: 'process', categoryLabel: 'Process', likeCount: 8000, thumbnail: null, is18plus: false },
+        ],
+      }),
+    );
+
+    await page.goto('/galerie');
+    await expect(page.getByText('Tendances cette semaine', { exact: true })).toBeVisible();
+    await expect(page.getByText('Toutes les illustrations', { exact: true })).toBeVisible();
+
+    const tagInput = page.getByLabel('#hashtag…');
+    await tagInput.fill('encre');
+    await tagInput.press('Enter');
+    await expect(page).toHaveURL(/tags=encre/, { timeout: 2000 });
+
+    // Trending is gone; the grid is relabelled "Résultats".
+    await expect(page.getByText('Résultats', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tendances cette semaine', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Toutes les illustrations', { exact: true })).toHaveCount(0);
+  });
+
   test('3b. at 375px, the hashtag chip is clickable and wraps without overflow', async ({ page }) => {
     await mockIllustrationAndGalleryFeeds(page);
     await page.setViewportSize({ width: 375, height: 900 });
