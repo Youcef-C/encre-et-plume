@@ -143,6 +143,7 @@ Admin console: reports, editor verification, content/comment moderation, users, 
 - [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages & salon chat) *(inferred)*
 - [AD-12](07-admin-moderation/AD-12-financial-administration.md) — Financial administration "Finances" *(inferred)*
 - [AD-13](07-admin-moderation/AD-13-sanctions-appeals.md) — Graduated sanctions & appeals *(inferred)*
+- [AD-14](07-admin-moderation/AD-14-support-ticket-triage.md) — Support ticket triage "Assistance" *(inferred)*
 
 ## Dependency spine
 Most stories depend on **F-1** (account) and **F-2** (roles). Creation depends on **CS-1** (project

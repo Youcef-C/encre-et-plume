@@ -23,6 +23,7 @@ This epic covers the platform's trust-and-safety and operations console: the rol
 - [[AD-11]] — Message oversight (private messages & salon chat)
 - [[AD-12]] — Financial administration "Finances"
 - [[AD-13]] — Graduated sanctions & appeals
+- [[AD-14]] — Support ticket triage "Assistance"
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-5]] Notifications

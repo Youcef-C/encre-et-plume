@@ -20,7 +20,7 @@
 - **Entity `SupportTicket`**: id, category (allowlisted), accountId (nullable), name, email, message, context (JSON: url/userAgent/requestId for bug reports), status (`new` | `open` | `resolved`), createdAt.
 - **Business rules**: category must be a known value; message/name/email length-capped; on create, **enqueue** ([[F-8]]) a notification to the support/staff channel via the transactional e-mail catalog ([[F-16]]) — the request path just validates, persists, and returns 200 fast (money-path-style: don't send inline).
 - **Validation / anti-abuse**: `class-validator` DTO (`whitelist`), reject on honeypot filled, **rate-limit per IP + per account** ([[F-1]] Redis limiter) to stop spam floods, cap payload size.
-- **Authorization**: submit is public; **reading/triaging tickets is staff-only** — surfaced in the admin panel ([[AD-1]]); the full triage/response UI is admin-epic scope (extend [[AD-2]] or a dedicated admin story), this story only guarantees tickets are captured, notified, and listable to staff.
+- **Authorization**: submit is public; **reading/triaging tickets is staff-only** — the admin-facing inbox/triage UI is [[AD-14]] ("Assistance" tab). This story only guarantees tickets are captured, notified, and listable to staff; AD-14 owns the queue, statuses, and replies.
 - **RGPD / observability** ([[F-9]]): the submitter e-mail and message are personal data — never log them; keep them out of Sentry breadcrumbs; include them in the [[F-14]] export/erasure scope for authenticated submitters.
 
 ## Dependencies
@@ -30,7 +30,7 @@
 - [[F-8]] — queue runs the notification off the request path.
 - [[F-9]] — request/correlation id enriches bug reports; PII stays out of logs.
 - [[F-20]] — on-brand form controls (`OnBrandSelect`, etc.).
-- [[AD-1]] / [[AD-2]] — staff triage of submitted tickets lives in the admin panel (report-handling analogue).
+- [[AD-14]] — staff triage of submitted tickets (the "Assistance" admin tab); [[AD-1]] hosts it.
 - [[F-14]] — support tickets are part of an authenticated user's data export / erasure.
 
 ## Notes
