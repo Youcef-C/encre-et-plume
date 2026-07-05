@@ -115,7 +115,7 @@ Editor talent-scouting space: radar, shortlist, contracts, trends, contests, edi
 - [PE-3](05-publisher-space/PE-3-shortlist-talents.md) — Shortlist talents
 - [PE-4](05-publisher-space/PE-4-propose-a-contract.md) — Propose a contract
 - [PE-5](05-publisher-space/PE-5-trends.md) — Trends "Tendances" *(inferred)*
-- [PE-6](05-publisher-space/PE-6-branded-contests.md) — Branded contests "Lancer un concours" *(inferred)*
+- [PE-6](05-publisher-space/PE-6-branded-contests.md) — Contests "Lancer un concours" (branded + platform) *(inferred)*
 - [PE-7](05-publisher-space/PE-7-editorial-board.md) — Editorial board "Rédaction" *(inferred)*
 
 ### [06 · Monetization & Revenue](06-monetization-revenue/_epic.md) — `MR`

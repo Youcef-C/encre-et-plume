@@ -1,11 +1,12 @@
 # AD-9 — Contest administration
 
-**As an** Admin, **I want** to oversee contests created by editors, **so that** entries are monitored, winners are designated, and contests are approved and closed cleanly.
+**As** a `maintainer` or an **Admin**, **I want** to oversee contests created by editors **and create platform-run contests myself**, **so that** entries are monitored, winners are designated, contests are approved and closed cleanly, and the platform can run its own events.
 
 > Screen(s): admin/editor "concours" tab (prototype CSS; only entry points drawn) · Priority: Could · Fidelity: Inferred
 
 ## Frontend
-- Contest list in the admin console: each contest with title, owning editor, status (e.g. en attente / actif / clôturé), entry count, and dates.
+- Contest list in the admin console: each contest with title, owner (editor org or « Plateforme »), status (e.g. en attente / actif / clôturé), entry count, and dates.
+- **"＋ Nouveau concours"** action (maintainer/admin) opens the [[PE-6]] contest editor to create a **platform-run** contest (no house branding); staff-created contests go live directly (self-approved).
 - Actions per contest: "Approuver" (approve a contest submitted by an editor, [[PE-6]]), view/monitor entries ([[PUB-7]]), designate winner(s), and "Clôturer".
 - Entries view: list of participant entries with the ability to mark "Gagnant·e".
 - States:
@@ -18,12 +19,13 @@
 ## Backend
 - **GET /admin/contests?status=** — list contests with status + entry counts.
 - **GET /admin/contests/{id}/entries** — participant entries (from [[PUB-7]]).
-- **PATCH /admin/contests/{id}** — `{ status: "approve"|"close" }`.
+- **POST /admin/contests** — `maintainer`/`admin` creates a platform contest ([[PE-6]] body, no branding) → live directly.
+- **PATCH /admin/contests/{id}** — `{ status: "approve"|"close" }` (approve only applies to editor-submitted `pending` contests).
 - **PATCH /admin/contests/{id}/entries/{entryId}** — `{ winner: true|false }`.
-- Entities **Contest**: `id, title, editorId, status (pending|active|closed), startAt, endAt`; **ContestEntry**: `id, contestId, participantId, submissionRef, isWinner`.
-- Business rules: contests are created by editors ([[PE-6]]); admin approval moves `pending → active`; closing freezes entries; winners flagged on entries.
+- Entities **Contest**: `id, title, editorId? (null = platform-run), createdByAccountId, status (pending|active|closed), startAt, endAt`; **ContestEntry**: `id, contestId, participantId, submissionRef, isWinner`.
+- Business rules: contests are created by **verified editors** (branded, may need approval) **or by maintainers/admins** (platform, self-approved) — [[PE-6]]; admin approval moves an editor's `pending → active`; closing freezes entries; winners flagged on entries.
 - Validation: `status`/`winner` flags; cannot pick winners before entries exist or after invalid transitions.
-- Authorization: `admin` ([[F-2]]) (editors manage their own per [[PE-6]]).
+- Authorization: oversight + platform-contest creation = `maintainer` / `admin` ([[F-2]]); editors manage their own branded contests per [[PE-6]].
 - Side effects: approval/closure and winner designation notify the editor and participants ([[F-5]]); closed contests + winners may surface in the feed ([[PUB-8]]).
 
 ## Dependencies
