@@ -1,9 +1,17 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import type { CallCard, CallsBoardResponse, CallsResponse, CallStatus, CreatorRole } from '@encre-et-plume/shared';
+import type {
+  ApplicationDto,
+  CallCard,
+  CallsBoardResponse,
+  CallsResponse,
+  CallStatus,
+  CreatorRole,
+} from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { CallsService, parseCallsLimit, type CallsBoardQueryParsed } from './calls.service';
 import { CreateCallDto } from './dto/create-call.dto';
 import { CloseCallDto } from './dto/close-call.dto';
+import { ApplyToCallDto } from './dto/apply-to-call.dto';
 
 /** Normalize a query value into a string[] (repeated key → array, single → one-element array). */
 function toArray(raw: unknown): string[] | undefined {
@@ -50,5 +58,12 @@ export class CallsController {
   close(@Req() req: AuthRequest, @Param('id') id: string, @Body() _dto: CloseCallDto): Promise<CallCard> {
     // _dto validates the body is exactly { status: 'closed' } (400 otherwise); the action is fixed.
     return this.service.closeEarly(req.accountId, id);
+  }
+
+  // MC-5 "Candidater": the applicant is always the session account, never a body field.
+  @Post(':id/applications')
+  @HttpCode(201)
+  apply(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: ApplyToCallDto): Promise<ApplicationDto> {
+    return this.service.apply(req.accountId, id, dto);
   }
 }

@@ -1,5 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type {
+  ApplicationDto,
   CallCard,
   CallDirection,
   CallFormat,
@@ -7,11 +14,15 @@ import type {
   CallStatus,
   CallsBoardResponse,
   CallsResponse,
+  CreatorRole,
+  InvitationUserRef,
 } from '@encre-et-plume/shared';
 import { CALL_FORMAT_LABELS, CALLS_BOARD_PAGE_SIZE, GENRES } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateCallDto } from './dto/create-call.dto';
+import type { ApplyToCallDto } from './dto/apply-to-call.dto';
 
 const CALLS_DEFAULT_LIMIT = 2;
 const CALLS_MAX_LIMIT = 6;
@@ -88,6 +99,7 @@ export class CallsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── MC-1 preview (unchanged): newest open calls, limited ─────────────────────
@@ -116,13 +128,26 @@ export class CallsService {
       this.prisma.projectCall.count({ where }),
     ]);
 
-    const sampleUrls = await this.resolveSampleUrls(rows);
+    const [sampleUrls, appliedIds] = await Promise.all([
+      this.resolveSampleUrls(rows),
+      this.resolveApplied(rows, viewerId),
+    ]);
     return {
-      items: rows.map((r) => this.mapCard(r, viewerId, sampleUrls)),
+      items: rows.map((r) => this.mapCard(r, viewerId, sampleUrls, appliedIds.has(r.id))),
       page,
       pageSize,
       total,
     };
+  }
+
+  /** MC-5: single lookup of the viewer's applications for this page — powers "Candidature envoyée". */
+  private async resolveApplied(rows: CallRow[], viewerId: string): Promise<Set<string>> {
+    if (rows.length === 0) return new Set();
+    const applied = (await this.prisma.application.findMany({
+      where: { applicantId: viewerId, callId: { in: rows.map((r) => r.id) } },
+      select: { callId: true },
+    })) as { callId: string }[];
+    return new Set(applied.map((a) => a.callId));
   }
 
   private buildWhere(query: CallsBoardQueryParsed): Record<string, unknown> {
@@ -210,6 +235,102 @@ export class CallsService {
     return this.mapCard(updated, viewerId, sampleUrls);
   }
 
+  // ── MC-5 apply "Candidater" ──────────────────────────────────────────────────
+  async apply(viewerId: string, callId: string, dto: ApplyToCallDto): Promise<ApplicationDto> {
+    const call = (await this.prisma.projectCall.findUnique({ where: { id: callId } })) as
+      | Pick<CallRow, 'authorId' | 'status' | 'closesAt'>
+      | null;
+    if (!call) throw new NotFoundException('Cet appel est introuvable.');
+    if (call.authorId === viewerId) {
+      throw new ForbiddenException('Vous ne pouvez pas candidater à votre propre appel.');
+    }
+    // Derived closure — never trust the stored column alone (mirrors board read / auto-close lag).
+    if (derivedStatus(call) === 'closed') throw new ConflictException('Cet appel est clôturé.');
+
+    const dupe = await this.prisma.application.findFirst({ where: { callId, applicantId: viewerId } });
+    if (dupe) throw new ConflictException('Vous avez déjà candidaté à cet appel.');
+
+    // Exactly ONE sample source; resolve its display URL against the applicant's own assets.
+    const sampleUrl = await this.resolveApplicationSample(viewerId, dto);
+
+    // AD-6: ban check joins here when the schema gains the flag (deferred — no ban column yet).
+    try {
+      const [application] = await this.prisma.$transaction([
+        this.prisma.application.create({
+          data: {
+            callId,
+            applicantId: viewerId,
+            sampleMediaId: dto.sampleMediaId ?? null,
+            samplePortfolioItemId: dto.samplePortfolioItemId ?? null,
+            sampleUrl,
+            message: dto.message ?? '',
+          },
+          include: APPLICANT_INCLUDE,
+        }),
+        this.prisma.projectCall.update({
+          where: { id: callId },
+          data: { applicationCount: { increment: 1 } },
+        }),
+      ]);
+
+      const row = application as unknown as ApplicationRow;
+      // F-5: notify the owner (seed calls with authorId null simply skip it).
+      if (call.authorId) {
+        await this.notifications.create({
+          recipientId: call.authorId,
+          type: 'application',
+          refId: row.id,
+          sourceUserId: viewerId,
+        });
+      }
+      return toApplicationDto(row);
+    } catch (e) {
+      // Unique index (callId, applicantId) race backstop → same duplicate 409 as the service check.
+      if ((e as { code?: string }).code === 'P2002') {
+        throw new ConflictException('Vous avez déjà candidaté à cet appel.');
+      }
+      throw e;
+    }
+  }
+
+  /** XOR the two sample sources, validate ownership/state, and return the denormalized display URL. */
+  private async resolveApplicationSample(viewerId: string, dto: ApplyToCallDto): Promise<string> {
+    const hasMedia = !!dto.sampleMediaId;
+    const hasPortfolio = !!dto.samplePortfolioItemId;
+    if (hasMedia === hasPortfolio) {
+      // neither or both
+      throw new BadRequestException('Ajoutez un échantillon de votre travail.');
+    }
+
+    if (hasMedia) {
+      const media = (await this.prisma.media.findUnique({ where: { id: dto.sampleMediaId } })) as {
+        ownerId: string;
+        status: string;
+        kind: string;
+        variants: { thumb?: string } | null;
+      } | null;
+      if (
+        !media ||
+        media.ownerId !== viewerId ||
+        media.status !== 'ready' ||
+        media.kind !== 'application_sample' ||
+        !media.variants?.thumb
+      ) {
+        throw new BadRequestException('Cet échantillon est invalide.');
+      }
+      return media.variants.thumb;
+    }
+
+    const item = (await this.prisma.portfolioItem.findUnique({
+      where: { id: dto.samplePortfolioItemId },
+      include: { profile: { select: { accountId: true } } },
+    })) as { image: string; profile: { accountId: string } | null } | null;
+    if (!item || item.profile?.accountId !== viewerId) {
+      throw new BadRequestException('Cet échantillon est invalide.');
+    }
+    return item.image;
+  }
+
   // ── helpers ──────────────────────────────────────────────────────────────────
   private async resolveSampleUrls(rows: CallRow[]): Promise<Map<string, string>> {
     const ids = rows.map((r) => r.sampleMediaId).filter((v): v is string => !!v);
@@ -226,7 +347,7 @@ export class CallsService {
     return out;
   }
 
-  private mapCard(row: CallRow, viewerId: string, sampleUrls: Map<string, string>): CallCard {
+  private mapCard(row: CallRow, viewerId: string, sampleUrls: Map<string, string>, hasApplied = false): CallCard {
     return {
       ...mapPreview(row),
       direction: directionOf(row.authorRole),
@@ -235,8 +356,60 @@ export class CallsService {
       status: derivedStatus(row),
       deadline: row.closesAt ? row.closesAt.toISOString() : null,
       isOwner: !!row.authorId && row.authorId === viewerId,
+      hasApplied, // MC-5: owner can never have applied ⇒ create/close paths pass false
     };
   }
+}
+
+// ── MC-5 application mapping ──────────────────────────────────────────────────
+const APPLICANT_INCLUDE = {
+  applicant: {
+    select: {
+      id: true,
+      displayName: true,
+      profileSlug: true,
+      avatar: true,
+      profile: { select: { creatorRoles: true } },
+    },
+  },
+};
+
+interface ApplicationRow {
+  id: string;
+  callId: string;
+  sampleUrl: string;
+  message: string;
+  status: string;
+  createdAt: Date;
+  applicant: {
+    id: string;
+    displayName: string;
+    profileSlug: string;
+    avatar: string | null;
+    profile: { creatorRoles: string[] } | null;
+  };
+}
+
+function toUserRef(u: ApplicationRow['applicant']): InvitationUserRef {
+  return {
+    userId: u.id,
+    name: u.displayName,
+    slug: u.profileSlug,
+    avatarUrl: u.avatar,
+    role: (u.profile?.creatorRoles?.[0] ?? null) as CreatorRole | null,
+  };
+}
+
+function toApplicationDto(row: ApplicationRow): ApplicationDto {
+  return {
+    id: row.id,
+    callId: row.callId,
+    applicant: toUserRef(row.applicant),
+    sampleUrl: row.sampleUrl,
+    message: row.message,
+    status: row.status as ApplicationDto['status'],
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 function composeTags(genreIds: string[], scope?: string, format?: CallFormat): string[] {

@@ -470,6 +470,15 @@ export const getCallsBoard = (query: CallsBoardQuery = {}): Promise<CallsBoardRe
 export const createCall = (body: CreateCallRequest): Promise<CallCard> =>
   request<CallCard>('/calls', { method: 'POST', body: JSON.stringify(body) });
 
+// ─── Apply to a call "Candidater" (MC-5) ──────────────────────────────────────
+import type { ApplyToCallRequest, ApplicationDto } from '@encre-et-plume/shared';
+
+export const applyToCall = (callId: string, body: ApplyToCallRequest): Promise<ApplicationDto> =>
+  request<ApplicationDto>(`/calls/${encodeURIComponent(callId)}/applications`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 // ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
 import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';
 

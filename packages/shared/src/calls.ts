@@ -29,6 +29,7 @@ export interface CallCard extends CallPreview {
   status: CallStatus; // derived server-side (deadline passed ⇒ closed)
   deadline: string | null; // ISO; drives "Clôture dans X j" (closesInDays stays precomputed)
   isOwner: boolean; // viewer owns this call ⇒ no "Candidater"
+  hasApplied: boolean; // MC-5: viewer already applied ⇒ disabled "Candidature envoyée"
 }
 
 export interface CallsBoardQuery {

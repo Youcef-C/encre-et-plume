@@ -6,7 +6,14 @@ import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getCallsBoard: vi.fn(), createCall: vi.fn() };
+  return {
+    ...actual,
+    getCallsBoard: vi.fn(),
+    createCall: vi.fn(),
+    applyToCall: vi.fn(),
+    getMe: vi.fn(),
+    getProfilePortfolio: vi.fn(),
+  };
 });
 
 vi.mock('next/link', () => ({
@@ -50,6 +57,7 @@ const call = (over: Partial<CallCard> = {}): CallCard => ({
   status: 'open',
   deadline: '2026-07-19T00:00:00.000Z',
   isOwner: false,
+  hasApplied: false,
   ...over,
 });
 
@@ -131,5 +139,31 @@ describe('AppelsClient (MC-4 board)', () => {
     await waitFor(() => expect(api.createCall).toHaveBeenCalled());
     const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(titles[0]).toBe('« Tout neuf »');
+  });
+
+  it('opens the apply modal and flips the card to "Candidature envoyée" with an incremented count', async () => {
+    getBoard().mockResolvedValue(
+      board([call({ id: 'c9', title: '« One-shot »', closesInDays: null, deadline: null, applicationCount: 5 })]),
+    );
+    (api.getMe as ReturnType<typeof vi.fn>).mockResolvedValue({ slug: 'yuki-moreau' });
+    (api.getProfilePortfolio as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'pf-1', image: 'https://cdn/1.jpg', caption: 'Encre', order: 0 },
+    ]);
+    (api.applyToCall as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'app-1', callId: 'c9' });
+    const user = userEvent.setup();
+    renderClient();
+
+    await user.click(await screen.findByRole('button', { name: 'Candidater' }));
+    const dialog = screen.getByRole('dialog', { name: 'Candidater' });
+    await user.click(await within(dialog).findByRole('button', { name: /Encre/ }));
+    await user.click(within(dialog).getByRole('button', { name: 'Envoyer ma candidature' }));
+
+    await waitFor(() => expect(api.applyToCall).toHaveBeenCalledWith('c9', { samplePortfolioItemId: 'pf-1' }));
+    // Confirmation shown; close the modal (Escape avoids the header X / footer "Fermer" name clash).
+    await within(dialog).findByText('Candidature envoyée !');
+    await user.keyboard('{Escape}');
+
+    expect(await screen.findByRole('button', { name: 'Candidature envoyée' })).toBeDisabled();
+    expect(screen.getByText('6 candidatures')).toBeInTheDocument();
   });
 });

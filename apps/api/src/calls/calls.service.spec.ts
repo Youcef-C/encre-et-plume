@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { CallsService, parseCallsLimit } from './calls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 const CALL_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'call-1',
@@ -58,7 +59,7 @@ describe('CallsService', () => {
       account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }) },
     };
     queue = { enqueue: jest.fn().mockResolvedValue(undefined) };
-    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService);
+    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService);
   });
 
   it('queries only open calls, newest first, limited', async () => {
@@ -108,14 +109,16 @@ describe('CallsService.findBoard', () => {
   let prisma: {
     projectCall: { findMany: jest.Mock; count: jest.Mock };
     media: { findMany: jest.Mock };
+    application: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
     prisma = {
       projectCall: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
       media: { findMany: jest.fn().mockResolvedValue([]) },
+      application: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
   });
 
   it('filters by role (seekingRole = direction sought)', async () => {
@@ -201,6 +204,24 @@ describe('CallsService.findBoard', () => {
     const res = await service.findBoard({ status: 'all' }, 'viewer');
     expect(res.items[0].sampleUrl).toBe('https://cdn/thumb.webp');
   });
+
+  it('sets hasApplied true only for calls the viewer already applied to (single lookup, no N+1)', async () => {
+    prisma.projectCall.findMany.mockResolvedValue([CALL_ROW({ id: 'call-1' }), CALL_ROW({ id: 'call-2' })]);
+    prisma.application.findMany.mockResolvedValue([{ callId: 'call-1' }]);
+    const res = await service.findBoard({ status: 'all' }, 'viewer');
+    expect(prisma.application.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.application.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { applicantId: 'viewer', callId: { in: ['call-1', 'call-2'] } } }),
+    );
+    expect(res.items.find((c) => c.id === 'call-1')?.hasApplied).toBe(true);
+    expect(res.items.find((c) => c.id === 'call-2')?.hasApplied).toBe(false);
+  });
+
+  it('skips the applications lookup when the page is empty', async () => {
+    prisma.projectCall.findMany.mockResolvedValue([]);
+    await service.findBoard({ status: 'all' }, 'viewer');
+    expect(prisma.application.findMany).not.toHaveBeenCalled();
+  });
 });
 
 describe('CallsService.createCall', () => {
@@ -228,7 +249,7 @@ describe('CallsService.createCall', () => {
       account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }) },
     };
     queue = { enqueue: jest.fn().mockResolvedValue(undefined) };
-    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService);
+    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService);
   });
 
   const DTO = (o: Partial<Record<string, unknown>> = {}) => ({
@@ -321,7 +342,7 @@ describe('CallsService.closeEarly', () => {
       },
       media: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
   });
 
   it('404s an unknown call', async () => {

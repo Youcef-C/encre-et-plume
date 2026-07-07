@@ -13,6 +13,7 @@ export const MEDIA_KINDS = [
   'article',
   'contest',
   'call_sample', // MC-4: "Appels à projets" sample image (public)
+  'application_sample', // MC-5: "Candidater" work-sample upload (public — portfolio parity)
 ] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 

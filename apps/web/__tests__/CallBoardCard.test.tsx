@@ -17,6 +17,7 @@ const base: CallCard = {
   status: 'open',
   deadline: '2026-07-19T00:00:00.000Z',
   isOwner: false,
+  hasApplied: false,
 };
 
 describe('CallBoardCard', () => {
@@ -58,6 +59,13 @@ describe('CallBoardCard', () => {
     const btn = getByRole('button', { name: 'Candidater' });
     btn.click();
     expect(onCandidater).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a disabled "Candidature envoyée" and no Candidater when the viewer already applied', () => {
+    render(<CallBoardCard call={{ ...base, hasApplied: true }} />);
+    const btn = screen.getByRole('button', { name: 'Candidature envoyée' });
+    expect(btn).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
   });
 
   it('shows a dashed placeholder with an accessible label when there is no sample', () => {

@@ -146,27 +146,49 @@ export default function CallBoardCard({
             <span>{statusText(call)}</span>
           )}
 
-          {showCandidater && (
-            <button
-              type="button"
-              onClick={onCandidater}
-              style={{
-                marginLeft: 'auto',
-                background: 'var(--ink)',
-                color: 'var(--paper)',
-                border: '2px solid var(--ink)',
-                borderRadius: 6,
-                padding: '7px 16px',
-                minHeight: 44,
-                fontWeight: 700,
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-                boxShadow: '2px 2px 0 var(--accent)',
-              }}
-            >
-              Candidater
-            </button>
-          )}
+          {showCandidater &&
+            (call.hasApplied ? (
+              // MC-5: already applied — disabled, the label itself carries the state (not color-only).
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                style={{
+                  marginLeft: 'auto',
+                  background: 'var(--tone)',
+                  color: 'var(--ink2)',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '7px 16px',
+                  minHeight: 44,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'default',
+                }}
+              >
+                Candidature envoyée
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onCandidater}
+                style={{
+                  marginLeft: 'auto',
+                  background: 'var(--ink)',
+                  color: 'var(--paper)',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '7px 16px',
+                  minHeight: 44,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  boxShadow: '2px 2px 0 var(--accent)',
+                }}
+              >
+                Candidater
+              </button>
+            ))}
         </div>
       </div>
     </article>

@@ -14,6 +14,7 @@ import * as api from '../../lib/api';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import CallBoardCard from './CallBoardCard';
 import PostCallModal from './PostCallModal';
+import ApplyCallModal from './ApplyCallModal';
 
 type Status = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -86,6 +87,7 @@ export default function AppelsClient() {
   const [status, setStatus] = useState<Status>('loading');
   const [retryKey, setRetryKey] = useState(0);
   const [posting, setPosting] = useState(false);
+  const [applyTarget, setApplyTarget] = useState<CallCard | null>(null);
 
   const filterKey = JSON.stringify({ role, genres, retryKey });
 
@@ -133,6 +135,16 @@ export default function AppelsClient() {
     setItems((prev) => [card, ...prev]);
     setTotal((t) => t + 1);
     setStatus('ready');
+  }
+
+  // MC-5: after a successful application, flip that card locally (no refetch) — mark applied and
+  // bump its counter so the meta line reads the incremented "N candidatures".
+  function handleApplied(callId: string) {
+    setItems((prev) =>
+      prev.map((c) =>
+        c.id === callId ? { ...c, hasApplied: true, applicationCount: c.applicationCount + 1 } : c,
+      ),
+    );
   }
 
   if (sessionLoading) {
@@ -266,7 +278,7 @@ export default function AppelsClient() {
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {items.map((c) => (
-              <CallBoardCard key={c.id} call={c} onCandidater={() => {}} />
+              <CallBoardCard key={c.id} call={c} onCandidater={() => setApplyTarget(c)} />
             ))}
           </div>
           {items.length < total && (
@@ -293,6 +305,14 @@ export default function AppelsClient() {
       )}
 
       {posting && <PostCallModal onClose={() => setPosting(false)} onCreated={handleCreated} />}
+
+      {applyTarget && (
+        <ApplyCallModal
+          call={applyTarget}
+          onClose={() => setApplyTarget(null)}
+          onApplied={handleApplied}
+        />
+      )}
     </div>
   );
 }

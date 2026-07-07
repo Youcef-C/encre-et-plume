@@ -25,6 +25,7 @@ const created: CallCard = {
   status: 'open',
   deadline: '2026-08-01T00:00:00.000Z',
   isOwner: true,
+  hasApplied: false,
 };
 
 function futureDate(days: number): string {
