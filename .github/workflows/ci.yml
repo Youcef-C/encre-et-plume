@@ -150,15 +150,6 @@ jobs:
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm --filter api exec prisma migrate deploy
 
-      # MC-1/MC-2: trouver.spec.ts and appels.spec.ts sign in as a real seeded account
-      # (camille.roux@seed.encre-et-plume.local) and exercise real backend fixture data — this
-      # was missing entirely from CI (only migrations were applied), so on a fresh DB the account
-      # never existed and login never redirected. e2e-seed.js (below, in global-setup.ts) seeds a
-      # separate set of generic qa_e2e_* accounts and does not create these fixtures.
-      - name: Seed dev/e2e fixtures
-        if: steps.webcheck.outputs.ok == 'true'
-        run: pnpm --filter api exec node prisma/seed.js
-
       - name: Install Playwright browsers
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm --filter web exec playwright install --with-deps
@@ -166,6 +157,16 @@ jobs:
       - name: Build
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm build
+
+      # MC-1/MC-2: trouver.spec.ts and appels.spec.ts sign in as a real seeded account
+      # (camille.roux@seed.encre-et-plume.local) and exercise real backend fixture data — this
+      # was missing entirely from CI (only migrations were applied), so on a fresh DB the account
+      # never existed and login never redirected. e2e-seed.js (below, in global-setup.ts) seeds a
+      # separate set of generic qa_e2e_* accounts and does not create these fixtures.
+      # Runs AFTER Build: seed.js requires @encre-et-plume/shared/dist, which only exists post-build.
+      - name: Seed dev/e2e fixtures
+        if: steps.webcheck.outputs.ok == 'true'
+        run: pnpm --filter api exec node prisma/seed.js
 
       - name: Run e2e
         if: steps.webcheck.outputs.ok == 'true'
