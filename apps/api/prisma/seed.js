@@ -499,7 +499,8 @@ async function main() {
   // `authorSlug` resolves to the owner's Account id so the login account owns one call.
   // MC-5: applications FK-reference calls (onDelete: Restrict), so wipe them first — this also resets
   // applicationCount to the fixture values below, keeping the MC-5 apply e2e repeatable across reseeds.
-  await prisma.application.deleteMany({});
+  // Optional-chained: the Application model ships with MC-5; older checkouts/CI clients lack it.
+  await prisma.application?.deleteMany({});
   await prisma.projectCall.deleteMany({});
   for (const call of PROJECT_CALLS) {
     const { authorSlug, ...data } = call;
