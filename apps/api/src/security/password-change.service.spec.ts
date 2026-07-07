@@ -7,7 +7,6 @@ jest.mock('bcryptjs', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
 import { PasswordChangeService } from './password-change.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';

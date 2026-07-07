@@ -6,7 +6,7 @@ jest.mock('bcryptjs', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { EmailChangeService } from './email-change.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';

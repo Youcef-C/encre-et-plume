@@ -54,12 +54,6 @@ function makePrisma() {
   };
 }
 
-function makePrivacyService() {
-  return {
-    runExport: jest.fn(),
-  };
-}
-
 function makeDeps() {
   const prisma = makePrisma();
   const media = {

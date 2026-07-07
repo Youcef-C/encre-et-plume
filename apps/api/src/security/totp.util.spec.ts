@@ -119,7 +119,7 @@ describe('AES-256-GCM round-trip', () => {
 
   it('throws when ciphertext is tampered', () => {
     const stored = encryptSecret('original');
-    const [iv, tag, ct] = stored.split(':');
+    const [iv, tag] = stored.split(':');
     const tampered = `${iv}:${tag}:${Buffer.from('tampered').toString('base64')}`;
     expect(() => decryptSecret(tampered)).toThrow();
   });

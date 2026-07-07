@@ -6,7 +6,6 @@ import {
   Logger,
   Optional,
   UnauthorizedException,
-  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs'; // ponytail: pure-JS; no native rebuild on Node version change

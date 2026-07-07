@@ -3,7 +3,6 @@
  * Honest limits: sessions from before F-18 ships are not indexed (no history).
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
 import { SessionStore } from './session-store.service';
 import { RedisService } from '../redis/redis.service';
 import { SESSION_NOT_FOUND } from '@encre-et-plume/shared';
