@@ -78,6 +78,8 @@ export default function PartnerCard({
         borderRadius: 10,
         overflow: 'hidden',
         boxShadow: '5px 5px 0 var(--shadow)',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div style={{ display: 'flex', gap: 5, padding: 6 }}>
@@ -96,7 +98,7 @@ export default function PartnerCard({
         })}
       </div>
 
-      <div style={{ padding: '6px 13px 14px' }}>
+      <div style={{ padding: '6px 13px 14px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span
             aria-hidden="true"
@@ -136,7 +138,7 @@ export default function PartnerCard({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 7, marginTop: 9 }}>
+        <div style={{ display: 'flex', gap: 7, marginTop: 'auto', paddingTop: 9 }}>
           <Link
             href={`/${slug}`}
             aria-label={`Profil de ${name}`}
