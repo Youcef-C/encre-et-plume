@@ -667,3 +667,117 @@ for (const [label, width, height] of [
     expect(overflow).toBe(false);
   });
 }
+
+// ---------------------------------------------------------------------------
+// MC-1 round 2 (owner addendum §5 + §9) — country/région location (no city),
+// and self-declared creator type(s) on the profile.
+// ---------------------------------------------------------------------------
+
+// OnBrandSelect is a combobox listbox (§8) everywhere — open the trigger, then click the option.
+async function pickComboboxOption(
+  page: import('@playwright/test').Page,
+  triggerLabel: string,
+  optionName: string,
+) {
+  await page.getByLabel(triggerLabel).click();
+  await page.getByRole('option', { name: optionName }).click();
+}
+
+test('MC1-PROFILE-1: no cities anywhere — "Ville" input is gone; "Pays" lists French country names', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { country: null, region: null } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+
+  await expect(page.getByLabel('Ville')).toHaveCount(0);
+  await page.getByLabel('Pays').click();
+  await expect(page.getByRole('option', { name: 'Japon' })).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Argentine' })).toBeVisible();
+  await page.keyboard.press('Escape');
+});
+
+test('MC1-PROFILE-2: "Région" appears only when Pays = France; picking a région and saving shows it read-mode', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { country: null, region: null } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+
+  // No country yet → no "Région" control.
+  await expect(page.getByLabel('Région')).toHaveCount(0);
+
+  await pickComboboxOption(page, 'Pays', 'France');
+  await expect(page.getByLabel('Région')).toBeVisible();
+  await pickComboboxOption(page, 'Région', 'Bretagne');
+
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText('Bretagne', { exact: true })).toBeVisible();
+
+  // Persisted server-side — survives a reload.
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Bretagne', { exact: true })).toBeVisible();
+});
+
+test('MC1-PROFILE-3: switching Pays away from France hides "Région" and nulls it on save; location shows the country', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { country: 'FR', region: 'Bretagne' } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+
+  await expect(page.getByLabel('Région')).toBeVisible(); // fixture starts as FR/Bretagne
+  await pickComboboxOption(page, 'Pays', 'Japon');
+  await expect(page.getByLabel('Région')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText('Japon', { exact: true })).toBeVisible();
+  await expect(page.getByText('Bretagne', { exact: true })).toHaveCount(0);
+});
+
+test('MC1-PROFILE-4: creator-type toggle buttons — self-declaring both roles shows both badges on the profile', async ({
+  page,
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  await request.patch(`${API}/profiles/me`, { data: { creatorRoles: [] } });
+
+  await loginUi(page, ACCOUNTS.UTILISATEUR.email);
+  await page.goto('/e2e-utilisateur');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Scénariste', { exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
+  const scenariste = page.getByRole('button', { name: 'Scénariste' });
+  const dessinateur = page.getByRole('button', { name: 'Dessinateur·rice' });
+  await expect(scenariste).toHaveAttribute('aria-pressed', 'false');
+  await scenariste.click();
+  await dessinateur.click();
+  await expect(scenariste).toHaveAttribute('aria-pressed', 'true');
+  await expect(dessinateur).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
+
+  // Read mode: both role badges rendered.
+  await expect(page.getByText('Scénariste', { exact: true })).toBeVisible();
+  await expect(page.getByText('Dessinateur·rice', { exact: true })).toBeVisible();
+});

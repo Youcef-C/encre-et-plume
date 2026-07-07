@@ -74,6 +74,10 @@ const mockProfile: ProfileResponse = {
   },
   tags: ['Seinen', 'Thriller'],
   counters: { followers: 0, likes: 0, works: 0, supporters: 0 },
+  country: 'FR',
+  region: 'Bretagne',
+  creatorRoles: ['dessinateur'],
+  availability: 'ouvert',
 };
 
 const mockAccount: AccountSummary = {
@@ -100,6 +104,12 @@ function renderProfile(slug: string, account: AccountSummary | null = null) {
       <ProfilePageClient slug={slug} />
     </SessionContext.Provider>
   );
+}
+
+// OnBrandSelect is a combobox listbox (§8): open the "Pays" trigger, then click the country option.
+async function pickCountry(user: ReturnType<typeof userEvent.setup>, optionLabel: string) {
+  await user.click(screen.getByLabelText('Pays'));
+  await user.click(screen.getByRole('option', { name: optionLabel }));
 }
 
 beforeEach(() => {
@@ -613,5 +623,80 @@ describe('ProfilePageClient — avatar fullscreen lightbox', () => {
     expect(screen.queryByRole('img', { name: /yuki moreau/i })).not.toBeInTheDocument();
     // No lightbox trigger button
     expect(screen.queryByRole('button', { name: /voir la photo/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfilePageClient — MC-1 country + région location (round 2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(mockProfile);
+    vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
+  });
+
+  it('shows the composed location (French région) in read mode', async () => {
+    renderProfile('yuki-moreau', null);
+    expect(await screen.findByText('Bretagne')).toBeInTheDocument();
+  });
+
+  it('offers "Pays" with French country names and no "Ville" input in edit mode', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByLabelText('Pays')); // open the combobox listbox
+    expect(screen.getByRole('option', { name: 'Japon' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Ville')).not.toBeInTheDocument();
+  });
+
+  it('shows the "Région" select only when the country is France', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    // fixture country = FR → Région visible
+    expect(screen.getByLabelText('Région')).toBeInTheDocument();
+    await pickCountry(user, 'Japon');
+    expect(screen.queryByLabelText('Région')).not.toBeInTheDocument();
+  });
+
+  it('PATCHes {country, region} with region nulled when leaving France, and never sends city', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await pickCountry(user, 'Japon');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    const body = vi.mocked(updateMyProfile).mock.calls[0][0];
+    expect(body).toMatchObject({ country: 'JP', region: null });
+    expect(body).not.toHaveProperty('city');
+  });
+});
+
+describe('ProfilePageClient — MC-1 §9 creator type(s)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockResolvedValue(mockProfile);
+    vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
+  });
+
+  it('shows the creator role(s) in read mode', async () => {
+    renderProfile('yuki-moreau', null);
+    expect(await screen.findByText('Dessinateur·rice')).toBeInTheDocument();
+  });
+
+  it('lets the owner add a second creator type via toggle buttons and PATCHes both', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    const scenariste = screen.getByRole('button', { name: 'Scénariste' });
+    expect(scenariste).toHaveAttribute('aria-pressed', 'false');
+    await user.click(scenariste);
+    expect(scenariste).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    const body = vi.mocked(updateMyProfile).mock.calls[0][0];
+    expect(body.creatorRoles).toEqual(['dessinateur', 'scenariste']);
   });
 });

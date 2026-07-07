@@ -287,8 +287,28 @@ const ILLUSTRATIONS = [
 // DR-10: birthdate seeded as adult (isAdult:true) — dr1-camille-roux is the login-tested account
 // (FAVORITES/READING_PROGRESS/WATCHLIST/REACTIONS above), so it must be age-cleared by default.
 const CREATORS = [
-  { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', birthdate: new Date('1996-04-12') },
-  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03') },
+  { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', birthdate: new Date('1996-04-12'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Encre dense'] },
+  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Thriller'] },
+];
+
+// MC-1 "Trouver un·e partenaire" directory fixtures. Each seeds an Account+Profile (creator role) +
+// 2 PortfolioItems. Tags mix F-20 genre labels (→ genreTags) and free style words (→ styleTags).
+// Region/availability/genre variety gives every filter a discriminating fixture (plan B6).
+const PARTNERS = [
+  { email: 'theo.m@seed.encre-et-plume.local', displayName: 'Théo M.', slug: 'mc1-theo-m', role: 'dessinateur', country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'disponible', tags: ['Seinen', 'Encre dense'], trendingScore: 90 },
+  { email: 'ines.k@seed.encre-et-plume.local', displayName: 'Inès K.', slug: 'mc1-ines-k', role: 'dessinateur', country: 'FR', region: 'Île-de-France', availability: 'ouvert', tags: ['Josei', 'Aquarelle'], trendingScore: 80 },
+  { email: 'hugo.d@seed.encre-et-plume.local', displayName: 'Hugo D.', slug: 'mc1-hugo-d', role: 'dessinateur', country: 'FR', region: 'Bretagne', availability: 'ouvert', tags: ['Fantastique', 'Action'], trendingScore: 70 },
+  { email: 'lea.b@seed.encre-et-plume.local', displayName: 'Léa B.', slug: 'mc1-lea-b', role: 'scenariste', country: 'FR', region: 'Occitanie', availability: 'disponible', tags: ['Seinen', 'Thriller', 'Dialogues ciselés'], trendingScore: 65 },
+  { email: 'noe.p@seed.encre-et-plume.local', displayName: 'Noé P.', slug: 'mc1-noe-p', role: 'scenariste', country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', availability: 'ouvert', tags: ['Romance', 'Comédie'], trendingScore: 60 },
+  { email: 'sora.t@seed.encre-et-plume.local', displayName: 'Sora T.', slug: 'mc1-sora-t', role: 'dessinateur', country: 'JP', region: null, availability: 'ouvert', tags: ['Shōnen', 'Action', 'Ligne claire'], trendingScore: 55 },
+  { email: 'marta.l@seed.encre-et-plume.local', displayName: 'Marta L.', slug: 'mc1-marta-l', role: 'dessinateur', country: 'ES', region: null, availability: 'indisponible', tags: ['Horreur', 'Lavis'], trendingScore: 50 },
+  { email: 'diego.s@seed.encre-et-plume.local', displayName: 'Diego S.', slug: 'mc1-diego-s', role: 'scenariste', country: 'AR', region: null, availability: 'ouvert', tags: ['Aventure', 'SF'], trendingScore: 45 },
+];
+
+// MC-1 "Appels à projets" preview rows (the prototype's two calls). MC-4 owns the full board + POST.
+const PROJECT_CALLS = [
+  { title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.', tags: ['Seinen', 'Thriller'], closesAt: inDays(12), applicationCount: 0, status: 'open' },
+  { title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.', tags: ['Fantastique', 'One-shot'], closesAt: null, applicationCount: 5, status: 'open' },
 ];
 
 // DR-10: a real, loginable minor test account (password `password123`, like dr1-camille-roux) —
@@ -310,6 +330,15 @@ async function main() {
     const chapter = SCHEDULED_CHAPTERS.find((c) => c.workSlug === w.slug);
     if (chapter) {
       // Clear + recreate so reseeding doesn't accumulate duplicate scheduled chapters.
+      // Clear dependent ReadingProgress/Reaction rows first (same guard as the published-chapter
+      // block below) — without it the deleteMany 500s on ReadingProgress_chapterId_fkey once any
+      // account has opened a scheduled chapter on a re-run over an existing DB.
+      const staleScheduled = await prisma.chapter.findMany({ where: { workId: work.id, status: 'scheduled' }, select: { id: true } });
+      if (staleScheduled.length) {
+        const ids = staleScheduled.map((c) => c.id);
+        await prisma.readingProgress.deleteMany({ where: { chapterId: { in: ids } } });
+        await prisma.reaction.deleteMany({ where: { targetType: 'chapter', targetId: { in: ids } } });
+      }
       await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'scheduled' } });
       await prisma.chapter.create({
         data: { workId: work.id, number: chapter.number, status: 'scheduled', publishAt: chapter.publishAt },
@@ -341,11 +370,41 @@ async function main() {
       update: { displayName: c.displayName, profileSlug: c.slug, birthdate: c.birthdate },
     });
     // DR-3: city 'Lyon' matches the prototype's "Scénariste · Lyon" / "Dessinateur · Lyon" sidebar rows.
+    // MC-1: country/region/availability/tags so these creators also appear in the partner directory.
+    const creatorProfile = { accountId: account.id, creatorRoles: [c.role], trendingScore: 100, city: 'Lyon', country: c.country, region: c.region, availability: c.availability, tags: c.tags };
     await prisma.profile.upsert({
       where: { accountId: account.id },
-      create: { accountId: account.id, creatorRoles: [c.role], trendingScore: 100, city: 'Lyon' },
-      update: { creatorRoles: [c.role], trendingScore: 100, city: 'Lyon' },
+      create: creatorProfile,
+      update: creatorProfile,
     });
+  }
+
+  // MC-1: partner-directory creator fixtures (Account + Profile + 2 PortfolioItems each).
+  for (const p of PARTNERS) {
+    const account = await prisma.account.upsert({
+      where: { email: p.email },
+      create: { email: p.email, displayName: p.displayName, passwordHash: hash, profileSlug: p.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
+      update: { displayName: p.displayName, profileSlug: p.slug },
+    });
+    const profileData = { accountId: account.id, creatorRoles: [p.role], trendingScore: p.trendingScore, country: p.country, region: p.region, availability: p.availability, tags: p.tags };
+    const profile = await prisma.profile.upsert({
+      where: { accountId: account.id },
+      create: profileData,
+      update: profileData,
+    });
+    // Clear + recreate 2 ordered portfolio thumbs so reseeding never accumulates duplicates.
+    await prisma.portfolioItem.deleteMany({ where: { profileId: profile.id } });
+    for (let i = 0; i < 2; i++) {
+      await prisma.portfolioItem.create({
+        data: { profileId: profile.id, image: `https://example.com/portfolio/${p.slug}-${i}.jpg`, order: i },
+      });
+    }
+  }
+
+  // MC-1: "Appels à projets" preview rows. deleteMany + create (like ANNOUNCEMENTS) — no natural key.
+  await prisma.projectCall.deleteMany({});
+  for (const call of PROJECT_CALLS) {
+    await prisma.projectCall.create({ data: call });
   }
 
   // DR-10: minor test account (no creator profile — a plain reader). emailVerifiedAt is set at

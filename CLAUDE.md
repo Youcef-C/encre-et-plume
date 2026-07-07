@@ -71,6 +71,10 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 
 ## Conventions
 - **TDD** — write the failing test before the implementation (API + web).
+- **Split test runs** — the e2e suite is large; per story, run only that story's Playwright spec file(s)
+  plus a short smoke (auth + nav), not the whole suite. Run the full e2e suite (sharded if needed) at epic
+  boundaries / before an epic's final push, not on every story. Unit suites stay scoped
+  (`pnpm --filter <pkg> test -- <pattern>`) while iterating; the full `pnpm test` still gates commits.
 - **Ponytail laziness** — the simplest solution that works: reuse existing code, prefer the platform/
   stdlib, no speculative abstractions. Smallest correct diff wins.
 - **Language** — UI copy stays in **French** (verbatim from the stories, e.g. "Lire maintenant",
@@ -84,12 +88,20 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
   comes from the shared SVG icon set `apps/web/components/icons.tsx` (chunky ink-style strokes); extend
   that file when a new icon is needed. Pure typography (arrows `→`, `✓`, `＋`, `◆` separators) is fine.
 - **On-brand form controls** (user rule): never render bare native checkboxes/selects — use the shared
-  `apps/web/components/form/OnBrandCheckbox.tsx` / `OnBrandSelect.tsx`. Genre/tag entry is never free
+  `apps/web/components/form/OnBrandCheckbox.tsx` / `OnBrandSelect.tsx` / `OnBrandMultiSelect.tsx`.
+  `OnBrandSelect` is a **custom popover listbox** (not a styled native `<select>`) — no native select
+  may render anywhere in the app; multi-selects show their selected values as removable chips outside
+  the trigger. Genre/tag entry is never free
   text: use `GenreChip` + `GenreSuggestInput` backed by the `packages/shared/src/genres.json` vocabulary
   (`F-20`). Filter UIs auto-apply on change (no "Appliquer" button) with debounced text inputs.
 - **Prototype REPLICA (not approximation)** — the UI must be a faithful **replica** of the interactive
   prototype, the single source of truth: **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**.
   Do NOT invent layouts, nav items, controls, icons, or copy — reproduce what the prototype draws.
+  - **Induced deviations are allowed:** when a requirement forces a control the prototype doesn't draw
+    (e.g. a filter needs multi-select but the proto shows a solo select, or a related page needs a better
+    input such as a normalized city/region autocomplete), the plan MAY deviate from the prototype — keep
+    the design-system look (OnBrand* components, tokens), stay minimal, and record the deviation + reason
+    in `plan.md` / the dev notes so QA and the reviewer grade against the deviation, not the raw prototype.
   - **Finding the right section:** the prototype is one HTML file where every screen is delimited by a
     banner comment `<!-- ============ NAME ============ -->` and carries `data-screen="<key>"` /
     `data-page="<key>"`; sub-components inside a screen use inner `<!-- comment -->` markers, and the global

@@ -42,8 +42,14 @@ function renderContact(account: AccountSummary | null = null) {
   );
 }
 
+// OnBrandSelect is a combobox listbox (§8): open the trigger, then click the option by its label.
+async function pickSujet(user: ReturnType<typeof userEvent.setup>, optionLabel: string) {
+  await user.click(screen.getByLabelText(/sujet/i));
+  await user.click(screen.getByRole('option', { name: optionLabel }));
+}
+
 async function fillValid(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText(/sujet/i), 'general');
+  await pickSujet(user, 'Question générale');
   await user.type(screen.getByLabelText(/^nom/i), 'Camille Dupont');
   await user.type(screen.getByLabelText(/e-mail/i), 'camille@example.com');
   await user.type(screen.getByLabelText(/message/i), 'Bonjour, une question.');
@@ -64,17 +70,14 @@ describe('ContactClient', () => {
     expect(screen.getByText(/bouton « Signaler »/i)).toBeInTheDocument();
   });
 
-  it('renders the 4 French category labels in a labelled select', () => {
+  it('renders the 4 French category labels in a labelled select', async () => {
+    const user = userEvent.setup();
     renderContact();
     const select = screen.getByLabelText(/sujet/i);
-    expect(select.tagName).toBe('SELECT');
-    for (const label of [
-      'Question générale',
-      'Problème de compte',
-      'Signaler un bug',
-      'Autre',
-    ]) {
-      expect(within(select).getByText(label)).toBeInTheDocument();
+    expect(select).toHaveAttribute('role', 'combobox');
+    await user.click(select);
+    for (const label of ['Question générale', 'Problème de compte', 'Signaler un bug', 'Autre']) {
+      expect(screen.getByRole('option', { name: label })).toBeInTheDocument();
     }
   });
 
@@ -123,7 +126,7 @@ describe('ContactClient', () => {
   it('bug mode: shows technical context (url / userAgent / requestId)', async () => {
     const user = userEvent.setup();
     renderContact(null);
-    await user.selectOptions(screen.getByLabelText(/sujet/i), 'bug');
+    await pickSujet(user, 'Signaler un bug');
     const panel = await screen.findByTestId('bug-context');
     expect(within(panel).getByText(/navigator|jsdom/i)).toBeInTheDocument();
     expect(within(panel).getByText(/req-abc-123/)).toBeInTheDocument();
@@ -132,7 +135,7 @@ describe('ContactClient', () => {
   it('bug mode: "Retirer" drops that field from the submitted context', async () => {
     const user = userEvent.setup();
     renderContact(null);
-    await user.selectOptions(screen.getByLabelText(/sujet/i), 'bug');
+    await pickSujet(user, 'Signaler un bug');
     await user.type(screen.getByLabelText(/^nom/i), 'Camille Dupont');
     await user.type(screen.getByLabelText(/e-mail/i), 'camille@example.com');
     await user.type(screen.getByLabelText(/message/i), 'Ça plante ici.');

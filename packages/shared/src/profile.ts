@@ -1,4 +1,6 @@
 // Shared profile contracts for F-3 (creator profile & portfolio).
+import type { PartnerRegion, PartnerAvailability } from './partners.js'; // MC-1 directory columns
+import type { CreatorRole } from './onboarding.js'; // F-2/F-17 creator sub-roles
 
 /** Creator crafts a profile may seek to pair with (seeking.targetRole). MC-2 matching input. */
 export const SEEKING_TARGET_ROLES = ['scénariste', 'dessinateur·rice'] as const;
@@ -43,6 +45,12 @@ export interface ProfileResponse {
   seeking: ProfileSeeking;
   tags: string[];
   counters: ProfileCounters;
+  /** F-2/F-17 creator sub-roles the user self-declares (MC-1 §9: editable + shown on the profile). */
+  creatorRoles: CreatorRole[];
+  /** MC-1 location model: country = ISO alpha-2 (null if unset); region = FR-only sub-level (null off France). */
+  country: string | null;
+  region: PartnerRegion | null;
+  availability: PartnerAvailability;
 }
 
 /** PATCH /profiles/me body. All fields optional; only provided fields change. */
@@ -57,4 +65,8 @@ export interface UpdateProfileRequest {
   bio?: string | null;
   city?: string | null;
   specialty?: string | null;
+  creatorRoles?: CreatorRole[]; // MC-1 §9: user-defined creator type(s)
+  country?: string | null; // MC-1: ISO alpha-2
+  region?: PartnerRegion | null; // MC-1: FR-only sub-level
+  availability?: PartnerAvailability; // MC-1
 }

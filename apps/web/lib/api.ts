@@ -446,6 +446,15 @@ export const getReactionState = (targetType: ReactionTargetType, ids: string[]):
     ? Promise.resolve({})
     : request<ReactionStateResponse>(`/reactions/state?targetType=${targetType}&ids=${ids.map(encodeURIComponent).join(',')}`);
 
+// ─── Partner directory "Trouver un·e partenaire" (MC-1) ───────────────────────
+import type { PartnersResponse, CallsResponse } from '@encre-et-plume/shared';
+
+export const getPartners = (query: URLSearchParams): Promise<PartnersResponse> =>
+  request<PartnersResponse>(`/partners${query.toString() ? `?${query.toString()}` : ''}`);
+
+export const getCalls = (limit = 2): Promise<CallsResponse> =>
+  request<CallsResponse>(`/calls?limit=${limit}`);
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

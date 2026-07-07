@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole } from '@encre-et-plume/shared';
+import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole, PartnerRegion, PartnerAvailability, CreatorRole } from '@encre-et-plume/shared';
 import { normalizeGenres } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
@@ -21,6 +21,10 @@ type ProfileRow = {
   seekingGenres: string[];
   seekingProjectLength: string | null;
   tags: string[];
+  creatorRoles: string[];
+  country: string | null;
+  region: string | null;
+  availability: string;
 } | null;
 
 @Injectable()
@@ -42,12 +46,30 @@ export class ProfilesService {
     if (dto.city !== undefined) data['city'] = dto.city;
     if (dto.specialty !== undefined) data['specialty'] = dto.specialty;
     if (dto.tags !== undefined) data['tags'] = normalizeGenres(dto.tags);
+    if (dto.creatorRoles !== undefined) data['creatorRoles'] = dto.creatorRoles;
+    if (dto.country !== undefined) data['country'] = dto.country;
+    if (dto.region !== undefined) data['region'] = dto.region;
+    if (dto.availability !== undefined) data['availability'] = dto.availability;
     if (dto.seeking !== undefined) {
       const s = dto.seeking;
       if (s.active !== undefined) data['seekingActive'] = s.active;
       if (s.targetRole !== undefined) data['seekingTargetRole'] = s.targetRole;
       if (s.genres !== undefined) data['seekingGenres'] = normalizeGenres(s.genres);
       if (s.projectLength !== undefined) data['seekingProjectLength'] = s.projectLength;
+    }
+
+    // MC-1 §5 trust boundary: a French région only persists when the EFFECTIVE country is FR — never
+    // trust the client to have nulled it. Effective value = the patched value if present, else the
+    // stored row's (so patching country OR region alone still resolves against reality).
+    if ('country' in data || 'region' in data) {
+      let country = 'country' in data ? (data['country'] as string | null) : undefined;
+      let region = 'region' in data ? (data['region'] as string | null) : undefined;
+      if (country === undefined || region === undefined) {
+        const stored = await this.prisma.profile.findUnique({ where: { accountId }, select: { country: true, region: true } });
+        if (country === undefined) country = stored?.country ?? null;
+        if (region === undefined) region = stored?.region ?? null;
+      }
+      if (country !== 'FR' && region != null) data['region'] = null;
     }
 
     const profile = await this.prisma.profile.upsert({
@@ -109,6 +131,12 @@ export class ProfilesService {
       bio: profile?.bio ?? null,
       seeking: { active: seekingActive, targetRole: seekingTargetRole, genres: seekingGenres, projectLength: seekingProjectLength, text },
       tags: profile?.tags ?? [],
+      // MC-1 §9: creator sub-roles the user self-declares (F-2 vocabulary), shown + editable on the profile.
+      creatorRoles: (profile?.creatorRoles ?? []) as CreatorRole[],
+      // MC-1: location = country (ISO alpha-2, null if unset) + FR-only région sub-level (null off France).
+      country: profile?.country ?? null,
+      region: (profile?.region ?? null) as PartnerRegion | null,
+      availability: (profile?.availability ?? 'ouvert') as PartnerAvailability,
       // ponytail: counters always 0 until PUB-4(followers)/DR-9(likes)/DR-3(works)/MR-1(supporters) land
       counters: { followers: 0, likes: 0, works: 0, supporters: 0 },
     };

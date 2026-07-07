@@ -237,7 +237,7 @@ describe('Header — primary nav', () => {
     expect(screen.getByRole('navigation', { name: /navigation principale/i })).toBeInTheDocument();
   });
 
-  it('renders seven prototype nav links with correct hrefs', () => {
+  it('renders the prototype nav links with correct hrefs ("Trouver" is a dropdown)', () => {
     renderHeader({ account: null });
     const expected = [
       { label: /accueil/i,    href: '/'           },
@@ -245,15 +245,35 @@ describe('Header — primary nav', () => {
       { label: /galerie/i,    href: '/galerie'     },
       { label: /actualités/i, href: '/actualites'  },
       { label: /lire/i,       href: '/lire'        },
-      { label: /trouver/i,    href: '/trouver'     },
       { label: /calendrier/i, href: '/calendrier'  },
     ];
     for (const { label, href } of expected) {
       expect(screen.getByRole('link', { name: label })).toHaveAttribute('href', href);
     }
+    // §11: "Trouver" is a menu button, not a link
+    expect(screen.getByRole('button', { name: 'Trouver' })).toHaveAttribute('aria-haspopup', 'menu');
     // Projets and Ma liste are auth-gated — must not appear when logged out
     expect(screen.queryByRole('link', { name: /^projets$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^ma liste$/i })).not.toBeInTheDocument();
+  });
+
+  it('§11: the "Trouver" nav dropdown opens two destinations', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: null });
+    const trigger = screen.getByRole('button', { name: 'Trouver' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const menu = screen.getByRole('menu', { name: 'Trouver' });
+    expect(within(menu).getByRole('menuitem', { name: 'Trouver un·e partenaire' })).toHaveAttribute('href', '/trouver');
+    expect(within(menu).getByRole('menuitem', { name: 'Appels à projets' })).toHaveAttribute('href', '/appels');
+  });
+
+  it('§11: the "Trouver" dropdown is marked active on /trouver and on /appels', () => {
+    vi.mocked(usePathname).mockReturnValue('/appels');
+    renderHeader({ account: null });
+    // aria-current="page" drives the .ep-nav-link accent (red) fill via CSS
+    expect(screen.getByRole('button', { name: 'Trouver' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('marks the active route with aria-current="page" and others without it', () => {
@@ -613,7 +633,17 @@ describe('Header — F-7 search overlay', () => {
 describe('Header — responsive mobile nav', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  const NAV = ['Accueil', 'Découvrir', 'Galerie', 'Actualités', 'Lire', 'Trouver', 'Calendrier'];
+  // §11: the hamburger degrades the "Trouver" dropdown to two plain entries.
+  const NAV = [
+    'Accueil',
+    'Découvrir',
+    'Galerie',
+    'Actualités',
+    'Lire',
+    'Trouver un·e partenaire',
+    'Appels à projets',
+    'Calendrier',
+  ];
 
   it('hamburger toggle opens a mobile nav with the 7 prototype links and closes on selection', async () => {
     const user = userEvent.setup();

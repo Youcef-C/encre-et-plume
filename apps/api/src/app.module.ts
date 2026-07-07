@@ -22,6 +22,8 @@ import { GalleryModule } from './gallery/gallery.module';
 import { ListModule } from './list/list.module';
 import { ReactionsModule } from './reactions/reactions.module';
 import { SupportModule } from './support/support.module';
+import { PartnersModule } from './partners/partners.module';
+import { CallsModule } from './calls/calls.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -43,6 +45,8 @@ import { SupportModule } from './support/support.module';
   //   moved to ReactionsModule's DELETE /reactions/save, B5 — single unsave implementation).
   // ReactionsModule (DR-9): POST/DELETE /reactions/{like,save} + GET /reactions/state.
   // SupportModule (F-21): public POST /support/tickets — help/contact/bug channel.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule],
+  // PartnersModule (MC-1): authenticated GET /partners — "Trouver un·e partenaire" creator directory.
+  // CallsModule (MC-1): authenticated GET /calls — "Appels à projets" preview (MC-4 extends).
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule],
 })
 export class AppModule {}

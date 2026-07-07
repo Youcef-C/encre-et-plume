@@ -24,3 +24,5 @@ export * from './list.js';
 export * from './reactions.js';
 export * from './age.js';
 export * from './support.js';
+export * from './partners.js';
+export * from './locations.js';

@@ -1,8 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { ProfileResponse, ApiError, SeekingTargetRole, MediaResponse, MediaVariants } from '@encre-et-plume/shared';
-import { SEEKING_TARGET_ROLES } from '@encre-et-plume/shared';
+import type { ProfileResponse, ApiError, SeekingTargetRole, MediaResponse, MediaVariants, PartnerRegion, CreatorRole } from '@encre-et-plume/shared';
+import { SEEKING_TARGET_ROLES, PARTNER_REGIONS, COUNTRY_CODES, CREATOR_ROLES, countryLabelFr, formatLocationFr } from '@encre-et-plume/shared';
+import { BrushIcon, PenNibIcon } from './icons';
+
+// MC-1 §9 — creator-type labels (verbatim F-2/F-17 copy) + the matching partner-card icon.
+const CREATOR_ROLE_LABELS: Record<CreatorRole, string> = {
+  scenariste: 'Scénariste',
+  dessinateur: 'Dessinateur·rice',
+};
+const CreatorRoleIcon = { scenariste: PenNibIcon, dessinateur: BrushIcon };
+
+// MC-1 (round 2) — country picker options, sorted by French name (same order as /trouver).
+const COUNTRY_OPTIONS = [...COUNTRY_CODES]
+  .map((code) => ({ code, label: countryLabelFr(code) }))
+  .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
 import { getProfile, updateMyProfile, setAvatar, buildSrcSet, deleteAvatar } from '../lib/api';
 import { useSession } from '../lib/session';
 import ProfileTags from './ProfileTags';
@@ -38,7 +51,9 @@ type Props = { slug: string };
 
 type EditData = {
   bio: string | null;
-  city: string | null;
+  country: string | null;
+  region: PartnerRegion | null;
+  creatorRoles: CreatorRole[];
   specialty: string | null;
   seeking: {
     active: boolean;
@@ -279,7 +294,9 @@ export default function ProfilePageClient({ slug }: Props) {
     if (!profile) return;
     setEditData({
       bio: profile.bio,
-      city: profile.city,
+      country: profile.country,
+      region: profile.region,
+      creatorRoles: profile.creatorRoles,
       specialty: profile.specialty,
       seeking: {
         active: profile.seeking.active,
@@ -449,6 +466,37 @@ export default function ProfilePageClient({ slug }: Props) {
                   {profile.roleLine}
                 </p>
               )}
+              {formatLocationFr(profile.country, profile.region) && (
+                <p style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500, marginTop: 3 }}>
+                  {formatLocationFr(profile.country, profile.region)}
+                </p>
+              )}
+              {profile.creatorRoles.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {profile.creatorRoles.map((r) => {
+                    const Icon = CreatorRoleIcon[r];
+                    return (
+                      <span
+                        key={r}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: 'var(--paper)',
+                          border: '2px solid var(--ink)',
+                          borderRadius: 5,
+                          padding: '3px 9px',
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                      >
+                        <Icon size={13} />
+                        {CREATOR_ROLE_LABELS[r]}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div style={{ flex: 1 }} />
@@ -607,6 +655,56 @@ export default function ProfilePageClient({ slug }: Props) {
               <fieldset style={editFieldsetStyle}>
                 <legend style={editLegendStyle}>Informations</legend>
 
+                {/* MC-1 §9 — self-declared creator type(s); prominent toggle buttons, above the rest.
+                    Both selectable, empty allowed. */}
+                <fieldset style={{ border: 'none', padding: 0, margin: '0 0 14px' }}>
+                  <legend className="ep-label" style={{ padding: 0, marginBottom: 8 }}>
+                    Type de création
+                  </legend>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9 }}>
+                    {CREATOR_ROLES.map((r) => {
+                      const on = editData.creatorRoles.includes(r);
+                      const Icon = CreatorRoleIcon[r];
+                      return (
+                        <button
+                          key={r}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            setEditData((d) =>
+                              d && {
+                                ...d,
+                                creatorRoles: d.creatorRoles.includes(r)
+                                  ? d.creatorRoles.filter((x) => x !== r)
+                                  : [...d.creatorRoles, r],
+                              },
+                            )
+                          }
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            minHeight: 44,
+                            padding: '8px 16px',
+                            fontSize: 14,
+                            fontWeight: 700,
+                            fontFamily: 'inherit',
+                            border: '2px solid var(--ink)',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            boxShadow: on ? '3px 3px 0 var(--shadow)' : 'none',
+                            background: on ? 'var(--accent)' : 'var(--card)',
+                            color: on ? '#fff' : 'var(--ink)',
+                          }}
+                        >
+                          <Icon size={15} />
+                          {CREATOR_ROLE_LABELS[r]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
                 <div className="ep-form-row-2" style={{ marginBottom: 12 }}>
                   <div>
                     <label className="ep-label" htmlFor="edit-specialty">
@@ -623,20 +721,51 @@ export default function ProfilePageClient({ slug }: Props) {
                     />
                   </div>
                   <div>
-                    <label className="ep-label" htmlFor="edit-city">
-                      Ville
+                    <label className="ep-label" htmlFor="edit-country">
+                      Pays
                     </label>
-                    <input
-                      id="edit-city"
-                      className="ep-input"
-                      value={editData.city ?? ''}
-                      onChange={(e) =>
-                        setEditData((d) => d && { ...d, city: e.target.value || null })
-                      }
-                      placeholder="Ex. Lyon, FR"
-                    />
+                    {/* Switching away from France nulls the FR-only région (server enforces too, B9). */}
+                    <OnBrandSelect
+                      id="edit-country"
+                      value={editData.country ?? ''}
+                      onChange={(e) => {
+                        const country = e.target.value || null;
+                        setEditData((d) =>
+                          d && { ...d, country, region: country === 'FR' ? d.region : null },
+                        );
+                      }}
+                    >
+                      <option value="">—</option>
+                      {COUNTRY_OPTIONS.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </OnBrandSelect>
                   </div>
                 </div>
+
+                {editData.country === 'FR' && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="ep-label" htmlFor="edit-region">
+                      Région
+                    </label>
+                    <OnBrandSelect
+                      id="edit-region"
+                      value={editData.region ?? ''}
+                      onChange={(e) =>
+                        setEditData((d) => d && { ...d, region: (e.target.value as PartnerRegion) || null })
+                      }
+                    >
+                      <option value="">—</option>
+                      {PARTNER_REGIONS.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </OnBrandSelect>
+                  </div>
+                )}
 
                 <div>
                   <label className="ep-label" htmlFor="edit-bio">

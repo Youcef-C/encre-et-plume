@@ -109,13 +109,14 @@ test('F4-E2E-4: primary nav renders the 7 prototype links with correct hrefs', a
   await expect(nav).toBeVisible();
 
   // Prototype TOP NAV: Accueil · Découvrir · Galerie · Actualités · Lire · Trouver · Calendrier
+  // MC-1 §11: "Trouver" is now a dropdown button (2 destinations), not a plain link — asserted
+  // separately below, not in this link-href loop.
   const links = [
     { label: 'Accueil', href: '/' },
     { label: 'Découvrir', href: '/decouvrir' },
     { label: 'Galerie', href: '/galerie' },
     { label: 'Actualités', href: '/actualites' },
     { label: 'Lire', href: '/lire' },
-    { label: 'Trouver', href: '/trouver' },
     { label: 'Calendrier', href: '/calendrier' },
   ];
   for (const { label, href } of links) {
@@ -123,6 +124,41 @@ test('F4-E2E-4: primary nav renders the 7 prototype links with correct hrefs', a
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', href);
   }
+
+  await expect(nav.getByRole('button', { name: 'Trouver' })).toBeVisible();
+});
+
+// MC-1 §11 — "Trouver" navbar dropdown (2 destinations) + active state shared with /appels.
+test('MC1-E2E-NAV: "Trouver" dropdown opens with 2 destinations; picking one navigates', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Navigation principale', exact: true });
+  const trouverBtn = nav.getByRole('button', { name: 'Trouver' });
+  await expect(trouverBtn).toHaveAttribute('aria-haspopup', 'menu');
+  await trouverBtn.click();
+  const menu = page.getByRole('menu', { name: 'Trouver' });
+  await expect(menu.getByRole('menuitem', { name: 'Trouver un·e partenaire' })).toHaveAttribute('href', '/trouver');
+  await expect(menu.getByRole('menuitem', { name: 'Appels à projets' })).toHaveAttribute('href', '/appels');
+  await menu.getByRole('menuitem', { name: 'Appels à projets' }).click();
+  await expect(page).toHaveURL('/appels');
+});
+
+test('MC1-E2E-NAV-2: "Trouver" dropdown closes on Escape and returns focus to the trigger', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Navigation principale', exact: true });
+  const trouverBtn = nav.getByRole('button', { name: 'Trouver' });
+  await trouverBtn.click();
+  await expect(page.getByRole('menu', { name: 'Trouver' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', { name: 'Trouver' })).not.toBeVisible();
+  await expect(trouverBtn).toBeFocused();
+});
+
+test('MC1-E2E-NAV-3: "Trouver" nav stays active (aria-current) on both /trouver and /appels', async ({ page }) => {
+  const nav = page.getByRole('navigation', { name: 'Navigation principale', exact: true });
+  await page.goto('/trouver');
+  await expect(nav.getByRole('button', { name: 'Trouver' })).toHaveAttribute('aria-current', 'page');
+  await page.goto('/appels');
+  await expect(nav.getByRole('button', { name: 'Trouver' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('F4-E2E-5: active nav link has aria-current="page" on home route', async ({ page }) => {

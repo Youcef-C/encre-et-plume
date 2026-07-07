@@ -185,9 +185,14 @@ model Profile {
   tags                 String[]        @default([])
   portfolio            PortfolioItem[]
   trendingScore        Int             @default(0) // DR-1: denormalized "of the moment" rank; engagement pipeline recomputes later
+  country              String?         // MC-1: ISO 3166-1 alpha-2 — directory location unit ('Hors France' bucket retired)
+  region               String?         // MC-1: FR-only sub-level (one of PARTNER_REGIONS, only when country = 'FR')
+  availability         String          @default("ouvert")   // MC-1: PARTNER_AVAILABILITY_KEYS — "Dispo" filter
   createdAt            DateTime        @default(now())
 
   @@index([trendingScore])
+  @@index([country]) // MC-1: directory location filter (continent/country tokens)
+  @@index([region]) // MC-1: FR-région sub-filter (creatorRoles is an array — GIN not expressible in Prisma, skip at this scale)
 }
 
 model PortfolioItem {
@@ -522,6 +527,25 @@ model Announcement {
   createdAt DateTime         @default(now())
 
   @@index([order])
+}
+
+// ── MC-1: project calls "Appels à projets" ────────────────────────────────────
+// MC-1 ships only the read-preview (GET /calls). MC-4 owns POST, the full board, board
+// filters/pagination, and any extra fields — do not add write logic here.
+model ProjectCall {
+  id               String    @id @default(cuid())
+  title            String // "« Lames de Brume »"
+  authorRole       String // 'scenariste' | 'dessinateur' (CREATOR_ROLES)
+  seekingRole      String // the complement — role sought
+  authorId         String? // nullable, seed-friendly (mirror Illustration.artistId)
+  authorName       String // denormalized display name
+  tags             String[]  @default([])
+  closesAt         DateTime? // null → FE meta falls back to applicationCount
+  applicationCount Int       @default(0)
+  status           String    @default("open") // MC-4 owns transitions
+  createdAt        DateTime  @default(now())
+
+  @@index([status, createdAt])
 }
 
 // ── DR-2: catalog "Découvrir" (Contest banner + editor picks) ────────────────

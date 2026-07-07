@@ -90,6 +90,116 @@ const NAV_LINKS = [
   { href: '/calendrier', label: 'Calendrier' },
 ] as const;
 
+// §11 — "Trouver" is a nav dropdown with two destinations.
+const TROUVER_LINKS = [
+  { href: '/trouver', label: 'Trouver un·e partenaire' },
+  { href: '/appels',  label: 'Appels à projets' },
+] as const;
+
+// Desktop nav "Trouver" disclosure: a menu button opening two on-brand links.
+function TrouverNav({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const isActive = TROUVER_LINKS.some((l) => l.href === pathname);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  return (
+    <div
+      ref={ref}
+      style={{ position: 'relative' }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && open) {
+          e.preventDefault();
+          setOpen(false);
+          btnRef.current?.focus();
+        }
+      }}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        className="ep-nav-link"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-current={isActive ? 'page' : undefined}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        style={{
+          // No inline background/color so the .ep-nav-link CSS drives hover + the red
+          // aria-current="page" active fill (inline would override the class).
+          padding: '8px 14px',
+          borderRadius: 6,
+          fontSize: 14,
+          fontWeight: 700,
+          fontFamily: 'inherit',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
+        }}
+      >
+        Trouver <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Trouver"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            zIndex: 50,
+            width: 220,
+            background: 'var(--card)',
+            border: '3px solid var(--ink)',
+            borderRadius: 8,
+            boxShadow: '5px 5px 0 var(--shadow)',
+            overflow: 'hidden',
+          }}
+        >
+          {TROUVER_LINKS.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              role="menuitem"
+              className="ep-menu-item"
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'block',
+                padding: '10px 13px',
+                borderBottom: '1.5px solid var(--border)',
+                fontSize: 14,
+                fontWeight: 700,
+                color: 'var(--ink)',
+                textDecoration: 'none',
+              }}
+            >
+              {l.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ponytail: POSTER_PAGES / PosterButton removed — user confirmed no poster button in nav
 
 // Shared menuitem link style (avoids repetition inside the large render)
@@ -249,6 +359,7 @@ export default function Header() {
       {/* Primary nav — 7 items per prototype TOP NAV (desktop; hidden ≤1024px) */}
       <nav aria-label="Navigation principale" className="ep-nav-desktop" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 700 }}>
         {NAV_LINKS.map(({ href, label }) => {
+          if (href === '/trouver') return <TrouverNav key={href} pathname={pathname} />;
           const isActive = pathname === href;
           return (
             <Link
@@ -271,17 +382,32 @@ export default function Header() {
       {/* Mobile nav drawer — shown ≤1024px when toggled; replicates the same 7 links + search */}
       {mobileNavOpen && (
         <nav id="ep-mobile-nav" className="ep-mobile-nav" aria-label="Navigation principale (mobile)">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={pathname === href ? 'page' : undefined}
-              className="ep-mobile-nav-link"
-              onClick={() => setMobileNavOpen(false)}
-            >
-              {label}
-            </Link>
-          ))}
+          {NAV_LINKS.flatMap(({ href, label }) =>
+            // §11: inside the hamburger the "Trouver" dropdown degrades to two plain entries.
+            href === '/trouver'
+              ? TROUVER_LINKS.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    aria-current={pathname === l.href ? 'page' : undefined}
+                    className="ep-mobile-nav-link"
+                    onClick={() => setMobileNavOpen(false)}
+                  >
+                    {l.label}
+                  </Link>
+                ))
+              : [
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-current={pathname === href ? 'page' : undefined}
+                    className="ep-mobile-nav-link"
+                    onClick={() => setMobileNavOpen(false)}
+                  >
+                    {label}
+                  </Link>,
+                ],
+          )}
           <button
             type="button"
             className="ep-mobile-nav-link"

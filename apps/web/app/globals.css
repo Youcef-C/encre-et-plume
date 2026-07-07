@@ -580,6 +580,26 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ── MC-1 Trouver — partner directory & calls preview reflow ─────────────────
+   Desktop: 3-col partner grid + 2-col calls grid. ≤1024px: 2 / (calls stay 2).
+   ≤640px: both drop to 1 col. */
+.ep-partners-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+@media (max-width: 1024px) {
+  .ep-partners-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .ep-partners-grid,
+  .ep-calls-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* ── DR-1 announcement ribbon marquee ────────────────────────────────────────
    Two copies of the item list slide -50% for a seamless loop.
    Paused on hover; static (first copy only visible) under reduced motion. */

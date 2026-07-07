@@ -30,14 +30,16 @@ describe('FilterSidebar (DR-2 FE-4, round 2 — auto-apply, no "Appliquer")', ()
     render(<FilterSidebar filters={EMPTY_FILTERS} onChange={onChange} onReset={vi.fn()} />);
     const select = screen.getByRole('combobox', { name: 'Trier' });
     expect(select).toBeInTheDocument();
-    await user.selectOptions(select, 'nouveautes');
+    await user.click(select);
+    await user.click(screen.getByRole('option', { name: 'Nouveautés' }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tri: 'nouveautes' }));
   });
 
-  it('TRIER options are Populaires / Nouveautés / Mieux notées', () => {
+  it('TRIER options are Populaires / Nouveautés / Mieux notées', async () => {
+    const user = userEvent.setup();
     render(<FilterSidebar filters={EMPTY_FILTERS} onChange={vi.fn()} onReset={vi.fn()} />);
-    const select = screen.getByRole('combobox', { name: 'Trier' }) as HTMLSelectElement;
-    const optionLabels = [...select.options].map((o) => o.textContent);
+    await user.click(screen.getByRole('combobox', { name: 'Trier' }));
+    const optionLabels = screen.getAllByRole('option').map((o) => o.textContent);
     expect(optionLabels).toEqual(['Populaires', 'Nouveautés', 'Mieux notées']);
   });
 

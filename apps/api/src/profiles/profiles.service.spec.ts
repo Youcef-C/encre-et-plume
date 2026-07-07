@@ -78,13 +78,13 @@ describe('ProfilesService', () => {
   let service: ProfilesService;
   let prisma: {
     account: { findUnique: jest.Mock };
-    profile: { upsert: jest.Mock };
+    profile: { upsert: jest.Mock; findUnique: jest.Mock };
   };
 
   beforeEach(() => {
     prisma = {
       account: { findUnique: jest.fn() },
-      profile: { upsert: jest.fn() },
+      profile: { upsert: jest.fn(), findUnique: jest.fn() },
     };
     service = new ProfilesService(prisma as unknown as PrismaService);
   });
@@ -180,6 +180,23 @@ describe('ProfilesService', () => {
 
       expect(res.tags).toEqual(['Encre dense']);
     });
+
+    it('exposes the profile creatorRoles (MC-1 §9 — creator type shown on the profile)', async () => {
+      const profile = { ...BASE_PROFILE, creatorRoles: ['scenariste', 'dessinateur'] };
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile });
+
+      const res = await service.getBySlug('yuki-moreau');
+
+      expect(res.creatorRoles).toEqual(['scenariste', 'dessinateur']);
+    });
+
+    it('defaults creatorRoles to an empty array when the profile row is absent', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: null });
+
+      const res = await service.getBySlug('yuki-moreau');
+
+      expect(res.creatorRoles).toEqual([]);
+    });
   });
 
   // ── updateMine ───────────────────────────────────────────────────────────────
@@ -251,6 +268,75 @@ describe('ProfilesService', () => {
 
       const call = prisma.profile.upsert.mock.calls[0][0];
       expect(call.update.tags).toEqual(['Shōnen']);
+    });
+
+    it('persists creatorRoles verbatim (MC-1 §9 — user defines their creator type)', async () => {
+      const upserted = { ...BASE_PROFILE, creatorRoles: ['scenariste', 'dessinateur'] };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', {
+        creatorRoles: ['scenariste', 'dessinateur'],
+      } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.creatorRoles).toEqual(['scenariste', 'dessinateur']);
+    });
+
+    // MC-1 round 2 QA regression: plan.md §5 + backend-notes.md both document "region is forced
+    // null whenever the effective country ≠ FR" as a trust-boundary rule. Live probing (curl PATCH
+    // /profiles/me with {country:'JP', region:'Bretagne'} in the SAME request) shows the incoherent
+    // pair persists verbatim (200, region unchanged) — updateMine copies dto.country/dto.region
+    // straight into `data` with no coherence check between them.
+    it('forces region to null when country and region are patched together and country !== FR (MC-1 §5)', async () => {
+      const upserted = { ...BASE_PROFILE, country: 'JP', region: null };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', {
+        country: 'JP',
+        region: 'Bretagne',
+      } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.region).toBeNull();
+    });
+
+    it('forces the stored région null when only country is patched to a non-FR value (MC-1 §5)', async () => {
+      // dto changes country → JP but leaves region; stored row still has région Bretagne.
+      prisma.profile.findUnique.mockResolvedValue({ country: 'FR', region: 'Bretagne' });
+      const upserted = { ...BASE_PROFILE, country: 'JP', region: null };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', { country: 'JP' } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.region).toBeNull();
+    });
+
+    it('forces a patched région null when the stored country is non-FR and country is not patched (MC-1 §5)', async () => {
+      // dto sets région Bretagne but the stored (unchanged) country is JP → incoherent, drop the région.
+      prisma.profile.findUnique.mockResolvedValue({ country: 'JP', region: null });
+      const upserted = { ...BASE_PROFILE, country: 'JP', region: null };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', { region: 'Bretagne' } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.region).toBeNull();
+    });
+
+    it('keeps a patched région when the effective country is FR (MC-1 §5)', async () => {
+      const upserted = { ...BASE_PROFILE, country: 'FR', region: 'Bretagne' };
+      prisma.profile.upsert.mockResolvedValue(upserted);
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: upserted });
+
+      await service.updateMine('acc-1', { country: 'FR', region: 'Bretagne' } as UpdateProfileDto);
+
+      const call = prisma.profile.upsert.mock.calls[0][0];
+      expect(call.update.region).toBe('Bretagne');
     });
 
     it('canonicalizes seeking.genres to the vocabulary, dropping unknown entries (BE1, multi-word)', async () => {
