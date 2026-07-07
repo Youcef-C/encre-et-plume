@@ -462,6 +462,15 @@ import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';
 export const getMatchSuggestions = (limit?: number): Promise<MatchSuggestionsResponse> =>
   request<MatchSuggestionsResponse>(`/matches/suggestions${limit ? `?limit=${limit}` : ''}`);
 
+// ─── Collaboration invitations "Proposer une collab" (MC-3) ───────────────────
+import type { MyProjectsResponse, CreateInvitationRequest, InvitationDto } from '@encre-et-plume/shared';
+
+export const getMyProjects = (): Promise<MyProjectsResponse> =>
+  request<MyProjectsResponse>('/projects/mine');
+
+export const createInvitation = (body: CreateInvitationRequest): Promise<InvitationDto> =>
+  request<InvitationDto>('/invitations', { method: 'POST', body: JSON.stringify(body) });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

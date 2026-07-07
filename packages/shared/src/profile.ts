@@ -33,6 +33,8 @@ export interface PortfolioItemResponse {
 
 /** GET /profiles/{slug} response. displayName/avatar/slug come from Account; rest from Profile. */
 export interface ProfileResponse {
+  /** Account id — MC-3 invite recipient identity (same public-id convention as PartnerCard.userId). */
+  userId: string;
   slug: string;
   displayName: string;
   avatar: string | null;

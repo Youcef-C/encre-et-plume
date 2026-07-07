@@ -66,11 +66,16 @@ test.describe('MC-2 Suggestions aside — signed in (dr1-camille-roux)', () => {
     await expect(page).toHaveURL('/mc1-theo-m');
   });
 
-  test('MC2-E3: "Proposer" has a descriptive a11y name and is a no-op stub (MC-3)', async ({ page }) => {
+  test('MC2-E3: "Proposer" has a descriptive a11y name and opens the MC-3 invite modal', async ({ page }) => {
     const topCard = aside(page).locator('li').first();
     const proposer = topCard.getByRole('button', { name: 'Proposer une collaboration à Théo M.' });
     await expect(proposer).toBeVisible();
+    // MC-3 wired this button to the real "Proposer une collab" invite modal (see
+    // mc3-invite.spec.ts for the full acceptance flow) — verify it opens, then close it.
     await proposer.click();
+    await expect(page.getByRole('dialog', { name: /Inviter Théo M\./ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible();
   });
 

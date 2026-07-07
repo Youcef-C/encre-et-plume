@@ -315,6 +315,13 @@ const PROJECT_CALLS = [
   { title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.', tags: ['Fantastique', 'One-shot'], closesAt: null, applicationCount: 5, status: 'open' },
 ];
 
+// MC-3 (CS-1 seam): the sender's projects for the invite modal picker (prototype fixtures).
+const PROJECTS = [
+  { id: 'mc3-proj-lames-de-brume', title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
+  { id: 'mc3-proj-spectres-avril', title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision' },
+  { id: 'mc3-proj-carnet-encre', title: "Carnet d'encre", kind: 'Illustration(s)', genre: null, status: 'en cours' },
+];
+
 // MC-2: a loginable creator with an EMPTY tag/genre profile — exercises the minimum-data guard
 // (GET /matches/suggestions → { items: [], incompleteProfile: true }, "Complétez votre profil…").
 const MC2_SPARSE_ACCOUNT = {
@@ -437,6 +444,17 @@ async function main() {
   await prisma.projectCall.deleteMany({});
   for (const call of PROJECT_CALLS) {
     await prisma.projectCall.create({ data: call });
+  }
+
+  // MC-3 (CS-1 seam): projects owned by the login-tested sender (dr1-camille-roux) so the invite
+  // modal's optional project picker renders. mc2-sans-profil stays project-less → empty-picker hint.
+  // Idempotent: upsert on fixed ids. CS-1 will own real project creation.
+  const camille = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' } });
+  if (camille) {
+    for (const p of PROJECTS) {
+      const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null };
+      await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
+    }
   }
 
   // DR-10: minor test account (no creator profile — a plain reader). emailVerifiedAt is set at

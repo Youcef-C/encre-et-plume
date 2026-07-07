@@ -4,8 +4,13 @@ import userEvent from '@testing-library/user-event';
 import type { AccountSummary, ProfileResponse } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
+// ProfileActions (rendered for visitors) uses next/navigation's useRouter (MC-3 invite gating).
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock('../lib/api', () => ({
   getProfile: vi.fn(),
+  getMyProjects: vi.fn().mockResolvedValue({ items: [] }),
+  createInvitation: vi.fn(),
   getProfilePortfolio: vi.fn().mockResolvedValue([]),
   updateMyProfile: vi.fn().mockResolvedValue({}),
   signup: vi.fn(),
@@ -57,6 +62,7 @@ import { getProfile, updateMyProfile, deleteAvatar } from '../lib/api';
 import ProfilePageClient from '../components/ProfilePageClient';
 
 const mockProfile: ProfileResponse = {
+  userId: 'yuki-1',
   slug: 'yuki-moreau',
   displayName: 'Yuki Moreau',
   avatar: null,

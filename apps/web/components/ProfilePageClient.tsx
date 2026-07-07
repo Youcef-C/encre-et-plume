@@ -525,7 +525,7 @@ export default function ProfilePageClient({ slug }: Props) {
                 </button>
               )
             ) : (
-              <ProfileActions />
+              <ProfileActions profile={profile} account={account} />
             )}
           </div>
 

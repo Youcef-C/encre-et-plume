@@ -190,7 +190,12 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
     const theoCard = grid(page).locator('li').filter({ hasText: 'Théo M.' });
     const proposerButton = theoCard.getByRole('button', { name: 'Proposer une collaboration à Théo M.' });
     await expect(proposerButton).toBeVisible();
-    await proposerButton.click(); // stubbed no-op (MC-3) — must not throw/navigate away
+    // MC-3 wired this button to a real "Proposer une collab" invite modal (see mc3-invite.spec.ts
+    // for the full acceptance flow) — verify it opens, then close it before continuing.
+    await proposerButton.click();
+    await expect(page.getByRole('dialog', { name: /Inviter Théo M\./ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible();
 
     await theoCard.getByRole('link', { name: 'Profil de Théo M.' }).click();

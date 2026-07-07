@@ -26,6 +26,12 @@ import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import PartnerCard from './PartnerCard';
 import CallsPreview from './CallsPreview';
 import SuggestionsAside from './SuggestionsAside';
+import InviteModal, { type InviteRecipient } from '../collab/InviteModal';
+
+const ROLE_LABEL_FR: Record<CreatorRole, string> = {
+  dessinateur: 'Dessinateur·rice',
+  scenariste: 'Scénariste',
+};
 
 // Genres = F-20 vocabulary (value = id). Localisation = the round-2 hierarchical facet: continents
 // (French name token), countries (ISO alpha-2 value, French label), and the 18 French régions.
@@ -93,6 +99,10 @@ function SkeletonCard() {
 
 export default function TrouverClient() {
   const { account, loading: sessionLoading } = useSession();
+
+  // MC-3 — the "Proposer" action on cards/suggestions opens the shared invite modal.
+  // The page already gates anonymous visitors (early return below), so opening is always allowed here.
+  const [inviteTarget, setInviteTarget] = useState<InviteRecipient | null>(null);
 
   const [role, setRole] = useState<CreatorRole | null>(null);
   const [genres, setGenres] = useState<string[]>([]);
@@ -313,7 +323,18 @@ export default function TrouverClient() {
             <>
               <ul className="ep-partners-grid" style={{ margin: 0, padding: 0 }}>
                 {items.map((partner) => (
-                  <PartnerCard key={partner.userId} partner={partner} onProposer={() => {}} />
+                  <PartnerCard
+                    key={partner.userId}
+                    partner={partner}
+                    onProposer={(p) =>
+                      setInviteTarget({
+                        userId: p.userId,
+                        name: p.name,
+                        avatarUrl: p.avatarUrl,
+                        subtitle: [ROLE_LABEL_FR[p.role], p.location].filter(Boolean).join(' · '),
+                      })
+                    }
+                  />
                 ))}
               </ul>
               {items.length < total && (
@@ -341,9 +362,22 @@ export default function TrouverClient() {
         </div>
 
         {/* MC-2 aside — second child, matching the prototype DOM order. Self-fetching independent
-            feed (fetch once on mount). onProposer is a no-op stub until MC-3 wires the invite. */}
-        <SuggestionsAside onProposer={() => {}} />
+            feed (fetch once on mount). MC-3 wires "Proposer" to the shared invite modal. */}
+        <SuggestionsAside
+          onProposer={(s) =>
+            setInviteTarget({
+              userId: s.userId,
+              name: s.name,
+              avatarUrl: s.avatarUrl,
+              subtitle: s.genre ? `${ROLE_LABEL_FR[s.role]} · ${s.genre}` : ROLE_LABEL_FR[s.role],
+            })
+          }
+        />
       </div>
+
+      {inviteTarget && (
+        <InviteModal recipient={inviteTarget} onClose={() => setInviteTarget(null)} />
+      )}
     </div>
   );
 }

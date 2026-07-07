@@ -3,9 +3,11 @@
 // DR-6 FE-T4 (FE-6, FE-7, FE-8, FE-11) — sticky sidebar: artist card, "Détails", "Plus de cet·te
 // artiste". Replica of prototype ILLUSTRATION lines 710-737. One file for the three always-
 // co-rendered sidebar sections (mirrors oeuvre/Sidebar.tsx's ponytail choice).
+import { useState } from 'react';
 import Link from 'next/link';
 import type { IllustrationArtist, GalleryIllustrationCard, AccountSummary } from '@encre-et-plume/shared';
 import { usePersonalAction } from '../../lib/usePersonalAction';
+import InviteModal, { type InviteRecipient } from '../collab/InviteModal';
 import { formatPublishedDate } from '../../lib/illustration';
 import { formatLikeCount } from '../../lib/home';
 import { coverStyle } from '../../lib/cover';
@@ -39,6 +41,25 @@ export default function ArtistSidebar({
   account: AccountSummary | null;
 }) {
   const { trigger, notice } = usePersonalAction(account);
+
+  // MC-3 — "Proposer une collab" opens the invite modal for a linked artist (has an Account id).
+  // Unlinked fixtures (id === null) keep the deferred stub; anonymous → /connexion (via trigger).
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const handleProposer = () => {
+    if (!account || !artist.id) {
+      trigger();
+      return;
+    }
+    setInviteOpen(true);
+  };
+  const recipient: InviteRecipient | null = artist.id
+    ? {
+        userId: artist.id,
+        name: artist.name,
+        avatarUrl: artist.avatar,
+        subtitle: [artist.role, artist.city].filter(Boolean).join(' · '),
+      }
+    : null;
 
   const rows: [string, string][] = [
     ['Catégorie', categoryLabel],
@@ -122,7 +143,7 @@ export default function ArtistSidebar({
         </div>
         <button
           type="button"
-          onClick={trigger}
+          onClick={handleProposer}
           style={{
             display: 'flex',
             width: '100%',
@@ -145,6 +166,9 @@ export default function ArtistSidebar({
         >
           <MailIcon size={13} /> Proposer une collab
         </button>
+        {inviteOpen && recipient && (
+          <InviteModal recipient={recipient} onClose={() => setInviteOpen(false)} />
+        )}
         {notice && (
           <p role="status" style={{ marginTop: 8, fontSize: 12, color: 'var(--ink2)', fontWeight: 700, textAlign: 'center' }}>
             Bientôt disponible

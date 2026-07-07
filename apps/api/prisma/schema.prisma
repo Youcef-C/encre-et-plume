@@ -96,38 +96,41 @@ enum ConsentDocument {
 }
 
 model Account {
-  id                       String                   @id @default(cuid())
-  displayName              String
-  email                    String                   @unique
-  passwordHash             String
-  role                     Role                     @default(utilisateur)
-  verified                 Boolean                  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
-  profileSlug              String                   @unique
-  avatar                   String?
-  preferences              Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
-  createdAt                DateTime                 @default(now())
-  emailVerifiedAt          DateTime?                // F-11: null = unverified; set on confirmation
-  birthdate                DateTime?                @db.Date // DR-10: RGPD PII, never public; null = not yet declared (prompt on next 18+ access)
-  deletedAt                DateTime?                // F-14: null = active; non-null = tombstoned (RGPD erasure)
-  onboardedAt              DateTime?                // F-17: null = show onboarding wizard; set on completion/skip
-  profile                  Profile?
-  notificationsReceived    Notification[]           @relation("NotifRecipient")
-  notificationsSent        Notification[]           @relation("NotifSource")
-  notificationPreferences  NotificationPreference[]
-  media                    Media[]
-  emailVerificationTokens  EmailVerificationToken[]
-  passwordResetTokens      PasswordResetToken[]
-  consents                 ConsentRecord[]          // F-13: append-only acceptance log
-  dataExports              DataExport[]             // F-14: export requests
-  twoFactor                TwoFactorCredential?     // F-18: TOTP credential (optional; 1-to-1)
-  emailChangeTokens        EmailChangeToken[]       // F-18: pending email-change requests
-  workCredits              WorkCreator[]            // DR-3: works this account is credited on
-  favorites                Favorite[]               // DR-4: favorited works (reads only; DR-9 owns the toggle write)
-  readingProgress          ReadingProgress[]        // DR-4: per-chapter reading position (feeds DR-8)
-  illustrations            Illustration[]           // DR-5: gallery illustrations credited to this artist
-  watchlist                WatchlistItem[]          // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
-  reactions                Reaction[]               // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
-  supportTickets           SupportTicket[]          // F-21: help/contact/bug tickets submitted while signed in
+  id                      String                   @id @default(cuid())
+  displayName             String
+  email                   String                   @unique
+  passwordHash            String
+  role                    Role                     @default(utilisateur)
+  verified                Boolean                  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
+  profileSlug             String                   @unique
+  avatar                  String?
+  preferences             Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
+  createdAt               DateTime                 @default(now())
+  emailVerifiedAt         DateTime? // F-11: null = unverified; set on confirmation
+  birthdate               DateTime?                @db.Date // DR-10: RGPD PII, never public; null = not yet declared (prompt on next 18+ access)
+  deletedAt               DateTime? // F-14: null = active; non-null = tombstoned (RGPD erasure)
+  onboardedAt             DateTime? // F-17: null = show onboarding wizard; set on completion/skip
+  profile                 Profile?
+  notificationsReceived   Notification[]           @relation("NotifRecipient")
+  notificationsSent       Notification[]           @relation("NotifSource")
+  notificationPreferences NotificationPreference[]
+  media                   Media[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  consents                ConsentRecord[] // F-13: append-only acceptance log
+  dataExports             DataExport[] // F-14: export requests
+  twoFactor               TwoFactorCredential? // F-18: TOTP credential (optional; 1-to-1)
+  emailChangeTokens       EmailChangeToken[] // F-18: pending email-change requests
+  workCredits             WorkCreator[] // DR-3: works this account is credited on
+  favorites               Favorite[] // DR-4: favorited works (reads only; DR-9 owns the toggle write)
+  readingProgress         ReadingProgress[] // DR-4: per-chapter reading position (feeds DR-8)
+  illustrations           Illustration[] // DR-5: gallery illustrations credited to this artist
+  watchlist               WatchlistItem[] // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
+  reactions               Reaction[] // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
+  supportTickets          SupportTicket[] // F-21: help/contact/bug tickets submitted while signed in
+  projects                Project[]                @relation("ProjectOwner") // CS-1 seam: projects this account owns
+  invitationsSent         Invitation[]             @relation("InvitationsSent") // MC-3: collab invites sent
+  invitationsReceived     Invitation[]             @relation("InvitationsReceived") // MC-3: collab invites received
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -146,7 +149,7 @@ model Media {
   variants    Json            @default("{}")
   visibility  MediaVisibility @default(public)
   createdAt   DateTime        @default(now())
-  dataExport  DataExport?     // F-14: back-relation (one archive per export)
+  dataExport  DataExport? // F-14: back-relation (one archive per export)
 
   @@index([ownerId])
   @@index([status, createdAt])
@@ -177,7 +180,7 @@ model Profile {
   specialty            String?
   city                 String?
   bio                  String?
-  creatorRoles         String[]        @default([])  // F-17: onboarding Step 1 sub-roles (NOT authz role)
+  creatorRoles         String[]        @default([]) // F-17: onboarding Step 1 sub-roles (NOT authz role)
   seekingActive        Boolean         @default(false)
   seekingTargetRole    String?
   seekingGenres        String[]        @default([])
@@ -185,9 +188,9 @@ model Profile {
   tags                 String[]        @default([])
   portfolio            PortfolioItem[]
   trendingScore        Int             @default(0) // DR-1: denormalized "of the moment" rank; engagement pipeline recomputes later
-  country              String?         // MC-1: ISO 3166-1 alpha-2 — directory location unit ('Hors France' bucket retired)
-  region               String?         // MC-1: FR-only sub-level (one of PARTNER_REGIONS, only when country = 'FR')
-  availability         String          @default("ouvert")   // MC-1: PARTNER_AVAILABILITY_KEYS — "Dispo" filter
+  country              String? // MC-1: ISO 3166-1 alpha-2 — directory location unit ('Hors France' bucket retired)
+  region               String? // MC-1: FR-only sub-level (one of PARTNER_REGIONS, only when country = 'FR')
+  availability         String          @default("ouvert") // MC-1: PARTNER_AVAILABILITY_KEYS — "Dispo" filter
   createdAt            DateTime        @default(now())
 
   @@index([trendingScore])
@@ -211,9 +214,9 @@ model EmailVerificationToken {
   id         String    @id @default(cuid())
   accountId  String
   account    Account   @relation(fields: [accountId], references: [id])
-  tokenHash  String    @unique      // sha256(raw); raw is never stored
-  expiresAt  DateTime               // createdAt + 24h
-  consumedAt DateTime?              // single-use: non-null once confirmed
+  tokenHash  String    @unique // sha256(raw); raw is never stored
+  expiresAt  DateTime // createdAt + 24h
+  consumedAt DateTime? // single-use: non-null once confirmed
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
@@ -225,9 +228,9 @@ model PasswordResetToken {
   id         String    @id @default(cuid())
   accountId  String
   account    Account   @relation(fields: [accountId], references: [id])
-  tokenHash  String    @unique   // sha256(raw); raw is never stored
-  expiresAt  DateTime            // createdAt + 1h
-  consumedAt DateTime?           // single-use: non-null once used
+  tokenHash  String    @unique // sha256(raw); raw is never stored
+  expiresAt  DateTime // createdAt + 1h
+  consumedAt DateTime? // single-use: non-null once used
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
@@ -248,6 +251,48 @@ model Notification {
   @@index([recipientId, createdAt])
 }
 
+// ── MC-3: Collaboration invitations + CS-1 project seam ───────────────────────
+
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+}
+
+// CS-1 seam: minimal project shell so MC-3's picker + ownership validation work.
+// CS-1 owns creation/workspace and extends this model (never renames these fields).
+model Project {
+  id          String       @id @default(cuid())
+  ownerId     String
+  owner       Account      @relation("ProjectOwner", fields: [ownerId], references: [id])
+  title       String
+  kind        String       @default("Manga") // "Manga" | "Illustration(s)" | … (picker meta line)
+  genre       String? // fr label, e.g. "Seinen" (picker meta line)
+  status      String       @default("en cours") // "en cours" | "en révision" | … (picker meta line)
+  cover       String? // image URL; null -> halftone placeholder
+  createdAt   DateTime     @default(now())
+  invitations Invitation[]
+
+  @@index([ownerId])
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  fromUserId  String
+  fromUser    Account          @relation("InvitationsSent", fields: [fromUserId], references: [id])
+  toUserId    String
+  toUser      Account          @relation("InvitationsReceived", fields: [toUserId], references: [id])
+  projectId   String?
+  project     Project?         @relation(fields: [projectId], references: [id])
+  message     String           @default("")
+  status      InvitationStatus @default(pending)
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@index([fromUserId, status])
+  @@index([toUserId, status])
+}
+
 // ── F-13: Legal documents & consent records ───────────────────────────────────
 
 // ── F-15: Notification & e-mail preferences ──────────────────────────────────
@@ -256,8 +301,8 @@ model NotificationPreference {
   id        String  @id @default(cuid())
   accountId String
   account   Account @relation(fields: [accountId], references: [id])
-  type      String  // NotificationPrefType (string — forward-compatible with new categories)
-  channel   String  // 'in_app' | 'email'
+  type      String // NotificationPrefType (string — forward-compatible with new categories)
+  channel   String // 'in_app' | 'email'
   enabled   Boolean
 
   @@unique([accountId, type, channel])
@@ -268,7 +313,7 @@ model LegalDocument {
   id          String    @id @default(cuid())
   kind        LegalKind
   version     String
-  content     String    // trusted HTML
+  content     String // trusted HTML
   publishedAt DateTime  @default(now())
 
   @@unique([kind, version])
@@ -291,11 +336,11 @@ model ConsentRecord {
 
 model TwoFactorCredential {
   id               String    @id @default(cuid())
-  accountId        String    @unique                 // one credential per account
+  accountId        String    @unique // one credential per account
   account          Account   @relation(fields: [accountId], references: [id])
-  secretEncrypted  String                            // AES-256-GCM "iv:tag:ciphertext" (base64); never logged
-  enabledAt        DateTime?                          // null = setup pending (secret issued, not confirmed)
-  backupCodeHashes String[]  @default([])             // sha256(code) hex; single-use → removed on use
+  secretEncrypted  String // AES-256-GCM "iv:tag:ciphertext" (base64); never logged
+  enabledAt        DateTime? // null = setup pending (secret issued, not confirmed)
+  backupCodeHashes String[]  @default([]) // sha256(code) hex; single-use → removed on use
   createdAt        DateTime  @default(now())
 }
 
@@ -305,9 +350,9 @@ model EmailChangeToken {
   id         String    @id @default(cuid())
   accountId  String
   account    Account   @relation(fields: [accountId], references: [id])
-  newEmail   String                                   // committed to Account.email on confirm
-  tokenHash  String    @unique                        // sha256(raw); raw never stored (mirror F-11/F-12)
-  expiresAt  DateTime                                 // createdAt + 24h
+  newEmail   String // committed to Account.email on confirm
+  tokenHash  String    @unique // sha256(raw); raw never stored (mirror F-11/F-12)
+  expiresAt  DateTime // createdAt + 24h
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
 
@@ -323,55 +368,55 @@ model Work {
   id                 String    @id @default(cuid())
   slug               String    @unique
   title              String
-  coverImage         String?                          // media URL; null → CSS halftone placeholder on FE
-  genre              String                            // display fr label — "Shōnen" | "Seinen" | "Fantastique" | "Josei" | …
-                                                         // (DR-2 catalog GENRE facet accepts F-20 vocabulary ids in the
-                                                         // query and maps id→fr via catalogGenreLabel() before filtering
-                                                         // this column — see catalog.service.ts. Column itself is unchanged
-                                                         // from DR-1: kept as the fr display label, reused verbatim by cards.)
-  meta               String                            // hero/ranking meta line, e.g. "Léa B. × Hugo D. · 20 ch."
-  likeCount          Int       @default(0)              // ponytail: denormalized total; DR-9 owns the increment
-  weeklyLikeDelta    Int       @default(0)              // ponytail: rolling-7d delta; DR-9/DR-4 recompute from events
-  priorWeekLikeDelta Int       @default(0)              // ponytail: prior-period delta for growth %; same note
-  featuredRank       Int?                               // null = not in "À LA UNE"; else carousel order asc
+  coverImage         String? // media URL; null → CSS halftone placeholder on FE
+  genre              String // display fr label — "Shōnen" | "Seinen" | "Fantastique" | "Josei" | …
+  // (DR-2 catalog GENRE facet accepts F-20 vocabulary ids in the
+  // query and maps id→fr via catalogGenreLabel() before filtering
+  // this column — see catalog.service.ts. Column itself is unchanged
+  // from DR-1: kept as the fr display label, reused verbatim by cards.)
+  meta               String // hero/ranking meta line, e.g. "Léa B. × Hugo D. · 20 ch."
+  likeCount          Int       @default(0) // ponytail: denormalized total; DR-9 owns the increment
+  weeklyLikeDelta    Int       @default(0) // ponytail: rolling-7d delta; DR-9/DR-4 recompute from events
+  priorWeekLikeDelta Int       @default(0) // ponytail: prior-period delta for growth %; same note
+  featuredRank       Int? // null = not in "À LA UNE"; else carousel order asc
   createdAt          DateTime  @default(now())
   chapters           Chapter[]
 
   // ── DR-2: catalog facet columns ──────────────────────────────────────────
-  themes         String[] @default([])                 // CATALOG_THEMES subset (OR-in filter)
-  format         String   @default("Manga")             // one of CATALOG_FORMATS
-  language       String   @default("Français")          // one of CATALOG_LANGUAGES
-  audienceRating String   @default("Tous publics")       // CATALOG_AUDIENCE_RATINGS — DR-10 reads this for 18+ gating
-  complete       Boolean  @default(false)                // STATUT: true = "Œuvres complètes"
-  chapterCount   Int      @default(0)                    // ponytail: denormalized card count + LONGUEUR filter; DR-3/CS own real counts
-  ratingAvg      Float    @default(0)                    // ponytail: denormalized; PUB-3 reviews own it
-  publishedAt    DateTime?                                // null = not in catalog; non-null = published + recency sort key
+  themes         String[]     @default([]) // CATALOG_THEMES subset (OR-in filter)
+  format         String       @default("Manga") // one of CATALOG_FORMATS
+  language       String       @default("Français") // one of CATALOG_LANGUAGES
+  audienceRating String       @default("Tous publics") // CATALOG_AUDIENCE_RATINGS — DR-10 reads this for 18+ gating
+  complete       Boolean      @default(false) // STATUT: true = "Œuvres complètes"
+  chapterCount   Int          @default(0) // ponytail: denormalized card count + LONGUEUR filter; DR-3/CS own real counts
+  ratingAvg      Float        @default(0) // ponytail: denormalized; PUB-3 reviews own it
+  publishedAt    DateTime? // null = not in catalog; non-null = published + recency sort key
   editorPicks    EditorPick[]
 
   // ── DR-3: work page "Œuvre" columns ──────────────────────────────────────
-  synopsis       String?                                  // "Synopsis" block body
-  hashtags       String[] @default([])                    // "#..." chips under the synopsis
-  proseExcerpt   String?                                  // roman-only excerpt body; response nulls it unless format==='Roman'
-  readCount      Int      @default(0)                     // ponytail: denormalized; DR-4 owns the increment (reader open)
-  favoriteCount  Int      @default(0)                      // ponytail: denormalized; DR-9 owns the increment
-  ratingStoryAvg Float    @default(0)                     // ponytail: recomputed from Review rows in WorksService (not stored authoritative)
-  ratingArtAvg   Float    @default(0)                     // same note
-  reviewCount    Int      @default(0)                     // same note — DR-3 recomputes ratingStoryAvg/ratingArtAvg/reviewCount +
-                                                            // an "overall" ratingAvg from Review rows in the service response; this
-                                                            // stays the seed-set starting point, not the live source of truth (the
-                                                            // existing `ratingAvg` column above stays the DR-2 catalog sort key —
-                                                            // the two may differ until PUB-3 reconciles them).
+  synopsis       String? // "Synopsis" block body
+  hashtags       String[]      @default([]) // "#..." chips under the synopsis
+  proseExcerpt   String? // roman-only excerpt body; response nulls it unless format==='Roman'
+  readCount      Int           @default(0) // ponytail: denormalized; DR-4 owns the increment (reader open)
+  favoriteCount  Int           @default(0) // ponytail: denormalized; DR-9 owns the increment
+  ratingStoryAvg Float         @default(0) // ponytail: recomputed from Review rows in WorksService (not stored authoritative)
+  ratingArtAvg   Float         @default(0) // same note
+  reviewCount    Int           @default(0) // same note — DR-3 recomputes ratingStoryAvg/ratingArtAvg/reviewCount +
+  // an "overall" ratingAvg from Review rows in the service response; this
+  // stays the seed-set starting point, not the live source of truth (the
+  // existing `ratingAvg` column above stays the DR-2 catalog sort key —
+  // the two may differ until PUB-3 reconciles them).
   creators       WorkCreator[]
   planches       Planche[]
   fundingGoals   FundingGoal[]
   reviews        Review[]
 
   // ── DR-4: reader "Lecteur" ────────────────────────────────────────────────
-  favoritedBy      Favorite[]        // DR-4 reads this list; DR-9 owns the toggle write + favoriteCount increment
-  readingProgress  ReadingProgress[]
+  favoritedBy     Favorite[] // DR-4 reads this list; DR-9 owns the toggle write + favoriteCount increment
+  readingProgress ReadingProgress[]
 
   // ── DR-8: "Ma liste" saved works ─────────────────────────────────────────
-  watchlistedBy    WatchlistItem[]
+  watchlistedBy WatchlistItem[]
 
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
@@ -387,15 +432,15 @@ model Chapter {
   number       Int
   title        String?
   status       ChapterStatus @default(published)
-  publishAt    DateTime      @default(now())              // future + status=scheduled → "Sorties programmées"
+  publishAt    DateTime      @default(now()) // future + status=scheduled → "Sorties programmées"
   createdAt    DateTime      @default(now())
-  plancheCount Int           @default(0)                   // ponytail: denormalized; CS owns real page counts later
-  likeCount    Int           @default(0)                   // ponytail: denormalized; DR-9 owns the increment
+  plancheCount Int           @default(0) // ponytail: denormalized; CS owns real page counts later
+  likeCount    Int           @default(0) // ponytail: denormalized; DR-9 owns the increment
 
   // ── DR-4: reader "Lecteur" ────────────────────────────────────────────────
-  premium         Boolean           @default(false)         // locked flag; stands in for MR-1/MR-4 access tier
-  prose           String?                                   // roman chapter body; paragraphs separated by "\n\n"
-  pages           Planche[]                                 // reader pages (chapterId set); DR-3 work-level planches keep chapterId=null
+  premium         Boolean           @default(false) // locked flag; stands in for MR-1/MR-4 access tier
+  prose           String? // roman chapter body; paragraphs separated by "\n\n"
+  pages           Planche[] // reader pages (chapterId set); DR-3 work-level planches keep chapterId=null
   readingProgress ReadingProgress[]
 
   @@index([status, publishAt])
@@ -412,7 +457,7 @@ model WorkCreator {
   work      Work    @relation(fields: [workId], references: [id])
   accountId String
   account   Account @relation(fields: [accountId], references: [id])
-  role      String                                        // "scenariste" | "dessinateur" | …
+  role      String // "scenariste" | "dessinateur" | …
   order     Int     @default(0)
 
   @@unique([workId, accountId])
@@ -422,7 +467,7 @@ model Planche {
   id        String   @id @default(cuid())
   workId    String
   work      Work     @relation(fields: [workId], references: [id])
-  chapterId String?                                          // DR-4: set = reader page; null = DR-3 work-level grid planche
+  chapterId String? // DR-4: set = reader page; null = DR-3 work-level grid planche
   chapter   Chapter? @relation(fields: [chapterId], references: [id])
   image     String?
   caption   String?
@@ -482,9 +527,9 @@ model Reaction {
   id         String   @id @default(cuid())
   accountId  String
   account    Account  @relation(fields: [accountId], references: [id])
-  targetType String   // 'chapter' | 'illustration'
-  targetId   String   // Chapter.id | Illustration.id
-  kind       String   // 'like' | 'save'
+  targetType String // 'chapter' | 'illustration'
+  targetId   String // Chapter.id | Illustration.id
+  kind       String // 'like' | 'save'
   createdAt  DateTime @default(now())
 
   @@unique([accountId, targetType, targetId, kind])
@@ -507,12 +552,12 @@ model Review {
   id          String   @id @default(cuid())
   workId      String
   work        Work     @relation(fields: [workId], references: [id])
-  authorId    String?                                      // nullable: seed fixtures have no real Account
+  authorId    String? // nullable: seed fixtures have no real Account
   authorName  String
   storyRating Int
   artRating   Int
   text        String
-  hidden      Boolean  @default(false)                      // AD-4/PUB-3 moderation flag; text blanked on the FE when true
+  hidden      Boolean  @default(false) // AD-4/PUB-3 moderation flag; text blanked on the FE when true
   createdAt   DateTime @default(now())
 
   @@index([workId, createdAt])
@@ -521,8 +566,8 @@ model Review {
 model Announcement {
   id        String           @id @default(cuid())
   type      AnnouncementType
-  label     String                                     // French rich text, verbatim from prototype ribbon
-  href      String                                      // link target (future PUB-7/PUB-8 route)
+  label     String // French rich text, verbatim from prototype ribbon
+  href      String // link target (future PUB-7/PUB-8 route)
   order     Int              @default(0)
   createdAt DateTime         @default(now())
 
@@ -552,11 +597,11 @@ model ProjectCall {
 
 model Contest {
   id        String    @id @default(cuid())
-  category  String                                     // e.g. "CONCOURS"
-  title     String                                     // "Prix du jeune mangaka 2026"
-  subtitle  String                                     // "Doté par un éditeur · clôture 30 j"
-  ctaLabel  String                                     // "Participer"
-  href      String                                      // PUB-7 route target (link/banner only for now)
+  category  String // e.g. "CONCOURS"
+  title     String // "Prix du jeune mangaka 2026"
+  subtitle  String // "Doté par un éditeur · clôture 30 j"
+  ctaLabel  String // "Participer"
+  href      String // PUB-7 route target (link/banner only for now)
   active    Boolean   @default(true)
   endsAt    DateTime?
   createdAt DateTime  @default(now())
@@ -568,7 +613,7 @@ model EditorPick {
   id        String   @id @default(cuid())
   workId    String
   work      Work     @relation(fields: [workId], references: [id])
-  blurb     String                                      // "« Encre Blanche » repéré par une maison partenaire"
+  blurb     String // "« Encre Blanche » repéré par une maison partenaire"
   order     Int      @default(0)
   createdAt DateTime @default(now())
 
@@ -580,21 +625,21 @@ model EditorPick {
 model Illustration {
   id              String    @id @default(cuid())
   title           String
-  artistId        String?                       // nullable like Review.authorId (seed fixtures may lack a real Account)
+  artistId        String? // nullable like Review.authorId (seed fixtures may lack a real Account)
   artist          Account?  @relation(fields: [artistId], references: [id])
-  artistName      String                        // denormalized display name (always present)
-  category        String                        // GALLERY_CATEGORY_KEYS: personnages|couvertures|decors|fanart|process
-  genres          String[]  @default([])        // Round 2: F-20 vocabulary fr labels (like Work.genre/themes) — genre[] facet
-  image           String?                        // media URL; null -> CSS halftone placeholder (coverStyle)
-  width           Int?                            // dimensions (DR-6/preview meta)
+  artistName      String // denormalized display name (always present)
+  category        String // GALLERY_CATEGORY_KEYS: personnages|couvertures|decors|fanart|process
+  genres          String[]  @default([]) // Round 2: F-20 vocabulary fr labels (like Work.genre/themes) — genre[] facet
+  image           String? // media URL; null -> CSS halftone placeholder (coverStyle)
+  width           Int? // dimensions (DR-6/preview meta)
   height          Int?
-  description     String?                        // DR-6: meta-block paragraph
-  hashtags        String[]  @default([])        // DR-6: free descriptive chips ("#encre") — NOT F-20 genres
-  tools           String?                        // DR-6: "Détails" -> Outils, e.g. "Encre · CSP"
-  license         String?                        // DR-6: "Détails" -> Licence; null -> "© Tous droits réservés" (BE default)
-  likeCount       Int       @default(0)          // ponytail: denormalized; DR-9 owns the increment
-  weeklyLikeDelta Int       @default(0)          // rolling-7d delta -> "tendance" sort + trending endpoint
-  publishedAt     DateTime?                        // null = not public; non-null = in gallery + "nouveautes" sort key
+  description     String? // DR-6: meta-block paragraph
+  hashtags        String[]  @default([]) // DR-6: free descriptive chips ("#encre") — NOT F-20 genres
+  tools           String? // DR-6: "Détails" -> Outils, e.g. "Encre · CSP"
+  license         String? // DR-6: "Détails" -> Licence; null -> "© Tous droits réservés" (BE default)
+  likeCount       Int       @default(0) // ponytail: denormalized; DR-9 owns the increment
+  weeklyLikeDelta Int       @default(0) // rolling-7d delta -> "tendance" sort + trending endpoint
+  publishedAt     DateTime? // null = not public; non-null = in gallery + "nouveautes" sort key
   createdAt       DateTime  @default(now())
 
   @@index([publishedAt])
@@ -609,13 +654,13 @@ model Illustration {
 
 model SupportTicket {
   id        String   @id @default(cuid())
-  category  String   // allowlisted in DTO: general | account | bug | other
-  accountId String?  // nullable — visitors submit too
+  category  String // allowlisted in DTO: general | account | bug | other
+  accountId String? // nullable — visitors submit too
   account   Account? @relation(fields: [accountId], references: [id])
   name      String
   email     String
   message   String
-  context   Json?    // { url?, userAgent?, requestId? } for bug reports
+  context   Json? // { url?, userAgent?, requestId? } for bug reports
   status    String   @default("new") // new | open | resolved (AD-14 owns transitions)
   createdAt DateTime @default(now())
 

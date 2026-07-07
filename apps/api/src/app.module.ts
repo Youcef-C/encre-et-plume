@@ -25,6 +25,8 @@ import { SupportModule } from './support/support.module';
 import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
 import { MatchesModule } from './matches/matches.module';
+import { ProjectsModule } from './projects/projects.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -49,6 +51,8 @@ import { MatchesModule } from './matches/matches.module';
   // PartnersModule (MC-1): authenticated GET /partners — "Trouver un·e partenaire" creator directory.
   // CallsModule (MC-1): authenticated GET /calls — "Appels à projets" preview (MC-4 extends).
   // MatchesModule (MC-2): authenticated GET /matches/suggestions — affinity-scored partner suggestions.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule],
+  // ProjectsModule (CS-1 seam): authenticated GET /projects/mine — MC-3 invite picker source.
+  // InvitationsModule (MC-3): authenticated POST/GET/PATCH /invitations — "Proposer une collab".
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule],
 })
 export class AppModule {}

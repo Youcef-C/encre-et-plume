@@ -121,6 +121,7 @@ export class ProfilesService {
     }
 
     return {
+      userId: account.id,
       slug: account.profileSlug,
       displayName: account.displayName,
       avatar: account.avatar,
