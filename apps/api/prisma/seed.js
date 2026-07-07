@@ -313,38 +313,45 @@ const PARTNERS = [
 // and a call owned by the login-tested e2e account (dr1-camille-roux) for the "own call → no
 // Candidater" and "closed → Clôturé" states. `authorSlug` (when set) resolves to the owner's
 // Account id at seed time. Genres are GENRES ids (F-20); `tags` are the denormalized display chips.
+// `createdAt` is EXPLICIT and spread a full minute apart (oldest first, array order) — `GET /calls`
+// orders by `createdAt desc`, and relying on the implicit `now()` at insert time is non-deterministic
+// (a fresh-seeded CI DB and a locally reseeded one can insert fast enough to tie or reorder). Fixed,
+// minute-spaced timestamps make ordering identical on every fresh seed AND every reseed.
+const inMinutes = (n) => new Date(Date.now() - 60 * 60 * 1000 + n * 60 * 1000);
 const PROJECT_CALLS = [
   {
     title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.',
     genres: ['seinen', 'thriller'], scope: '~120 planches', tags: ['Seinen', 'Thriller', '~120 planches'],
     description: "Un thriller urbain mélancolique. J'ai 6 chapitres écrits, je cherche un trait à l'encre dense pour porter l'ambiance pluvieuse.",
-    closesAt: inDays(12), applicationCount: 0, status: 'open',
+    closesAt: inDays(12), applicationCount: 0, status: 'open', createdAt: inMinutes(0),
   },
   {
     title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.',
     genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
     description: "J'ai le character design et l'univers d'un monde de brume. Il me manque l'histoire — cherche un·e scénariste pour un one-shot de 40 pages.",
-    closesAt: null, applicationCount: 5, status: 'open',
+    closesAt: null, applicationCount: 5, status: 'open', createdAt: inMinutes(1),
   },
   {
     title: 'Comédie romantique', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Maya L.',
     genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
     description: 'Série courte feel-good, trait rond et chaleureux souhaité. 8 chapitres prévus.',
-    closesAt: inDays(20), applicationCount: 2, status: 'open',
+    closesAt: inDays(20), applicationCount: 2, status: 'open', createdAt: inMinutes(2),
   },
   {
     // Closed call → renders "Clôturé", no "Candidater".
     title: 'Recueil horrifique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Marta L.',
     genres: ['horror'], format: 'one_shot', tags: ['Horreur', 'One-shot'],
     description: 'Anthologie de courtes histoires d’épouvante — appel clos, merci à toutes et tous.',
-    closesAt: inDays(-3), applicationCount: 9, status: 'closed',
+    closesAt: inDays(-3), applicationCount: 9, status: 'closed', createdAt: inMinutes(3),
   },
   {
     // Owned by the login-tested account → viewer sees no "Candidater" on their own call.
+    // Newest of the 5 (createdAt inMinutes(4)) — the /trouver preview band (limit=2, newest-first)
+    // deterministically surfaces this one; trouver.spec.ts MC1-E9 asserts on it explicitly.
     title: 'Seinen urbain', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille Roux', authorSlug: 'dr1-camille-roux',
     genres: ['seinen'], scope: '~90 planches', tags: ['Seinen', '~90 planches'],
     description: 'Récit choral dans un Lyon nocturne. Scénario prêt, je cherche un·e dessinateur·rice pour un partenariat au long cours.',
-    closesAt: inDays(30), applicationCount: 1, status: 'open',
+    closesAt: inDays(30), applicationCount: 1, status: 'open', createdAt: inMinutes(4),
   },
 ];
 
@@ -450,6 +457,21 @@ async function main() {
     });
   }
 
+  // MC-5: the login-tested e2e account (dr1-camille-roux) applies to a call via the portfolio path,
+  // so ensure she has 2 selectable PortfolioItems. Clear + recreate so reseeding never duplicates.
+  {
+    const acc = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' }, select: { id: true } });
+    const prof = acc && (await prisma.profile.findUnique({ where: { accountId: acc.id }, select: { id: true } }));
+    if (prof) {
+      await prisma.portfolioItem.deleteMany({ where: { profileId: prof.id } });
+      for (let i = 0; i < 2; i++) {
+        await prisma.portfolioItem.create({
+          data: { profileId: prof.id, image: `https://example.com/portfolio/dr1-camille-roux-${i}.jpg`, caption: `Échantillon ${i + 1}`, order: i },
+        });
+      }
+    }
+  }
+
   // MC-1: partner-directory creator fixtures (Account + Profile + 2 PortfolioItems each).
   for (const p of PARTNERS) {
     const account = await prisma.account.upsert({
@@ -475,6 +497,9 @@ async function main() {
 
   // MC-4: "Appels à projets" board rows. deleteMany + create (like ANNOUNCEMENTS) — no natural key.
   // `authorSlug` resolves to the owner's Account id so the login account owns one call.
+  // MC-5: applications FK-reference calls (onDelete: Restrict), so wipe them first — this also resets
+  // applicationCount to the fixture values below, keeping the MC-5 apply e2e repeatable across reseeds.
+  await prisma.application.deleteMany({});
   await prisma.projectCall.deleteMany({});
   for (const call of PROJECT_CALLS) {
     const { authorSlug, ...data } = call;

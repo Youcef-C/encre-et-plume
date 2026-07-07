@@ -214,10 +214,13 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
     page,
   }) => {
     await expect(page.getByRole('heading', { name: 'Appels à projets' })).toBeVisible();
-    // MC-4 reseeded the board to 5 calls (backend-notes.md); the preview (limit=2, open, newest
-    // first) now surfaces the 2 newest — "Seinen urbain" (+30j) and "Comédie romantique" (+20j) —
-    // not the story's "« Lames de Brume »" example, which is older. CallsPreview itself (and its
-    // "Clôture X j" copy, no "dans" — distinct from the MC-4 board's CallBoardCard copy) is unchanged.
+    // MC-4 reseeded the board to 5 calls with EXPLICIT, minute-spaced `createdAt` (seed.js) so
+    // ordering is deterministic on every fresh seed AND every reseed (no reliance on insert-time
+    // `now()`, which can tie/reorder depending on how fast the seed script runs). The preview
+    // (limit=2, open, newest first) deterministically surfaces "Seinen urbain" (+30j, the newest of
+    // the 5) and "Comédie romantique" (+20j) — not the story's "« Lames de Brume »" example, which
+    // is the oldest. CallsPreview itself (and its "Clôture X j" copy, no "dans" — distinct from the
+    // MC-4 board's CallBoardCard copy) is unchanged.
     await expect(page.getByText('Seinen urbain')).toBeVisible();
     await expect(page.getByText('Clôture 30 j')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Voir tous les appels →' })).toHaveAttribute('href', '/appels');

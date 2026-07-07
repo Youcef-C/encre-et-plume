@@ -171,14 +171,18 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     await dialog.getByRole('button', { name: "Publier l'appel" }).click();
     await expect(dialog).toHaveCount(0);
 
-    // Prepended at the top of the board without a refetch, with the computed countdown.
-    const newCard = board(page).first();
-    await expect(newCard.getByText('« Brume Écarlate » — one-shot QA')).toBeVisible();
+    // Prepended without a refetch, with the computed countdown. Located by its own (unique)
+    // title rather than board(page).first() — independent of seed ordering/timing.
+    const newCard = cardByTitle(page, '« Brume Écarlate » — one-shot QA');
+    await expect(newCard).toBeVisible();
     await expect(newCard.getByText('Clôture dans 5 j')).toBeVisible();
-    await expect(newCard.getByText('DESSINATEUR CHERCHE SCÉNARISTE')).toBeVisible();
+    // "Un·e dessinateur·rice" = writerSeeksIllustrator = a scénariste seeking a dessinateur·rice.
+    await expect(newCard.getByText('SCÉNARISTE CHERCHE DESSINATEUR·RICE')).toBeVisible();
     // The poster is the viewer's own new call — no Candidater.
     await expect(newCard.getByRole('button', { name: 'Candidater' })).toHaveCount(0);
     await expect(board(page)).toHaveCount(6);
+    // Prepended means it's also the first DOM row (still true, asserted separately from identity).
+    await expect(board(page).first()).toHaveText(/Brume Écarlate/);
   });
 
   test('MC4-E9: "Poster un appel" rejects a past/today deadline client-side', async ({ page }) => {
