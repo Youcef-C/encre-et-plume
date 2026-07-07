@@ -140,6 +140,26 @@ export default function OnBrandMultiSelect({
             padding: '6px 0',
           }}
         >
+          {/* Selected choices shown as removable chips ON TOP of the list (F-22 GenreChip pattern).
+              Kept inside the popover so they never grow the shared filter row and misalign it.
+              Removing a chip re-fires onChange → the filter auto-applies. */}
+          {values.length > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                padding: '2px 11px 8px',
+                borderBottom: '2px solid var(--ink)',
+                marginBottom: 6,
+              }}
+            >
+              {values.map((v) => (
+                <GenreChip key={v} label={labelByValue.get(v) ?? v} onRemove={() => toggle(v)} />
+              ))}
+            </div>
+          )}
+
           {searchable && (
             <div style={{ padding: '2px 11px 8px' }}>
               <input
@@ -185,16 +205,6 @@ export default function OnBrandMultiSelect({
               )}
               {g.options.map(row)}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Selected choices shown at a glance as removable chips (F-22 GenreChip pattern).
-          Removing a chip re-fires onChange → the filter auto-applies. */}
-      {values.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {values.map((v) => (
-            <GenreChip key={v} label={labelByValue.get(v) ?? v} onRemove={() => toggle(v)} />
           ))}
         </div>
       )}

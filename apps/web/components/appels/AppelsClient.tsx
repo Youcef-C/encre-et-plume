@@ -1,32 +1,107 @@
 'use client';
 
-// MC-1 §11 — minimal Appels à projets board: heading + the seeded calls (GET /calls, limit 6),
-// reusing the CallsPreview card grid. No posting/filters yet (MC-4). Auth-gated like /trouver.
+// MC-4 — "Appels à projets" board (route /appels). Replica of prototype APPELS À PROJETS
+// (.dc.html lines 1580–1606): header (Mes candidatures / Candidatures reçues stubs + ＋ Poster un
+// appel), tagline, filter row, and full-width call rows. Two owner-approved deviations vs the drawn
+// frame: the "Je suis :" self-role toggle becomes a "Je cherche :" direction filter (owner rule
+// §1/§12, same as /trouver), and "Genre ▾" becomes an OnBrandMultiSelect with removable chips.
+// Filters auto-apply (no "Appliquer"). Posting an appeal prepends the returned card without refetch.
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { CallPreview } from '@encre-et-plume/shared';
+import { GENRES, type CreatorRole, type CallCard } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
-import CallsPreview from '../trouver/CallsPreview';
+import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
+import CallBoardCard from './CallBoardCard';
+import PostCallModal from './PostCallModal';
 
-type Status = 'loading' | 'ready' | 'error';
+type Status = 'loading' | 'ready' | 'empty' | 'error';
+
+const ROLE_OPTIONS: { role: CreatorRole; label: string }[] = [
+  { role: 'dessinateur', label: 'Dessinateur·rice' },
+  { role: 'scenariste', label: 'Scénariste' },
+];
+
+const GENRE_OPTIONS = GENRES.map((g) => ({ value: g.id, label: g.fr }));
+
+const chipBase: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 5,
+  padding: '8px 13px',
+  minHeight: 44,
+  display: 'inline-flex',
+  alignItems: 'center',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
+function chipStyle(active: boolean): React.CSSProperties {
+  return active
+    ? { ...chipBase, background: 'var(--accent)', color: '#fff' }
+    : { ...chipBase, background: 'var(--card)', color: 'var(--ink)' };
+}
+
+// Outline stub buttons (Mes candidatures / Candidatures reçues) — no-op until MC-6/MC-7.
+const outlineBtn: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 6,
+  padding: '8px 14px',
+  minHeight: 44,
+  background: 'var(--card)',
+  color: 'var(--ink)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
+function SkeletonRow() {
+  return (
+    <li
+      aria-hidden="true"
+      className="ep-skeleton-delayed"
+      style={{
+        listStyle: 'none',
+        height: 152,
+        border: '3px solid var(--ink)',
+        borderRadius: 10,
+        background: 'var(--tone)',
+        opacity: 0.5,
+      }}
+    />
+  );
+}
 
 export default function AppelsClient() {
   const { account, loading: sessionLoading } = useSession();
-  const [calls, setCalls] = useState<CallPreview[]>([]);
+
+  const [role, setRole] = useState<CreatorRole | null>(null);
+  const [genres, setGenres] = useState<string[]>([]);
+
+  const [items, setItems] = useState<CallCard[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [status, setStatus] = useState<Status>('loading');
-  const [retry, setRetry] = useState(0);
+  const [retryKey, setRetryKey] = useState(0);
+  const [posting, setPosting] = useState(false);
+
+  const filterKey = JSON.stringify({ role, genres, retryKey });
 
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
     setStatus('loading');
+    setPage(1);
     api
-      .getCalls(6)
+      .getCallsBoard({ status: 'all', page: 1, ...(role ? { role } : {}), ...(genres.length ? { genre: genres } : {}) })
       .then((res) => {
         if (cancelled) return;
-        setCalls(res.items);
-        setStatus('ready');
+        setItems(res.items);
+        setTotal(res.total);
+        setPage(res.page);
+        setStatus(res.items.length === 0 ? 'empty' : 'ready');
       })
       .catch(() => {
         if (!cancelled) setStatus('error');
@@ -34,7 +109,31 @@ export default function AppelsClient() {
     return () => {
       cancelled = true;
     };
-  }, [account, retry]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, filterKey]);
+
+  async function loadMore() {
+    const res = await api.getCallsBoard({
+      status: 'all',
+      page: page + 1,
+      ...(role ? { role } : {}),
+      ...(genres.length ? { genre: genres } : {}),
+    });
+    setItems((prev) => [...prev, ...res.items]);
+    setPage(res.page);
+    setTotal(res.total);
+  }
+
+  // Single-select "Je cherche" role filter — click the active chip again to clear (same as /trouver).
+  function toggleRole(next: CreatorRole) {
+    setRole((cur) => (cur === next ? null : next));
+  }
+
+  function handleCreated(card: CallCard) {
+    setItems((prev) => [card, ...prev]);
+    setTotal((t) => t + 1);
+    setStatus('ready');
+  }
 
   if (sessionLoading) {
     return <div aria-busy="true" style={{ minHeight: 300 }} />;
@@ -68,13 +167,72 @@ export default function AppelsClient() {
   }
 
   return (
-    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '28px 28px 80px' }}>
-      <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: '0 0 6px' }}>Appels à projets</h1>
-      <div style={{ fontSize: 15, color: 'var(--ink2)', fontWeight: 500, marginBottom: 22 }}>
-        Les scénaristes et dessinateur·rices qui cherchent un·e partenaire pour un projet.
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 28px 80px' }}>
+      {/* Header (prototype 1583) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: 0 }}>Appels à projets</h1>
+        <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {/* MC-6/MC-7 stubs — rendered per prototype, no-op until those stories land. */}
+          <button type="button" onClick={() => {}} style={outlineBtn}>
+            Mes candidatures
+          </button>
+          <button type="button" onClick={() => {}} style={outlineBtn}>
+            Candidatures reçues
+          </button>
+          <button
+            type="button"
+            onClick={() => setPosting(true)}
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              background: 'var(--accent)',
+              color: '#fff',
+              border: '3px solid var(--ink)',
+              borderRadius: 6,
+              padding: '11px 20px',
+              minHeight: 44,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: '3px 3px 0 var(--shadow)',
+            }}
+          >
+            ＋ Poster un appel
+          </button>
+        </div>
       </div>
 
-      {status === 'loading' && <p style={{ color: 'var(--ink2)', fontSize: 15 }}>Chargement…</p>}
+      {/* Tagline (prototype 1584) */}
+      <div style={{ fontSize: 15, color: 'var(--ink2)', fontWeight: 500, marginBottom: 20 }}>
+        Postez un scénario en quête d&apos;un trait, ou un univers en quête d&apos;une histoire.
+      </div>
+
+      {/* Filter row (prototype 1585 + owner-approved deviations) — auto-applies on change. */}
+      <div
+        role="group"
+        aria-label="Je cherche :"
+        style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap', alignItems: 'center' }}
+      >
+        <span style={{ color: 'var(--ink2)', fontWeight: 500, fontSize: 13 }}>Je cherche :</span>
+        {ROLE_OPTIONS.map(({ role: r, label }) => (
+          <button key={r} type="button" aria-pressed={role === r} onClick={() => toggleRole(r)} style={chipStyle(role === r)}>
+            {label}
+          </button>
+        ))}
+        <OnBrandMultiSelect label="Genre" options={GENRE_OPTIONS} values={genres} onChange={setGenres} />
+      </div>
+
+      {/* Board */}
+      {status === 'loading' && (
+        <ul
+          role="status"
+          aria-label="Chargement des appels…"
+          style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonRow key={i} />
+          ))}
+        </ul>
+      )}
 
       {status === 'error' && (
         <div role="alert" style={{ padding: '20px 0' }}>
@@ -83,7 +241,7 @@ export default function AppelsClient() {
           </p>
           <button
             type="button"
-            onClick={() => setRetry((k) => k + 1)}
+            onClick={() => setRetryKey((k) => k + 1)}
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -100,12 +258,41 @@ export default function AppelsClient() {
         </div>
       )}
 
-      {status === 'ready' &&
-        (calls.length === 0 ? (
-          <p style={{ color: 'var(--ink2)', fontSize: 15 }}>Aucun appel ouvert pour le moment.</p>
-        ) : (
-          <CallsPreview calls={calls} hideHeader />
-        ))}
+      {status === 'empty' && (
+        <p style={{ color: 'var(--ink2)', fontSize: 15, padding: '20px 0' }}>Aucun appel pour ces filtres.</p>
+      )}
+
+      {status === 'ready' && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {items.map((c) => (
+              <CallBoardCard key={c.id} call={c} onCandidater={() => {}} />
+            ))}
+          </div>
+          {items.length < total && (
+            <div style={{ textAlign: 'center', marginTop: 24 }}>
+              <button
+                type="button"
+                onClick={loadMore}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  background: 'var(--card)',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '10px 20px',
+                  cursor: 'pointer',
+                  boxShadow: '2px 2px 0 var(--shadow)',
+                }}
+              >
+                Charger plus
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {posting && <PostCallModal onClose={() => setPosting(false)} onCreated={handleCreated} />}
     </div>
   );
 }

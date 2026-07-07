@@ -309,10 +309,43 @@ const PARTNERS = [
   { email: 'diego.s@seed.encre-et-plume.local', displayName: 'Diego S.', slug: 'mc1-diego-s', role: 'scenariste', country: 'AR', region: null, availability: 'ouvert', tags: ['Aventure', 'SF'], trendingScore: 45 },
 ];
 
-// MC-1 "Appels à projets" preview rows (the prototype's two calls). MC-4 owns the full board + POST.
+// MC-4 "Appels à projets" board rows (the prototype's three examples, full data) + a closed call
+// and a call owned by the login-tested e2e account (dr1-camille-roux) for the "own call → no
+// Candidater" and "closed → Clôturé" states. `authorSlug` (when set) resolves to the owner's
+// Account id at seed time. Genres are GENRES ids (F-20); `tags` are the denormalized display chips.
 const PROJECT_CALLS = [
-  { title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.', tags: ['Seinen', 'Thriller'], closesAt: inDays(12), applicationCount: 0, status: 'open' },
-  { title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.', tags: ['Fantastique', 'One-shot'], closesAt: null, applicationCount: 5, status: 'open' },
+  {
+    title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.',
+    genres: ['seinen', 'thriller'], scope: '~120 planches', tags: ['Seinen', 'Thriller', '~120 planches'],
+    description: "Un thriller urbain mélancolique. J'ai 6 chapitres écrits, je cherche un trait à l'encre dense pour porter l'ambiance pluvieuse.",
+    closesAt: inDays(12), applicationCount: 0, status: 'open',
+  },
+  {
+    title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.',
+    genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
+    description: "J'ai le character design et l'univers d'un monde de brume. Il me manque l'histoire — cherche un·e scénariste pour un one-shot de 40 pages.",
+    closesAt: null, applicationCount: 5, status: 'open',
+  },
+  {
+    title: 'Comédie romantique', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Maya L.',
+    genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
+    description: 'Série courte feel-good, trait rond et chaleureux souhaité. 8 chapitres prévus.',
+    closesAt: inDays(20), applicationCount: 2, status: 'open',
+  },
+  {
+    // Closed call → renders "Clôturé", no "Candidater".
+    title: 'Recueil horrifique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Marta L.',
+    genres: ['horror'], format: 'one_shot', tags: ['Horreur', 'One-shot'],
+    description: 'Anthologie de courtes histoires d’épouvante — appel clos, merci à toutes et tous.',
+    closesAt: inDays(-3), applicationCount: 9, status: 'closed',
+  },
+  {
+    // Owned by the login-tested account → viewer sees no "Candidater" on their own call.
+    title: 'Seinen urbain', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille Roux', authorSlug: 'dr1-camille-roux',
+    genres: ['seinen'], scope: '~90 planches', tags: ['Seinen', '~90 planches'],
+    description: 'Récit choral dans un Lyon nocturne. Scénario prêt, je cherche un·e dessinateur·rice pour un partenariat au long cours.',
+    closesAt: inDays(30), applicationCount: 1, status: 'open',
+  },
 ];
 
 // MC-3 (CS-1 seam): the sender's projects for the invite modal picker (prototype fixtures).
@@ -440,10 +473,16 @@ async function main() {
     }
   }
 
-  // MC-1: "Appels à projets" preview rows. deleteMany + create (like ANNOUNCEMENTS) — no natural key.
+  // MC-4: "Appels à projets" board rows. deleteMany + create (like ANNOUNCEMENTS) — no natural key.
+  // `authorSlug` resolves to the owner's Account id so the login account owns one call.
   await prisma.projectCall.deleteMany({});
   for (const call of PROJECT_CALLS) {
-    await prisma.projectCall.create({ data: call });
+    const { authorSlug, ...data } = call;
+    if (authorSlug) {
+      const owner = await prisma.account.findUnique({ where: { profileSlug: authorSlug }, select: { id: true } });
+      data.authorId = owner?.id ?? null;
+    }
+    await prisma.projectCall.create({ data });
   }
 
   // MC-3 (CS-1 seam): projects owned by the login-tested sender (dr1-camille-roux) so the invite

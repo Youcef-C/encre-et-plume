@@ -72,8 +72,11 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
     await expect(cards.nth(2)).toBeVisible();
     expect(await cards.count()).toBeGreaterThanOrEqual(3);
 
-    // Camille Roux is the logged-in viewer — her own card must never appear.
-    await expect(page.getByText('Camille Roux', { exact: true })).toHaveCount(0);
+    // Camille Roux is the logged-in viewer — her own card must never appear in the partners grid.
+    // Scoped to the grid (not page-wide): MC-4's "Appels à projets" band above the grid can
+    // legitimately show her own posted call ("Seinen urbain", authorName "Camille Roux") — that's
+    // a different surface with no such exclusion rule, only the partner directory excludes self.
+    await expect(grid(page).getByText('Camille Roux', { exact: true })).toHaveCount(0);
 
     // No location filter selected → non-French fixtures (Sora/Diego) are present.
     await expect(cardName(page, 'Sora T.')).toBeVisible();
@@ -134,6 +137,11 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
     await expect(page.getByText('Aucun·e partenaire ne correspond à ces filtres.')).toBeVisible();
 
     await page.getByRole('group', { name: 'Je cherche :' }).getByRole('button', { name: 'Scénariste' }).click();
+    // Owner's chip-layout fix: selected chips render inside the popover, not the shared filter row
+    // — clicking the role toggle (outside the popover) closes it, so the chip must be reached by
+    // reopening the popover (same pattern as MC1-E3/E5's "still open across toggles" — here it
+    // WAS closed by the intervening click, so we reopen explicitly).
+    await openMultiSelect(page, 'Genres');
     await page.getByRole('button', { name: 'Retirer Josei' }).click();
     await expect(cardName(page, 'Théo M.')).toBeVisible();
   });
@@ -206,8 +214,12 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
     page,
   }) => {
     await expect(page.getByRole('heading', { name: 'Appels à projets' })).toBeVisible();
-    await expect(page.getByText('« Lames de Brume »')).toBeVisible();
-    await expect(page.getByText('Clôture 12 j')).toBeVisible();
+    // MC-4 reseeded the board to 5 calls (backend-notes.md); the preview (limit=2, open, newest
+    // first) now surfaces the 2 newest — "Seinen urbain" (+30j) and "Comédie romantique" (+20j) —
+    // not the story's "« Lames de Brume »" example, which is older. CallsPreview itself (and its
+    // "Clôture X j" copy, no "dans" — distinct from the MC-4 board's CallBoardCard copy) is unchanged.
+    await expect(page.getByText('Seinen urbain')).toBeVisible();
+    await expect(page.getByText('Clôture 30 j')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Voir tous les appels →' })).toHaveAttribute('href', '/appels');
 
     // §10 — "Partenaires" divider heading between the two zones.

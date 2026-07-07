@@ -62,24 +62,36 @@ describe('OnBrandMultiSelect', () => {
     expect(screen.queryByRole('checkbox', { name: 'Japon' })).not.toBeInTheDocument();
   });
 
-  it('renders the selected values as removable chips outside the popover (closed)', () => {
+  it('does NOT render selected chips outside the popover (closed) — keeps the filter row aligned', () => {
     render(<OnBrandMultiSelect label="Genres" options={flat} values={['josei']} onChange={() => {}} />);
-    // trigger is collapsed, yet the chosen chip shows at a glance
-    expect(screen.getByRole('button', { name: /Genres/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText('Josei')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retirer Josei' })).toBeInTheDocument();
+    // Collapsed: only the trigger (with its count badge) shows — no in-row chip stack to grow the row.
+    expect(screen.getByRole('button', { name: /Genres \(1\)/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Josei')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retirer Josei' })).not.toBeInTheDocument();
+  });
+
+  it('renders selected chips at the TOP of the open listbox, above the options', async () => {
+    render(<OnBrandMultiSelect label="Genres" options={flat} values={['josei']} onChange={() => {}} />);
+    await userEvent.click(screen.getByRole('button', { name: /Genres/ }));
+    const listbox = screen.getByRole('listbox');
+    const chip = within(listbox).getByRole('button', { name: 'Retirer Josei' });
+    const firstOption = within(listbox).getByRole('checkbox', { name: 'Josei' });
+    // chip appears before the option list in DOM order
+    expect(chip.compareDocumentPosition(firstOption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('deselects a value (re-firing onChange) when its chip × is clicked', async () => {
     const onChange = vi.fn();
     render(<OnBrandMultiSelect label="Genres" options={flat} values={['josei', 'seinen']} onChange={onChange} />);
+    await userEvent.click(screen.getByRole('button', { name: /Genres/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Retirer Josei' }));
     expect(onChange).toHaveBeenCalledWith(['seinen']);
   });
 
-  it('resolves grouped-option labels for chips (ISO code → French name)', () => {
+  it('resolves grouped-option labels for chips (ISO code → French name)', async () => {
     render(<OnBrandMultiSelect label="Localisation" options={grouped} values={['JP']} onChange={() => {}} searchable />);
-    expect(screen.getByText('Japon')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Localisation/ }));
+    // ISO code JP resolves to the French label on the removable chip.
     expect(screen.getByRole('button', { name: 'Retirer Japon' })).toBeInTheDocument();
   });
 

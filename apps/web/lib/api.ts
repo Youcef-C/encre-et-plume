@@ -455,6 +455,21 @@ export const getPartners = (query: URLSearchParams): Promise<PartnersResponse> =
 export const getCalls = (limit = 2): Promise<CallsResponse> =>
   request<CallsResponse>(`/calls?limit=${limit}`);
 
+// ─── Appels à projets board (MC-4) ────────────────────────────────────────────
+import type { CallsBoardQuery, CallsBoardResponse, CreateCallRequest, CallCard } from '@encre-et-plume/shared';
+
+export const getCallsBoard = (query: CallsBoardQuery = {}): Promise<CallsBoardResponse> => {
+  const q = new URLSearchParams();
+  if (query.role) q.set('role', query.role);
+  (query.genre ?? []).forEach((g) => q.append('genre', g));
+  if (query.status) q.set('status', query.status);
+  if (query.page) q.set('page', String(query.page));
+  return request<CallsBoardResponse>(`/calls${q.toString() ? `?${q.toString()}` : ''}`);
+};
+
+export const createCall = (body: CreateCallRequest): Promise<CallCard> =>
+  request<CallCard>('/calls', { method: 'POST', body: JSON.stringify(body) });
+
 // ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
 import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';
 

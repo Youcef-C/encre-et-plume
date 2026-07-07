@@ -69,6 +69,7 @@ enum MediaKind {
   attachment
   article
   contest
+  call_sample
 }
 
 enum MediaStatus {
@@ -584,13 +585,19 @@ model ProjectCall {
   seekingRole      String // the complement — role sought
   authorId         String? // nullable, seed-friendly (mirror Illustration.artistId)
   authorName       String // denormalized display name
-  tags             String[]  @default([])
-  closesAt         DateTime? // null → FE meta falls back to applicationCount
+  tags             String[]  @default([]) // denormalized display chips (genre labels + scope/format)
+  description      String    @default("") // MC-4: card body text
+  genres           String[]  @default([]) // MC-4: GENRES ids (F-20) — used for board filtering
+  format           String? // MC-4: 'serie' | 'one_shot'
+  scope            String? // MC-4: free text, e.g. "~120 planches"
+  sampleMediaId    String? // MC-4: FK-by-convention to Media.id (kind 'call_sample')
+  closesAt         DateTime? // null → FE meta falls back to applicationCount; MC-4: the deadline
   applicationCount Int       @default(0)
   status           String    @default("open") // MC-4 owns transitions
   createdAt        DateTime  @default(now())
 
   @@index([status, createdAt])
+  @@index([authorId])
 }
 
 // ── DR-2: catalog "Découvrir" (Contest banner + editor picks) ────────────────

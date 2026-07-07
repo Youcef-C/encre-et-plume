@@ -1,5 +1,4 @@
-// MC-1 §11 — minimal "Appels à projets" board. Reuses GET /calls (no new backend); MC-4 replaces
-// this with the full board (posting, filters, pagination).
+// MC-4 — "Appels à projets" board: filters, full call rows, and the "Poster un appel" modal.
 import AppelsClient from '../../components/appels/AppelsClient';
 
 export const metadata = { title: 'Appels à projets — Encre & Plume' };

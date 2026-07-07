@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import type { AccountSummary, CallPreview } from '@encre-et-plume/shared';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { AccountSummary, CallCard, CallsBoardResponse } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getCalls: vi.fn() };
+  return { ...actual, getCallsBoard: vi.fn(), createCall: vi.fn() };
 });
 
 vi.mock('next/link', () => ({
@@ -35,7 +36,7 @@ const account: AccountSummary = {
   isAdult: true,
 };
 
-const call: CallPreview = {
+const call = (over: Partial<CallCard> = {}): CallCard => ({
   id: 'call-1',
   heading: 'SCÉNARISTE CHERCHE DESSINATEUR·RICE',
   title: '« Lames de Brume »',
@@ -43,7 +44,21 @@ const call: CallPreview = {
   authorName: 'Camille R.',
   closesInDays: 12,
   applicationCount: 0,
-};
+  direction: 'writerSeeksIllustrator',
+  description: 'Un thriller urbain.',
+  sampleUrl: null,
+  status: 'open',
+  deadline: '2026-07-19T00:00:00.000Z',
+  isOwner: false,
+  ...over,
+});
+
+const board = (items: CallCard[], total = items.length): CallsBoardResponse => ({
+  items,
+  page: 1,
+  pageSize: 10,
+  total,
+});
 
 function renderClient(acc: AccountSummary | null = account) {
   return render(
@@ -53,28 +68,68 @@ function renderClient(acc: AccountSummary | null = account) {
   );
 }
 
+const getBoard = () => api.getCallsBoard as ReturnType<typeof vi.fn>;
+
 beforeEach(() => vi.clearAllMocks());
 
-describe('AppelsClient (§11)', () => {
-  it('fetches up to 6 calls and lists them under a heading', async () => {
-    (api.getCalls as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [call] });
+describe('AppelsClient (MC-4 board)', () => {
+  it('shows skeletons while loading, then the cards', async () => {
+    let resolve!: (r: CallsBoardResponse) => void;
+    getBoard().mockReturnValue(new Promise<CallsBoardResponse>((r) => (resolve = r)));
     renderClient();
+    expect(screen.getByRole('status', { name: /chargement/i })).toBeInTheDocument();
+    resolve(board([call()]));
     expect(await screen.findByText('« Lames de Brume »')).toBeInTheDocument();
-    expect(api.getCalls).toHaveBeenCalledWith(6);
-    expect(screen.getByRole('heading', { name: 'Appels à projets' })).toBeInTheDocument();
-    // this page is the board itself → no "Voir tous les appels" self-link
-    expect(screen.queryByRole('link', { name: /voir tous les appels/i })).not.toBeInTheDocument();
   });
 
-  it('shows an empty message when no call is open', async () => {
-    (api.getCalls as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+  it('shows the empty message verbatim when no call matches', async () => {
+    getBoard().mockResolvedValue(board([]));
     renderClient();
-    expect(await screen.findByText('Aucun appel ouvert pour le moment.')).toBeInTheDocument();
+    expect(await screen.findByText('Aucun appel pour ces filtres.')).toBeInTheDocument();
   });
 
-  it('shows the connect prompt when logged out', () => {
-    renderClient(null);
-    expect(screen.getByText(/Connectez-vous pour parcourir les appels/)).toBeInTheDocument();
-    expect(api.getCalls).not.toHaveBeenCalled();
+  it('renders an error state and retries', async () => {
+    getBoard().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(board([call()]));
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(await screen.findByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('« Lames de Brume »')).toBeInTheDocument();
+  });
+
+  it('refetches with the role filter when a role chip is toggled', async () => {
+    getBoard().mockResolvedValue(board([call()]));
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Lames de Brume »');
+    await user.click(screen.getByRole('button', { name: 'Dessinateur·rice' }));
+    await waitFor(() => {
+      const last = getBoard().mock.calls.at(-1)![0];
+      expect(last).toMatchObject({ role: 'dessinateur', status: 'all', page: 1 });
+    });
+  });
+
+  it('prepends the new card after a successful post', async () => {
+    getBoard().mockResolvedValue(board([call({ id: 'existing', title: '« Existant »' })]));
+    (api.createCall as ReturnType<typeof vi.fn>).mockResolvedValue(
+      call({ id: 'fresh', title: '« Tout neuf »' }),
+    );
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Existant »');
+
+    await user.click(screen.getByRole('button', { name: '＋ Poster un appel' }));
+    const dialog = screen.getByRole('dialog', { name: 'Poster un appel' });
+    await user.click(within(dialog).getByRole('button', { name: 'Un·e dessinateur·rice' }));
+    await user.type(within(dialog).getByLabelText('Titre'), 'Tout neuf');
+    await user.type(within(dialog).getByLabelText('Description'), 'Une histoire.');
+    await user.type(within(dialog).getByRole('combobox', { name: 'Ajouter un genre' }), 'Seinen{Enter}');
+    const d = new Date();
+    d.setDate(d.getDate() + 10);
+    await user.type(within(dialog).getByLabelText('Date de clôture'), d.toISOString().slice(0, 10));
+    await user.click(within(dialog).getByRole('button', { name: "Publier l'appel" }));
+
+    await waitFor(() => expect(api.createCall).toHaveBeenCalled());
+    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(titles[0]).toBe('« Tout neuf »');
   });
 });

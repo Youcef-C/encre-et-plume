@@ -3,13 +3,29 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { CallsController } from './calls.controller';
 import { CallsService } from './calls.service';
 import { SessionGuard } from '../auth/guards/session.guard';
+import type { AuthRequest } from '../auth/guards/session.guard';
+import type { CreateCallDto } from './dto/create-call.dto';
+
+function req(query: Record<string, unknown> = {}, accountId = 'acc-1'): AuthRequest {
+  return { query, accountId } as unknown as AuthRequest;
+}
 
 describe('CallsController', () => {
   let controller: CallsController;
-  let service: { findOpenCalls: jest.Mock };
+  let service: {
+    findOpenCalls: jest.Mock;
+    findBoard: jest.Mock;
+    createCall: jest.Mock;
+    closeEarly: jest.Mock;
+  };
 
   beforeEach(async () => {
-    service = { findOpenCalls: jest.fn().mockResolvedValue({ items: [] }) };
+    service = {
+      findOpenCalls: jest.fn().mockResolvedValue({ items: [] }),
+      findBoard: jest.fn().mockResolvedValue({ items: [], page: 1, pageSize: 10, total: 0 }),
+      createCall: jest.fn().mockResolvedValue({ id: 'call-new' }),
+      closeEarly: jest.fn().mockResolvedValue({ id: 'call-1', status: 'closed' }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CallsController],
       providers: [{ provide: CallsService, useValue: service }],
@@ -25,13 +41,46 @@ describe('CallsController', () => {
     expect(guards).toEqual([SessionGuard]);
   });
 
-  it('defaults the limit to 2 when absent', async () => {
-    await controller.find(undefined);
+  it('routes to the MC-1 preview path when a limit is present', async () => {
+    await controller.find(req({ limit: '2' }));
     expect(service.findOpenCalls).toHaveBeenCalledWith(2);
+    expect(service.findBoard).not.toHaveBeenCalled();
   });
 
-  it('clamps the limit to the max of 6', async () => {
-    await controller.find('99');
+  it('clamps the preview limit to the max of 6', async () => {
+    await controller.find(req({ limit: '99' }));
     expect(service.findOpenCalls).toHaveBeenCalledWith(6);
+  });
+
+  it('routes to the board when no limit is present, scoped to the session account', async () => {
+    await controller.find(req({ status: 'all', page: '2' }));
+    expect(service.findBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'all', page: 2 }),
+      'acc-1',
+    );
+  });
+
+  it('normalizes a single genre query key into an array', async () => {
+    await controller.find(req({ genre: 'seinen' }));
+    expect(service.findBoard).toHaveBeenCalledWith(expect.objectContaining({ genre: ['seinen'] }), 'acc-1');
+  });
+
+  it('passes repeated genre keys through as an array', async () => {
+    await controller.find(req({ genre: ['seinen', 'thriller'] }));
+    expect(service.findBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ genre: ['seinen', 'thriller'] }),
+      'acc-1',
+    );
+  });
+
+  it('creates a call scoped to the session account', async () => {
+    const dto = { title: 'x' } as unknown as CreateCallDto;
+    await controller.create(req(), dto);
+    expect(service.createCall).toHaveBeenCalledWith('acc-1', dto);
+  });
+
+  it('closes a call early scoped to the session account', async () => {
+    await controller.close(req(), 'call-1', { status: 'closed' });
+    expect(service.closeEarly).toHaveBeenCalledWith('acc-1', 'call-1');
   });
 });
