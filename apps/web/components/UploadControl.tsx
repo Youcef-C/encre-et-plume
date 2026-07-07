@@ -351,7 +351,8 @@ export default function UploadControl({
             width={64}
             height={64}
             style={{
-              borderRadius: '50%',
+              // Circle is an avatar affordance; every other kind previews as a rounded rectangle.
+              borderRadius: kind === 'avatar' ? '50%' : 6,
               border: '2px solid var(--ink)',
               objectFit: 'cover',
               flexShrink: 0,

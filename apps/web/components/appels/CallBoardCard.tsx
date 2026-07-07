@@ -5,6 +5,7 @@
 // (real img when sampleUrl, else the dashed "sample slot" placeholder). Directional eyebrow (text,
 // not color-only), title, genre/scope chips, description, author + status line. "Candidater" is an
 // MC-5 no-op stub, hidden on closed calls and on the viewer's own calls.
+import { useState } from 'react';
 import type { CallCard } from '@encre-et-plume/shared';
 
 const chip: React.CSSProperties = {
@@ -32,15 +33,32 @@ function statusText(call: CallCard): string {
 export default function CallBoardCard({
   call,
   onCandidater,
+  onWithdraw,
 }: {
   call: CallCard;
   onCandidater?: () => void;
+  onWithdraw?: (applicationId: string) => Promise<void> | void;
 }) {
   const closed = call.status === 'closed';
   const showCandidater = !closed && !call.isOwner;
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function confirmWithdraw() {
+    if (!call.myApplicationId || !onWithdraw) return;
+    setBusy(true);
+    try {
+      await onWithdraw(call.myApplicationId);
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
 
   return (
     <article
+      id={`call-${call.id}`}
+      tabIndex={-1}
       className="ep-call-board-card"
       style={{
         display: 'flex',
@@ -148,26 +166,87 @@ export default function CallBoardCard({
 
           {showCandidater &&
             (call.hasApplied ? (
-              // MC-5: already applied — disabled, the label itself carries the state (not color-only).
-              <button
-                type="button"
-                disabled
-                aria-disabled="true"
-                style={{
-                  marginLeft: 'auto',
-                  background: 'var(--tone)',
-                  color: 'var(--ink2)',
-                  border: '2px solid var(--ink)',
-                  borderRadius: 6,
-                  padding: '7px 16px',
-                  minHeight: 44,
-                  fontWeight: 700,
-                  fontFamily: 'inherit',
-                  cursor: 'default',
-                }}
-              >
-                Candidature envoyée
-              </button>
+              // MC-5: already applied — the label carries the state (not color-only). MC-6 owner
+              // extension: a "Retirer" affordance (inline confirm) withdraws a pending application
+              // and flips the card back to "Candidater".
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    background: 'var(--tone)',
+                    color: 'var(--ink2)',
+                    border: '2px solid var(--ink)',
+                    borderRadius: 6,
+                    padding: '7px 16px',
+                    fontWeight: 700,
+                    fontSize: 13,
+                  }}
+                >
+                  Candidature envoyée
+                </span>
+                {call.myApplicationId &&
+                  onWithdraw &&
+                  (confirming ? (
+                    <span role="group" aria-label="Confirmer le retrait de la candidature" style={{ display: 'inline-flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={confirmWithdraw}
+                        disabled={busy}
+                        style={{
+                          background: 'var(--accent)',
+                          color: '#fff',
+                          border: '2px solid var(--ink)',
+                          borderRadius: 6,
+                          padding: '7px 13px',
+                          minHeight: 44,
+                          fontWeight: 700,
+                          fontSize: 13,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Confirmer le retrait
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(false)}
+                        disabled={busy}
+                        style={{
+                          background: 'var(--card)',
+                          color: 'var(--ink)',
+                          border: '2px solid var(--ink)',
+                          borderRadius: 6,
+                          padding: '7px 13px',
+                          minHeight: 44,
+                          fontWeight: 700,
+                          fontSize: 13,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Annuler
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(true)}
+                      style={{
+                        background: 'var(--card)',
+                        color: 'var(--ink)',
+                        border: '2px solid var(--ink)',
+                        borderRadius: 6,
+                        padding: '7px 13px',
+                        minHeight: 44,
+                        fontWeight: 700,
+                        fontSize: 13,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Retirer
+                    </button>
+                  ))}
+              </span>
             ) : (
               <button
                 type="button"

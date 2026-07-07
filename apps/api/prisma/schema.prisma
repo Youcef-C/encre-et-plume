@@ -622,6 +622,7 @@ model Application {
   sampleUrl             String // denormalized display URL — MC-6/MC-7 render this
   message               String            @default("")
   status                ApplicationStatus @default(pending)
+  appliedAs             String? // MC-6: the CreatorRole the applicant applied AS (dual-role users); null = unspecified
   createdAt             DateTime          @default(now())
 
   @@unique([callId, applicantId]) // one application per user per call — DB-level backstop

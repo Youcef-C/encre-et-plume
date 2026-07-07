@@ -353,6 +353,39 @@ const PROJECT_CALLS = [
     description: 'Récit choral dans un Lyon nocturne. Scénario prêt, je cherche un·e dessinateur·rice pour un partenariat au long cours.',
     closesAt: inDays(30), applicationCount: 1, status: 'open', createdAt: inMinutes(4),
   },
+  // MC-6 "Mes candidatures": three calls dr1-camille-roux has applied to (one per status). Kept
+  // deliberately OLDEST (inMinutes negative → bottom of the createdAt-desc board) so the /trouver
+  // preview's newest-2 window is untouched, and ALL seekingRole:'scenariste' + non-seinen genres so
+  // the appels.spec role/genre filter counts (dessinateur→3, seinen→2) stay valid. They DO grow the
+  // default board total (status:'all') from 5 to 8 — appels.spec's total-count assertions are bumped
+  // accordingly. Explicit ids so the applications below can reference them.
+  {
+    id: 'mc6-call-fantastique', title: 'Récit fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.',
+    genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
+    description: "Univers de brume et de spectres, character design prêt — cherche un·e scénariste pour lui donner une histoire.",
+    closesAt: inDays(15), applicationCount: 1, status: 'open', createdAt: inMinutes(-1),
+  },
+  {
+    id: 'mc6-call-comedie', title: 'Comédie douce-amère', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Maya L.',
+    genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
+    description: 'Série courte feel-good, trait rond et chaleureux — je cherche une plume pour porter les dialogues.',
+    closesAt: inDays(22), applicationCount: 1, status: 'open', createdAt: inMinutes(-2),
+  },
+  {
+    id: 'mc6-call-aventure', title: 'Aventure onirique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Sora K.',
+    genres: ['adventure'], tags: ['Aventure'],
+    description: 'Un voyage initiatique à travers des mondes flottants — décors posés, il me manque le récit.',
+    closesAt: inDays(28), applicationCount: 1, status: 'open', createdAt: inMinutes(-3),
+  },
+];
+
+// MC-6: dr1-camille-roux's own applications, one per status, to the three mc6-call-* calls above.
+// Statuses are seeded directly (MC-7's accept/reject PATCH doesn't exist yet). Distinct createdAt
+// (newest-first: pending → accepted → rejected) so the "Mes candidatures" order is assertable.
+const MY_APPLICATIONS = [
+  { callId: 'mc6-call-fantastique', status: 'pending', createdAt: inDays(-2) },
+  { callId: 'mc6-call-comedie', status: 'accepted', createdAt: inDays(-5) },
+  { callId: 'mc6-call-aventure', status: 'rejected', createdAt: inDays(-9) },
 ];
 
 // MC-3 (CS-1 seam): the sender's projects for the invite modal picker (prototype fixtures).
@@ -509,6 +542,29 @@ async function main() {
       data.authorId = owner?.id ?? null;
     }
     await prisma.projectCall.create({ data });
+  }
+
+  // MC-6: seed dr1-camille-roux's own applications (one per status) to the mc6-call-* calls. Runs
+  // after her PortfolioItems exist (block above) — reuse her first one as the denormalized sampleUrl.
+  {
+    const applicant = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' }, select: { id: true } });
+    const profile = applicant && (await prisma.profile.findUnique({ where: { accountId: applicant.id }, select: { id: true } }));
+    const sample = profile && (await prisma.portfolioItem.findFirst({ where: { profileId: profile.id }, orderBy: { order: 'asc' }, select: { id: true, image: true } }));
+    if (applicant && sample) {
+      for (const app of MY_APPLICATIONS) {
+        await prisma.application.create({
+          data: {
+            callId: app.callId,
+            applicantId: applicant.id,
+            samplePortfolioItemId: sample.id,
+            sampleUrl: sample.image,
+            message: '',
+            status: app.status,
+            createdAt: app.createdAt,
+          },
+        });
+      }
+    }
   }
 
   // MC-3 (CS-1 seam): projects owned by the login-tested sender (dr1-camille-roux) so the invite

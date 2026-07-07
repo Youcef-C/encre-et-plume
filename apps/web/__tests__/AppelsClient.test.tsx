@@ -11,10 +11,17 @@ vi.mock('../lib/api', async (importOriginal) => {
     getCallsBoard: vi.fn(),
     createCall: vi.fn(),
     applyToCall: vi.fn(),
+    withdrawApplication: vi.fn(),
     getMe: vi.fn(),
+    getProfile: vi.fn(),
     getProfilePortfolio: vi.fn(),
   };
 });
+
+let searchParams = new URLSearchParams();
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => searchParams,
+}));
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
@@ -58,6 +65,7 @@ const call = (over: Partial<CallCard> = {}): CallCard => ({
   deadline: '2026-07-19T00:00:00.000Z',
   isOwner: false,
   hasApplied: false,
+  myApplicationId: null,
   ...over,
 });
 
@@ -78,7 +86,10 @@ function renderClient(acc: AccountSummary | null = account) {
 
 const getBoard = () => api.getCallsBoard as ReturnType<typeof vi.fn>;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  searchParams = new URLSearchParams();
+});
 
 describe('AppelsClient (MC-4 board)', () => {
   it('shows skeletons while loading, then the cards', async () => {
@@ -146,6 +157,7 @@ describe('AppelsClient (MC-4 board)', () => {
       board([call({ id: 'c9', title: '« One-shot »', closesInDays: null, deadline: null, applicationCount: 5 })]),
     );
     (api.getMe as ReturnType<typeof vi.fn>).mockResolvedValue({ slug: 'yuki-moreau' });
+    (api.getProfile as ReturnType<typeof vi.fn>).mockResolvedValue({ creatorRoles: ['dessinateur'] });
     (api.getProfilePortfolio as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'pf-1', image: 'https://cdn/1.jpg', caption: 'Encre', order: 0 },
     ]);
@@ -163,7 +175,43 @@ describe('AppelsClient (MC-4 board)', () => {
     await within(dialog).findByText('Candidature envoyée !');
     await user.keyboard('{Escape}');
 
-    expect(await screen.findByRole('button', { name: 'Candidature envoyée' })).toBeDisabled();
+    expect(await screen.findByText('Candidature envoyée')).toBeInTheDocument();
     expect(screen.getByText('6 candidatures')).toBeInTheDocument();
+  });
+
+  it('renders "Mes candidatures" as a link to /mes-candidatures', async () => {
+    getBoard().mockResolvedValue(board([call()]));
+    renderClient();
+    await screen.findByText('« Lames de Brume »');
+    const link = screen.getByRole('link', { name: 'Mes candidatures' });
+    expect(link).toHaveAttribute('href', '/mes-candidatures');
+  });
+
+  it('highlights the deep-linked card when ?call= is present', async () => {
+    searchParams = new URLSearchParams('call=deep-1');
+    getBoard().mockResolvedValue(board([call({ id: 'deep-1', title: '« Cible »' })]));
+    renderClient();
+    await screen.findByText('« Cible »');
+    await waitFor(() => {
+      const el = document.getElementById('call-deep-1');
+      expect(el?.style.outline).toContain('var(--accent)');
+    });
+  });
+
+  it('withdraws from the board and flips the card back to "Candidater"', async () => {
+    getBoard().mockResolvedValue(
+      board([call({ id: 'c9', hasApplied: true, myApplicationId: 'app-9', applicationCount: 3, closesInDays: null, deadline: null })]),
+    );
+    (api.withdrawApplication as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('Candidature envoyée');
+
+    await user.click(screen.getByRole('button', { name: 'Retirer' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmer le retrait' }));
+
+    await waitFor(() => expect(api.withdrawApplication).toHaveBeenCalledWith('app-9'));
+    expect(await screen.findByRole('button', { name: 'Candidater' })).toBeInTheDocument();
+    expect(screen.getByText('2 candidatures')).toBeInTheDocument();
   });
 });

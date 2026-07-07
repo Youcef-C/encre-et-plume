@@ -14,10 +14,12 @@ import {
   type ApiError,
   type ApplyToCallRequest,
   type CallCard,
+  type CallDirection,
+  type CreatorRole,
   type MediaResponse,
   type PortfolioItemResponse,
 } from '@encre-et-plume/shared';
-import { getMe, getProfilePortfolio, applyToCall } from '../../lib/api';
+import { getMe, getProfile, getProfilePortfolio, applyToCall } from '../../lib/api';
 import { XIcon } from '../icons';
 import UploadControl from '../UploadControl';
 
@@ -47,6 +49,16 @@ type PortfolioState =
   | { status: 'loading' }
   | { status: 'ready'; items: PortfolioItemResponse[] }
   | { status: 'error' };
+
+// The role a call is looking for (its author's inverse). Drives the apply-as toggle default.
+function soughtRole(direction: CallDirection): CreatorRole {
+  return direction === 'writerSeeksIllustrator' ? 'dessinateur' : 'scenariste';
+}
+
+const ROLE_LABEL: Record<CreatorRole, string> = {
+  scenariste: 'Scénariste',
+  dessinateur: 'Dessinateur·rice',
+};
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -80,13 +92,16 @@ export default function ApplyCallModal({
 }: {
   call: CallCard;
   onClose: () => void;
-  onApplied: (callId: string) => void;
+  onApplied: (callId: string, applicationId: string) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'apply-call-title';
   const sampleErrId = 'apply-call-sample-error';
 
   const [portfolio, setPortfolio] = useState<PortfolioState>({ status: 'loading' });
+  // Dual-role applicants pick the role they apply as; single-role users see no toggle (server default).
+  const [dualRole, setDualRole] = useState(false);
+  const [appliedAs, setAppliedAs] = useState<CreatorRole>(soughtRole(call.direction));
   const [portfolioItemId, setPortfolioItemId] = useState<string | null>(null);
   const [sampleMediaId, setSampleMediaId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -102,17 +117,28 @@ export default function ApplyCallModal({
     dialogRef.current?.focus();
   }, []);
 
-  // Load the applicant's portfolio pieces for the inline thumbnail picker.
+  // Load the applicant's portfolio pieces for the inline thumbnail picker, and their creator roles
+  // (a dual-role applicant gets the apply-as toggle; default = the call's sought role when they have it).
   useEffect(() => {
     let cancelled = false;
     getMe()
-      .then((me) => getProfilePortfolio(me.slug))
-      .then((its) => !cancelled && setPortfolio({ status: 'ready', items: its }))
+      .then((me) => Promise.all([getProfile(me.slug), getProfilePortfolio(me.slug)]))
+      .then(([profile, its]) => {
+        if (cancelled) return;
+        const roles = profile.creatorRoles ?? [];
+        const both = roles.includes('scenariste') && roles.includes('dessinateur');
+        setDualRole(both);
+        if (both) {
+          const sought = soughtRole(call.direction);
+          setAppliedAs(roles.includes(sought) ? sought : roles[0]);
+        }
+        setPortfolio({ status: 'ready', items: its });
+      })
       .catch(() => !cancelled && setPortfolio({ status: 'error' }));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [call.direction]);
 
   // Exactly ONE sample source — the last one chosen wins (picking a thumbnail clears an upload and
   // vice-versa), so the POST body always carries a single field.
@@ -143,12 +169,13 @@ export default function ApplyCallModal({
     setServerError(null);
     setPending(true);
     try {
-      await applyToCall(call.id, {
+      const created = await applyToCall(call.id, {
         ...sampleBody,
         ...(message.trim() ? { message: message.trim() } : {}),
+        ...(dualRole ? { appliedAs } : {}),
       });
       setSent(true);
-      onApplied(call.id);
+      onApplied(call.id, created.id);
     } catch (err) {
       const apiErr = err as ApiError;
       setServerError(apiErr.message ?? 'Une erreur est survenue. Veuillez réessayer.');
@@ -246,6 +273,40 @@ export default function ApplyCallModal({
           </div>
         ) : (
           <div style={{ padding: '16px 18px' }}>
+            {/* Apply-as role toggle — only for applicants who hold BOTH creator roles (owner add). */}
+            {dualRole && (
+              <div role="group" aria-label="Je candidate en tant que :" style={{ marginBottom: 14 }}>
+                <div style={{ ...sectionLabel, marginBottom: 8 }}>Je candidate en tant que :</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {(['scenariste', 'dessinateur'] as CreatorRole[]).map((r) => {
+                    const active = appliedAs === r;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setAppliedAs(r)}
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          border: '2px solid var(--ink)',
+                          borderRadius: 5,
+                          padding: '8px 13px',
+                          minHeight: 44,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          background: active ? 'var(--accent)' : 'var(--card)',
+                          color: active ? '#fff' : 'var(--ink)',
+                        }}
+                      >
+                        {ROLE_LABEL[r]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* VOTRE MESSAGE — first, per the prototype (2788). */}
             <label htmlFor="apply-call-message" style={{ ...sectionLabel, display: 'block', marginBottom: 6 }}>
               VOTRE MESSAGE

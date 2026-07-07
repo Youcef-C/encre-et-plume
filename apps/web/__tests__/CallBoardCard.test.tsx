@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { CallCard } from '@encre-et-plume/shared';
 import CallBoardCard from '../components/appels/CallBoardCard';
 
@@ -18,6 +19,7 @@ const base: CallCard = {
   deadline: '2026-07-19T00:00:00.000Z',
   isOwner: false,
   hasApplied: false,
+  myApplicationId: null,
 };
 
 describe('CallBoardCard', () => {
@@ -61,11 +63,25 @@ describe('CallBoardCard', () => {
     expect(onCandidater).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a disabled "Candidature envoyée" and no Candidater when the viewer already applied', () => {
+  it('shows "Candidature envoyée" and no Candidater when the viewer already applied', () => {
     render(<CallBoardCard call={{ ...base, hasApplied: true }} />);
-    const btn = screen.getByRole('button', { name: 'Candidature envoyée' });
-    expect(btn).toBeDisabled();
+    expect(screen.getByText('Candidature envoyée')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
+  });
+
+  it('offers an inline "Retirer" affordance that withdraws the viewer application', async () => {
+    const onWithdraw = vi.fn();
+    render(
+      <CallBoardCard
+        call={{ ...base, hasApplied: true, myApplicationId: 'app-7' }}
+        onWithdraw={onWithdraw}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Retirer' }));
+    // Inline confirm, no browser confirm().
+    await user.click(screen.getByRole('button', { name: 'Confirmer le retrait' }));
+    expect(onWithdraw).toHaveBeenCalledWith('app-7');
   });
 
   it('shows a dashed placeholder with an accessible label when there is no sample', () => {

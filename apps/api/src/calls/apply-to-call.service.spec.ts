@@ -17,6 +17,7 @@ const CALL_ROW = (o: Partial<Record<string, unknown>> = {}) => ({
   authorId: 'acc-owner',
   status: 'open',
   closesAt: null,
+  seekingRole: 'dessinateur',
   ...o,
 });
 
@@ -28,6 +29,7 @@ const CREATED = (o: Partial<Record<string, unknown>> = {}) => ({
   sampleUrl: 'https://cdn/portfolio-1.webp',
   message: '',
   status: 'pending',
+  appliedAs: 'dessinateur',
   createdAt: new Date('2026-07-07T10:00:00.000Z'),
   applicant: APPLICANT_ROW,
   ...o,
@@ -40,6 +42,7 @@ describe('CallsService.apply', () => {
     application: { findFirst: jest.Mock; create: jest.Mock };
     media: { findUnique: jest.Mock };
     portfolioItem: { findUnique: jest.Mock };
+    profile: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let notifications: { create: jest.Mock };
@@ -57,6 +60,9 @@ describe('CallsService.apply', () => {
       media: { findUnique: jest.fn() },
       portfolioItem: {
         findUnique: jest.fn().mockResolvedValue({ id: 'pi-1', image: 'https://cdn/portfolio-1.webp', profile: { accountId: 'acc-applicant' } }),
+      },
+      profile: {
+        findUnique: jest.fn().mockResolvedValue({ creatorRoles: ['dessinateur'] }),
       },
       // realistic array-form $transaction: awaits each operation, returns results in order
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
@@ -223,5 +229,80 @@ describe('CallsService.apply', () => {
     await expect(service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1' })).rejects.toThrow(
       new BadRequestException('Cet échantillon est invalide.'),
     );
+  });
+});
+
+describe('CallsService.apply — appliedAs (applied-as role)', () => {
+  let service: CallsService;
+  let prisma: {
+    projectCall: { findUnique: jest.Mock; update: jest.Mock };
+    application: { findFirst: jest.Mock; create: jest.Mock };
+    portfolioItem: { findUnique: jest.Mock };
+    profile: { findUnique: jest.Mock };
+    $transaction: jest.Mock;
+  };
+
+  const setup = (creatorRoles: string[], seekingRole = 'dessinateur') => {
+    prisma = {
+      projectCall: {
+        findUnique: jest.fn().mockResolvedValue(CALL_ROW({ seekingRole })),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      application: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(CREATED()),
+      },
+      portfolioItem: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'pi-1', image: 'https://cdn/portfolio-1.webp', profile: { accountId: 'acc-applicant' } }),
+      },
+      profile: { findUnique: jest.fn().mockResolvedValue({ creatorRoles }) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    service = new CallsService(
+      prisma as unknown as PrismaService,
+      {} as unknown as QueueService,
+      { create: jest.fn().mockResolvedValue(null) } as unknown as NotificationsService,
+    );
+  };
+
+  const appliedAsOf = () => prisma.application.create.mock.calls[0][0].data.appliedAs;
+
+  it('stores an explicit appliedAs that is one of the applicant creator roles', async () => {
+    setup(['scenariste', 'dessinateur']);
+    await service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1', appliedAs: 'scenariste' });
+    expect(appliedAsOf()).toBe('scenariste');
+  });
+
+  it('400s an explicit appliedAs the applicant does not have', async () => {
+    setup(['dessinateur']);
+    await expect(
+      service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1', appliedAs: 'scenariste' }),
+    ).rejects.toThrow(new BadRequestException("Ce rôle ne fait pas partie de vos rôles de création."));
+    expect(prisma.application.create).not.toHaveBeenCalled();
+  });
+
+  it("defaults to the call's seekingRole when the applicant has it", async () => {
+    setup(['scenariste', 'dessinateur'], 'dessinateur');
+    await service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1' });
+    expect(appliedAsOf()).toBe('dessinateur');
+  });
+
+  it('defaults to the single role when the applicant lacks the seekingRole', async () => {
+    setup(['scenariste'], 'dessinateur');
+    await service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1' });
+    expect(appliedAsOf()).toBe('scenariste');
+  });
+
+  it('defaults to null when the applicant has no creator role', async () => {
+    setup([], 'dessinateur');
+    await service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1' });
+    expect(appliedAsOf()).toBeNull();
+  });
+
+  it('surfaces appliedAs on the returned ApplicationDto', async () => {
+    setup(['dessinateur']);
+    prisma.application.create.mockResolvedValue(CREATED({ appliedAs: 'dessinateur' }));
+    const dto = await service.apply('acc-applicant', 'call-1', { samplePortfolioItemId: 'pi-1' });
+    expect(dto.appliedAs).toBe('dessinateur');
   });
 });

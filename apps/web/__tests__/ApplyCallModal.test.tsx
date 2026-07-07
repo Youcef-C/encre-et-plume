@@ -5,6 +5,7 @@ import type { AccountSummary, CallCard, PortfolioItemResponse, MediaResponse } f
 
 vi.mock('../lib/api', () => ({
   getMe: vi.fn(),
+  getProfile: vi.fn(),
   getProfilePortfolio: vi.fn(),
   applyToCall: vi.fn(),
 }));
@@ -48,6 +49,7 @@ const call: CallCard = {
   deadline: '2026-07-19T00:00:00.000Z',
   isOwner: false,
   hasApplied: false,
+  myApplicationId: null,
 };
 
 const me = { slug: 'yuki-moreau' } as AccountSummary;
@@ -58,12 +60,15 @@ const items: PortfolioItemResponse[] = [
 ];
 
 const getMe = () => api.getMe as ReturnType<typeof vi.fn>;
+const getProfile = () => api.getProfile as ReturnType<typeof vi.fn>;
 const getPortfolio = () => api.getProfilePortfolio as ReturnType<typeof vi.fn>;
 const apply = () => api.applyToCall as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   getMe().mockResolvedValue(me);
+  // Single-role by default — the "Je candidate en tant que :" toggle stays hidden.
+  getProfile().mockResolvedValue({ creatorRoles: ['dessinateur'] });
   getPortfolio().mockResolvedValue(items);
   apply().mockResolvedValue({ id: 'app-1', callId: 'call-1' });
 });
@@ -127,7 +132,7 @@ describe('ApplyCallModal', () => {
       }),
     );
     expect(await screen.findByText('Candidature envoyée !')).toBeInTheDocument();
-    expect(onApplied).toHaveBeenCalledWith('call-1');
+    expect(onApplied).toHaveBeenCalledWith('call-1', 'app-1');
   });
 
   it('shows only the file adder when the portfolio is empty (no thumbnails)', async () => {
@@ -171,5 +176,51 @@ describe('ApplyCallModal', () => {
     const { onClose } = open();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // Owner addition (MC-6): dual-role applicants pick which role they apply as.
+  it('hides the apply-as toggle for a single-role applicant and sends no appliedAs', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+    expect(screen.queryByText('Je candidate en tant que :')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', { samplePortfolioItemId: 'pf-1' }),
+    );
+  });
+
+  it('shows the toggle for a dual-role applicant, defaults to the sought role, and sends appliedAs', async () => {
+    getProfile().mockResolvedValue({ creatorRoles: ['scenariste', 'dessinateur'] });
+    const user = userEvent.setup();
+    open(); // call sought role = dessinateur (writerSeeksIllustrator)
+    await screen.findByText('Je candidate en tant que :');
+    // Default = the sought role.
+    expect(screen.getByRole('button', { name: 'Dessinateur·rice' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Scénariste' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
+        samplePortfolioItemId: 'pf-1',
+        appliedAs: 'dessinateur',
+      }),
+    );
+  });
+
+  it('sends the switched role when the dual-role applicant flips the toggle', async () => {
+    getProfile().mockResolvedValue({ creatorRoles: ['scenariste', 'dessinateur'] });
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: 'Scénariste' }));
+    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
+        samplePortfolioItemId: 'pf-1',
+        appliedAs: 'scenariste',
+      }),
+    );
   });
 });

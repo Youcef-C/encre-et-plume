@@ -479,6 +479,20 @@ export const applyToCall = (callId: string, body: ApplyToCallRequest): Promise<A
     body: JSON.stringify(body),
   });
 
+// ─── Mes candidatures (MC-6) ──────────────────────────────────────────────────
+import type { MyApplicationsQuery, MyApplicationsResponse } from '@encre-et-plume/shared';
+
+export const getMyApplications = (query: MyApplicationsQuery = {}): Promise<MyApplicationsResponse> => {
+  const q = new URLSearchParams();
+  if (query.status && query.status !== 'all') q.set('status', query.status);
+  if (query.page && query.page > 1) q.set('page', String(query.page));
+  return request<MyApplicationsResponse>(`/me/applications${q.toString() ? `?${q.toString()}` : ''}`);
+};
+
+// Withdraw a pending application (204). Owner extension — DELETE /me/applications/:id.
+export const withdrawApplication = (id: string): Promise<void> =>
+  request<void>(`/me/applications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 // ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
 import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';
 

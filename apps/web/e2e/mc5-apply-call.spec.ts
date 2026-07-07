@@ -95,20 +95,18 @@ test.describe('MC-5 "Candidater" — signed in (dr1-camille-roux)', () => {
     await dialog.getByText('Fermer', { exact: true }).click();
     await expect(dialog).toHaveCount(0);
 
-    // Card flips to the disabled "Candidature envoyée" state and the count bumps 5 → 6, without a refetch.
+    // Card flips to the "Candidature envoyée" state and the count bumps 5 → 6, without a refetch.
+    // MC-6: this is a <span> (not a disabled button) — a "Retirer" affordance now lives alongside it.
     const updatedCard = cardByTitle(page, 'One-shot fantastique');
-    const sentButton = updatedCard.getByRole('button', { name: 'Candidature envoyée' });
-    await expect(sentButton).toBeVisible();
-    await expect(sentButton).toBeDisabled();
+    await expect(updatedCard.getByText('Candidature envoyée')).toBeVisible();
     await expect(updatedCard.getByRole('button', { name: 'Candidater' })).toHaveCount(0);
     await expect(updatedCard.getByText('6 candidatures')).toBeVisible();
 
-    // Reload — server-side `hasApplied` (not client state) still shows the disabled button.
+    // Reload — server-side `hasApplied` (not client state) still shows "Candidature envoyée".
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
     const reloadedCard = cardByTitle(page, 'One-shot fantastique');
-    await expect(reloadedCard.getByRole('button', { name: 'Candidature envoyée' })).toBeVisible();
-    await expect(reloadedCard.getByRole('button', { name: 'Candidature envoyée' })).toBeDisabled();
+    await expect(reloadedCard.getByText('Candidature envoyée')).toBeVisible();
     await expect(reloadedCard.getByText('6 candidatures')).toBeVisible();
   });
 

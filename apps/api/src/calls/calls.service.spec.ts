@@ -205,16 +205,20 @@ describe('CallsService.findBoard', () => {
     expect(res.items[0].sampleUrl).toBe('https://cdn/thumb.webp');
   });
 
-  it('sets hasApplied true only for calls the viewer already applied to (single lookup, no N+1)', async () => {
+  it('sets myApplicationId (and hasApplied) only for calls the viewer applied to (single lookup, no N+1)', async () => {
     prisma.projectCall.findMany.mockResolvedValue([CALL_ROW({ id: 'call-1' }), CALL_ROW({ id: 'call-2' })]);
-    prisma.application.findMany.mockResolvedValue([{ callId: 'call-1' }]);
+    prisma.application.findMany.mockResolvedValue([{ id: 'app-9', callId: 'call-1' }]);
     const res = await service.findBoard({ status: 'all' }, 'viewer');
     expect(prisma.application.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.application.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { applicantId: 'viewer', callId: { in: ['call-1', 'call-2'] } } }),
     );
-    expect(res.items.find((c) => c.id === 'call-1')?.hasApplied).toBe(true);
-    expect(res.items.find((c) => c.id === 'call-2')?.hasApplied).toBe(false);
+    const applied = res.items.find((c) => c.id === 'call-1');
+    const notApplied = res.items.find((c) => c.id === 'call-2');
+    expect(applied?.myApplicationId).toBe('app-9');
+    expect(applied?.hasApplied).toBe(true);
+    expect(notApplied?.myApplicationId).toBeNull();
+    expect(notApplied?.hasApplied).toBe(false);
   });
 
   it('skips the applications lookup when the page is empty', async () => {

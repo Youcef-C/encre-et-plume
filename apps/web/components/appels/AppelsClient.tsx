@@ -6,8 +6,9 @@
 // frame: the "Je suis :" self-role toggle becomes a "Je cherche :" direction filter (owner rule
 // §1/§12, same as /trouver), and "Genre ▾" becomes an OnBrandMultiSelect with removable chips.
 // Filters auto-apply (no "Appliquer"). Posting an appeal prepends the returned card without refetch.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { GENRES, type CreatorRole, type CallCard } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
@@ -77,6 +78,9 @@ function SkeletonRow() {
 
 export default function AppelsClient() {
   const { account, loading: sessionLoading } = useSession();
+  const searchParams = useSearchParams();
+  const deepLinkCallId = searchParams.get('call');
+  const highlightedRef = useRef<string | null>(null);
 
   const [role, setRole] = useState<CreatorRole | null>(null);
   const [genres, setGenres] = useState<string[]>([]);
@@ -139,13 +143,48 @@ export default function AppelsClient() {
 
   // MC-5: after a successful application, flip that card locally (no refetch) — mark applied and
   // bump its counter so the meta line reads the incremented "N candidatures".
-  function handleApplied(callId: string) {
+  function handleApplied(callId: string, applicationId: string) {
     setItems((prev) =>
       prev.map((c) =>
-        c.id === callId ? { ...c, hasApplied: true, applicationCount: c.applicationCount + 1 } : c,
+        c.id === callId
+          ? { ...c, hasApplied: true, myApplicationId: applicationId, applicationCount: c.applicationCount + 1 }
+          : c,
       ),
     );
   }
+
+  // MC-6 owner extension: withdraw from the board. On success flip the card back to "Candidater"
+  // and decrement its counter locally (mirror of handleApplied, no refetch).
+  async function handleWithdraw(callId: string, applicationId: string) {
+    await api.withdrawApplication(applicationId);
+    setItems((prev) =>
+      prev.map((c) =>
+        c.id === callId
+          ? { ...c, hasApplied: false, myApplicationId: null, applicationCount: Math.max(0, c.applicationCount - 1) }
+          : c,
+      ),
+    );
+  }
+
+  // Deep link from "Mes candidatures" (/appels?call=<id>): once the board is loaded, scroll the
+  // matching card into view, flash an accent outline (~2s), and move focus for keyboard users.
+  // ponytail: highlights only when the call is on the loaded page — a call-detail page is the upgrade path.
+  useEffect(() => {
+    if (status !== 'ready' || !deepLinkCallId || highlightedRef.current === deepLinkCallId) return;
+    if (!items.some((c) => c.id === deepLinkCallId)) return;
+    const el = document.getElementById(`call-${deepLinkCallId}`);
+    if (!el) return;
+    highlightedRef.current = deepLinkCallId;
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    el.focus({ preventScroll: true });
+    el.style.outline = '3px solid var(--accent)';
+    el.style.outlineOffset = '3px';
+    const t = setTimeout(() => {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [status, deepLinkCallId, items]);
 
   if (sessionLoading) {
     return <div aria-busy="true" style={{ minHeight: 300 }} />;
@@ -184,10 +223,10 @@ export default function AppelsClient() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: 0 }}>Appels à projets</h1>
         <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          {/* MC-6/MC-7 stubs — rendered per prototype, no-op until those stories land. */}
-          <button type="button" onClick={() => {}} style={outlineBtn}>
+          {/* MC-6: live link. "Candidatures reçues" stays a stub until MC-7. */}
+          <Link href="/mes-candidatures" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Mes candidatures
-          </button>
+          </Link>
           <button type="button" onClick={() => {}} style={outlineBtn}>
             Candidatures reçues
           </button>
@@ -278,7 +317,12 @@ export default function AppelsClient() {
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {items.map((c) => (
-              <CallBoardCard key={c.id} call={c} onCandidater={() => setApplyTarget(c)} />
+              <CallBoardCard
+                key={c.id}
+                call={c}
+                onCandidater={() => setApplyTarget(c)}
+                onWithdraw={(applicationId) => handleWithdraw(c.id, applicationId)}
+              />
             ))}
           </div>
           {items.length < total && (

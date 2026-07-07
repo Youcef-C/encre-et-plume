@@ -720,6 +720,20 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ── MC-6 "Mes candidatures" rows — responsive reflow ─────────────────────────
+   Desktop: thumb · body · badge · actions on one line (prototype 2159). <=640px:
+   the row wraps — thumb+body keep line 1, badge and the action buttons drop below
+   at full width so nothing overflows at 375px. */
+@media (max-width: 640px) {
+  .ep-candidature-row {
+    flex-wrap: wrap;
+  }
+  .ep-candidature-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
 /* Two-column field row (Spécialité / Ville) — single column below 640px so
    the profile edit form stays clean at 375px/768px. */
 .ep-form-row-2 {

@@ -73,7 +73,8 @@ interface CallRow {
   createdAt: Date;
 }
 
-function directionOf(authorRole: string): CallDirection {
+/** direction from the call's stored authorRole — shared with MC-6 "Mes candidatures". */
+export function directionOf(authorRole: string): CallDirection {
   return authorRole === 'dessinateur' ? 'illustratorSeeksWriter' : 'writerSeeksIllustrator';
 }
 
@@ -133,21 +134,25 @@ export class CallsService {
       this.resolveApplied(rows, viewerId),
     ]);
     return {
-      items: rows.map((r) => this.mapCard(r, viewerId, sampleUrls, appliedIds.has(r.id))),
+      items: rows.map((r) => this.mapCard(r, viewerId, sampleUrls, appliedIds.get(r.id) ?? null)),
       page,
       pageSize,
       total,
     };
   }
 
-  /** MC-5: single lookup of the viewer's applications for this page — powers "Candidature envoyée". */
-  private async resolveApplied(rows: CallRow[], viewerId: string): Promise<Set<string>> {
-    if (rows.length === 0) return new Set();
+  /**
+   * MC-5/MC-6: single lookup of the viewer's applications for this page. Returns callId → the
+   * viewer's own Application id — powers "Candidature envoyée" (hasApplied) AND the MC-6 withdraw
+   * button (myApplicationId).
+   */
+  private async resolveApplied(rows: CallRow[], viewerId: string): Promise<Map<string, string>> {
+    if (rows.length === 0) return new Map();
     const applied = (await this.prisma.application.findMany({
       where: { applicantId: viewerId, callId: { in: rows.map((r) => r.id) } },
-      select: { callId: true },
-    })) as { callId: string }[];
-    return new Set(applied.map((a) => a.callId));
+      select: { id: true, callId: true },
+    })) as { id: string; callId: string }[];
+    return new Map(applied.map((a) => [a.callId, a.id]));
   }
 
   private buildWhere(query: CallsBoardQueryParsed): Record<string, unknown> {
@@ -238,7 +243,7 @@ export class CallsService {
   // ── MC-5 apply "Candidater" ──────────────────────────────────────────────────
   async apply(viewerId: string, callId: string, dto: ApplyToCallDto): Promise<ApplicationDto> {
     const call = (await this.prisma.projectCall.findUnique({ where: { id: callId } })) as
-      | Pick<CallRow, 'authorId' | 'status' | 'closesAt'>
+      | Pick<CallRow, 'authorId' | 'status' | 'closesAt' | 'seekingRole'>
       | null;
     if (!call) throw new NotFoundException('Cet appel est introuvable.');
     if (call.authorId === viewerId) {
@@ -249,6 +254,9 @@ export class CallsService {
 
     const dupe = await this.prisma.application.findFirst({ where: { callId, applicantId: viewerId } });
     if (dupe) throw new ConflictException('Vous avez déjà candidaté à cet appel.');
+
+    // MC-6: which role the applicant applies as — validated/defaulted against THEIR own profile roles.
+    const appliedAs = await this.resolveAppliedAs(viewerId, call.seekingRole, dto.appliedAs);
 
     // Exactly ONE sample source; resolve its display URL against the applicant's own assets.
     const sampleUrl = await this.resolveApplicationSample(viewerId, dto);
@@ -264,6 +272,7 @@ export class CallsService {
             samplePortfolioItemId: dto.samplePortfolioItemId ?? null,
             sampleUrl,
             message: dto.message ?? '',
+            appliedAs,
           },
           include: APPLICANT_INCLUDE,
         }),
@@ -291,6 +300,32 @@ export class CallsService {
       }
       throw e;
     }
+  }
+
+  /**
+   * MC-6 applied-as role. Explicit `appliedAs` must be one of the applicant's OWN creator roles
+   * (400 otherwise — the DTO only shape-checks it's a CreatorRole). Absent → default to the call's
+   * seekingRole if the applicant has it, else their single role, else null.
+   */
+  private async resolveAppliedAs(
+    viewerId: string,
+    seekingRole: string,
+    requested?: CreatorRole,
+  ): Promise<CreatorRole | null> {
+    const profile = (await this.prisma.profile.findUnique({
+      where: { accountId: viewerId },
+      select: { creatorRoles: true },
+    })) as { creatorRoles: CreatorRole[] } | null;
+    const roles = profile?.creatorRoles ?? [];
+
+    if (requested !== undefined) {
+      if (!roles.includes(requested)) {
+        throw new BadRequestException('Ce rôle ne fait pas partie de vos rôles de création.');
+      }
+      return requested;
+    }
+    if (roles.includes(seekingRole as CreatorRole)) return seekingRole as CreatorRole;
+    return roles.length === 1 ? roles[0] : null;
   }
 
   /** XOR the two sample sources, validate ownership/state, and return the denormalized display URL. */
@@ -347,7 +382,7 @@ export class CallsService {
     return out;
   }
 
-  private mapCard(row: CallRow, viewerId: string, sampleUrls: Map<string, string>, hasApplied = false): CallCard {
+  private mapCard(row: CallRow, viewerId: string, sampleUrls: Map<string, string>, myApplicationId: string | null = null): CallCard {
     return {
       ...mapPreview(row),
       direction: directionOf(row.authorRole),
@@ -356,7 +391,9 @@ export class CallsService {
       status: derivedStatus(row),
       deadline: row.closesAt ? row.closesAt.toISOString() : null,
       isOwner: !!row.authorId && row.authorId === viewerId,
-      hasApplied, // MC-5: owner can never have applied ⇒ create/close paths pass false
+      // MC-5: owner can never have applied ⇒ create/close paths pass null.
+      hasApplied: myApplicationId !== null,
+      myApplicationId,
     };
   }
 }
@@ -380,6 +417,7 @@ interface ApplicationRow {
   sampleUrl: string;
   message: string;
   status: string;
+  appliedAs: string | null;
   createdAt: Date;
   applicant: {
     id: string;
@@ -408,6 +446,7 @@ function toApplicationDto(row: ApplicationRow): ApplicationDto {
     sampleUrl: row.sampleUrl,
     message: row.message,
     status: row.status as ApplicationDto['status'],
+    appliedAs: (row.appliedAs ?? null) as CreatorRole | null,
     createdAt: row.createdAt.toISOString(),
   };
 }
