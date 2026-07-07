@@ -24,6 +24,7 @@ import { ReactionsModule } from './reactions/reactions.module';
 import { SupportModule } from './support/support.module';
 import { PartnersModule } from './partners/partners.module';
 import { CallsModule } from './calls/calls.module';
+import { MatchesModule } from './matches/matches.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -47,6 +48,7 @@ import { CallsModule } from './calls/calls.module';
   // SupportModule (F-21): public POST /support/tickets — help/contact/bug channel.
   // PartnersModule (MC-1): authenticated GET /partners — "Trouver un·e partenaire" creator directory.
   // CallsModule (MC-1): authenticated GET /calls — "Appels à projets" preview (MC-4 extends).
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule],
+  // MatchesModule (MC-2): authenticated GET /matches/suggestions — affinity-scored partner suggestions.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule],
 })
 export class AppModule {}

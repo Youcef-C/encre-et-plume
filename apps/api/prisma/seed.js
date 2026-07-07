@@ -288,18 +288,22 @@ const ILLUSTRATIONS = [
 // (FAVORITES/READING_PROGRESS/WATCHLIST/REACTIONS above), so it must be age-cleared by default.
 const CREATORS = [
   { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', birthdate: new Date('1996-04-12'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Encre dense'] },
-  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Thriller'] },
+  // MC-2: Camille is the login-tested suggestions viewer. Genre 'Seinen' + style 'Ambiances urbaines',
+  // plus seeking prefs so Théo M. tops her suggestions with "même genre · rythme compatible".
+  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Ambiances urbaines'], seekingProjectLength: 'projet long', seekingTargetRole: 'dessinateur' },
 ];
 
 // MC-1 "Trouver un·e partenaire" directory fixtures. Each seeds an Account+Profile (creator role) +
 // 2 PortfolioItems. Tags mix F-20 genre labels (→ genreTags) and free style words (→ styleTags).
 // Region/availability/genre variety gives every filter a discriminating fixture (plan B6).
 const PARTNERS = [
-  { email: 'theo.m@seed.encre-et-plume.local', displayName: 'Théo M.', slug: 'mc1-theo-m', role: 'dessinateur', country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'disponible', tags: ['Seinen', 'Encre dense'], trendingScore: 90 },
+  // MC-2: 'projet long' matches Camille's rhythm → Théo tops her suggestions (score 75, "même genre · rythme compatible").
+  { email: 'theo.m@seed.encre-et-plume.local', displayName: 'Théo M.', slug: 'mc1-theo-m', role: 'dessinateur', country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'disponible', tags: ['Seinen', 'Encre dense'], trendingScore: 90, seekingProjectLength: 'projet long' },
   { email: 'ines.k@seed.encre-et-plume.local', displayName: 'Inès K.', slug: 'mc1-ines-k', role: 'dessinateur', country: 'FR', region: 'Île-de-France', availability: 'ouvert', tags: ['Josei', 'Aquarelle'], trendingScore: 80 },
   { email: 'hugo.d@seed.encre-et-plume.local', displayName: 'Hugo D.', slug: 'mc1-hugo-d', role: 'dessinateur', country: 'FR', region: 'Bretagne', availability: 'ouvert', tags: ['Fantastique', 'Action'], trendingScore: 70 },
   { email: 'lea.b@seed.encre-et-plume.local', displayName: 'Léa B.', slug: 'mc1-lea-b', role: 'scenariste', country: 'FR', region: 'Occitanie', availability: 'disponible', tags: ['Seinen', 'Thriller', 'Dialogues ciselés'], trendingScore: 65 },
-  { email: 'noe.p@seed.encre-et-plume.local', displayName: 'Noé P.', slug: 'mc1-noe-p', role: 'scenariste', country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', availability: 'ouvert', tags: ['Romance', 'Comédie'], trendingScore: 60 },
+  // MC-2: shares Camille's style tag 'Ambiances urbaines' but no genre → style-only suggestion (score 25, "style proche de vos refs").
+  { email: 'noe.p@seed.encre-et-plume.local', displayName: 'Noé P.', slug: 'mc1-noe-p', role: 'scenariste', country: 'FR', region: 'Provence-Alpes-Côte d\'Azur', availability: 'ouvert', tags: ['Romance', 'Comédie', 'Ambiances urbaines'], trendingScore: 60 },
   { email: 'sora.t@seed.encre-et-plume.local', displayName: 'Sora T.', slug: 'mc1-sora-t', role: 'dessinateur', country: 'JP', region: null, availability: 'ouvert', tags: ['Shōnen', 'Action', 'Ligne claire'], trendingScore: 55 },
   { email: 'marta.l@seed.encre-et-plume.local', displayName: 'Marta L.', slug: 'mc1-marta-l', role: 'dessinateur', country: 'ES', region: null, availability: 'indisponible', tags: ['Horreur', 'Lavis'], trendingScore: 50 },
   { email: 'diego.s@seed.encre-et-plume.local', displayName: 'Diego S.', slug: 'mc1-diego-s', role: 'scenariste', country: 'AR', region: null, availability: 'ouvert', tags: ['Aventure', 'SF'], trendingScore: 45 },
@@ -310,6 +314,15 @@ const PROJECT_CALLS = [
   { title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.', tags: ['Seinen', 'Thriller'], closesAt: inDays(12), applicationCount: 0, status: 'open' },
   { title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.', tags: ['Fantastique', 'One-shot'], closesAt: null, applicationCount: 5, status: 'open' },
 ];
+
+// MC-2: a loginable creator with an EMPTY tag/genre profile — exercises the minimum-data guard
+// (GET /matches/suggestions → { items: [], incompleteProfile: true }, "Complétez votre profil…").
+const MC2_SPARSE_ACCOUNT = {
+  email: 'mc2.sansprofil@seed.encre-et-plume.local',
+  displayName: 'Sans Profil (MC-2)',
+  slug: 'mc2-sans-profil',
+  role: 'dessinateur',
+};
 
 // DR-10: a real, loginable minor test account (password `password123`, like dr1-camille-roux) —
 // isAdult:false so QA/e2e can exercise the "logged-in minor" 403/refusal branch of the age gate
@@ -323,6 +336,20 @@ const MINOR_ACCOUNT = {
 
 async function main() {
   const hash = bcrypt.hashSync('password123', 10);
+
+  // F-13: current published cgu/privacy versions (seeded by the f13_legal_consent migration) — used
+  // below to give every loginable seed account a ConsentRecord so needsCguReconsent === false. Without
+  // this, a fresh DB leaves the CguReconsentModal's full-viewport backdrop mounted after login, which
+  // blocks every click in e2e (mirrors the same guard already in e2e-seed.js).
+  const cguDoc = await prisma.legalDocument.findFirst({ where: { kind: 'cgu' }, orderBy: { publishedAt: 'desc' } });
+  const privacyDoc = await prisma.legalDocument.findFirst({ where: { kind: 'privacy' }, orderBy: { publishedAt: 'desc' } });
+  async function ensureConsent(accountId) {
+    for (const [kind, doc] of [['cgu', cguDoc], ['privacy', privacyDoc]]) {
+      if (!doc) continue;
+      const existing = await prisma.consentRecord.findFirst({ where: { accountId, document: kind, version: doc.version } });
+      if (!existing) await prisma.consentRecord.create({ data: { accountId, document: kind, version: doc.version } });
+    }
+  }
 
   for (const w of WORKS) {
     const work = await prisma.work.upsert({ where: { slug: w.slug }, create: w, update: w });
@@ -366,12 +393,16 @@ async function main() {
   for (const c of CREATORS) {
     const account = await prisma.account.upsert({
       where: { email: c.email },
-      create: { email: c.email, displayName: c.displayName, passwordHash: hash, profileSlug: c.slug, role: 'utilisateur', birthdate: c.birthdate },
+      // emailVerifiedAt must be set at creation (F-11 blocks login otherwise) — a genuinely fresh
+      // DB hits this `create` branch and camille.roux (the login-tested e2e fixture) was otherwise
+      // stuck unverified, 403-ing every login and stalling every e2e spec that signs in as her.
+      create: { email: c.email, displayName: c.displayName, passwordHash: hash, profileSlug: c.slug, role: 'utilisateur', birthdate: c.birthdate, emailVerifiedAt: new Date() },
       update: { displayName: c.displayName, profileSlug: c.slug, birthdate: c.birthdate },
     });
+    await ensureConsent(account.id);
     // DR-3: city 'Lyon' matches the prototype's "Scénariste · Lyon" / "Dessinateur · Lyon" sidebar rows.
     // MC-1: country/region/availability/tags so these creators also appear in the partner directory.
-    const creatorProfile = { accountId: account.id, creatorRoles: [c.role], trendingScore: 100, city: 'Lyon', country: c.country, region: c.region, availability: c.availability, tags: c.tags };
+    const creatorProfile = { accountId: account.id, creatorRoles: [c.role], trendingScore: 100, city: 'Lyon', country: c.country, region: c.region, availability: c.availability, tags: c.tags, seekingProjectLength: c.seekingProjectLength ?? null, seekingTargetRole: c.seekingTargetRole ?? null };
     await prisma.profile.upsert({
       where: { accountId: account.id },
       create: creatorProfile,
@@ -386,7 +417,8 @@ async function main() {
       create: { email: p.email, displayName: p.displayName, passwordHash: hash, profileSlug: p.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
       update: { displayName: p.displayName, profileSlug: p.slug },
     });
-    const profileData = { accountId: account.id, creatorRoles: [p.role], trendingScore: p.trendingScore, country: p.country, region: p.region, availability: p.availability, tags: p.tags };
+    await ensureConsent(account.id);
+    const profileData = { accountId: account.id, creatorRoles: [p.role], trendingScore: p.trendingScore, country: p.country, region: p.region, availability: p.availability, tags: p.tags, seekingProjectLength: p.seekingProjectLength ?? null };
     const profile = await prisma.profile.upsert({
       where: { accountId: account.id },
       create: profileData,
@@ -409,7 +441,7 @@ async function main() {
 
   // DR-10: minor test account (no creator profile — a plain reader). emailVerifiedAt is set at
   // creation so it is immediately loginable (F-11 blocks login otherwise) for QA/e2e.
-  await prisma.account.upsert({
+  const minorAccount = await prisma.account.upsert({
     where: { email: MINOR_ACCOUNT.email },
     create: {
       email: MINOR_ACCOUNT.email,
@@ -427,6 +459,19 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
+  await ensureConsent(minorAccount.id);
+
+  // MC-2: sparse-profile creator (creatorRoles set, but tags/seekingGenres empty) → suggestions empty state.
+  {
+    const account = await prisma.account.upsert({
+      where: { email: MC2_SPARSE_ACCOUNT.email },
+      create: { email: MC2_SPARSE_ACCOUNT.email, displayName: MC2_SPARSE_ACCOUNT.displayName, passwordHash: hash, profileSlug: MC2_SPARSE_ACCOUNT.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
+      update: { displayName: MC2_SPARSE_ACCOUNT.displayName, profileSlug: MC2_SPARSE_ACCOUNT.slug, emailVerifiedAt: new Date() },
+    });
+    await ensureConsent(account.id);
+    const sparseProfile = { accountId: account.id, creatorRoles: [MC2_SPARSE_ACCOUNT.role], tags: [], seekingGenres: [] };
+    await prisma.profile.upsert({ where: { accountId: account.id }, create: sparseProfile, update: sparseProfile });
+  }
 
   // DR-3: wire the creative team (WorkCreator) onto the showcase manga.
   for (const wc of WORK_CREATORS) {

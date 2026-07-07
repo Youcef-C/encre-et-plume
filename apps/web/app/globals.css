@@ -600,6 +600,16 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* MC-2 — the Suggestions aside is a 264px right column on desktop; ≤1024px it goes full-width and
+   stacks below the grid (partners stay the primary content). Grid keeps flex:1 min-width:0 so the
+   flex-wrap row reflows without horizontal overflow. */
+@media (max-width: 1024px) {
+  .ep-suggestions-aside {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+}
+
 /* ── DR-1 announcement ribbon marquee ────────────────────────────────────────
    Two copies of the item list slide -50% for a seamless loop.
    Paused on hover; static (first copy only visible) under reduced motion. */

@@ -25,6 +25,7 @@ import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import PartnerCard from './PartnerCard';
 import CallsPreview from './CallsPreview';
+import SuggestionsAside from './SuggestionsAside';
 
 // Genres = F-20 vocabulary (value = id). Localisation = the round-2 hierarchical facet: continents
 // (French name token), countries (ISO alpha-2 value, French label), and the 18 French régions.
@@ -260,7 +261,10 @@ export default function TrouverClient() {
         Partenaires
       </h2>
 
-      <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start' }}>
+      <div
+        className="ep-trouver-results"
+        style={{ display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}
+      >
         <div style={{ flex: 1, minWidth: 0 }}>
           {status === 'loading' && (
             <ul
@@ -335,6 +339,10 @@ export default function TrouverClient() {
             </>
           )}
         </div>
+
+        {/* MC-2 aside — second child, matching the prototype DOM order. Self-fetching independent
+            feed (fetch once on mount). onProposer is a no-op stub until MC-3 wires the invite. */}
+        <SuggestionsAside onProposer={() => {}} />
       </div>
     </div>
   );

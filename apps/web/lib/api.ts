@@ -455,6 +455,13 @@ export const getPartners = (query: URLSearchParams): Promise<PartnersResponse> =
 export const getCalls = (limit = 2): Promise<CallsResponse> =>
   request<CallsResponse>(`/calls?limit=${limit}`);
 
+// ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
+import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';
+
+// Omit `limit` — the server default (4) is what the aside shows.
+export const getMatchSuggestions = (limit?: number): Promise<MatchSuggestionsResponse> =>
+  request<MatchSuggestionsResponse>(`/matches/suggestions${limit ? `?limit=${limit}` : ''}`);
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

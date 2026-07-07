@@ -30,7 +30,9 @@ test('FE: "Signaler un bug" reveals the technical-context panel (url / UA / requ
   page,
 }) => {
   await page.goto('/contact');
-  await page.getByLabel(/sujet/i).selectOption('bug');
+  // §8 — OnBrandSelect is a combobox listbox (no native <select>): open the trigger, click the option.
+  await page.getByLabel(/sujet/i).click();
+  await page.getByRole('option', { name: 'Signaler un bug' }).click();
   const panel = page.getByTestId('bug-context');
   await expect(panel).toBeVisible();
   await expect(panel.getByText(/Page/i)).toBeVisible();
@@ -42,7 +44,9 @@ test('FE: full submit flow — fill bug report, submit, see success, reset with 
 }) => {
   await page.goto('/contact');
 
-  await page.getByLabel(/sujet/i).selectOption('bug');
+  // §8 — OnBrandSelect is a combobox listbox (no native <select>): open the trigger, click the option.
+  await page.getByLabel(/sujet/i).click();
+  await page.getByRole('option', { name: 'Signaler un bug' }).click();
   await expect(page.getByTestId('bug-context')).toBeVisible();
 
   await page.getByLabel(/^nom/i).fill('QA Visitor');

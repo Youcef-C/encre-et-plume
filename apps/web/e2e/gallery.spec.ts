@@ -87,7 +87,9 @@ test.describe('Galerie illustration gallery', () => {
 
   test('changing the sort updates the URL', async ({ page }) => {
     await page.goto('/galerie');
-    await page.getByLabel('Trié par :').selectOption('populaires');
+    // §8 — OnBrandSelect is a combobox listbox (no native <select>): open the trigger, click the option.
+    await page.getByLabel('Trié par :').click();
+    await page.getByRole('option', { name: 'Populaires' }).click();
     await expect(page).toHaveURL(/tri=populaires/);
   });
 

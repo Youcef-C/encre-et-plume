@@ -11,6 +11,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     getPartners: vi.fn(),
     getCalls: vi.fn().mockResolvedValue({ items: [] }),
     getProfile: vi.fn().mockResolvedValue({ creatorRoles: [] }),
+    getMatchSuggestions: vi.fn().mockResolvedValue({ items: [], incompleteProfile: false }),
   };
 });
 
@@ -80,6 +81,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   (api.getCalls as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
   (api.getProfile as ReturnType<typeof vi.fn>).mockResolvedValue({ creatorRoles: [] });
+  (api.getMatchSuggestions as ReturnType<typeof vi.fn>).mockResolvedValue({
+    items: [],
+    incompleteProfile: false,
+  });
 });
 
 describe('TrouverClient', () => {
@@ -228,5 +233,54 @@ describe('TrouverClient', () => {
     renderClient({ account: null });
     expect(screen.getByText(/Connectez-vous pour parcourir/)).toBeInTheDocument();
     expect(api.getPartners).not.toHaveBeenCalled();
+    expect(api.getMatchSuggestions).not.toHaveBeenCalled();
+  });
+
+  // ── MC-2 Suggestions aside ──────────────────────────────────────────────────
+  it('renders the Suggestions aside after the partner grid in the results row', async () => {
+    (api.getPartners as ReturnType<typeof vi.fn>).mockResolvedValue(ok([partner()]));
+    (api.getMatchSuggestions as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [
+        {
+          userId: 'acc-lea',
+          slug: 'mc1-lea-b',
+          name: 'Léa B.',
+          avatarUrl: null,
+          role: 'scenariste',
+          genre: 'Seinen',
+          affinityScore: 94,
+          reason: 'même genre · rythme compatible',
+        },
+      ],
+      incompleteProfile: false,
+    });
+    renderClient();
+    const aside = await screen.findByRole('complementary', {
+      name: 'Suggestions — par affinité de style & genre',
+    });
+    const card = await screen.findByText('Théo M.');
+    // grid card precedes the aside in document order (grid first, aside second — prototype order)
+    expect(card.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await screen.findByText('Léa B.')).toBeInTheDocument();
+  });
+
+  it('fetches suggestions once on mount and does NOT refetch them on filter changes', async () => {
+    (api.getPartners as ReturnType<typeof vi.fn>).mockResolvedValue(ok([partner()]));
+    renderClient();
+    await screen.findByText('Théo M.');
+    await waitFor(() => expect(api.getMatchSuggestions).toHaveBeenCalledTimes(1));
+    const filters = screen.getByRole('group', { name: 'Je cherche :' });
+    await userEvent.click(within(filters).getByRole('button', { name: 'Dessinateur·rice' }));
+    await waitFor(() => expect(lastQuery().get('role')).toBe('dessinateur'));
+    // partners refetched, suggestions did not
+    expect(api.getMatchSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the partner grid intact when the suggestions endpoint fails', async () => {
+    (api.getPartners as ReturnType<typeof vi.fn>).mockResolvedValue(ok([partner()]));
+    (api.getMatchSuggestions as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('boom'));
+    renderClient();
+    expect(await screen.findByText('Théo M.')).toBeInTheDocument();
+    expect(await screen.findByText('Impossible de charger les suggestions.')).toBeInTheDocument();
   });
 });

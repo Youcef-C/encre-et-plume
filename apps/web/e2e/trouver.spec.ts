@@ -185,12 +185,15 @@ test.describe('Trouver un·e partenaire — signed in (dr1-camille-roux)', () =>
   test('MC1-E8: "Profil" navigates to the profile page; "Proposer" has a descriptive a11y name', async ({
     page,
   }) => {
-    const proposerButton = page.getByRole('button', { name: 'Proposer une collaboration à Théo M.' });
+    // MC-2 added a "Suggestions" aside that may also surface Théo M. with the same accessible
+    // names — scope to the main partners grid card to disambiguate.
+    const theoCard = grid(page).locator('li').filter({ hasText: 'Théo M.' });
+    const proposerButton = theoCard.getByRole('button', { name: 'Proposer une collaboration à Théo M.' });
     await expect(proposerButton).toBeVisible();
     await proposerButton.click(); // stubbed no-op (MC-3) — must not throw/navigate away
     await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Profil de Théo M.' }).click();
+    await theoCard.getByRole('link', { name: 'Profil de Théo M.' }).click();
     await expect(page).toHaveURL('/mc1-theo-m');
   });
 
