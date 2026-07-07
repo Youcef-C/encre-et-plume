@@ -20,7 +20,7 @@ jobs:
     outputs:
       has_app: ${{ steps.detect.outputs.has_app }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Detect monorepo scaffold
         id: detect
@@ -106,7 +106,7 @@ jobs:
       MEDIA_SIGNED_URL_TTL: "300"
       DISABLE_RATE_LIMIT: "true"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Guard — web app present
         id: webcheck
