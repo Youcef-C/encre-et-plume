@@ -13,7 +13,6 @@ import { useEffectiveRole } from '../lib/role';
 import { useUnreadCount, useUnreadCounts } from '../lib/unread';
 import CountBadge from './CountBadge';
 import SearchOverlay from './SearchOverlay';
-// ponytail: message-launcher bubble + chat-list unread dots deferred to MC-9 (no host surface yet)
 import type { UserRole } from '@encre-et-plume/shared';
 import {
   DiamondIcon,

@@ -32,3 +32,4 @@ export * from './invitations.js';
 export * from './calls.js';
 export * from './applications.js';
 export * from './connections.js';
+export * from './messaging.js';

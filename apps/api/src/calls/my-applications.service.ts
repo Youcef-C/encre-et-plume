@@ -27,6 +27,7 @@ interface AppRow {
     title: string;
     authorRoles: string[];
     authorName: string;
+    authorId: string | null;
     genres: string[];
   };
   assets: { url: string; kind: string; size: number | null; position: number }[];
@@ -128,6 +129,7 @@ export class MyApplicationsService {
       callGenres: r.call.genres,
       callSampleUrl: thumbs.get(r.callId) ?? null,
       ownerName: r.call.authorName,
+      ownerId: r.call.authorId ?? null,
       status: r.status,
       appliedAs: (r.appliedAs ?? null) as CreatorRole | null,
       samples: toApplicationSamples(r.assets ?? []),

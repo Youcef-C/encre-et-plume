@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { RedisService } from '../../redis/redis.service';
+import { verifySessionToken } from '../session-token';
 
 // Avoid circular import: SessionStore lives in SecurityModule (which imports AuthModule).
 // We use a structural interface to decouple the types.
@@ -42,45 +43,19 @@ export class SessionGuard implements CanActivate {
     const token = req.cookies?.['ep_session'] as string | undefined;
     if (!token) throw new UnauthorizedException();
 
-    let payload: { sub: string; jti?: string; exp?: number; iat?: number; ims?: number };
-    try {
-      payload = this.jwt.verify<{ sub: string; jti?: string; exp?: number; iat?: number; ims?: number }>(
-        token,
-        { algorithms: ['HS256'] }, // L: pin verify algorithm (defense-in-depth against alg confusion)
-      );
-    } catch {
-      throw new UnauthorizedException();
-    }
+    // Shared with the MC-9 WS gateway: HS256 verify + denylist + session-epoch checks.
+    // Returns null → 401; a Redis outage propagates (M3 fail-closed) exactly as before.
+    const verified = await verifySessionToken(this.jwt, this.redis, token);
+    if (!verified) throw new UnauthorizedException();
 
-    // Check JWT denylist (token revoked via logout)
-    // M3: strict read — a Redis outage must NOT silently let a revoked token through; fail closed.
-    if (payload.jti) {
-      const denied = await this.redis.getOrThrow(`denylist:${payload.jti}`);
-      if (denied) throw new UnauthorizedException();
-    }
-
-    // F-12: per-account session epoch — reject JWTs issued before the last password reset.
-    // ms precision via the custom `ims` claim: second-granularity iat left a 1s window where
-    // a token issued the same second as the reset survived it. Legacy tokens (no ims) fall
-    // back to iat*1000 — the boundary (<=) counts as pre-reset, so the old same-second hole
-    // stays closed for them too. PasswordResetService.confirm() writes `session-epoch-ms:<id>`.
-    // M3: strict read — same fail-closed rationale as the denylist check above.
-    const epochStr = await this.redis.getOrThrow(`session-epoch-ms:${payload.sub}`);
-    if (epochStr !== null) {
-      const issuedMs = payload.ims ?? (payload.iat !== undefined ? payload.iat * 1000 : undefined);
-      if (issuedMs !== undefined && issuedMs <= parseInt(epochStr, 10)) {
-        throw new UnauthorizedException();
-      }
-    }
-
-    req.accountId = payload.sub;
-    req.jti = payload.jti;
-    req.tokenExp = payload.exp;
+    req.accountId = verified.accountId;
+    req.jti = verified.jti;
+    req.tokenExp = verified.tokenExp;
 
     // F-18: best-effort session index touch — never blocks auth on failure.
-    if (sharedSessionStore && payload.jti) {
+    if (sharedSessionStore && verified.jti) {
       const ua = req.headers['user-agent'] ?? null;
-      sharedSessionStore.touch(payload.sub, payload.jti, ua, req.ip ?? null).catch(() => {});
+      sharedSessionStore.touch(verified.accountId, verified.jti, ua, req.ip ?? null).catch(() => {});
     }
 
     return true;

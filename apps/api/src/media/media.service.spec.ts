@@ -44,6 +44,7 @@ describe('MediaService', () => {
       deleteMany: jest.Mock;
       findMany: jest.Mock;
     };
+    message: { findFirst: jest.Mock };
   };
   let redis: jest.Mocked<Pick<RedisService, 'incr' | 'expire'>>;
   let queue: jest.Mocked<Pick<QueueService, 'enqueue' | 'schedule'>>;
@@ -57,6 +58,7 @@ describe('MediaService', () => {
         deleteMany: jest.fn(),
         findMany: jest.fn(),
       },
+      message: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     s3 = {
       presignPut: jest.fn().mockResolvedValue('https://minio/presigned'),
@@ -177,6 +179,13 @@ describe('MediaService', () => {
           data: expect.objectContaining({ visibility: 'private' }),
         }),
       );
+    });
+
+    // MC-9: the attachment kind accepts BOTH images and documents (PDF/TXT) — message attachments.
+    it('MC-9: accepts application/pdf for the attachment kind (documents allowed alongside images)', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'attachment', visibility: 'private' }));
+      const result = await service.requestUpload('acc-1', { kind: 'attachment', contentType: 'application/pdf', size: 2048 });
+      expect(result.bucketKey).toMatch(/^attachment\/acc-1\/[a-f0-9]+\.pdf$/);
     });
 
     // ── MC-4X: document kinds (PDF-only allowlist) ──────────────────────────
@@ -406,6 +415,28 @@ describe('MediaService', () => {
       );
       expect(result.url).toBe('https://minio/signed-get');
       expect(typeof result.expiresIn).toBe('number');
+    });
+
+    // MC-9: message attachments are private but readable by every conversation participant, not only the owner.
+    it('MC-9: issues a presigned GET for a NON-owner who participates in a conversation with this attachment', async () => {
+      prisma.media.findUnique.mockResolvedValue(
+        makeMedia({ visibility: 'private', ownerId: 'other', kind: 'attachment', bucketKey: 'attachment/other/media-1.png' }),
+      );
+      prisma.message.findFirst.mockResolvedValue({ id: 'msg-1' }); // caller participates in a conv with this media
+
+      const result = await service.signedUrl('acc-1', 'media-1');
+
+      expect(prisma.message.findFirst).toHaveBeenCalled();
+      expect(result.url).toBe('https://minio/signed-get');
+    });
+
+    it('MC-9: still 403 for a non-owner attachment when the caller participates in NO such conversation', async () => {
+      prisma.media.findUnique.mockResolvedValue(
+        makeMedia({ visibility: 'private', ownerId: 'other', kind: 'attachment', bucketKey: 'attachment/other/media-1.png' }),
+      );
+      prisma.message.findFirst.mockResolvedValue(null);
+
+      await expect(service.signedUrl('acc-1', 'media-1')).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 

@@ -4,5 +4,6 @@
 export { SessionProvider } from '../lib/session';
 export { RoleSimulationProvider } from '../lib/role';
 export { UnreadProvider } from '../lib/unread';
+export { MessagingProvider } from '../lib/messaging';
 export { ThemeProvider } from '../lib/theme';
 export { CookieConsentProvider } from '../lib/cookie-consent';

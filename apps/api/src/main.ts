@@ -28,6 +28,7 @@ const cookieParser = require('cookie-parser') as typeof import('cookie-parser');
 import { AppModule } from './app.module';
 import { AppLoggerService } from './observability/app-logger.service';
 import { WorkerRunner } from './queue/worker-runner';
+import { RedisIoAdapter } from './messaging/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -71,6 +72,13 @@ async function bootstrap() {
     app.get(WorkerRunner).run();
     console.log('Job workers running inline (WORKER_INLINE=true)');
   }
+
+  // MC-9: wire the socket.io Redis adapter BEFORE listen so the messaging gateway fans out across N
+  // instances. Same HTTP server/port as REST. (worker.ts never does this — it has no HTTP server.)
+  const redisIoAdapter = new RedisIoAdapter(app);
+  await redisIoAdapter.connectToRedis();
+  app.useWebSocketAdapter(redisIoAdapter);
+  console.log('WS messaging gateway initialized (socket.io + Redis adapter)');
 
   const port = Number(process.env['API_PORT'] ?? 3001);
   await app.listen(port);

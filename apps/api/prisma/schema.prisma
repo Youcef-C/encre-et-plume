@@ -143,6 +143,8 @@ model Account {
   applications            Application[] // MC-5: call applications this account submitted
   connectionsSent         Connection[]             @relation("ConnectionsSent") // MC-8: requests this account initiated
   connectionsReceived     Connection[]             @relation("ConnectionsReceived") // MC-8: requests addressed to this account
+  conversationParticipations ConversationParticipant[] // MC-9: conversations this account is a member of
+  messagesSent            Message[]                @relation("MessagesSent") // MC-9: messages this account sent
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -330,6 +332,57 @@ model Connection {
   @@unique([requesterId, addresseeId]) // backstop; service enforces one row per unordered pair
   @@index([addresseeId, status])
   @@index([requesterId, status])
+}
+
+// ── MC-9: Messaging (floating widget) ─────────────────────────────────────────
+// readBy[] is DERIVED, not stored: message M is read by participant P iff
+// P.lastReadAt >= M.createdAt. One timestamp per participant (O(1) mark-read) instead of a
+// row per (message × reader). Unread per conversation = messages after my lastReadAt not sent by me.
+
+enum ConversationType {
+  dm
+  group
+}
+
+model Conversation {
+  id            String                    @id @default(cuid())
+  type          ConversationType
+  name          String? // group only; DM title is computed per-viewer (the OTHER party)
+  projectId     String? // CS-8 seam: a project group chat IS this conversation
+  dmKey         String?                   @unique // dm only: "minId:maxId" — DB backstop, one DM per pair
+  createdAt     DateTime                  @default(now())
+  lastMessageAt DateTime                  @default(now()) // list ordering key (bumped on each send)
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@index([projectId])
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  conversationId String
+  accountId      String
+  lastReadAt     DateTime     @default(now()) // unread = messages after this, not sent by me
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  account        Account      @relation(fields: [accountId], references: [id])
+
+  @@id([conversationId, accountId])
+  @@index([accountId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         Account      @relation("MessagesSent", fields: [senderId], references: [id])
+  body           String       @default("")
+  attachments    Json         @default("[]") // MessageAttachment[] denormalized display (mediaId,name,kind)
+  attachmentIds  String[]     @default([]) // Media.ids — queryable authz lookup for signed-URL gating (F-10)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 // ── F-13: Legal documents & consent records ───────────────────────────────────

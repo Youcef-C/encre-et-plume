@@ -28,6 +28,7 @@ import { MatchesModule } from './matches/matches.module';
 import { ProjectsModule } from './projects/projects.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { ConnectionsModule } from './connections/connections.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -55,6 +56,7 @@ import { ConnectionsModule } from './connections/connections.module';
   // ProjectsModule (CS-1 seam): authenticated GET /projects/mine — MC-3 invite picker source.
   // InvitationsModule (MC-3): authenticated POST/GET/PATCH /invitations — "Proposer une collab".
   // ConnectionsModule (MC-8): authenticated /contacts, /connections/*, /people/search, /presence.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule],
+  // MessagingModule (MC-9): authenticated /conversations* REST + the socket.io WS gateway (Redis adapter).
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule],
 })
 export class AppModule {}

@@ -24,6 +24,11 @@ vi.mock('../lib/api', async (importOriginal) => {
   };
 });
 
+const openDm = vi.fn();
+vi.mock('../lib/messaging', () => ({
+  useMessaging: () => ({ openDm }),
+}));
+
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={href} {...rest}>
@@ -200,7 +205,7 @@ describe('ContactsClient — Demandes tab (FE-3, FE-6)', () => {
 });
 
 describe('ContactsClient — Contacts tab (FE-4, FE-7, D5, D7)', () => {
-  it('shows presence text, meta, a disabled Message button and an overflow menu', async () => {
+  it('shows presence text, meta, an enabled Message button (MC-9) and an overflow menu', async () => {
     mockAll({
       contacts: [contact({ presence: { online: true, lastSeen: null } })],
       requests: [],
@@ -213,8 +218,11 @@ describe('ContactsClient — Contacts tab (FE-4, FE-7, D5, D7)', () => {
     expect(screen.getByText(/en ligne/i)).toBeInTheDocument();
     expect(screen.getByText(/lyon/i)).toBeInTheDocument();
 
+    // MC-9 seam is live: « Message » opens (or starts) the DM in the widget.
     const message = screen.getByRole('button', { name: /message à léa b\./i });
-    expect(message).toBeDisabled();
+    expect(message).toBeEnabled();
+    await user.click(message);
+    expect(openDm).toHaveBeenCalledWith('u-lea');
 
     await user.click(screen.getByRole('button', { name: /actions pour léa b\./i }));
     expect(await screen.findByRole('menuitem', { name: /voir le profil/i })).toHaveAttribute('href', '/lea-b');

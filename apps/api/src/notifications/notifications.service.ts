@@ -31,6 +31,15 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   connection_accepted: 'autres',
 };
 
+/**
+ * BE-RT1 seam: the MC-9 messaging gateway implements this and is wired in via setRealtimeNotifier()
+ * (MessagingModule.onModuleInit), mirroring SessionGuard.setSessionStore — no NotificationsModule ↔
+ * gateway import, so no circular dep. Best-effort: an emit failure never breaks the notification write.
+ */
+export interface RealtimeNotifier {
+  notifyUnreadChanged(recipientId: string): void;
+}
+
 type SourceUserRow = { displayName: string; profileSlug: string; avatar: string | null } | null;
 
 type NotifRow = {
@@ -48,6 +57,13 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly preferences: NotificationPreferencesService,
   ) {}
+
+  // BE-RT1: set by MessagingModule.onModuleInit(). Optional — notifications work with no gateway
+  // (e.g. the worker process, or before the gateway wires in).
+  private realtimeNotifier?: RealtimeNotifier;
+  setRealtimeNotifier(notifier: RealtimeNotifier): void {
+    this.realtimeNotifier = notifier;
+  }
 
   /**
    * BE-8 seam: other stories (MC-9 messages, MC-7 applications, AD-2 reports) call this to emit
@@ -75,6 +91,15 @@ export class NotificationsService {
         sourceUser: { select: { displayName: true, profileSlug: true, avatar: true } },
       },
     });
+
+    // BE-RT1: realtime nudge so an online recipient refetches unread counts without a reload/refocus.
+    // Best-effort — the DB write above already succeeded; a socket-fan-out failure must not surface.
+    try {
+      this.realtimeNotifier?.notifyUnreadChanged(input.recipientId);
+    } catch {
+      /* best-effort realtime; never break the notification write */
+    }
+
     return this.toItem(row as NotifRow);
   }
 

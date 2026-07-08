@@ -154,6 +154,43 @@ describe('NotificationsService', () => {
       expect(prisma.notification.create).not.toHaveBeenCalled();
     });
 
+    // ── MC-9 BE-RT1: realtime "unread:changed" nudge on create ────────────
+
+    it('fires the realtime notifier for the recipient after a notification is persisted', async () => {
+      const notifier = { notifyUnreadChanged: jest.fn() };
+      service.setRealtimeNotifier(notifier);
+      prisma.notification.create.mockResolvedValue(makeRow({ type: 'connection_request' }));
+
+      await service.create({ recipientId: ACCOUNT_A, type: 'connection_request' });
+
+      expect(notifier.notifyUnreadChanged).toHaveBeenCalledWith(ACCOUNT_A);
+    });
+
+    it('does NOT fire the realtime notifier when the notification is suppressed (opted out)', async () => {
+      const notifier = { notifyUnreadChanged: jest.fn() };
+      service.setRealtimeNotifier(notifier);
+      preferences.isInAppAllowed.mockResolvedValue(false);
+
+      await service.create({ recipientId: ACCOUNT_A, type: 'like' });
+
+      expect(notifier.notifyUnreadChanged).not.toHaveBeenCalled();
+    });
+
+    it('is best-effort: a throwing realtime notifier never fails the create (DB write wins)', async () => {
+      const notifier = {
+        notifyUnreadChanged: jest.fn(() => {
+          throw new Error('socket server down');
+        }),
+      };
+      service.setRealtimeNotifier(notifier);
+      prisma.notification.create.mockResolvedValue(makeRow());
+
+      const item = await service.create({ recipientId: ACCOUNT_A, type: 'message' });
+
+      expect(item).not.toBeNull();
+      expect(notifier.notifyUnreadChanged).toHaveBeenCalled();
+    });
+
     it('creates notification when in-app is allowed (default)', async () => {
       preferences.isInAppAllowed.mockResolvedValue(true);
       const row = makeRow({ type: 'like' });

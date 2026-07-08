@@ -62,11 +62,18 @@ describe('MyApplicationsService.list', () => {
       callGenres: ['seinen', 'thriller'],
       callSampleUrl: null,
       ownerName: 'Camille R.',
+      ownerId: null,
       status: 'pending',
       appliedAs: 'dessinateur',
       samples: [],
       createdAt: '2026-07-07T10:00:00.000Z',
     });
+  });
+
+  it('MC-9 seam: exposes the call author account id as ownerId for the « Message » CTA', async () => {
+    prisma.application.findMany.mockResolvedValue([APP({ call: { ...APP().call, authorId: 'acc-owner' } })]);
+    const res = await service.list('acc-me', { status: 'all', page: 1 });
+    expect(res.items[0].ownerId).toBe('acc-owner');
   });
 
   it('exposes the application own samples (position order) from its ApplicationAsset rows', async () => {

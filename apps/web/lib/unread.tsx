@@ -26,9 +26,9 @@ export const UnreadCountsContext = createContext<UnreadCountsCtx>({
 export const useUnreadCounts = () => useContext(UnreadCountsContext);
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
-// ponytail: polling/WebSocket deferred — counts refresh on mount, window focus,
-// and explicitly after mark-read mutations. Upgrade path: when MC-9 lands, a
-// WebSocket gateway can push counts via RedisService and call refresh() here.
+// Counts refresh on mount, window focus, explicitly after mark-read mutations, AND live via the
+// MC-9 socket gateway: MessagingProvider calls refresh() on `message:new` and `unread:changed`
+// (BE-RT1), so all header badges update in realtime with no polling timer.
 export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const { account } = useSession();
   const [counts, setCounts] = useState<UnreadCounts>(DEFAULT_COUNTS);

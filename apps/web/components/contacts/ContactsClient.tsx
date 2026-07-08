@@ -20,6 +20,7 @@ import {
   type PeopleSearchItem,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
+import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
 import { relativeTime } from '../../lib/notifications';
 import CountBadge from '../CountBadge';
@@ -218,6 +219,7 @@ function ContactRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { openDm } = useMessaging();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -276,16 +278,12 @@ function ContactRow({
           </span>
         ) : (
           <>
-            {/* MC-9 seam: messaging isn't built yet — the story-explicit button ships disabled. */}
+            {/* MC-9: opens (or starts) the DM in the floating widget. */}
             <button
               type="button"
-              disabled
               aria-label={`Message à ${contact.name}`}
-              title="Messagerie bientôt disponible"
-              style={{ ...actionBtn, opacity: 0.5, cursor: 'not-allowed' }}
-              onClick={() => {
-                /* MC-9 seam: dispatch to the floating message widget here. */
-              }}
+              style={actionBtn}
+              onClick={() => void openDm(contact.userId)}
             >
               Message
             </button>

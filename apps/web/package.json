@@ -20,7 +20,8 @@
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-easy-crop": "^6.0.2"
+    "react-easy-crop": "^6.0.2",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

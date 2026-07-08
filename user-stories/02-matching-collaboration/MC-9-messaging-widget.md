@@ -43,3 +43,11 @@
 ## Notes
 - Explicit: launcher bubble (red ✉, unread "3"), header "Messages [3] · ＋ Groupe · minimize ▁ · close ✕", conversation search, the three sample rows (group + two DMs with typing/preview), the `openMsg` per-recipient modal, the shared project group chat ([[CS-8]]), realtime messaging/typing/presence + group creation + history + attachments, and that it renders on every page (depends [[F-1]], [[F-4]]).
 - Inferred: exact endpoint shapes, pagination, and reconnect/offline-notification behavior.
+
+## Realtime notifications (added 2026-07-08)
+- The WS gateway pushes **all F-5 notifications** live, not only chat: connection requests ([[MC-8]]),
+  call applications ([[MC-5]]/[[MC-7]]), collaboration invitations ([[MC-3]]), and the header unread
+  badges update in real time (no tab refocus/reload). `NotificationsService.create()` emits
+  `unread:changed` to the recipient's authenticated per-user room (best-effort, authz-scoped, Redis-adapter
+  fan-out); the client calls the existing `UnreadProvider.refresh()`. Unread counts still come from the
+  REST source of truth — the socket event is a "refetch now" signal.

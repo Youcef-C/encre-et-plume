@@ -102,14 +102,16 @@ test.describe('MC-8 Contacts & connexions — signed in as the fixture account (
     await expect(lea.getByText(PRESENCE_RE)).toBeVisible();
     const leaMessage = lea.getByRole('button', { name: 'Message à Léa B.' });
     await expect(leaMessage).toBeVisible();
-    await expect(leaMessage).toBeDisabled(); // D5 — MC-9 seam, ships disabled
+    // D5 seam is now LIVE (MC-9 shipped): the button is enabled and opens/starts the DM via
+    // useMessaging().openDm(contact.userId) — see mc9-messaging.spec.ts for the full realtime proof.
+    await expect(leaMessage).toBeEnabled();
     await expect(lea.getByRole('button', { name: 'Actions pour Léa B.' })).toBeVisible();
 
     const hugo = rowByName(panel, 'Hugo D.');
     await expect(hugo).toBeVisible();
     await expect(hugo.getByText('Dessinateur·rice')).toBeVisible();
     await expect(hugo.getByText(PRESENCE_RE)).toBeVisible();
-    await expect(hugo.getByRole('button', { name: 'Message à Hugo D.' })).toBeDisabled();
+    await expect(hugo.getByRole('button', { name: 'Message à Hugo D.' })).toBeEnabled();
   });
 
   test('MC8-E1b: presence is conveyed as text, not colour alone — forcing Léa online is reflected on reload (D4, FE-7)', async ({

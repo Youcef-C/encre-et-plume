@@ -518,6 +518,16 @@ h1, h2, h3, h4, h5, h6 {
     scroll-margin-top: 196px;
   }
 }
+
+/* MC-9: the floating chat panel becomes a full-width sheet on mobile (FE-6). */
+@media (max-width: 480px) {
+  .ep-chat-panel {
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+}
 .ep-settings-summary {
   cursor: pointer;
   list-style: none;

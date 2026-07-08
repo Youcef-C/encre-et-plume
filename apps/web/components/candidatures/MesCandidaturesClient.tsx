@@ -14,6 +14,7 @@ import {
   type MyApplicationsStatusFilter,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
+import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
 import StatusBadge from './StatusBadge';
 
@@ -101,6 +102,7 @@ function ApplicationRow({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const { openDm } = useMessaging();
 
   const genreLabel = app.callGenres.length ? GENRE_FR.get(app.callGenres[0]) ?? app.callGenres[0] : null;
   const meta = [DIRECTION_LABEL[app.callDirection], genreLabel, app.ownerName].filter(Boolean).join(' · ');
@@ -185,6 +187,16 @@ function ApplicationRow({
               Retirer
             </button>
           ))}
+        {app.status === 'accepted' && app.ownerId && (
+          <button
+            type="button"
+            onClick={() => void openDm(app.ownerId as string)}
+            aria-label={`Message à ${app.ownerName}`}
+            style={{ ...actionBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)' }}
+          >
+            Message
+          </button>
+        )}
         <Link href={`/appels?call=${app.callId}`} aria-label={`Voir l'appel « ${app.callTitle} »`} style={actionBtn}>
           Voir l&apos;appel
         </Link>

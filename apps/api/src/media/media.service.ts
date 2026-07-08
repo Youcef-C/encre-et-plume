@@ -101,10 +101,13 @@ export class MediaService {
       throw new BadRequestException(`kind must be one of: ${MEDIA_KINDS.join(', ')}`);
     }
     // Validate contentType allowlist — kind-aware: document kinds accept ONLY application/pdf;
-    // every other kind keeps the raster allowlist (SVG excluded — XSS risk).
+    // MC-9 message attachments accept BOTH images and documents (PDF/TXT); every other kind keeps the
+    // raster allowlist (SVG excluded — XSS risk).
     const allowed = DOCUMENT_KINDS.has(dto.kind as MediaKind)
       ? (DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[])
-      : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
+      : dto.kind === 'attachment'
+        ? ([...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES] as readonly string[])
+        : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
     if (!allowed.includes(dto.contentType)) {
       throw new BadRequestException(`contentType not allowed: ${dto.contentType}`);
     }
@@ -261,11 +264,28 @@ export class MediaService {
       return { url: this.s3.publicUrl(row['bucketKey'] as string), expiresIn: ttl };
     }
 
-    // Private: owner-gated now (seam: AD-11 participant/subscriber checks added by consuming story)
-    if (row['ownerId'] !== accountId) throw new ForbiddenException();
+    // Private: owner-gated, plus MC-9's exception — a message attachment is readable by any account that
+    // participates in a conversation whose message references this mediaId (one query, no leak: a
+    // non-participant/non-owner still gets 403). AD-11 subscriber checks layer on later.
+    if (row['ownerId'] !== accountId) {
+      const allowed = row['kind'] === 'attachment' && (await this.isConversationAttachmentReadable(accountId, mediaId));
+      if (!allowed) throw new ForbiddenException();
+    }
 
     const url = await this.s3.presignGet(row['bucketKey'] as string, ttl);
     return { url, expiresIn: ttl };
+  }
+
+  /** MC-9: does `accountId` participate in a conversation whose message references this attachment? */
+  private async isConversationAttachmentReadable(accountId: string, mediaId: string): Promise<boolean> {
+    const msg = await this.prisma.message.findFirst({
+      where: {
+        attachmentIds: { has: mediaId },
+        conversation: { participants: { some: { accountId } } },
+      },
+      select: { id: true },
+    });
+    return msg !== null;
   }
 
   async getForOwner(accountId: string, mediaId: string): Promise<MediaResponse> {

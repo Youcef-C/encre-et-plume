@@ -582,6 +582,37 @@ export const getPresence = (userIds: string[]): Promise<PresenceResponse> =>
     ? Promise.resolve({ items: [] })
     : request<PresenceResponse>(`/presence?userIds=${userIds.map(encodeURIComponent).join(',')}`);
 
+// ─── Messaging (MC-9) ─────────────────────────────────────────────────────────
+import type {
+  ConversationsResponse,
+  MessagesPage,
+  MessageDto,
+  SendMessageRequest,
+  CreateConversationRequest,
+  ConversationItem,
+  MarkReadResponse,
+} from '@encre-et-plume/shared';
+
+export const getConversations = (cursor?: string): Promise<ConversationsResponse> =>
+  request<ConversationsResponse>(`/conversations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+
+export const getMessages = (conversationId: string, cursor?: string): Promise<MessagesPage> =>
+  request<MessagesPage>(
+    `/conversations/${encodeURIComponent(conversationId)}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+  );
+
+export const sendMessage = (conversationId: string, body: SendMessageRequest): Promise<MessageDto> =>
+  request<MessageDto>(`/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const createConversation = (body: CreateConversationRequest): Promise<ConversationItem> =>
+  request<ConversationItem>('/conversations', { method: 'POST', body: JSON.stringify(body) });
+
+export const markConversationRead = (conversationId: string): Promise<MarkReadResponse> =>
+  request<MarkReadResponse>(`/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'POST' });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

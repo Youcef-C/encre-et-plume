@@ -21,6 +21,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+// MC-9 seam: accepted rows with an ownerId get a « Message » CTA wired to useMessaging().openDm().
+const openDm = vi.fn();
+vi.mock('../lib/messaging', () => ({
+  useMessaging: () => ({ openDm }),
+}));
+
 import * as api from '../lib/api';
 import MesCandidaturesClient from '../components/candidatures/MesCandidaturesClient';
 
@@ -193,5 +199,30 @@ describe('MesCandidaturesClient (MC-6)', () => {
     expect(screen.getByRole('button', { name: /Toutes · 1/ })).toBeInTheDocument();
     // Accepted row stays.
     expect(screen.getByText('« Acceptée »')).toBeInTheDocument();
+  });
+
+  it('MC-9 seam: an accepted row with an ownerId shows a "Message" CTA that opens a DM with the call author', async () => {
+    getList().mockResolvedValue(
+      response([row({ id: 'a1', callTitle: '« Acceptée »', status: 'accepted', ownerId: 'owner-1', ownerName: 'Théo M.' })]),
+    );
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Acceptée »');
+
+    const messageBtn = screen.getByRole('button', { name: 'Message à Théo M.' });
+    await user.click(messageBtn);
+    expect(openDm).toHaveBeenCalledWith('owner-1');
+    // The pending-only "Retirer" CTA never appears on a decided row.
+    expect(screen.queryByRole('button', { name: /Retirer/ })).not.toBeInTheDocument();
+  });
+
+  it('MC-9 seam: an accepted row WITHOUT an ownerId (pre-MC-9 / seed calls) shows no "Message" CTA', async () => {
+    getList().mockResolvedValue(
+      response([row({ id: 'a2', callTitle: '« Acceptée sans owner »', status: 'accepted', ownerId: null })]),
+    );
+    renderClient();
+    await screen.findByText('« Acceptée sans owner »');
+    expect(screen.queryByRole('button', { name: /^Message/ })).not.toBeInTheDocument();
+    expect(openDm).not.toHaveBeenCalled();
   });
 });

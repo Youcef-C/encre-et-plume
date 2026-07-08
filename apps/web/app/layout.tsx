@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { Anton, Zen_Kaku_Gothic_New } from 'next/font/google';
 import './globals.css';
-import { SessionProvider, RoleSimulationProvider, UnreadProvider, ThemeProvider, CookieConsentProvider } from './providers';
+import { SessionProvider, RoleSimulationProvider, UnreadProvider, MessagingProvider, ThemeProvider, CookieConsentProvider } from './providers';
 import Header from '../components/Header';
+import MessagingWidget from '../components/messaging/MessagingWidget';
 import RoleBanner from '../components/RoleBanner';
 import LegalFooter from '../components/LegalFooter';
 import CookieBanner from '../components/CookieBanner';
@@ -36,14 +37,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeProvider>
             <CookieConsentProvider>
               <UnreadProvider>
-                <RoleSimulationProvider>
-                  <Header />
-                  <RoleBanner />
-                  <main>{children}</main>
-                  <LegalFooter />
-                  <CookieBanner />
-                  <CguReconsentModal />
-                </RoleSimulationProvider>
+                <MessagingProvider>
+                  <RoleSimulationProvider>
+                    <Header />
+                    <RoleBanner />
+                    <main>{children}</main>
+                    <LegalFooter />
+                    <CookieBanner />
+                    <CguReconsentModal />
+                    <MessagingWidget />
+                  </RoleSimulationProvider>
+                </MessagingProvider>
               </UnreadProvider>
             </CookieConsentProvider>
           </ThemeProvider>

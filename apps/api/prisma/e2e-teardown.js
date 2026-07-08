@@ -75,6 +75,22 @@ async function main() {
     });
   }
 
+  // 4e. Delete MC-9 messaging rows (Message.senderId + ConversationParticipant.accountId FK-restrict
+  // Account deletion). Deleting the conversations cascades their participants + messages; then sweep
+  // any stray rows still referencing a seeded account.
+  if (accountIds.length > 0) {
+    const parts = await prisma.conversationParticipant.findMany({
+      where: { accountId: { in: accountIds } },
+      select: { conversationId: true },
+    });
+    const convIds = [...new Set(parts.map((p) => p.conversationId))];
+    if (convIds.length > 0) {
+      await prisma.conversation.deleteMany({ where: { id: { in: convIds } } });
+    }
+    await prisma.message.deleteMany({ where: { senderId: { in: accountIds } } });
+    await prisma.conversationParticipant.deleteMany({ where: { accountId: { in: accountIds } } });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

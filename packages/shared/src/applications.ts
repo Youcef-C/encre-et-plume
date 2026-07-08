@@ -70,6 +70,7 @@ export interface MyApplicationRow {
   callGenres: string[]; // ProjectCall.genres (GENRES ids) — FE renders the first label
   callSampleUrl: string | null; // the CALL's cover thumb (same resolution as CallCard.sampleUrl); null → placeholder
   ownerName: string; // ProjectCall.authorName (denormalized — works for authorId:null seed calls)
+  ownerId?: string | null; // MC-9 seam: call author's account id → « Message » CTA opens a DM (null for seed calls; optional so pre-MC-9 fixtures compile)
   status: ApplicationStatus;
   appliedAs: CreatorRole | null; // MC-6: the role the applicant applied as; null = unspecified (FE falls back to creatorRoles[0])
   samples: ApplicationSample[]; // MC-4X: the applicant's own submitted samples, position order (first feeds the thumbnail)

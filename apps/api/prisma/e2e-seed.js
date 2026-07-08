@@ -87,6 +87,68 @@ async function main() {
     }
   }
 
+  // ── MC-9: seed messaging fixtures for the two standard e2e accounts ──────────
+  // Deterministic timestamps (ordering-stable). Reset first so each run is hermetic: delete every
+  // conversation any seeded account participates in (cascade removes its participants + messages).
+  {
+    const u = accounts.UTILISATEUR.id;
+    const t = accounts.TARGET.id;
+    const admin = accounts.ADMIN.id;
+    const seededIds = Object.values(accounts).map((a) => a.id);
+
+    const parts = await prisma.conversationParticipant.findMany({
+      where: { accountId: { in: seededIds } },
+      select: { conversationId: true },
+    });
+    const convIds = [...new Set(parts.map((p) => p.conversationId))];
+    if (convIds.length > 0) {
+      await prisma.conversation.deleteMany({ where: { id: { in: convIds } } });
+    }
+
+    const D = (iso) => new Date(iso);
+    // DM UTILISATEUR ⇄ TARGET — 2 messages from TARGET after UTILISATEUR's lastReadAt → 2 unread for U.
+    const dmKey = [u, t].sort().join(':');
+    await prisma.conversation.create({
+      data: {
+        type: 'dm',
+        dmKey,
+        lastMessageAt: D('2026-07-07T12:03:00.000Z'),
+        participants: {
+          create: [
+            { accountId: u, lastReadAt: D('2026-07-07T12:01:00.000Z') },
+            { accountId: t, lastReadAt: D('2026-07-07T12:03:00.000Z') },
+          ],
+        },
+        messages: {
+          create: [
+            { senderId: u, body: 'Salut, tu es dispo cette semaine ?', createdAt: D('2026-07-07T12:01:00.000Z') },
+            { senderId: t, body: 'Oui, avec plaisir.', createdAt: D('2026-07-07T12:02:00.000Z') },
+            { senderId: t, body: 'On se cale un créneau demain ?', createdAt: D('2026-07-07T12:03:00.000Z') },
+          ],
+        },
+      },
+    });
+
+    // Group "Projet · Lames de Brume" — 1 message from TARGET, unread for UTILISATEUR (preview row).
+    await prisma.conversation.create({
+      data: {
+        type: 'group',
+        name: 'Projet · Lames de Brume',
+        lastMessageAt: D('2026-07-07T13:00:00.000Z'),
+        participants: {
+          create: [
+            { accountId: u, lastReadAt: D('2026-07-07T11:00:00.000Z') },
+            { accountId: t, lastReadAt: D('2026-07-07T13:00:00.000Z') },
+            { accountId: admin, lastReadAt: D('2026-07-07T11:00:00.000Z') },
+          ],
+        },
+        messages: {
+          create: [{ senderId: t, body: 'nemu planche 4 prêt', createdAt: D('2026-07-07T13:00:00.000Z') }],
+        },
+      },
+    });
+  }
+
   await prisma.$disconnect();
 
   const fs = require('fs');

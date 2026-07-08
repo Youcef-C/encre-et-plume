@@ -35,6 +35,7 @@ import { SessionStore } from './session-store.service';
     TwoFactorService,
     SessionStore,
   ],
+  exports: [SessionStore], // MC-9: the messaging gateway reuses SessionStore.touch for presence
 })
 export class SecurityModule implements OnModuleInit {
   constructor(
