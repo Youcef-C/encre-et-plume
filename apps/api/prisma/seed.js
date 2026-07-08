@@ -49,11 +49,28 @@ const WORKS = [
   { slug: 'dr7-les-heures-de-verre', title: 'Les Heures de Verre', genre: 'Josei', meta: 'Sana K. · 6 ch.', likeCount: 900, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 6, ratingAvg: 4.1, publishedAt: inDays(-6), synopsis: 'Une horlogère répare le temps des autres et n’a jamais osé remonter le sien — jusqu’à ce qu’un client lui rapporte une montre qui s’arrête toujours à la même heure.', hashtags: ['roman', 'romance'] },
 ];
 
-// DR-3: creative team for the showcase manga (Lames de Brume) — the same two top-creator profiles
-// DR-1 seeds (Camille Roux/Yuki Moreau), both set to Lyon to match the prototype's "· Lyon" city line.
+// DR-3: creative team (WorkCreator) for EVERY seeded work so the "Équipe créative" box appears on
+// every /oeuvre page with clickable, followable creator profiles (previously only lames-de-brume had
+// a team, so the box hit its `team.length === 0 → return null` guard everywhere else). Accounts are
+// the seeded creator profiles (DR-1/MC-1); manga/one-shot = scénariste × dessinateur, roman = solo
+// scénariste. Reusing creators across works is realistic (a creator can have several titles).
 const WORK_CREATORS = [
-  { workSlug: 'lames-de-brume', accountSlug: 'dr1-camille-roux', role: 'scenariste', order: 0 },
-  { workSlug: 'lames-de-brume', accountSlug: 'dr1-yuki-moreau', role: 'dessinateur', order: 1 },
+  { workSlug: 'lames-de-brume',            accountSlug: 'dr1-camille-roux', role: 'scenariste',  order: 0 },
+  { workSlug: 'lames-de-brume',            accountSlug: 'dr1-yuki-moreau',  role: 'dessinateur', order: 1 },
+  { workSlug: 'neon-sutra',                accountSlug: 'mc1-lea-b',        role: 'scenariste',  order: 0 },
+  { workSlug: 'neon-sutra',                accountSlug: 'mc1-hugo-d',       role: 'dessinateur', order: 1 },
+  { workSlug: 'le-dernier-ronin',          accountSlug: 'mc1-diego-s',      role: 'scenariste',  order: 0 },
+  { workSlug: 'le-dernier-ronin',          accountSlug: 'mc1-marta-l',      role: 'dessinateur', order: 1 },
+  { workSlug: 'spectres-davril',           accountSlug: 'mc1-noe-p',        role: 'scenariste',  order: 0 },
+  { workSlug: 'spectres-davril',           accountSlug: 'mc1-ines-k',       role: 'dessinateur', order: 1 },
+  { workSlug: 'onibi',                     accountSlug: 'mc1-diego-s',      role: 'scenariste',  order: 0 },
+  { workSlug: 'onibi',                     accountSlug: 'mc1-sora-t',       role: 'dessinateur', order: 1 },
+  { workSlug: 'vertige',                   accountSlug: 'dr1-camille-roux', role: 'scenariste',  order: 0 },
+  { workSlug: 'vertige',                   accountSlug: 'mc1-theo-m',       role: 'dessinateur', order: 1 },
+  { workSlug: 'encre-blanche',             accountSlug: 'mc1-lea-b',        role: 'scenariste',  order: 0 },
+  { workSlug: 'encre-blanche',             accountSlug: 'mc1-ines-k',       role: 'dessinateur', order: 1 },
+  { workSlug: 'dr2-le-murmure-des-cendres', accountSlug: 'mc1-noe-p',       role: 'scenariste',  order: 0 },
+  { workSlug: 'dr7-les-heures-de-verre',   accountSlug: 'dr1-camille-roux', role: 'scenariste',  order: 0 },
 ];
 
 // DR-4: roman showcase prose, verbatim from the prototype (lines 802-814), split into paragraphs.

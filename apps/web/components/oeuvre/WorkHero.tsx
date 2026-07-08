@@ -131,10 +131,15 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
 
         <div style={{ flex: 1, minWidth: 280 }}>
           <div style={{ display: 'flex', gap: 7, marginBottom: 10, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
-            {work.complete && (
+            {/* Series status. The prototype only draws "✓ Complet"; the "En cours" pill is an
+                induced deviation so an ongoing series is legible at a glance in the hero, not only
+                in the DÉTAILS box. */}
+            {work.complete ? (
               <span style={badgeStyle}>
                 <CheckIcon size={11} /> Complet
               </span>
+            ) : (
+              <span style={badgeStyle}>En cours</span>
             )}
             {genreId ? (
               <Link

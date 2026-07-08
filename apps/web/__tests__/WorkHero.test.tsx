@@ -98,9 +98,10 @@ describe('WorkHero (DR-3 FE-2)', () => {
     expect(link).toHaveTextContent('Seinen');
   });
 
-  it('hides the Complet badge when not complete', () => {
+  it('shows "En cours" (not "Complet") when the series is ongoing', () => {
     render(<WorkHero work={{ ...work, complete: false }} account={null} />);
     expect(screen.queryByText(/Complet/)).not.toBeInTheDocument();
+    expect(screen.getByText('En cours')).toBeInTheDocument();
   });
 
   it('formats the stat row', () => {
