@@ -482,6 +482,26 @@ const MC7_RECEIVED = [
     message: 'Un carnet illustré, je peux poser le texte de voyage qui va avec.' },
 ];
 
+// MC-8 "Contacts & connexions": a dedicated login-tested account for the e2e (mc8-contacts.spec.ts).
+// Standalone (NOT in PARTNERS/CREATORS — those feed directory count assertions). Its connections reuse
+// existing MC-1 partner creators so no extra accounts are minted.
+const MC8_ACCOUNT = {
+  email: 'contacts.mc8@seed.encre-et-plume.local',
+  displayName: 'Camille R.',
+  slug: 'mc8-contacts-fixture',
+  role: 'scenariste',
+  city: 'Paris',
+};
+
+// MC-8 fixtures keyed by the OTHER party's partner slug:
+//  - 2 accepted → the Contacts tab shows 2 rows.
+//  - 2 pending incoming (from → MC8_ACCOUNT) → the Demandes badge shows [2].
+const MC8_ACCEPTED = ['mc1-lea-b', 'mc1-hugo-d'];
+const MC8_PENDING_FROM = [
+  { slug: 'mc1-noe-p', context: 'souhaite se connecter' },
+  { slug: 'mc1-diego-s', context: 'souhaite se connecter' },
+];
+
 async function main() {
   const hash = bcrypt.hashSync('password123', 10);
 
@@ -703,6 +723,41 @@ async function main() {
           },
         },
       });
+    }
+  }
+
+  // MC-8: the login-tested "Contacts & connexions" account + its network. Runs after PARTNERS (its
+  // connections reference existing partner creators). Reset-safe: wipe the account's connections first.
+  {
+    const account = await prisma.account.upsert({
+      where: { email: MC8_ACCOUNT.email },
+      create: { email: MC8_ACCOUNT.email, displayName: MC8_ACCOUNT.displayName, passwordHash: hash, profileSlug: MC8_ACCOUNT.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
+      update: { displayName: MC8_ACCOUNT.displayName, profileSlug: MC8_ACCOUNT.slug, emailVerifiedAt: new Date() },
+    });
+    await ensureConsent(account.id);
+    const profileData = { accountId: account.id, creatorRoles: [MC8_ACCOUNT.role], city: MC8_ACCOUNT.city };
+    await prisma.profile.upsert({ where: { accountId: account.id }, create: profileData, update: profileData });
+
+    // Idempotent reset: drop any connection touching this fixture account before recreating.
+    await prisma.connection.deleteMany({ where: { OR: [{ requesterId: account.id }, { addresseeId: account.id }] } });
+
+    const idBySlug = async (slug) => (await prisma.account.findUnique({ where: { profileSlug: slug }, select: { id: true } }))?.id;
+
+    for (const slug of MC8_ACCEPTED) {
+      const otherId = await idBySlug(slug);
+      if (otherId) {
+        await prisma.connection.create({
+          data: { requesterId: account.id, addresseeId: otherId, status: 'accepted', respondedAt: new Date(), context: '' },
+        });
+      }
+    }
+    for (const p of MC8_PENDING_FROM) {
+      const fromId = await idBySlug(p.slug);
+      if (fromId) {
+        await prisma.connection.create({
+          data: { requesterId: fromId, addresseeId: account.id, status: 'pending', context: p.context },
+        });
+      }
     }
   }
 

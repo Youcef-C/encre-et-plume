@@ -31,3 +31,4 @@ export * from './projects.js';
 export * from './invitations.js';
 export * from './calls.js';
 export * from './applications.js';
+export * from './connections.js';

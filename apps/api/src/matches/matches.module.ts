@@ -17,5 +17,6 @@ import { SessionGuard } from '../auth/guards/session.guard';
   ],
   controllers: [MatchesController],
   providers: [MatchesService, PrismaService, RedisService, SessionGuard],
+  exports: [MatchesService], // MC-8 ConnectionsModule delegates /connections/suggestions here
 })
 export class MatchesModule {}

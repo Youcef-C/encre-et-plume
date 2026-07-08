@@ -6,6 +6,7 @@
 // DR-1 adds Work, Chapter, Announcement + Profile.trendingScore (home showroom).
 // DR-3 extends Work/Chapter + adds WorkCreator, Planche, FundingGoal, Review (work page "Œuvre").
 // DR-4 extends Chapter (premium/prose) + Planche (chapterId) + adds Favorite, ReadingProgress (reader).
+// MC-8 adds Connection + ConnectionStatus + NotifType.connection_* (contacts & connexions network).
 
 generator client {
   provider = "prisma-client-js"
@@ -35,6 +36,8 @@ enum NotifType {
   system // F-14: system notifications (data export ready, etc.)
   application_accepted // MC-7: owner accepted an applicant
   application_rejected // MC-7: owner rejected an applicant
+  connection_request // MC-8: someone sent a connection request
+  connection_accepted // MC-8: the recipient accepted the connection request
 }
 
 // ── DR-1 Work/Chapter/Announcement enums ───────────────────────────────────────
@@ -138,6 +141,8 @@ model Account {
   invitationsSent         Invitation[]             @relation("InvitationsSent") // MC-3: collab invites sent
   invitationsReceived     Invitation[]             @relation("InvitationsReceived") // MC-3: collab invites received
   applications            Application[] // MC-5: call applications this account submitted
+  connectionsSent         Connection[]             @relation("ConnectionsSent") // MC-8: requests this account initiated
+  connectionsReceived     Connection[]             @relation("ConnectionsReceived") // MC-8: requests addressed to this account
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -299,6 +304,32 @@ model Invitation {
 
   @@index([fromUserId, status])
   @@index([toUserId, status])
+}
+
+// ── MC-8: Contacts & connexions ───────────────────────────────────────────────
+
+enum ConnectionStatus {
+  pending
+  accepted
+  declined
+}
+
+// MC-8: one row per user pair. A `pending` row IS the story's ConnectionRequest; an `accepted` row
+// IS the mutual Connection. Direction (requester→addressee) matters only while pending.
+model Connection {
+  id          String           @id @default(cuid())
+  requesterId String
+  requester   Account          @relation("ConnectionsSent", fields: [requesterId], references: [id])
+  addresseeId String
+  addressee   Account          @relation("ConnectionsReceived", fields: [addresseeId], references: [id])
+  status      ConnectionStatus @default(pending)
+  context     String           @default("") // D6: derived French context line, frozen at creation
+  createdAt   DateTime         @default(now())
+  respondedAt DateTime?
+
+  @@unique([requesterId, addresseeId]) // backstop; service enforces one row per unordered pair
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
 }
 
 // ── F-13: Legal documents & consent records ───────────────────────────────────

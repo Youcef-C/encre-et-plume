@@ -535,6 +535,53 @@ export const getMyProjects = (): Promise<MyProjectsResponse> =>
 export const createInvitation = (body: CreateInvitationRequest): Promise<InvitationDto> =>
   request<InvitationDto>('/invitations', { method: 'POST', body: JSON.stringify(body) });
 
+// ─── Contacts & connexions (MC-8) ─────────────────────────────────────────────
+import type {
+  ContactsResponse,
+  ConnectionRequestsResponse,
+  CreateConnectionRequestBody,
+  DecideConnectionRequestBody,
+  ConnectionRequestDto,
+  ConnectionSuggestionsResponse,
+  PeopleSearchResponse,
+  PresenceResponse,
+} from '@encre-et-plume/shared';
+
+export const getContacts = (): Promise<ContactsResponse> =>
+  request<ContactsResponse>('/contacts');
+
+export const removeContact = (userId: string): Promise<void> =>
+  request<void>(`/contacts/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+
+export const getConnectionRequests = (): Promise<ConnectionRequestsResponse> =>
+  request<ConnectionRequestsResponse>('/connections/requests');
+
+export const sendConnectionRequest = (toUser: string): Promise<ConnectionRequestDto> =>
+  request<ConnectionRequestDto>('/connections/requests', {
+    method: 'POST',
+    body: JSON.stringify({ toUser } satisfies CreateConnectionRequestBody),
+  });
+
+export const decideConnectionRequest = (
+  id: string,
+  status: DecideConnectionRequestBody['status'],
+): Promise<ConnectionRequestDto> =>
+  request<ConnectionRequestDto>(`/connections/requests/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status } satisfies DecideConnectionRequestBody),
+  });
+
+export const getConnectionSuggestions = (): Promise<ConnectionSuggestionsResponse> =>
+  request<ConnectionSuggestionsResponse>('/connections/suggestions');
+
+export const searchPeople = (q: string): Promise<PeopleSearchResponse> =>
+  request<PeopleSearchResponse>(`/people/search?q=${encodeURIComponent(q)}`);
+
+export const getPresence = (userIds: string[]): Promise<PresenceResponse> =>
+  userIds.length === 0
+    ? Promise.resolve({ items: [] })
+    : request<PresenceResponse>(`/presence?userIds=${userIds.map(encodeURIComponent).join(',')}`);
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

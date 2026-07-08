@@ -1,6 +1,6 @@
 import type { ComponentType, CSSProperties } from 'react';
 import type { NotifType } from '@encre-et-plume/shared';
-import { CheckIcon, CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, WarningIcon, XIcon } from '../components/icons';
+import { CheckIcon, CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, UserIcon, WarningIcon, XIcon } from '../components/icons';
 
 // French label composer per notification type (single source of truth on web)
 export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
@@ -15,6 +15,9 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   // MC-7: the call owner decided on the applicant's candidature
   application_accepted: (n) => `${n} a accepté votre candidature`,
   application_rejected: (n) => `${n} n'a pas retenu votre candidature`,
+  // MC-8: connection request lifecycle
+  connection_request:  (n) => `${n} souhaite se connecter avec vous`,
+  connection_accepted: (n) => `${n} a accepté votre demande de connexion`,
   // F-14: system notification (e.g. export ready)
   system:           ()  => 'Notification système',
 };
@@ -31,6 +34,9 @@ export const NOTIF_ICON: Record<NotifType, ComponentType<{ size?: number; style?
   comment:          PenIcon,
   application_accepted: CheckIcon,
   application_rejected: XIcon,
+  // MC-8: connection lifecycle
+  connection_request:  UserIcon,
+  connection_accepted: CheckIcon,
   system:           CircleDotIcon,
 };
 
@@ -47,6 +53,9 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   // MC-7: decision on the applicant's candidature → their own "Mes candidatures"
   application_accepted: '/mes-candidatures',
   application_rejected: '/mes-candidatures',
+  // MC-8: both connection notifications route to the contacts page
+  connection_request:  '/contacts',
+  connection_accepted: '/contacts',
   // F-14: system (export ready) → parametres for download link
   system:           '/parametres',
 };

@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ReceivedApplicationsService } from './received-applications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { ConnectionsService } from '../connections/connections.service';
 
 // application.findMany rows for list(): applicant ref + assets + minimal call.
 const APP = (o: Partial<Record<string, unknown>> = {}) => ({
@@ -33,6 +34,7 @@ describe('ReceivedApplicationsService.list', () => {
     service = new ReceivedApplicationsService(
       prisma as unknown as PrismaService,
       { create: jest.fn() } as unknown as NotificationsService,
+      { ensureConnected: jest.fn() } as unknown as ConnectionsService,
     );
   });
 
@@ -102,6 +104,7 @@ describe('ReceivedApplicationsService.decide', () => {
   let service: ReceivedApplicationsService;
   let prisma: { application: { findUnique: jest.Mock; update: jest.Mock } };
   let notifications: { create: jest.Mock };
+  let connections: { ensureConnected: jest.Mock };
 
   const ROW = (o: Partial<Record<string, unknown>> = {}) => ({
     id: 'app-1',
@@ -132,9 +135,11 @@ describe('ReceivedApplicationsService.decide', () => {
       },
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
+    connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
     service = new ReceivedApplicationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
+      connections as unknown as ConnectionsService,
     );
   });
 
@@ -171,6 +176,8 @@ describe('ReceivedApplicationsService.decide', () => {
       sourceUserId: 'acc-owner',
     });
     expect(dto).toMatchObject({ id: 'app-1', status: 'accepted', applicant: { userId: 'usr-lea' } });
+    // MC-8 seam: accepting creates the mutual connection between the owner and the applicant.
+    expect(connections.ensureConnected).toHaveBeenCalledWith('acc-owner', 'usr-lea');
   });
 
   it('rejects: persists status and notifies the applicant (application_rejected)', async () => {
@@ -180,5 +187,7 @@ describe('ReceivedApplicationsService.decide', () => {
       expect.objectContaining({ type: 'application_rejected', recipientId: 'usr-lea', refId: 'app-1' }),
     );
     expect(dto).toMatchObject({ status: 'rejected' });
+    // MC-8 seam: a rejection must NOT create a connection.
+    expect(connections.ensureConnected).not.toHaveBeenCalled();
   });
 });

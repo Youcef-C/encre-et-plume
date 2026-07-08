@@ -8,6 +8,7 @@ import {
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import type { ConnectionsService } from '../connections/connections.service';
 
 const userRow = (id: string, roles: string[] = ['dessinateur']) => ({
   id,
@@ -48,6 +49,7 @@ describe('InvitationsService', () => {
     };
   };
   let notifications: { create: jest.Mock };
+  let connections: { ensureConnected: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -63,9 +65,11 @@ describe('InvitationsService', () => {
       },
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
+    connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
+      connections as unknown as ConnectionsService,
     );
   });
 
@@ -204,6 +208,14 @@ describe('InvitationsService', () => {
         refId: 'inv-1',
         sourceUserId: 'acc-to',
       });
+      // MC-8 seam: accepting an invite creates the mutual connection (sender ↔ recipient).
+      expect(connections.ensureConnected).toHaveBeenCalledWith('acc-from', 'acc-to');
+    });
+
+    it('declines: does NOT create a connection', async () => {
+      prisma.invitation.update.mockResolvedValue(INV({ status: 'declined', respondedAt: new Date() }));
+      await service.respond('acc-to', 'inv-1', { status: 'declined' });
+      expect(connections.ensureConnected).not.toHaveBeenCalled();
     });
   });
 });

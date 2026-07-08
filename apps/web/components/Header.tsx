@@ -25,6 +25,7 @@ import {
   PenIcon,
   StarIcon,
   UserIcon,
+  UsersIcon,
   XIcon,
 } from './icons';
 
@@ -700,7 +701,7 @@ export default function Header() {
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
                 className="ep-menu-item"
-                style={{ ...menuItemStyle, borderBottom: '2px solid var(--border)', justifyContent: 'space-between' }}
+                style={{ ...menuItemStyle, justifyContent: 'space-between' }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <span style={iconStyle}><InboxIcon size={16} /></span>
@@ -710,6 +711,18 @@ export default function Header() {
                   count={counts.demandes}
                   label={`${counts.demandes} demandes en attente`}
                 />
+              </Link>
+
+              {/* Contacts & connexions (MC-8) — closes the personal-space group */}
+              <Link
+                href="/contacts"
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
+                style={{ ...menuItemStyle, borderBottom: '2px solid var(--border)' }}
+              >
+                <span style={iconStyle}><UsersIcon size={16} /></span>
+                Contacts &amp; connexions
               </Link>
 
               {/* Role-gated links — hidden (not disabled) when role lacks access */}

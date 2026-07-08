@@ -99,6 +99,18 @@ export function UserIcon(p: IconProps) {
   );
 }
 
+// MC-8: two-figure "network / contacts" glyph for the avatar-menu entry.
+export function UsersIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M3.5 20c1.2-3 3.3-4.4 5.5-4.4S13.3 17 14.5 20" />
+      <path d="M15.5 5.2A3.2 3.2 0 0119 8.4a3.2 3.2 0 01-1.6 2.8" />
+      <path d="M17 15.8c1.9.3 3.4 1.7 4.5 4.2" />
+    </Svg>
+  );
+}
+
 export function PenIcon(p: IconProps) {
   return (
     <Svg {...p}>

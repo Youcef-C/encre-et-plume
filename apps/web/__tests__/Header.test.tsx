@@ -413,6 +413,14 @@ describe('Header — dropdown entries', () => {
     expect(item).toHaveAttribute('href', '/candidatures-recues');
   });
 
+  it('shows Contacts & connexions link (MC-8)', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /contacts & connexions/i });
+    expect(item).toHaveAttribute('href', '/contacts');
+  });
+
   it('closes menu when a dropdown item is clicked', async () => {
     const user = userEvent.setup();
     renderHeader({ account: mockAccount });

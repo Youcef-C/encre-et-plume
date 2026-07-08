@@ -27,7 +27,10 @@ const VIEWER = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 describe('MatchesService', () => {
   let service: MatchesService;
-  let prisma: { profile: { findUnique: jest.Mock; findMany: jest.Mock } };
+  let prisma: {
+    profile: { findUnique: jest.Mock; findMany: jest.Mock };
+    connection: { findMany: jest.Mock };
+  };
   let redis: { get: jest.Mock; set: jest.Mock };
 
   beforeEach(() => {
@@ -36,6 +39,7 @@ describe('MatchesService', () => {
         findUnique: jest.fn().mockResolvedValue(VIEWER()),
         findMany: jest.fn().mockResolvedValue([]),
       },
+      connection: { findMany: jest.fn().mockResolvedValue([]) },
     };
     redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
     service = new MatchesService(prisma as unknown as PrismaService, redis as unknown as RedisService);
@@ -61,11 +65,25 @@ describe('MatchesService', () => {
     it('excludes the viewer, tombstoned accounts, and non-creators, ordered trending then oldest, bounded scan', async () => {
       await service.getSuggestions('viewer-1', 4);
       const args = prisma.profile.findMany.mock.calls[0][0];
-      expect(args.where.accountId).toEqual({ not: 'viewer-1' });
+      expect(args.where.accountId).toEqual({ notIn: ['viewer-1'] });
       expect(args.where.account).toEqual({ deletedAt: null });
       expect(args.where.NOT).toEqual({ creatorRoles: { isEmpty: true } });
       expect(args.orderBy).toEqual([{ trendingScore: 'desc' }, { createdAt: 'asc' }]);
       expect(args.take).toBe(200);
+    });
+
+    it('excludes accounts already connected or with a pending request (MC-8, either direction)', async () => {
+      prisma.connection.findMany.mockResolvedValue([
+        { requesterId: 'viewer-1', addresseeId: 'acc-connected' },
+        { requesterId: 'acc-pending', addresseeId: 'viewer-1' },
+      ]);
+      await service.getSuggestions('viewer-1', 4);
+      const args = prisma.profile.findMany.mock.calls[0][0];
+      expect(new Set(args.where.accountId.notIn)).toEqual(new Set(['viewer-1', 'acc-connected', 'acc-pending']));
+      // only non-declined pairs feed the exclusion
+      expect(prisma.connection.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ status: { in: ['pending', 'accepted'] } }) }),
+      );
     });
   });
 

@@ -11,7 +11,9 @@ export type NotifType =
   | 'comment'
   | 'system' // F-14: system notifications (data export ready, etc.)
   | 'application_accepted' // MC-7: the call owner accepted the applicant's candidature
-  | 'application_rejected'; // MC-7: the call owner did not retain the applicant's candidature
+  | 'application_rejected' // MC-7: the call owner did not retain the applicant's candidature
+  | 'connection_request' // MC-8: someone sent a connection request ("souhaite se connecter")
+  | 'connection_accepted'; // MC-8: the recipient accepted the connection request
 
 export type NotifArea = 'messages' | 'demandes' | 'signalements' | 'autres';
 

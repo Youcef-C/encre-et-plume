@@ -68,6 +68,13 @@ async function main() {
     await prisma.passwordResetToken.deleteMany({ where: { accountId: { in: accountIds } } });
   }
 
+  // 4d. Delete MC-8 Connection rows referencing those accounts (FK-restricts Account deletion)
+  if (accountIds.length > 0) {
+    await prisma.connection.deleteMany({
+      where: { OR: [{ requesterId: { in: accountIds } }, { addresseeId: { in: accountIds } }] },
+    });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import type { ApplicationDto, ReceivedApplicationsResponse, ReceivedCallGroup } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConnectionsService } from '../connections/connections.service';
 import { ACCOUNT_REF_SELECT, toApplicationDto } from './calls.service';
 
 // application.findMany({ include }) row for list() — the ApplicationDto source plus the minimal call.
@@ -28,6 +29,7 @@ export class ReceivedApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly connections: ConnectionsService,
   ) {}
 
   async list(ownerId: string): Promise<ReceivedApplicationsResponse> {
@@ -78,7 +80,10 @@ export class ReceivedApplicationsService {
 
     await this.prisma.application.update({ where: { id: applicationId }, data: { status } });
 
-    // MC-8: create the Connection ("Contacts & connexions") here when MC-8 lands.
+    // MC-8: an accepted application creates the mutual Connection ("Contacts & connexions").
+    if (status === 'accepted') {
+      await this.connections.ensureConnected(ownerId, app.applicantId);
+    }
 
     // F-5: notify the applicant of the decision (both branches).
     await this.notifications.create({

@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ConnectionsModule } from '../connections/connections.module';
 
 /** MC-1 "Appels à projets" preview: authenticated GET /calls. MC-4 + MC-5 extend this module. */
 @Module({
@@ -20,6 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       signOptions: { expiresIn: '7d' },
     }),
     NotificationsModule, // F-5 seam: notify the call owner on a new MC-5 application
+    ConnectionsModule, // MC-8 seam: an accepted application creates the mutual connection
   ],
   controllers: [CallsController, MyApplicationsController, ReceivedApplicationsController],
   providers: [

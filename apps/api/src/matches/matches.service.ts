@@ -110,10 +110,26 @@ export class MatchesService {
     const viewerRhythm = viewer!.seekingProjectLength;
     const preferredRole = derivePreferredRole(viewer!);
 
+    // MC-8: exclude the viewer AND anyone already connected or with a pending request (either
+    // direction). Declined pairs stay suggestible (re-connecting is allowed). Fixes both /trouver
+    // (MC-2) and /connections/suggestions (MC-8) since both route through compute().
+    const pairs = (await this.prisma.connection.findMany({
+      where: {
+        OR: [{ requesterId: viewerAccountId }, { addresseeId: viewerAccountId }],
+        status: { in: ['pending', 'accepted'] },
+      },
+      select: { requesterId: true, addresseeId: true },
+    })) as { requesterId: string; addresseeId: string }[];
+    const excludeIds = new Set<string>([viewerAccountId]);
+    for (const p of pairs) {
+      excludeIds.add(p.requesterId);
+      excludeIds.add(p.addresseeId);
+    }
+
     const rows = (await this.prisma.profile.findMany({
       where: {
         account: { deletedAt: null }, // tombstoned out; AD-6 ban flag joins here later
-        accountId: { not: viewerAccountId }, // self-exclusion (MC-8 close-connections join here later)
+        accountId: { notIn: [...excludeIds] }, // self + connected/pending pairs (MC-8)
         NOT: { creatorRoles: { isEmpty: true } }, // creators only
       },
       orderBy: ORDER_BY,

@@ -107,6 +107,24 @@ describe('NotificationsService', () => {
       expect(item!.area).toBe('demandes');
     });
 
+    it('maps connection_request type to demandes area (recipient-actionable, MC-8)', async () => {
+      const row = makeRow({ type: 'connection_request' });
+      prisma.notification.create.mockResolvedValue(row);
+
+      const item = await service.create({ recipientId: ACCOUNT_A, type: 'connection_request' });
+
+      expect(item!.area).toBe('demandes');
+    });
+
+    it('maps connection_accepted type to autres area (informational, MC-8)', async () => {
+      const row = makeRow({ type: 'connection_accepted' });
+      prisma.notification.create.mockResolvedValue(row);
+
+      const item = await service.create({ recipientId: ACCOUNT_A, type: 'connection_accepted' });
+
+      expect(item!.area).toBe('autres');
+    });
+
     it('maps report type to signalements area', async () => {
       const row = makeRow({ type: 'report' });
       prisma.notification.create.mockResolvedValue(row);

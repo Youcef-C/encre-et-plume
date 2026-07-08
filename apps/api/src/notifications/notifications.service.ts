@@ -25,6 +25,10 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   // a decision must not inflate the applicant's demandes badge.
   application_accepted: 'autres',
   application_rejected: 'autres',
+  // MC-8: a connection request is recipient-actionable (Accepter/Refuser) → 'demandes', same as an
+  // application. The acceptance notif is informational → 'autres' (must not inflate the actionable badge).
+  connection_request: 'demandes',
+  connection_accepted: 'autres',
 };
 
 type SourceUserRow = { displayName: string; profileSlug: string; avatar: string | null } | null;

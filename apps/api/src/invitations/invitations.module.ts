@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ConnectionsModule } from '../connections/connections.module';
 
 /** MC-3 "Proposer une collab": authenticated POST/GET/PATCH /invitations. */
 @Module({
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       signOptions: { expiresIn: '7d' },
     }),
     NotificationsModule, // F-5 seam: notify recipient on send, sender on response
+    ConnectionsModule, // MC-8 seam: an accepted invite creates the mutual connection
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService, PrismaService, RedisService, SessionGuard],

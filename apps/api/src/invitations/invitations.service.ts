@@ -16,6 +16,7 @@ import type {
 } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConnectionsService } from '../connections/connections.service';
 import { toProjectSummary } from '../projects/projects.service';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { RespondInvitationDto } from './dto/respond-invitation.dto';
@@ -98,6 +99,7 @@ export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly connections: ConnectionsService,
   ) {}
 
   async create(fromUserId: string, dto: CreateInvitationDto): Promise<InvitationDto> {
@@ -187,7 +189,12 @@ export class InvitationsService {
       include: INVITATION_INCLUDE,
     })) as InvitationRow;
 
-    // CS-2/MC-8 seam: on accept, collaboration/connection records land here later (plan §1).
+    // MC-8: an accepted invite creates the mutual connection. CS-2 seam: collaboration records
+    // (the shared workspace) still land here later.
+    if (dto.status === 'accepted') {
+      await this.connections.ensureConnected(inv.fromUserId, accountId);
+    }
+
     await this.notifications.create({
       recipientId: inv.fromUserId,
       type: 'invitation',
