@@ -613,6 +613,17 @@ export const createConversation = (body: CreateConversationRequest): Promise<Con
 export const markConversationRead = (conversationId: string): Promise<MarkReadResponse> =>
   request<MarkReadResponse>(`/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'POST' });
 
+// ─── Blocks & mute (MC-10) ─────────────────────────────────────────────────────
+import type { BlockKind, BlockDto, BlocksResponse, CreateBlockRequest } from '@encre-et-plume/shared';
+
+export const getMyBlocks = (): Promise<BlocksResponse> => request<BlocksResponse>('/me/blocks');
+
+export const createBlock = (body: CreateBlockRequest): Promise<BlockDto> =>
+  request<BlockDto>('/me/blocks', { method: 'POST', body: JSON.stringify(body) });
+
+export const deleteBlock = (userId: string, kind: BlockKind): Promise<void> =>
+  request<void>(`/me/blocks/${encodeURIComponent(userId)}?kind=${kind}`, { method: 'DELETE' });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

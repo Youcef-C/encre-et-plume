@@ -9,6 +9,7 @@ import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MatchesModule } from '../matches/matches.module';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /**
  * MC-8 "Contacts & connexions": authenticated /contacts, /connections/*, /people/search, /presence.
@@ -23,6 +24,7 @@ import { MatchesModule } from '../matches/matches.module';
     }),
     NotificationsModule, // F-5: notify recipient on request, requester on accept
     MatchesModule, // MC-2: suggestions engine (delegated)
+    BlocksModule, // MC-10: blocked-pair check on createRequest
   ],
   controllers: [ConnectionsController],
   providers: [ConnectionsService, PresenceService, PrismaService, RedisService, SessionGuard],

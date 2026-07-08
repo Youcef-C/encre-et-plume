@@ -80,13 +80,18 @@ describe('ProfilesService', () => {
     account: { findUnique: jest.Mock };
     profile: { upsert: jest.Mock; findUnique: jest.Mock };
   };
+  let blocks: { pairFlags: jest.Mock; isBlockedPair: jest.Mock };
 
   beforeEach(() => {
     prisma = {
       account: { findUnique: jest.fn() },
       profile: { upsert: jest.fn(), findUnique: jest.fn() },
     };
-    service = new ProfilesService(prisma as unknown as PrismaService);
+    blocks = {
+      pairFlags: jest.fn().mockResolvedValue({ viewerHasBlocked: false, blockedByTarget: false }),
+      isBlockedPair: jest.fn().mockResolvedValue(false),
+    };
+    service = new ProfilesService(prisma as unknown as PrismaService, blocks as unknown as never);
   });
 
   // ── getBySlug ────────────────────────────────────────────────────────────────
@@ -196,6 +201,39 @@ describe('ProfilesService', () => {
       const res = await service.getBySlug('yuki-moreau');
 
       expect(res.creatorRoles).toEqual([]);
+    });
+
+    // ── MC-10 round 2 (B10): directional block flags ──
+    it('both block flags false for an anonymous viewer (no pairFlags call)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      const res = await service.getBySlug('yuki-moreau');
+      expect(res.viewerHasBlocked).toBe(false);
+      expect(res.blockedByTarget).toBe(false);
+      expect(blocks.pairFlags).not.toHaveBeenCalled();
+    });
+
+    it('both block flags false when the owner views their own profile (no pairFlags call)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      const res = await service.getBySlug('yuki-moreau', 'acc-1');
+      expect(res.viewerHasBlocked).toBe(false);
+      expect(res.blockedByTarget).toBe(false);
+      expect(blocks.pairFlags).not.toHaveBeenCalled();
+    });
+
+    it('viewerHasBlocked when the signed-in viewer has blocked this account', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      blocks.pairFlags.mockResolvedValue({ viewerHasBlocked: true, blockedByTarget: false });
+      const res = await service.getBySlug('yuki-moreau', 'viewer');
+      expect(blocks.pairFlags).toHaveBeenCalledWith('viewer', 'acc-1');
+      expect(res.viewerHasBlocked).toBe(true);
+      expect(res.blockedByTarget).toBe(false);
+    });
+
+    it('blockedByTarget when this account has blocked the signed-in viewer', async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      blocks.pairFlags.mockResolvedValue({ viewerHasBlocked: false, blockedByTarget: true });
+      const res = await service.getBySlug('yuki-moreau', 'viewer');
+      expect(res.blockedByTarget).toBe(true);
     });
   });
 
@@ -395,6 +433,28 @@ describe('ProfilesService', () => {
       const res = await service.getPortfolio('yuki-moreau');
 
       expect(res).toEqual([]);
+    });
+
+    // ── MC-10 round 2 (B10): portfolio hidden for a blocked pair (either direction) ──
+    it('returns [] for a blocked-pair viewer even when items exist', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...BASE_ACCOUNT,
+        profile: { ...BASE_PROFILE, portfolio: [PORTFOLIO_ITEM] },
+      });
+      blocks.isBlockedPair.mockResolvedValue(true);
+      const res = await service.getPortfolio('yuki-moreau', 'viewer');
+      expect(blocks.isBlockedPair).toHaveBeenCalledWith('viewer', 'acc-1');
+      expect(res).toEqual([]);
+    });
+
+    it('returns the full portfolio for a third-party (non-blocked) viewer', async () => {
+      prisma.account.findUnique.mockResolvedValue({
+        ...BASE_ACCOUNT,
+        profile: { ...BASE_PROFILE, portfolio: [PORTFOLIO_ITEM] },
+      });
+      blocks.isBlockedPair.mockResolvedValue(false);
+      const res = await service.getPortfolio('yuki-moreau', 'viewer');
+      expect(res).toHaveLength(1);
     });
 
     it('throws NotFoundException for unknown slug', async () => {

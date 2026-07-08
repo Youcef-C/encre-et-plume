@@ -32,7 +32,7 @@ const API_ORIGIN =
 const TYPING_EXPIRY_MS = 4000;
 
 // A thread message can be optimistic (pending) or a failed send awaiting retry.
-export type ThreadMessage = MessageDto & { pending?: boolean; failed?: boolean };
+export type ThreadMessage = MessageDto & { pending?: boolean; failed?: boolean; error?: string };
 
 export type PanelState = 'closed' | 'open' | 'minimized';
 export type ConnectionState = 'connected' | 'reconnecting';
@@ -358,9 +358,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
           };
           return [conv, ...prev.filter((c) => c.id !== conversationId)];
         });
-      } catch {
+      } catch (e) {
+        // Surface the server's neutral message (e.g. MC-10 block: "Impossible d'envoyer le message.")
+        // without ever disclosing a block. Falls back to the generic label.
+        const msg = (e as { message?: string } | null)?.message;
         setActiveMessages((list) =>
-          list.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)),
+          list.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true, error: msg } : m)),
         );
       }
     },

@@ -10,6 +10,7 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: 'cookies', label: 'Cookies' },
   { id: 'securite', label: 'Sécurité' },
   { id: 'contenu-adulte', label: 'Contenu 18+' },
+  { id: 'comptes-bloques', label: 'Comptes bloqués' },
   { id: 'mes-donnees', label: 'Mes données' },
 ];
 

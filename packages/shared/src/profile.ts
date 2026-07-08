@@ -53,6 +53,12 @@ export interface ProfileResponse {
   country: string | null;
   region: PartnerRegion | null;
   availability: PartnerAvailability;
+  /** MC-10 round 2 (D8): directional block flags relative to the signed-in viewer. Both false for
+   *  anonymous viewers and for the owner viewing their own profile. kind='block' only — mute is never
+   *  disclosed. `viewerHasBlocked` → FE shows "Débloquer" + "Bloqué" badge; `blockedByTarget` → FE
+   *  shows "Cet utilisateur vous a bloqué·e." */
+  viewerHasBlocked: boolean;
+  blockedByTarget: boolean;
 }
 
 /** PATCH /profiles/me body. All fields optional; only provided fields change. */

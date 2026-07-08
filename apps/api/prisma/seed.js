@@ -197,7 +197,9 @@ const WORK_FUNDING_GOALS = {
 // DR-3: reviews for the showcase manga (Histoire/Dessin sub-scores + aggregate + list).
 const WORK_REVIEWS = {
   'lames-de-brume': [
-    { authorName: 'Léa B.', storyRating: 5, artRating: 4, text: 'Une plume incroyable, hâte de lire la suite.' },
+    // MC-10: one review carries a real authorId (dr1-yuki-moreau) so the "mute" flow is exercisable in
+    // dev + e2e; the other keeps authorId null (covers the null-author, never-filtered branch).
+    { authorName: 'Yuki Moreau', authorSlug: 'dr1-yuki-moreau', storyRating: 5, artRating: 4, text: 'Une plume incroyable, hâte de lire la suite.' },
     { authorName: 'Hugo D.', storyRating: 4, artRating: 5, text: 'Le dessin est somptueux, chaque planche est un tableau.' },
   ],
 };
@@ -368,7 +370,7 @@ const PROJECT_CALLS = [
     title: 'Seinen urbain', authorRole: 'scenariste', seekingRoles: ['dessinateur'], authorName: 'Camille Roux', authorSlug: 'dr1-camille-roux',
     genres: ['seinen'], scope: '~90 planches', tags: ['Seinen', '~90 planches'],
     description: 'Récit choral dans un Lyon nocturne. Scénario prêt, je cherche un·e dessinateur·rice pour un partenariat au long cours.',
-    closesAt: inDays(30), applicationCount: 1, status: 'open', createdAt: inMinutes(4),
+    closesAt: inDays(30), applicationCount: 0, status: 'open', createdAt: inMinutes(4),
   },
   // MC-6 "Mes candidatures": three calls the dedicated MC6_APPLICANT_ACCOUNT has applied to (one
   // per status; QA fix — was dr1-camille-roux, moved to stop racing mc5-apply-call.spec.ts's
@@ -674,6 +676,12 @@ async function main() {
   // Optional-chained: the Application model ships with MC-5; older checkouts/CI clients lack it.
   // MC-4X: ApplicationAsset cascades on application delete; ProjectCallAsset cascades on call delete.
   // The explicit projectCallAsset.deleteMany is a no-op safety (Cascade covers it).
+  // F-5: notifications reference applications/calls by opaque refId (no FK), so wiping applications
+  // here would orphan every "someone applied to your call" notification. The seed creates zero
+  // notifications, so a full reset is safe and keeps reseed idempotent — without it, runtime/e2e
+  // application notifications pile up across reseeds (owners saw phantom "applied" notifications with
+  // nothing in their received list).
+  await prisma.notification?.deleteMany({});
   await prisma.application?.deleteMany({});
   await prisma.projectCallAsset?.deleteMany({});
   await prisma.projectCall.deleteMany({});
@@ -951,7 +959,10 @@ async function main() {
     if (!work) continue;
     await prisma.review.deleteMany({ where: { workId: work.id } });
     for (const r of reviews) {
-      await prisma.review.create({ data: { workId: work.id, authorName: r.authorName, storyRating: r.storyRating, artRating: r.artRating, text: r.text } });
+      const authorId = r.authorSlug
+        ? (await prisma.account.findUnique({ where: { profileSlug: r.authorSlug }, select: { id: true } }))?.id ?? null
+        : null;
+      await prisma.review.create({ data: { workId: work.id, authorId, authorName: r.authorName, storyRating: r.storyRating, artRating: r.artRating, text: r.text } });
     }
   }
 

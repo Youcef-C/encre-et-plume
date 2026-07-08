@@ -4,8 +4,18 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GalleryController } from './gallery.controller';
 import { GalleryService } from './gallery.service';
 import { AgeGateService } from '../age-gate/age-gate.service';
+import { BlocksService } from '../blocks/blocks.service';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import type { AuthRequest } from '../auth/guards/session.guard';
+
+const ANON = {} as AuthRequest;
+const hc = (o: Partial<{ illustrationIds: Set<string> }> = {}) => ({
+  accountIds: new Set<string>(),
+  workIds: new Set<string>(),
+  workSlugs: new Set<string>(),
+  illustrationIds: new Set<string>(),
+  ...o,
+});
 
 describe('GalleryController', () => {
   let controller: GalleryController;
@@ -17,6 +27,7 @@ describe('GalleryController', () => {
     getMoreByArtist: jest.Mock;
   };
   let ageGate: { assertMayView18Plus: jest.Mock };
+  let blocks: { hiddenContent: jest.Mock };
 
   beforeEach(async () => {
     service = {
@@ -34,12 +45,14 @@ describe('GalleryController', () => {
       getMoreByArtist: jest.fn().mockResolvedValue([]),
     };
     ageGate = { assertMayView18Plus: jest.fn().mockResolvedValue(undefined) };
+    blocks = { hiddenContent: jest.fn().mockResolvedValue(null) };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [GalleryController],
       providers: [
         { provide: GalleryService, useValue: service },
         { provide: AgeGateService, useValue: ageGate },
+        { provide: BlocksService, useValue: blocks },
         { provide: OptionalSessionGuard, useValue: { canActivate: () => true } },
       ],
     })
@@ -61,14 +74,14 @@ describe('GalleryController', () => {
   });
 
   it('GET /illustrations parses the query and delegates to findIllustrations', async () => {
-    const result = await controller.illustrations({ category: 'personnages', page: '2' });
+    const result = await controller.illustrations({ category: 'personnages', page: '2' }, ANON);
 
     expect(service.findIllustrations).toHaveBeenCalledWith(expect.objectContaining({ category: 'personnages', page: 2 }));
     expect(result.total).toBe(0);
   });
 
   it('GET /illustrations/trending delegates to the service', async () => {
-    const result = await controller.trending();
+    const result = await controller.trending(ANON);
     expect(service.getTrending).toHaveBeenCalled();
     expect(result).toEqual([{ id: 'i1', rank: 1 }]);
   });
@@ -175,9 +188,51 @@ describe('GalleryController', () => {
   it('GET /illustrations/:id/more delegates to getMoreByArtist', async () => {
     service.getMoreByArtist.mockResolvedValue([{ id: 'i2' }]);
 
-    const result = await controller.more('i1');
+    const result = await controller.more('i1', ANON);
 
     expect(service.getMoreByArtist).toHaveBeenCalledWith('i1');
     expect(result).toEqual([{ id: 'i2' }]);
+  });
+
+  // ── MC-10 round 2 (B13): blocked-pair illustration hiding ──
+  describe('blocked-pair filtering', () => {
+    const req = { accountId: 'acc-1' } as AuthRequest;
+
+    it('drops list items in the illustrationIds set; summary stays global', async () => {
+      service.findIllustrations.mockResolvedValue({
+        items: [{ id: 'i1' }, { id: 'i2' }],
+        total: 2,
+        page: 1,
+        pageSize: 12,
+        totalPages: 1,
+        summary: { illustrationCount: 2, artistCount: 2 },
+      });
+      blocks.hiddenContent.mockResolvedValue(hc({ illustrationIds: new Set(['i1']) }));
+      const res = await controller.illustrations({}, req);
+      expect(res.items).toEqual([{ id: 'i2' }]);
+      expect(res.summary).toEqual({ illustrationCount: 2, artistCount: 2 }); // D10 global
+    });
+
+    it('drops trending + more cards by id', async () => {
+      service.getTrending.mockResolvedValue([{ id: 'i1' }, { id: 'i2' }]);
+      service.getMoreByArtist.mockResolvedValue([{ id: 'i1' }, { id: 'i2' }]);
+      blocks.hiddenContent.mockResolvedValue(hc({ illustrationIds: new Set(['i1']) }));
+      expect((await controller.trending(req)).map((c) => c.id)).toEqual(['i2']);
+      expect((await controller.more('src', req)).map((c) => c.id)).toEqual(['i2']);
+    });
+
+    it('404s detail + preview for a blocked-pair illustration', async () => {
+      blocks.hiddenContent.mockResolvedValue(hc({ illustrationIds: new Set(['i1']) }));
+      await expect(controller.illustration('i1', req)).rejects.toThrow('Illustration introuvable');
+      await expect(controller.preview('i1', req)).rejects.toThrow('Illustration introuvable');
+      expect(service.getIllustration).not.toHaveBeenCalled();
+      expect(service.getPreview).not.toHaveBeenCalled();
+    });
+
+    it('does not consult hiddenContent for an anonymous viewer', async () => {
+      await controller.illustrations({}, ANON);
+      await controller.illustration('i1', ANON);
+      expect(blocks.hiddenContent).not.toHaveBeenCalled();
+    });
   });
 });

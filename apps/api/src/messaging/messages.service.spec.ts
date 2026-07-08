@@ -5,6 +5,7 @@ import type { RedisService } from '../redis/redis.service';
 import type { QueueService } from '../queue/queue.service';
 import type { PresenceService } from '../connections/presence.service';
 import type { MessagingGateway } from './messaging.gateway';
+import type { BlocksService } from '../blocks/blocks.service';
 
 const ACC = (id: string) => ({
   id,
@@ -96,20 +97,23 @@ function build(over: {
   queue?: { enqueue: jest.Mock };
   presence?: { get: jest.Mock };
   gateway?: { emitMessageNew: jest.Mock; emitConversationRead: jest.Mock };
+  blocks?: { isBlockedPair: jest.Mock };
 } = {}) {
   const prisma = over.prisma ?? makePrisma();
   const redis = over.redis ?? { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(undefined) };
   const queue = over.queue ?? { enqueue: jest.fn().mockResolvedValue(undefined) };
   const presence = over.presence ?? { get: jest.fn().mockResolvedValue({ 'acc-2': { online: true, lastSeen: null } }) };
   const gateway = over.gateway ?? { emitMessageNew: jest.fn(), emitConversationRead: jest.fn() };
+  const blocks = over.blocks ?? { isBlockedPair: jest.fn().mockResolvedValue(false) };
   const service = new MessagesService(
     prisma as unknown as PrismaService,
     redis as unknown as RedisService,
     queue as unknown as QueueService,
     presence as unknown as PresenceService,
     gateway as unknown as MessagingGateway,
+    blocks as unknown as BlocksService,
   );
-  return { service, prisma, redis, queue, presence, gateway };
+  return { service, prisma, redis, queue, presence, gateway, blocks };
 }
 
 const origDisable = process.env['DISABLE_RATE_LIMIT'];
@@ -321,5 +325,48 @@ describe('MessagesService.listConversations', () => {
     expect(res.totalUnread).toBe(3);
     expect(res.items[0].unreadCount).toBe(3);
     expect(res.items[0].name).toBe('Name acc-2'); // DM → the other participant's display name
+  });
+});
+
+describe('MessagesService — MC-10 block enforcement (DM only)', () => {
+  it('sendMessage on a blocked DM pair → neutral 400, no message persisted', async () => {
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service, prisma } = build({ blocks });
+    await expect(service.sendMessage('acc-1', 'conv-1', { body: 'Salut' })).rejects.toThrow(
+      "Impossible d'envoyer le message.",
+    );
+    expect(blocks.isBlockedPair).toHaveBeenCalledWith('acc-1', 'acc-2');
+    expect(prisma.message.create).not.toHaveBeenCalled();
+  });
+
+  it('the neutral error is a BadRequestException (no block disclosure)', async () => {
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service } = build({ blocks });
+    await expect(service.sendMessage('acc-1', 'conv-1', { body: 'Salut' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('group sends are unaffected by blocks', async () => {
+    const prisma = makePrisma();
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ type: 'group', name: 'Projet' }));
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service } = build({ prisma, blocks });
+    await expect(service.sendMessage('acc-1', 'conv-1', { body: 'Salut' })).resolves.toBeTruthy();
+    expect(blocks.isBlockedPair).not.toHaveBeenCalled();
+  });
+
+  it('getMessages history stays readable on a blocked pair', async () => {
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service } = build({ blocks });
+    await expect(service.getMessages('acc-1', 'conv-1', {})).resolves.toBeTruthy();
+  });
+
+  it('createConversation (getOrCreateDm) on a blocked pair → neutral 400', async () => {
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service } = build({ blocks });
+    await expect(service.createConversation('acc-1', { participantId: 'acc-2' })).rejects.toThrow(
+      "Impossible d'envoyer le message.",
+    );
   });
 });

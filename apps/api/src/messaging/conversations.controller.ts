@@ -25,6 +25,8 @@ function parseLimit(raw: unknown): number | undefined {
 @Controller('conversations')
 @UseGuards(SessionGuard)
 export class ConversationsController {
+  // ponytail: PUB-6 seam — "Signaler ce message" + POST /reports targetType 'message' land with PUB-6
+  // (MC-10 plan §8: no reports module exists yet; don't invent a one-off endpoint here).
   constructor(private readonly service: MessagesService) {}
 
   @Get()

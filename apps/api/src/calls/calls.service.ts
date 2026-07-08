@@ -35,6 +35,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BlocksService } from '../blocks/blocks.service';
 import type { CreateCallDto } from './dto/create-call.dto';
 import type { UpdateCallDto } from './dto/update-call.dto';
 import type { ApplyToCallDto } from './dto/apply-to-call.dto';
@@ -170,6 +171,7 @@ export class CallsService {
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
     private readonly notifications: NotificationsService,
+    private readonly blocks: BlocksService,
   ) {}
 
   // ── MC-1 preview (unchanged): newest open calls, limited ─────────────────────
@@ -510,6 +512,11 @@ export class CallsService {
       | Pick<CallRow, 'authorId' | 'status' | 'closesAt' | 'seekingRoles'>
       | null;
     if (!call) throw new NotFoundException('Cet appel est introuvable.');
+    // MC-10: a blocked pair 404s exactly like an unknown call — the blocked applicant can't diff it.
+    // (call.authorId is nullable for seed fixtures; a null-owner call can't be part of a block pair.)
+    if (call.authorId && (await this.blocks.isBlockedPair(viewerId, call.authorId))) {
+      throw new NotFoundException('Cet appel est introuvable.');
+    }
     if (call.authorId === viewerId) {
       throw new ForbiddenException('Vous ne pouvez pas candidater à votre propre appel.');
     }

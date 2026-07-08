@@ -3,6 +3,9 @@ import { CallsService } from './calls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { BlocksService } from '../blocks/blocks.service';
+
+const noBlocks = () => ({ isBlockedPair: jest.fn().mockResolvedValue(false) }) as unknown as BlocksService;
 
 const APPLICANT_ROW = {
   id: 'acc-applicant',
@@ -40,6 +43,7 @@ const PORTFOLIO_ITEM = { id: 'pi-1', image: 'https://cdn/portfolio-1.webp', prof
 
 describe('CallsService.apply', () => {
   let service: CallsService;
+  let blocks: { isBlockedPair: jest.Mock };
   let prisma: {
     projectCall: { findUnique: jest.Mock; update: jest.Mock };
     application: { findFirst: jest.Mock; create: jest.Mock };
@@ -67,14 +71,24 @@ describe('CallsService.apply', () => {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
+    blocks = { isBlockedPair: jest.fn().mockResolvedValue(false) };
     service = new CallsService(
       prisma as unknown as PrismaService,
       {} as unknown as QueueService,
       notifications as unknown as NotificationsService,
+      blocks as unknown as BlocksService,
     );
   });
 
   const portfolioSample = { samples: [{ portfolioItemId: 'pi-1' }] };
+
+  it('MC-10: 404s a blocked pair with the appel-introuvable wording (no block disclosure)', async () => {
+    blocks.isBlockedPair.mockResolvedValue(true);
+    await expect(service.apply('acc-viewer', 'call-1', portfolioSample)).rejects.toThrow(
+      'Cet appel est introuvable.',
+    );
+    expect(prisma.application.create).not.toHaveBeenCalled();
+  });
 
   it('creates a pending application from a portfolio sample and returns the ApplicationDto', async () => {
     const dto = await service.apply('acc-applicant', 'call-1', { ...portfolioSample, message: 'Bonjour' });
@@ -302,6 +316,7 @@ describe('CallsService.apply — MC-4X role gate + derived appliedAs', () => {
       prisma as unknown as PrismaService,
       {} as unknown as QueueService,
       { create: jest.fn().mockResolvedValue(null) } as unknown as NotificationsService,
+      noBlocks(),
     );
   };
 

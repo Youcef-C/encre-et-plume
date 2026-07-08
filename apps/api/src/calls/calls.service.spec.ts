@@ -3,6 +3,9 @@ import { CallsService, parseCallsLimit } from './calls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { BlocksService } from '../blocks/blocks.service';
+
+const noBlocks = () => ({ isBlockedPair: jest.fn().mockResolvedValue(false) }) as unknown as BlocksService;
 
 const CALL_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'call-1',
@@ -44,7 +47,7 @@ describe('CallsService.findOpenCalls', () => {
 
   beforeEach(() => {
     prisma = { projectCall: { findMany: jest.fn().mockResolvedValue([]) } };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('queries only open calls, newest first, limited', async () => {
@@ -93,7 +96,7 @@ describe('CallsService.findBoard', () => {
       application: { findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue(null) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('filters by role — matches calls seeking that role (ANY, via has)', async () => {
@@ -223,7 +226,7 @@ describe('CallsService.createCall', () => {
       $transaction: jest.fn((cb: (tx: unknown) => Promise<unknown>) => cb({ projectCall, projectCallAsset })),
     };
     queue = { enqueue: jest.fn().mockResolvedValue(undefined) };
-    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   const DTO = (o: Partial<Record<string, unknown>> = {}) => ({
@@ -398,7 +401,7 @@ describe('CallsService.closeEarly', () => {
       profile: { findUnique: jest.fn().mockResolvedValue(null) },
       application: { groupBy: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('404s an unknown call', async () => {
@@ -453,7 +456,7 @@ describe('CallsService.findDetail', () => {
       account: { findUnique: jest.fn().mockResolvedValue(ref('acc-owner', 'Camille R.', 'scenariste')) },
       invitation: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('404s an unknown id', async () => {
@@ -576,7 +579,7 @@ describe('CallsService.closeIfFilled (MC-4X §8 — MC-7 accept seam)', () => {
       },
       application: { groupBy: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('closes the call when every seat is covered by accepted applications', async () => {
@@ -644,7 +647,7 @@ describe('CallsService.updateCall', () => {
       profile: { findUnique: jest.fn().mockResolvedValue(null) },
       application: { groupBy: jest.fn().mockResolvedValue([]) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
   });
 
   it('400s an empty body (no field to change)', async () => {
@@ -755,7 +758,7 @@ describe('CallsService.deleteCall', () => {
       },
       application: { count: jest.fn().mockResolvedValue(0) },
     };
-    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, notifications as unknown as NotificationsService);
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, notifications as unknown as NotificationsService, noBlocks());
   });
 
   it('404s an unknown call', async () => {

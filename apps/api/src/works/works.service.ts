@@ -115,6 +115,7 @@ interface FundingGoalRow {
 
 interface ReviewRow {
   id: string;
+  authorId: string | null;
   authorName: string;
   storyRating: number;
   artRating: number;
@@ -210,6 +211,7 @@ function mapFundingGoal(g: FundingGoalRow): FundingGoalDto {
 function mapReview(r: ReviewRow): WorkReviewDto {
   return {
     id: r.id,
+    authorId: r.authorId, // MC-10: enables per-viewer mute filtering in the controller
     authorName: r.authorName,
     storyRating: r.storyRating,
     artRating: r.artRating,

@@ -28,6 +28,11 @@ const SPECS = [
   { key: 'MSG_C',       email: 'qa_e2e_msg_c@test.com',       slug: 'e2e-msg-c' },
   { key: 'MSG_CONTACT', email: 'qa_e2e_msg_contact@test.com', slug: 'e2e-msg-contact' },
   { key: 'MSG_FRESH',   email: 'qa_e2e_msg_fresh@test.com',   slug: 'e2e-msg-fresh' },
+  // MC-10 dedicated block/mute fixtures — no other spec file references these, so this suite's
+  // absolute connection/DM/block-list assertions can't be disturbed by a parallel sibling.
+  { key: 'MC10_A',      email: 'qa_e2e_mc10_a@test.com',      slug: 'e2e-mc10-a' },
+  { key: 'MC10_B',      email: 'qa_e2e_mc10_b@test.com',      slug: 'e2e-mc10-b' },
+  { key: 'MC10_FRESH',  email: 'qa_e2e_mc10_fresh@test.com',  slug: 'e2e-mc10-fresh' },
 ];
 
 async function main() {
@@ -155,6 +160,92 @@ async function main() {
         messages: {
           create: [{ senderId: t, body: 'nemu planche 4 prêt', createdAt: D('2026-07-07T13:00:00.000Z') }],
         },
+      },
+    });
+  }
+
+  // ── MC-10: block & mute fixtures for the dedicated MC10_A/MC10_B/MC10_FRESH accounts ──────────
+  // A and B start as accepted contacts with an existing DM (so B can attempt a send after A blocks
+  // them, and the block-triggered auto-remove-connection criterion has something to remove). Reset
+  // first so re-runs are hermetic: previous local runs may have left a block/connection/DM behind.
+  {
+    const a = accounts.MC10_A.id;
+    const b = accounts.MC10_B.id;
+    const fresh = accounts.MC10_FRESH.id;
+
+    await prisma.userBlock.deleteMany({
+      where: { OR: [{ blockerId: { in: [a, b, fresh] } }, { blockedId: { in: [a, b, fresh] } }] },
+    });
+    await prisma.connection.deleteMany({
+      where: { requesterId: { in: [a, b] }, addresseeId: { in: [a, b] } },
+    });
+    const mc10Parts = await prisma.conversationParticipant.findMany({
+      where: { accountId: { in: [a, b] } },
+      select: { conversationId: true },
+    });
+    const mc10ConvIds = [...new Set(mc10Parts.map((p) => p.conversationId))];
+    if (mc10ConvIds.length > 0) {
+      await prisma.conversation.deleteMany({ where: { id: { in: mc10ConvIds } } });
+    }
+
+    // Clear any mute A/MC10_FRESH left on the dev-seeded review author (dr1-yuki-moreau, the
+    // lames-de-brume review fixture) from a prior local run — kept hermetic across re-runs.
+    const yuki = await prisma.account.findUnique({ where: { profileSlug: 'dr1-yuki-moreau' } });
+    if (yuki) {
+      await prisma.userBlock.deleteMany({ where: { blockerId: { in: [a, fresh] }, blockedId: yuki.id } });
+    }
+
+    await prisma.connection.create({
+      data: { requesterId: a, addresseeId: b, status: 'accepted', respondedAt: new Date('2026-07-08T09:00:00.000Z') },
+    });
+    const dmKey = [a, b].sort().join(':');
+    await prisma.conversation.create({
+      data: {
+        type: 'dm',
+        dmKey,
+        lastMessageAt: new Date('2026-07-08T10:00:00.000Z'),
+        participants: {
+          create: [
+            { accountId: a, lastReadAt: new Date('2026-07-08T10:00:00.000Z') },
+            { accountId: b, lastReadAt: new Date('2026-07-08T10:00:00.000Z') },
+          ],
+        },
+        messages: {
+          create: [{ senderId: a, body: 'Salut, on garde le contact !', createdAt: new Date('2026-07-08T10:00:00.000Z') }],
+        },
+      },
+    });
+
+    // Round 2 (B14): MC10_A owns one published work + one published illustration so the mutual
+    // content-hiding criterion (R2-B2/B3) is assertable from B's session and from an anonymous
+    // context. Idempotent (work upsert by slug; illustration reset-then-create by title).
+    const workA = await prisma.work.upsert({
+      where: { slug: 'e2e-mc10-oeuvre-a' },
+      update: { publishedAt: new Date('2026-07-08T08:00:00.000Z') },
+      create: {
+        slug: 'e2e-mc10-oeuvre-a',
+        title: 'E2E MC10 Œuvre A',
+        genre: 'Seinen',
+        meta: 'E2E MC10 · 1 ch.',
+        format: 'Manga',
+        audienceRating: 'Tous publics',
+        publishedAt: new Date('2026-07-08T08:00:00.000Z'),
+      },
+    });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: workA.id, accountId: a } },
+      update: {},
+      create: { workId: workA.id, accountId: a, role: 'dessinateur', order: 0 },
+    });
+
+    await prisma.illustration.deleteMany({ where: { title: 'E2E MC10 Illustration A' } });
+    await prisma.illustration.create({
+      data: {
+        title: 'E2E MC10 Illustration A',
+        artistId: a,
+        artistName: 'E2E MC10_A',
+        category: 'personnages',
+        publishedAt: new Date('2026-07-08T08:00:00.000Z'),
       },
     });
   }

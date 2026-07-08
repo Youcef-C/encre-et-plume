@@ -3,12 +3,14 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { NotFoundException } from '@nestjs/common';
 import { ReaderController } from './reader.controller';
 import { ReaderService } from './reader.service';
+import { BlocksService } from '../blocks/blocks.service';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import type { AuthRequest } from '../auth/guards/session.guard';
 
 describe('ReaderController', () => {
   let controller: ReaderController;
   let service: { getPages: jest.Mock };
+  let blocks: { hiddenContent: jest.Mock };
 
   beforeEach(async () => {
     service = {
@@ -22,10 +24,13 @@ describe('ReaderController', () => {
       }),
     };
 
+    blocks = { hiddenContent: jest.fn().mockResolvedValue(null) };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ReaderController],
       providers: [
         { provide: ReaderService, useValue: service },
+        { provide: BlocksService, useValue: blocks },
         { provide: OptionalSessionGuard, useValue: { canActivate: () => true } },
       ],
     })
@@ -70,5 +75,24 @@ describe('ReaderController', () => {
     service.getPages.mockRejectedValue(new NotFoundException('Chapitre introuvable'));
     const req = {} as AuthRequest;
     await expect(controller.getPages('lames-de-brume', '99', req)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // ── MC-10 round 2 (B11): reader mutual hiding ──
+  it('404s Chapitre introuvable when the work slug is in the blocked-pair set', async () => {
+    blocks.hiddenContent.mockResolvedValue({
+      accountIds: new Set<string>(),
+      workIds: new Set<string>(),
+      workSlugs: new Set(['lames-de-brume']),
+      illustrationIds: new Set<string>(),
+    });
+    await expect(controller.getPages('lames-de-brume', '1', { accountId: 'acc-1' } as AuthRequest)).rejects.toThrow(
+      'Chapitre introuvable',
+    );
+    expect(service.getPages).not.toHaveBeenCalled();
+  });
+
+  it('does not consult hiddenContent for an anonymous viewer', async () => {
+    await controller.getPages('lames-de-brume', '1', {} as AuthRequest);
+    expect(blocks.hiddenContent).not.toHaveBeenCalled();
   });
 });

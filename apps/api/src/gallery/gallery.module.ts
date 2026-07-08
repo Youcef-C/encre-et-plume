@@ -7,6 +7,7 @@ import { AgeGateService } from '../age-gate/age-gate.service';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { BlocksModule } from '../blocks/blocks.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { RedisService } from '../redis/redis.service';
       secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
+    BlocksModule, // MC-10: hiddenContent for blocked-pair illustration hiding
   ],
   controllers: [GalleryController],
   providers: [GalleryService, AgeGateService, OptionalSessionGuard, PrismaService, RedisService],

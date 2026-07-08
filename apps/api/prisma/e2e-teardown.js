@@ -91,6 +91,15 @@ async function main() {
     await prisma.conversationParticipant.deleteMany({ where: { accountId: { in: accountIds } } });
   }
 
+  // 4f. MC-10 (B14): a seeded account may own a WorkCreator row / an Illustration (the mutual
+  // content-hiding fixtures) — both FK-restrict Account deletion. Drop the WorkCreator row (the Work
+  // itself stays, re-upserted by the seed) and null out Illustration.artistId (denormalized
+  // artistName survives, same nullable pattern as Review.authorId).
+  if (accountIds.length > 0) {
+    await prisma.workCreator.deleteMany({ where: { accountId: { in: accountIds } } });
+    await prisma.illustration.updateMany({ where: { artistId: { in: accountIds } }, data: { artistId: null } });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

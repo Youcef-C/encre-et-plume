@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 import { SessionGuard } from '../auth/guards/session.guard';
+import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
+import type { AuthRequest } from '../auth/guards/session.guard';
 
 const PROFILE_RESPONSE = {
   slug: 'yuki-moreau',
@@ -34,37 +36,48 @@ describe('ProfilesController', () => {
       providers: [
         { provide: ProfilesService, useValue: service },
         { provide: SessionGuard, useValue: { canActivate: () => true } },
+        { provide: OptionalSessionGuard, useValue: { canActivate: () => true } },
       ],
     })
       .overrideGuard(SessionGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(OptionalSessionGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<ProfilesController>(ProfilesController);
   });
 
-  it('GET /profiles/:slug delegates to getBySlug', async () => {
+  it('GET /profiles/:slug delegates to getBySlug with the viewer accountId', async () => {
     service.getBySlug.mockResolvedValue(PROFILE_RESPONSE);
 
-    const res = await controller.getBySlug('yuki-moreau');
+    const res = await controller.getBySlug('yuki-moreau', { accountId: 'viewer' } as AuthRequest);
 
     expect(res).toEqual(PROFILE_RESPONSE);
-    expect(service.getBySlug).toHaveBeenCalledWith('yuki-moreau');
+    expect(service.getBySlug).toHaveBeenCalledWith('yuki-moreau', 'viewer');
+  });
+
+  it('GET /profiles/:slug passes undefined accountId for an anonymous viewer', async () => {
+    service.getBySlug.mockResolvedValue(PROFILE_RESPONSE);
+
+    await controller.getBySlug('yuki-moreau', {} as AuthRequest);
+
+    expect(service.getBySlug).toHaveBeenCalledWith('yuki-moreau', undefined);
   });
 
   it('GET /profiles/:slug propagates NotFoundException (unknown slug → 404)', async () => {
     service.getBySlug.mockRejectedValue(new NotFoundException());
 
-    await expect(controller.getBySlug('no-such')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(controller.getBySlug('no-such', {} as AuthRequest)).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('GET /profiles/:slug/portfolio delegates to getPortfolio', async () => {
+  it('GET /profiles/:slug/portfolio delegates to getPortfolio with the viewer accountId', async () => {
     service.getPortfolio.mockResolvedValue([]);
 
-    const res = await controller.getPortfolio('yuki-moreau');
+    const res = await controller.getPortfolio('yuki-moreau', { accountId: 'viewer' } as AuthRequest);
 
     expect(res).toEqual([]);
-    expect(service.getPortfolio).toHaveBeenCalledWith('yuki-moreau');
+    expect(service.getPortfolio).toHaveBeenCalledWith('yuki-moreau', 'viewer');
   });
 
   it('PATCH /profiles/me delegates to updateMine with accountId from request', async () => {

@@ -9,6 +9,7 @@ import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { ConnectionsService } from '../connections/connections.service';
+import type { BlocksService } from '../blocks/blocks.service';
 
 const userRow = (id: string, roles: string[] = ['dessinateur']) => ({
   id,
@@ -50,6 +51,7 @@ describe('InvitationsService', () => {
   };
   let notifications: { create: jest.Mock };
   let connections: { ensureConnected: jest.Mock };
+  let blocks: { isBlockedPair: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -66,10 +68,12 @@ describe('InvitationsService', () => {
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
     connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
+    blocks = { isBlockedPair: jest.fn().mockResolvedValue(false) };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
       connections as unknown as ConnectionsService,
+      blocks as unknown as BlocksService,
     );
   });
 
@@ -109,6 +113,14 @@ describe('InvitationsService', () => {
     it('404s when the recipient is unknown or tombstoned', async () => {
       prisma.account.findFirst.mockResolvedValue(null);
       await expect(service.create('acc-from', { toUser: 'ghost' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('MC-10: 404s a blocked pair with the identical not-found wording', async () => {
+      blocks.isBlockedPair.mockResolvedValue(true);
+      await expect(service.create('acc-from', { toUser: 'acc-to' })).rejects.toThrow(
+        'Ce créateur est introuvable.',
+      );
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
     it('scopes the recipient lookup to non-deleted accounts', async () => {

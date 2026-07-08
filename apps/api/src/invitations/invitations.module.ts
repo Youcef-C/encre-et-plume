@@ -8,6 +8,7 @@ import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ConnectionsModule } from '../connections/connections.module';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /** MC-3 "Proposer une collab": authenticated POST/GET/PATCH /invitations. */
 @Module({
@@ -18,6 +19,7 @@ import { ConnectionsModule } from '../connections/connections.module';
     }),
     NotificationsModule, // F-5 seam: notify recipient on send, sender on response
     ConnectionsModule, // MC-8 seam: an accepted invite creates the mutual connection
+    BlocksModule, // MC-10: blocked-pair check on create
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService, PrismaService, RedisService, SessionGuard],

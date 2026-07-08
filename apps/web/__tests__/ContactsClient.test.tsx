@@ -21,6 +21,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     sendConnectionRequest: vi.fn(),
     decideConnectionRequest: vi.fn(),
     removeContact: vi.fn(),
+    createBlock: vi.fn().mockResolvedValue({ id: 'b1', userId: 'u-lea', kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }),
   };
 });
 
@@ -137,6 +138,23 @@ describe('ContactsClient — tabs & counts (FE-1)', () => {
     // Demandes tab announces its pending count in the accessible name
     expect(within(tabs).getByRole('tab', { name: /demandes.*2/i })).toBeInTheDocument();
     expect(within(tabs).getByRole('tab', { name: /suggestions/i })).toBeInTheDocument();
+  });
+});
+
+describe('ContactsClient — block a contact (MC-10)', () => {
+  it('blocks from the row menu, confirms, and removes the row locally', async () => {
+    mockAll({ contacts: [contact()] });
+    const user = userEvent.setup();
+    renderClient();
+
+    await user.click(await screen.findByRole('button', { name: /actions pour léa b\./i }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Bloquer Léa B.' }));
+    // Confirmation modal, then confirm.
+    const dialog = await screen.findByRole('dialog', { name: /bloquer léa b\./i });
+    await user.click(within(dialog).getByRole('button', { name: 'Bloquer' }));
+
+    await waitFor(() => expect(api.createBlock).toHaveBeenCalledWith({ userId: 'u-lea', kind: 'block' }));
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Léa B.' })).not.toBeInTheDocument());
   });
 });
 

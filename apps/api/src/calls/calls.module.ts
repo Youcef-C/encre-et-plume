@@ -12,6 +12,7 @@ import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ConnectionsModule } from '../connections/connections.module';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /** MC-1 "Appels à projets" preview: authenticated GET /calls. MC-4 + MC-5 extend this module. */
 @Module({
@@ -22,6 +23,7 @@ import { ConnectionsModule } from '../connections/connections.module';
     }),
     NotificationsModule, // F-5 seam: notify the call owner on a new MC-5 application
     ConnectionsModule, // MC-8 seam: an accepted application creates the mutual connection
+    BlocksModule, // MC-10: blocked-pair check on apply()
   ],
   controllers: [CallsController, MyApplicationsController, ReceivedApplicationsController],
   providers: [

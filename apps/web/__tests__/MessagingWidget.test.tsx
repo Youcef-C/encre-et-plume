@@ -38,6 +38,9 @@ vi.mock('../lib/api', () => ({
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
   getMedia: vi.fn(),
+  createBlock: vi.fn().mockResolvedValue({ id: 'b1', userId: 'u-lea', kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }),
+  getMyBlocks: vi.fn().mockResolvedValue({ items: [] }),
+  deleteBlock: vi.fn().mockResolvedValue(undefined),
 }));
 
 import * as api from '../lib/api';
@@ -180,7 +183,8 @@ describe('MessagingWidget — thread + states', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
 
     expect(await screen.findByText('Bonjour !')).toBeInTheDocument();
-    expect(await screen.findByText("Échec de l'envoi")).toBeInTheDocument();
+    // The neutral server message is surfaced (MC-10 uses this path for blocked sends).
+    expect(await screen.findByText('boom')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
   });
 
@@ -189,6 +193,63 @@ describe('MessagingWidget — thread + states', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
     await fire('disconnect');
     expect(await screen.findByText('Reconnexion…')).toBeInTheDocument();
+  });
+});
+
+describe('MessagingWidget — block from the DM header (MC-10)', () => {
+  it('offers a block overflow on a DM thread but not a group thread', async () => {
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+
+    // DM thread → overflow present.
+    await userEvent.click(await screen.findByText('Léa B.'));
+    expect(await screen.findByRole('button', { name: /plus d'actions sur la conversation avec léa b\./i })).toBeInTheDocument();
+
+    // Back to list, open the group thread → no overflow.
+    await userEvent.click(screen.getByRole('button', { name: 'Retour aux conversations' }));
+    await userEvent.click(await screen.findByText('Projet · Lames de Brume'));
+    expect(screen.queryByRole('button', { name: /plus d'actions sur la conversation/i })).not.toBeInTheDocument();
+  });
+
+  it('confirming the block closes the thread', async () => {
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByText('Léa B.'));
+    await userEvent.click(await screen.findByRole('button', { name: /plus d'actions sur la conversation avec léa b\./i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Bloquer' }));
+    const dialog = await screen.findByRole('dialog', { name: /bloquer léa b\./i });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Bloquer' }));
+
+    await waitFor(() => expect(api.createBlock).toHaveBeenCalledWith({ userId: 'u-lea', kind: 'block' }));
+    // Thread closed → back on the conversation list (search field visible again).
+    expect(await screen.findByLabelText('Rechercher une conversation')).toBeInTheDocument();
+  });
+
+  // ── MC-10 round 2 (F10): DM header reflects an existing block ──────────────
+  it('shows "Débloquer" (not "Bloquer") in the DM header when the peer is already blocked', async () => {
+    (api.getMyBlocks as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [{ userId: 'u-lea', slug: 'lea-b', name: 'Léa B.', avatarUrl: null, kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }],
+    });
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByText('Léa B.'));
+    await userEvent.click(await screen.findByRole('button', { name: /plus d'actions sur la conversation avec léa b\./i }));
+    expect(await screen.findByRole('menuitem', { name: /débloquer léa b\./i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Bloquer' })).not.toBeInTheDocument();
+  });
+
+  it('unblocking from the DM header calls deleteBlock and flips the item back to "Bloquer"', async () => {
+    (api.getMyBlocks as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [{ userId: 'u-lea', slug: 'lea-b', name: 'Léa B.', avatarUrl: null, kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }],
+    });
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByText('Léa B.'));
+    await userEvent.click(await screen.findByRole('button', { name: /plus d'actions sur la conversation avec léa b\./i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /débloquer léa b\./i }));
+    await waitFor(() => expect(api.deleteBlock).toHaveBeenCalledWith('u-lea', 'block'));
+    await userEvent.click(await screen.findByRole('button', { name: /plus d'actions sur la conversation avec léa b\./i }));
+    expect(await screen.findByRole('menuitem', { name: 'Bloquer' })).toBeInTheDocument();
   });
 });
 

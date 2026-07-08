@@ -31,6 +31,7 @@ import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
 import { PresenceService } from '../connections/presence.service';
 import { MessagingGateway } from './messaging.gateway';
+import { BlocksService } from '../blocks/blocks.service';
 
 // No-existence-leak: unknown conversation AND non-participant both return this 404 (MC-7/MC-8 pattern).
 const NOT_FOUND = 'Conversation introuvable.';
@@ -90,6 +91,7 @@ export class MessagesService {
     private readonly queue: QueueService,
     private readonly presence: PresenceService,
     private readonly gateway: MessagingGateway,
+    private readonly blocks: BlocksService,
   ) {}
 
   // ── GET /conversations ──────────────────────────────────────────────────────
@@ -162,7 +164,7 @@ export class MessagesService {
     }
 
     await this.enforceSendRateLimit(accountId);
-    this.assertCanSend(accountId); // AD-6 seam: ban flag lands with AD-6; MC-10 adds block checks.
+    await this.assertCanSend(accountId, conv);
 
     const attachments = await this.resolveAttachments(accountId, attachmentRefs);
 
@@ -254,8 +256,16 @@ export class MessagesService {
     }
   }
 
-  // AD-6 seam: ban flag lands with AD-6; MC-10 adds blocked-pair checks. No-op until then.
-  private assertCanSend(_accountId: string): void {}
+  // AD-6 seam: ban flag lands with AD-6 (still a no-op for that half). MC-10: a blocked pair cannot
+  // exchange NEW DMs in EITHER direction — history stays readable, only new sends are refused, with the
+  // story's neutral copy (no block disclosure). Group conversations are out of story scope (D7).
+  private async assertCanSend(accountId: string, conv: ConvRow): Promise<void> {
+    if (conv.type !== 'dm') return;
+    const other = conv.participants.find((p) => p.accountId !== accountId);
+    if (other && (await this.blocks.isBlockedPair(accountId, other.accountId))) {
+      throw new BadRequestException("Impossible d'envoyer le message.");
+    }
+  }
 
   private async resolveAttachments(
     accountId: string,
@@ -317,6 +327,10 @@ export class MessagesService {
     if (otherId === accountId) throw new BadRequestException('Vous ne pouvez pas discuter avec vous-même.');
     const other = await this.prisma.account.findFirst({ where: { id: otherId, deletedAt: null }, select: { id: true } });
     if (!other) throw new NotFoundException('Ce membre est introuvable.');
+    // MC-10: a blocked user must not open a fresh DM around the wall — same neutral copy as send.
+    if (await this.blocks.isBlockedPair(accountId, otherId)) {
+      throw new BadRequestException("Impossible d'envoyer le message.");
+    }
 
     const dmKey = [accountId, otherId].sort().join(':');
     const existing = (await this.prisma.conversation.findUnique({

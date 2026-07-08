@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import type { ProfileResponse, PortfolioItemResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
+import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { ProfilesService } from './profiles.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -16,16 +17,18 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 export class ProfilesController {
   constructor(private readonly profilesService: ProfilesService) {}
 
-  /** Public — no guard. */
+  /** Public — OptionalSessionGuard so a signed-in viewer gets MC-10 directional block flags. */
   @Get(':slug')
-  getBySlug(@Param('slug') slug: string): Promise<ProfileResponse> {
-    return this.profilesService.getBySlug(slug);
+  @UseGuards(OptionalSessionGuard)
+  getBySlug(@Param('slug') slug: string, @Req() req: AuthRequest): Promise<ProfileResponse> {
+    return this.profilesService.getBySlug(slug, req.accountId);
   }
 
-  /** Public — no guard. */
+  /** Public — OptionalSessionGuard so a blocked-pair viewer gets an empty portfolio (D8c). */
   @Get(':slug/portfolio')
-  getPortfolio(@Param('slug') slug: string): Promise<PortfolioItemResponse[]> {
-    return this.profilesService.getPortfolio(slug);
+  @UseGuards(OptionalSessionGuard)
+  getPortfolio(@Param('slug') slug: string, @Req() req: AuthRequest): Promise<PortfolioItemResponse[]> {
+    return this.profilesService.getPortfolio(slug, req.accountId);
   }
 
   /** Owner-only: session account edits their own row — no slug needed (D1). */

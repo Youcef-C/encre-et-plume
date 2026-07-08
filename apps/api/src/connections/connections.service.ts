@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PresenceService } from './presence.service';
 import { MatchesService } from '../matches/matches.service';
+import { BlocksService } from '../blocks/blocks.service';
 import type { CreateConnectionRequestDto } from './dto/create-connection-request.dto';
 
 const LIST_CAP = 200; // ponytail: personal network fits; MC-9-era pagination when it doesn't.
@@ -75,15 +76,19 @@ export class ConnectionsService {
     private readonly notifications: NotificationsService,
     private readonly presence: PresenceService,
     private readonly matches: MatchesService,
+    private readonly blocks: BlocksService,
   ) {}
 
   async createRequest(fromId: string, dto: CreateConnectionRequestDto): Promise<ConnectionRequestDto> {
     const toUser = dto.toUser;
     if (toUser === fromId) throw new BadRequestException('Vous ne pouvez pas vous connecter à vous-même.');
 
-    // AD-6 seam: ban flag joins here when it lands. MC-10 seam: blocked-pair check joins here.
+    // AD-6 seam: ban flag joins here when it lands.
     const recipient = await this.prisma.account.findFirst({ where: { id: toUser, deletedAt: null }, select: { id: true } });
-    if (!recipient) throw new NotFoundException('Ce membre est introuvable.');
+    // MC-10: a blocked pair 404s with the same no-existence-leak wording (blocked user can't diff it).
+    if (!recipient || (await this.blocks.isBlockedPair(fromId, toUser))) {
+      throw new NotFoundException('Ce membre est introuvable.');
+    }
 
     const existing = await this.prisma.connection.findFirst({ where: this.pairWhere(fromId, toUser) });
     if (existing) {

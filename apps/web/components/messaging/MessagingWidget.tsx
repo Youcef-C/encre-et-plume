@@ -15,9 +15,11 @@ import {
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { useMessaging, type ThreadMessage } from '../../lib/messaging';
-import { getMediaSignedUrl, getPresence, requestUpload, finalizeMedia, getMedia } from '../../lib/api';
+import { getMediaSignedUrl, getPresence, requestUpload, finalizeMedia, getMedia, getMyBlocks, deleteBlock } from '../../lib/api';
 import { MailIcon, XIcon, ChevronLeftIcon, PlusIcon } from '../icons';
 import GroupCreateModal from './GroupCreateModal';
+import OverflowMenu, { MenuItem } from '../OverflowMenu';
+import BlockConfirmModal from '../blocks/BlockConfirmModal';
 
 // Attachments accept the F-10 `attachment` allowlist (raster images ∪ PDF/TXT); the server re-validates.
 const ATTACHMENT_ACCEPT = [...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES].join(',');
@@ -190,7 +192,17 @@ function AttachmentTile({ mediaId, name, kind }: { mediaId: string; name: string
 
 // ─── chat thread ────────────────────────────────────────────────────────────────
 
-function ChatThread({ conv }: { conv: ConversationItem }) {
+function ChatThread({
+  conv,
+  blockedIds,
+  onBlocked,
+  onUnblocked,
+}: {
+  conv: ConversationItem;
+  blockedIds: Set<string>;
+  onBlocked: (userId: string) => void;
+  onUnblocked: (userId: string) => void;
+}) {
   const { account } = useSession();
   const myId = account?.id ?? null;
   const {
@@ -200,6 +212,7 @@ function ChatThread({ conv }: { conv: ConversationItem }) {
     hasMoreMessages,
     loadOlderMessages,
     closeThread,
+    reloadConversations,
     sendMessage,
     retryMessage,
     emitTyping,
@@ -207,7 +220,22 @@ function ChatThread({ conv }: { conv: ConversationItem }) {
 
   const others = otherParticipants(conv, myId);
   const [presenceOnline, setPresenceOnline] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dmOther = conv.type === 'dm' ? others[0] ?? null : null;
+  // MC-10 round 2 (F10) — reflect an existing block in the header (kind='block').
+  const isBlocked = dmOther ? blockedIds.has(dmOther.userId) : false;
+
+  async function handleUnblock() {
+    if (!dmOther) return;
+    try {
+      await deleteBlock(dmOther.userId, 'block');
+      onUnblocked(dmOther.userId);
+      reloadConversations();
+    } catch {
+      // ponytail: swallow; the header stays on "Débloquer" and the action is retryable.
+    }
+  }
 
   // Presence for a DM's other party (MC-8 read path).
   useEffect(() => {
@@ -259,7 +287,52 @@ function ChatThread({ conv }: { conv: ConversationItem }) {
             {subtitle}
           </div>
         </div>
+        {/* MC-10 — block / unblock the other party (DM only). */}
+        {dmOther && (
+          <OverflowMenu
+            label={`Plus d'actions sur la conversation avec ${conv.name}`}
+            triggerStyle={{ minWidth: 36, minHeight: 36, padding: '4px 10px', background: 'none', border: 'none', color: 'var(--ink2)' }}
+          >
+            {(close) =>
+              isBlocked ? (
+                <MenuItem
+                  accent
+                  ariaLabel={`Débloquer ${conv.name}`}
+                  onClick={() => {
+                    close();
+                    void handleUnblock();
+                  }}
+                >
+                  Débloquer
+                </MenuItem>
+              ) : (
+                <MenuItem
+                  accent
+                  onClick={() => {
+                    close();
+                    setBlockOpen(true);
+                  }}
+                >
+                  Bloquer
+                </MenuItem>
+              )
+            }
+          </OverflowMenu>
+        )}
       </div>
+
+      {blockOpen && dmOther && (
+        <BlockConfirmModal
+          user={{ userId: dmOther.userId, name: conv.name }}
+          onClose={() => setBlockOpen(false)}
+          onBlocked={() => {
+            setBlockOpen(false);
+            onBlocked(dmOther.userId);
+            closeThread();
+            reloadConversations();
+          }}
+        />
+      )}
 
       {/* Messages */}
       <div
@@ -339,6 +412,8 @@ function MessageBubble({
       ? conv.participants.find((p) => p.userId === message.senderId)?.name ?? ''
       : '';
 
+  // ponytail: PUB-6 seam — "⚑ Signaler ce message" (report a DM message, targetType 'message') lands
+  // with PUB-6; no report modal / reports endpoint exists yet (MC-10 plan §8 D1). No UI this round.
   return (
     <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '78%', opacity: message.pending ? 0.6 : 1 }}>
       {senderName && (
@@ -362,7 +437,7 @@ function MessageBubble({
       )}
       {message.failed && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, justifyContent: 'flex-end' }}>
-          <span role="alert" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>Échec de l&apos;envoi</span>
+          <span role="alert" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>{message.error ?? "Échec de l'envoi"}</span>
           <button
             type="button"
             onClick={onRetry}
@@ -560,10 +635,27 @@ export default function MessagingWidget() {
 
   const [query, setQuery] = useState('');
   const [groupOpen, setGroupOpen] = useState(false);
+  // MC-10 round 2 (F10) — the viewer's block set (kind='block'), for DM-header reflection.
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const fabRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const open = panelState === 'open';
+
+  // ponytail: one GET per panel open (list capped at 200); move to a shared session store if a
+  // third consumer of the block list appears.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getMyBlocks()
+      .then((r) => {
+        if (!cancelled) setBlockedIds(new Set(r.items.filter((i) => i.kind === 'block').map((i) => i.userId)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Focus into the panel on open AND whenever the view switches (list↔thread, thread↔thread):
   // opening a conversation unmounts the focused list-row button, so without re-homing focus it
@@ -665,7 +757,18 @@ export default function MessagingWidget() {
           )}
 
           {activeConv ? (
-            <ChatThread conv={activeConv} />
+            <ChatThread
+              conv={activeConv}
+              blockedIds={blockedIds}
+              onBlocked={(id) => setBlockedIds((s) => new Set(s).add(id))}
+              onUnblocked={(id) =>
+                setBlockedIds((s) => {
+                  const next = new Set(s);
+                  next.delete(id);
+                  return next;
+                })
+              }
+            />
           ) : (
             <>
               {/* Search field (D2) */}

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole, PartnerRegion, PartnerAvailability, CreatorRole } from '@encre-et-plume/shared';
 import { normalizeGenres } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { BlocksService } from '../blocks/blocks.service';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 
 type AccountRow = {
@@ -29,15 +30,23 @@ type ProfileRow = {
 
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly blocks: BlocksService,
+  ) {}
 
-  async getBySlug(slug: string): Promise<ProfileResponse> {
+  async getBySlug(slug: string, viewerId?: string): Promise<ProfileResponse> {
     const account = await this.prisma.account.findUnique({
       where: { profileSlug: slug },
       include: { profile: true },
     });
     if (!account) throw new NotFoundException();
-    return this.compose(account, account.profile);
+    const base = this.compose(account, account.profile);
+    // MC-10 round 2 (D8): directional block flags — only for a signed-in viewer who isn't the owner.
+    if (viewerId && viewerId !== account.id) {
+      return { ...base, ...(await this.blocks.pairFlags(viewerId, account.id)) };
+    }
+    return base;
   }
 
   async updateMine(accountId: string, dto: UpdateProfileDto): Promise<ProfileResponse> {
@@ -82,7 +91,7 @@ export class ProfilesService {
     return this.compose(account!, profile);
   }
 
-  async getPortfolio(slug: string): Promise<PortfolioItemResponse[]> {
+  async getPortfolio(slug: string, viewerId?: string): Promise<PortfolioItemResponse[]> {
     const account = await this.prisma.account.findUnique({
       where: { profileSlug: slug },
       include: {
@@ -94,6 +103,10 @@ export class ProfilesService {
       },
     });
     if (!account) throw new NotFoundException();
+    // MC-10 round 2 (D8c): content is hidden both ways for a blocked pair — return [].
+    if (viewerId && viewerId !== account.id && (await this.blocks.isBlockedPair(viewerId, account.id))) {
+      return [];
+    }
     return (account.profile?.portfolio ?? []).map((item) => ({
       id: item.id,
       image: item.image,
@@ -140,6 +153,9 @@ export class ProfilesService {
       availability: (profile?.availability ?? 'ouvert') as PartnerAvailability,
       // ponytail: counters always 0 until PUB-4(followers)/DR-9(likes)/DR-3(works)/MR-1(supporters) land
       counters: { followers: 0, likes: 0, works: 0, supporters: 0 },
+      // MC-10 round 2 (D8): default both false; getBySlug overlays pairFlags for a signed-in non-owner viewer.
+      viewerHasBlocked: false,
+      blockedByTarget: false,
     };
   }
 }

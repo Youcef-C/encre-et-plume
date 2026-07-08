@@ -12,6 +12,7 @@ import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { AgeGateService } from '../age-gate/age-gate.service';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /** DR-4 reader "Lecteur": public chapter pages route + authenticated /me/favorites, /me/reading-progress. */
 @Module({
@@ -20,6 +21,7 @@ import { AgeGateService } from '../age-gate/age-gate.service';
       secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
+    BlocksModule, // MC-10: hiddenContent for blocked-pair chapter hiding
   ],
   controllers: [ReaderController, FavoritesController, ReadingProgressController],
   providers: [

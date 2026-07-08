@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PresenceService } from './presence.service';
 import type { MatchesService } from '../matches/matches.service';
+import type { BlocksService } from '../blocks/blocks.service';
 
 const accountRef = (id: string, roles: string[] = ['scenariste']) => ({
   id,
@@ -53,17 +54,20 @@ function build(prisma: ReturnType<typeof makePrisma>, over: Partial<{
   notifications: { create: jest.Mock };
   presence: { get: jest.Mock };
   matches: { getSuggestions: jest.Mock };
+  blocks: { isBlockedPair: jest.Mock };
 }> = {}) {
   const notifications = over.notifications ?? { create: jest.fn().mockResolvedValue(null) };
   const presence = over.presence ?? { get: jest.fn().mockResolvedValue({}) };
   const matches = over.matches ?? { getSuggestions: jest.fn().mockResolvedValue({ items: [], incompleteProfile: false }) };
+  const blocks = over.blocks ?? { isBlockedPair: jest.fn().mockResolvedValue(false) };
   const service = new ConnectionsService(
     prisma as unknown as PrismaService,
     notifications as unknown as NotificationsService,
     presence as unknown as PresenceService,
     matches as unknown as MatchesService,
+    blocks as unknown as BlocksService,
   );
-  return { service, notifications, presence, matches };
+  return { service, notifications, presence, matches, blocks };
 }
 
 describe('ConnectionsService.createRequest', () => {
@@ -83,6 +87,15 @@ describe('ConnectionsService.createRequest', () => {
     expect(prisma.account.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ id: 'ghost', deletedAt: null }) }),
     );
+  });
+
+  it('MC-10: 404s a blocked pair with the same no-existence-leak wording', async () => {
+    const prisma = makePrisma();
+    const { service } = build(prisma, { blocks: { isBlockedPair: jest.fn().mockResolvedValue(true) } });
+    await expect(service.createRequest('acc-from', { toUser: 'acc-to' })).rejects.toThrow(
+      'Ce membre est introuvable.',
+    );
+    expect(prisma.connection.create).not.toHaveBeenCalled();
   });
 
   it('409s when a pending request already exists in either direction', async () => {

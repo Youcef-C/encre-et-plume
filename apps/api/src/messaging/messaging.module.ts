@@ -12,6 +12,7 @@ import { PresenceService } from '../connections/presence.service';
 import { SecurityModule } from '../security/security.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /**
  * MC-9 "Messaging (floating widget)": REST history/send/create/read + the socket.io gateway (Redis
@@ -27,6 +28,7 @@ import { NotificationsService } from '../notifications/notifications.service';
     }),
     SecurityModule, // exports SessionStore for the gateway presence touch (MC-8 presence)
     NotificationsModule, // BE-RT1: wire the gateway as NotificationsService's RealtimeNotifier (one-way import → no cycle)
+    BlocksModule, // MC-10: blocked-pair check on DM send / getOrCreateDm
   ],
   controllers: [ConversationsController],
   providers: [

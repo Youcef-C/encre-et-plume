@@ -145,6 +145,8 @@ model Account {
   connectionsReceived     Connection[]             @relation("ConnectionsReceived") // MC-8: requests addressed to this account
   conversationParticipations ConversationParticipant[] // MC-9: conversations this account is a member of
   messagesSent            Message[]                @relation("MessagesSent") // MC-9: messages this account sent
+  blocksMade              UserBlock[]              @relation("BlocksMade") // MC-10: block/mute rows this account created
+  blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -653,6 +655,25 @@ model Review {
   createdAt   DateTime @default(now())
 
   @@index([workId, createdAt])
+}
+
+// ── MC-10: block & mute ─────────────────────────────────────────────────────
+enum BlockKind {
+  block
+  mute
+}
+
+model UserBlock {
+  id        String    @id @default(cuid())
+  blockerId String
+  blockedId String
+  kind      BlockKind
+  createdAt DateTime  @default(now())
+  blocker   Account   @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   Account   @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId, kind]) // also serves as the blockerId-direction index
+  @@index([blockedId]) // reverse-direction lookups (enforcement checks)
 }
 
 model Announcement {

@@ -84,6 +84,8 @@ const mockProfile: ProfileResponse = {
   region: 'Bretagne',
   creatorRoles: ['dessinateur'],
   availability: 'ouvert',
+  viewerHasBlocked: false,
+  blockedByTarget: false,
 };
 
 const mockAccount: AccountSummary = {
@@ -404,6 +406,39 @@ describe('ProfilePageClient — edit form ergonomics pass (on-brand controls + s
     expect(
       projectLengthInput.compareDocumentPosition(saveBtn) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+});
+
+describe('ProfilePageClient — blocked-by-target disclosure (MC-10 round 2, F9)', () => {
+  it('renders "Profil indisponible" + the disclosure copy and hides the profile shell', async () => {
+    vi.mocked(getProfile).mockResolvedValue({ ...mockProfile, blockedByTarget: true });
+    renderProfile('yuki-moreau', { ...mockAccount, slug: 'camille-r' } as AccountSummary);
+    expect(await screen.findByText('Profil indisponible')).toBeInTheDocument();
+    expect(screen.getByText('Cet utilisateur vous a bloqué·e.')).toBeInTheDocument();
+    // No profile shell: no tabs, no action buttons, no stats.
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /suivre/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('abonnés')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfilePageClient — "Bloqué" pill placement (MC-10 round 2, F9)', () => {
+  it('renders the "Bloqué" pill in the name block (not the action row) when the viewer has blocked this profile', async () => {
+    vi.mocked(getProfile).mockResolvedValue({ ...mockProfile, viewerHasBlocked: true });
+    renderProfile('yuki-moreau', { ...mockAccount, slug: 'camille-r' } as AccountSummary);
+    // The pill lives next to the <h1> name, not inside the visitor action-button row.
+    const pill = await screen.findByText('Bloqué');
+    expect(pill).toBeInTheDocument();
+    expect(pill.closest('[role="dialog"]')).toBeNull();
+    // Actions are still present (the pill was moved out of, not instead of, the action row).
+    expect(screen.getByRole('button', { name: /proposer une collab/i })).toBeInTheDocument();
+  });
+
+  it('does not render the pill when the viewer has not blocked this profile', async () => {
+    vi.mocked(getProfile).mockResolvedValue({ ...mockProfile, viewerHasBlocked: false });
+    renderProfile('yuki-moreau', { ...mockAccount, slug: 'camille-r' } as AccountSummary);
+    expect(await screen.findByRole('button', { name: /proposer une collab/i })).toBeInTheDocument();
+    expect(screen.queryByText('Bloqué')).not.toBeInTheDocument();
   });
 });
 

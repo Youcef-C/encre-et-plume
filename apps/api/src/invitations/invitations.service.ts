@@ -17,6 +17,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConnectionsService } from '../connections/connections.service';
+import { BlocksService } from '../blocks/blocks.service';
 import { toProjectSummary } from '../projects/projects.service';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { RespondInvitationDto } from './dto/respond-invitation.dto';
@@ -100,6 +101,7 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly connections: ConnectionsService,
+    private readonly blocks: BlocksService,
   ) {}
 
   async create(fromUserId: string, dto: CreateInvitationDto): Promise<InvitationDto> {
@@ -111,7 +113,10 @@ export class InvitationsService {
       where: { id: dto.toUser, deletedAt: null }, // AD-6 seam: ban flag joins here when it lands
       ...USER_SELECT,
     })) as UserRow | null;
-    if (!recipient) throw new NotFoundException('Ce créateur est introuvable.');
+    // MC-10: a blocked pair 404s with the SAME wording as an unknown recipient (no block disclosure).
+    if (!recipient || (await this.blocks.isBlockedPair(fromUserId, dto.toUser))) {
+      throw new NotFoundException('Ce créateur est introuvable.');
+    }
 
     if ((recipient.profile?.creatorRoles?.length ?? 0) === 0) {
       throw new UnprocessableEntityException('Ce créateur ne peut pas recevoir de proposition pour le moment.');

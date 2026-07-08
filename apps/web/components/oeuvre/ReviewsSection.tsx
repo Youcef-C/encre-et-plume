@@ -3,9 +3,11 @@
 // DR-3 FE-6 — "Avis des lecteur·rices" (PUB-3 read-only display). Replica of ŒUVRE lines 912-932.
 // The "Laisser un avis" form is a replica; submit is a stub (PUB-3 owns the real write path).
 import { useState } from 'react';
-import type { WorkDetail, AccountSummary } from '@encre-et-plume/shared';
+import type { WorkDetail, WorkReviewDto, AccountSummary } from '@encre-et-plume/shared';
 import { ratingLabel } from '../../lib/work';
 import { usePersonalAction } from '../../lib/usePersonalAction';
+import { createBlock } from '../../lib/api';
+import OverflowMenu, { MenuItem } from '../OverflowMenu';
 import { StarIcon } from '../icons';
 
 function StarPicker({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
@@ -44,6 +46,22 @@ export default function ReviewsSection({ work, account }: { work: WorkDetail; ac
   const [storyRating, setStoryRating] = useState(0);
   const [artRating, setArtRating] = useState(0);
   const [draft, setDraft] = useState('');
+  // MC-10 F7 — mute (masquer) rides the review rows since PUB-2 comments are stubbed (deviation D2).
+  const [reviews, setReviews] = useState<WorkReviewDto[]>(work.reviews);
+  const [muteNotice, setMuteNotice] = useState<string | null>(null);
+
+  // The lighter "mute" option — no confirm modal (story calls it the lighter action). On success
+  // the server already omits that author for this viewer on the next read; hide their rows now.
+  function muteAuthor(review: WorkReviewDto) {
+    if (!review.authorId) return;
+    const authorId = review.authorId;
+    void createBlock({ userId: authorId, kind: 'mute' })
+      .then(() => {
+        setReviews((prev) => prev.filter((r) => r.authorId !== authorId));
+        setMuteNotice('Commentaires masqués.');
+      })
+      .catch(() => setMuteNotice('Impossible de masquer ce compte. Réessayez.'));
+  }
 
   return (
     <div>
@@ -148,43 +166,74 @@ export default function ReviewsSection({ work, account }: { work: WorkDetail; ac
         )}
       </div>
 
-      {work.reviews.length > 0 && (
+      {muteNotice && (
+        <p role="status" style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700, margin: '0 0 12px' }}>
+          {muteNotice}
+        </p>
+      )}
+
+      {reviews.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {work.reviews.map((review) => (
-            <div
-              key={review.id}
-              style={{
-                border: '2px solid var(--ink)',
-                borderRadius: 8,
-                padding: '12px 14px',
-                background: 'var(--card)',
-                boxShadow: '2px 2px 0 var(--shadow)',
-              }}
-            >
-              {review.hidden ? (
-                <p style={{ fontSize: 13, color: 'var(--ink2)', fontStyle: 'italic', margin: 0 }}>
-                  Avis de <b style={{ fontStyle: 'normal' }}>{review.authorName}</b> masqué par la modération.
-                </p>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5, flexWrap: 'wrap' }}>
-                    <span
-                      aria-hidden="true"
-                      style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--tone)', border: '2px solid var(--ink)', flex: 'none' }}
-                    />
-                    <b style={{ fontSize: 14 }}>{review.authorName}</b>
-                    <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 700 }}>
-                      Histoire <span style={{ color: 'var(--accent)' }}>{review.storyRating}/5</span>
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 700 }}>
-                      Dessin <span style={{ color: 'var(--accent)' }}>{review.artRating}/5</span>
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{review.text}</div>
-                </>
-              )}
-            </div>
-          ))}
+          {reviews.map((review) => {
+            // Mute is offered on other people's authored (non-null id) reviews to a signed-in viewer.
+            const canMute = Boolean(account) && !!review.authorId && review.authorId !== account?.id && !review.hidden;
+            return (
+              <div
+                key={review.id}
+                style={{
+                  border: '2px solid var(--ink)',
+                  borderRadius: 8,
+                  padding: '12px 14px',
+                  background: 'var(--card)',
+                  boxShadow: '2px 2px 0 var(--shadow)',
+                }}
+              >
+                {review.hidden ? (
+                  <p style={{ fontSize: 13, color: 'var(--ink2)', fontStyle: 'italic', margin: 0 }}>
+                    Avis de <b style={{ fontStyle: 'normal' }}>{review.authorName}</b> masqué par la modération.
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5, flexWrap: 'wrap' }}>
+                      <span
+                        aria-hidden="true"
+                        style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--tone)', border: '2px solid var(--ink)', flex: 'none' }}
+                      />
+                      <b style={{ fontSize: 14 }}>{review.authorName}</b>
+                      <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 700 }}>
+                        Histoire <span style={{ color: 'var(--accent)' }}>{review.storyRating}/5</span>
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 700 }}>
+                        Dessin <span style={{ color: 'var(--accent)' }}>{review.artRating}/5</span>
+                      </span>
+                      {canMute && (
+                        <span style={{ marginLeft: 'auto' }}>
+                          <OverflowMenu
+                            label={`Actions sur l'avis de ${review.authorName}`}
+                            width={260}
+                            triggerStyle={{ minWidth: 36, minHeight: 36, padding: '4px 10px', fontSize: 15 }}
+                          >
+                            {(close) => (
+                              <MenuItem
+                                accent
+                                onClick={() => {
+                                  close();
+                                  muteAuthor(review);
+                                }}
+                              >
+                                Masquer les commentaires de ce compte
+                              </MenuItem>
+                            )}
+                          </OverflowMenu>
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.5 }}>{review.text}</div>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

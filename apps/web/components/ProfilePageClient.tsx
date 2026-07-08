@@ -216,6 +216,9 @@ export default function ProfilePageClient({ slug }: Props) {
   const [deleting, setDeleting] = useState(false);
   // Key to reset UploadControl internal state after avatar delete
   const [uploadKey, setUploadKey] = useState(0);
+  // MC-10 (F9): block state lifted here so the "Bloqué" pill sits by the name; ProfileActions
+  // owns the block/unblock actions and reports changes back via onBlockedChange.
+  const [hasBlocked, setHasBlocked] = useState(false);
 
   const isOwner = !!account && account.slug === slug;
 
@@ -223,7 +226,7 @@ export default function ProfilePageClient({ slug }: Props) {
     setLoading(true);
     setFetchError(null);
     getProfile(slug)
-      .then((data) => { setProfile(data); })
+      .then((data) => { setProfile(data); setHasBlocked(Boolean(data.viewerHasBlocked)); })
       .catch((err: ApiError) => { setFetchError(err); })
       .finally(() => setLoading(false));
   }, [slug]);
@@ -289,6 +292,26 @@ export default function ProfilePageClient({ slug }: Props) {
   }
 
   if (!profile) return null;
+
+  // MC-10 round 2 (F9, D8b) — the target has blocked the signed-in viewer: disclose it and render
+  // no profile shell (the API already empties the portfolio; the page hides tabs/actions/stats too).
+  if (profile.blockedByTarget) {
+    return (
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(32px, 6vw, 56px)',
+            textTransform: 'uppercase',
+            marginBottom: 12,
+          }}
+        >
+          Profil indisponible
+        </h1>
+        <p style={{ color: 'var(--ink2)', fontSize: 15 }}>Cet utilisateur vous a bloqué·e.</p>
+      </div>
+    );
+  }
 
   function handleStartEdit() {
     if (!profile) return;
@@ -466,6 +489,25 @@ export default function ProfilePageClient({ slug }: Props) {
                   {profile.roleLine}
                 </p>
               )}
+              {/* MC-10 (F9): "Bloqué" pill next to the name (only for a signed-in visitor who
+                  has blocked this profile) — kept out of the action row so it doesn't crowd it. */}
+              {!!account && account.id !== profile.userId && hasBlocked && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    marginTop: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: '2px solid var(--accent)',
+                    color: 'var(--accent)',
+                    borderRadius: 5,
+                    padding: '3px 9px',
+                  }}
+                >
+                  Bloqué
+                </span>
+              )}
               {formatLocationFr(profile.country, profile.region) && (
                 <p style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500, marginTop: 3 }}>
                   {formatLocationFr(profile.country, profile.region)}
@@ -525,7 +567,12 @@ export default function ProfilePageClient({ slug }: Props) {
                 </button>
               )
             ) : (
-              <ProfileActions profile={profile} account={account} />
+              <ProfileActions
+                profile={profile}
+                account={account}
+                hasBlocked={hasBlocked}
+                onBlockedChange={setHasBlocked}
+              />
             )}
           </div>
 

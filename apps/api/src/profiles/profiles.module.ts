@@ -4,8 +4,10 @@ import { getJwtSecret } from '../auth/jwt-secret';
 import { ProfilesController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 import { SessionGuard } from '../auth/guards/session.guard';
+import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { BlocksModule } from '../blocks/blocks.module';
 
 @Module({
   imports: [
@@ -13,8 +15,9 @@ import { RedisService } from '../redis/redis.service';
       secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
+    BlocksModule, // MC-10: pairFlags / isBlockedPair for directional block state + portfolio hiding
   ],
   controllers: [ProfilesController],
-  providers: [ProfilesService, SessionGuard, PrismaService, RedisService],
+  providers: [ProfilesService, SessionGuard, OptionalSessionGuard, PrismaService, RedisService],
 })
 export class ProfilesModule {}

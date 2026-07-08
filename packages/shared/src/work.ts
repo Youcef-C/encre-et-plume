@@ -24,6 +24,7 @@ export interface FundingGoalDto {
 
 export interface WorkReviewDto {
   id: string;
+  authorId: string | null; // MC-10: null for seed/legacy fixtures; used for per-viewer mute filtering
   authorName: string;
   storyRating: number; // 0..5
   artRating: number; // 0..5

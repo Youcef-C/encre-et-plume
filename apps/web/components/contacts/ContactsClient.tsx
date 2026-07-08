@@ -24,6 +24,7 @@ import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
 import { relativeTime } from '../../lib/notifications';
 import CountBadge from '../CountBadge';
+import BlockConfirmModal from '../blocks/BlockConfirmModal';
 
 type PanelState = 'loading' | 'ready' | 'error';
 type TabKey = 'contacts' | 'demandes' | 'suggestions';
@@ -212,12 +213,15 @@ function RequestRow({
 function ContactRow({
   contact,
   onRemove,
+  onBlock,
 }: {
   contact: ContactItem;
   onRemove: (contact: ContactItem) => void;
+  onBlock: (contact: ContactItem) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { openDm } = useMessaging();
 
@@ -332,9 +336,22 @@ function ContactRow({
                       setMenuOpen(false);
                       setConfirming(true);
                     }}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 13px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: 'var(--accent)', fontFamily: 'inherit' }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 13px', borderTop: 'none', borderRight: 'none', borderLeft: 'none', borderBottom: '1.5px solid var(--border)', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: 'var(--accent)', fontFamily: 'inherit' }}
                   >
                     Retirer le contact
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="ep-menu-item"
+                    aria-label={`Bloquer ${contact.name}`}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setBlockOpen(true);
+                    }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 13px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: 'var(--accent)', fontFamily: 'inherit' }}
+                  >
+                    Bloquer
                   </button>
                 </div>
               )}
@@ -342,6 +359,16 @@ function ContactRow({
           </>
         )}
       </div>
+      {blockOpen && (
+        <BlockConfirmModal
+          user={{ userId: contact.userId, name: contact.name }}
+          onClose={() => setBlockOpen(false)}
+          onBlocked={() => {
+            setBlockOpen(false);
+            onBlock(contact);
+          }}
+        />
+      )}
     </li>
   );
 }
@@ -609,6 +636,12 @@ export default function ContactsClient() {
     });
   }
 
+  // Block: the server already deleted the connection in the block transaction, so drop the row.
+  function blockContact(contact: ContactItem) {
+    setContacts((prev) => prev.filter((c) => c.userId !== contact.userId));
+    setAnnounce('Compte bloqué.');
+  }
+
   function connectSuggestion(item: MatchSuggestion) {
     setActionError('');
     setSuggestions((prev) => prev.filter((s) => s.userId !== item.userId));
@@ -797,7 +830,7 @@ export default function ContactsClient() {
               ) : (
                 <ul style={ulReset}>
                   {contacts.map((c) => (
-                    <ContactRow key={c.userId} contact={c} onRemove={removeContact} />
+                    <ContactRow key={c.userId} contact={c} onRemove={removeContact} onBlock={blockContact} />
                   ))}
                 </ul>
               ))}
