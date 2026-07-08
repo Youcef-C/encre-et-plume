@@ -94,7 +94,11 @@ jobs:
       # MinIO is NOT a service container: the official minio/minio image needs `server /data`
       # (a command), which GH service containers can't pass. It's started via `docker run` below.
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public
+      # connection_limit caps the long-lived API + worker Prisma pools so the full e2e suite (parallel
+      # workers + F-14 data-export jobs + the many one-shot helper scripts, each capped separately via
+      # _e2e-prisma.js) stays under Postgres max_connections (100). Uncapped pools exhausted it →
+      # "too many clients", dropped sockets, and partially-applied seeds (wrong seeded state).
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public&connection_limit=10&pool_timeout=30
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-e2e-test-secret
       S3_ENDPOINT: http://localhost:9000

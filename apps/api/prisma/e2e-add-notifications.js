@@ -6,13 +6,13 @@
  * Inserts: 3 unread messages, 2 unread applications, 1 unread report, 1 read like.
  * The report row is used to verify admin/maintainer-scoped signalements count.
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 
 async function main() {
   const [recipientSlug, sourceSlug] = process.argv.slice(2);
   if (!recipientSlug) throw new Error('Usage: e2e-add-notifications.js <recipientSlug> [sourceSlug]');
 
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(1);
   try {
     const recipient = await prisma.account.findUnique({ where: { profileSlug: recipientSlug } });
     if (!recipient) throw new Error(`No account with profileSlug: ${recipientSlug}`);

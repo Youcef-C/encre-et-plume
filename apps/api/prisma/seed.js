@@ -9,12 +9,12 @@
  *
  * ponytail: plain JS (mirrors e2e-seed.js/e2e-add-portfolio.js), no ts-node — no new runtime dependency.
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 const bcrypt = require('bcryptjs');
 // F-22: single source of truth for hashtag shape — seeded tags match the BE `tag` filter & FE chips.
 const { normalizeHashtags } = require('@encre-et-plume/shared');
 
-const prisma = new PrismaClient();
+const prisma = e2ePrisma(5);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const inDays = (n) => new Date(Date.now() + n * DAY_MS);

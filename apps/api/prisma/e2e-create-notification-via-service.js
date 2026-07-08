@@ -34,7 +34,7 @@ const { resolve, dirname } = require('node:path');
   }
 })();
 
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 
 // Mirrors NOTIF_TYPE_TO_PREF from @encre-et-plume/shared (suppressible types only).
 // Mandatory types (report → moderation, system → account) are not listed here — they always create.
@@ -50,7 +50,7 @@ async function main() {
     throw new Error('Usage: e2e-create-notification-via-service.js <recipientId> <type>');
   }
 
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(1);
   try {
     // isInAppAllowed — mirrors preferences.service.ts logic
     const prefType = NOTIF_TYPE_TO_PREF[type];

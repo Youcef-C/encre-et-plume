@@ -4,7 +4,7 @@
  * Usage: node e2e-add-portfolio.js <profileSlug> <count>
  * Called by profile e2e specs so they can exercise the portfolio grid without a create endpoint (D5).
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 
 async function main() {
   const [slug, countStr] = process.argv.slice(2);
@@ -12,7 +12,7 @@ async function main() {
   const count = parseInt(countStr, 10);
   if (isNaN(count) || count < 0) throw new Error('count must be a non-negative integer');
 
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(1);
   try {
     const account = await prisma.account.findUnique({ where: { profileSlug: slug } });
     if (!account) throw new Error(`No account found with profileSlug: ${slug}`);

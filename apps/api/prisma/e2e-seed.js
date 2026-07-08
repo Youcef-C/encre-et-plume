@@ -9,7 +9,7 @@
  * F-13: also seeds ConsentRecords (cgu + privacy at current version) for all
  * seeded accounts so needsCguReconsent === false and e2e auth flows are unblocked.
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 const bcrypt = require('bcryptjs');
 
 const SPECS = [
@@ -48,7 +48,7 @@ async function main() {
     }
   }
 
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(5);
   // ponytail: cost 10 is standard; no need for lower in tests since this runs once
   const hash = bcrypt.hashSync('password123', 10);
 

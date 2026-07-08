@@ -4,13 +4,13 @@
  * Usage: node e2e-set-role.js <accountId> <role>
  * Called by roles.spec.ts dbSetRole() via execFileSync — synchronous from the caller's POV.
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 
 async function main() {
   const [id, role] = process.argv.slice(2);
   if (!id || !role) throw new Error('Usage: e2e-set-role.js <id> <role>');
 
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(1);
   await prisma.account.update({ where: { id }, data: { role } });
   await prisma.$disconnect();
 }

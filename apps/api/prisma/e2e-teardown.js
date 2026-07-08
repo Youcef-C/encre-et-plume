@@ -5,10 +5,10 @@
  *   DataExport → Media → PortfolioItem → Profile → Notification → ConsentRecord → Account.
  * Called by apps/web/e2e/global-teardown.ts after each e2e run.
  */
-const { PrismaClient } = require('@prisma/client');
+const { e2ePrisma } = require('./_e2e-prisma');
 
 async function main() {
-  const prisma = new PrismaClient();
+  const prisma = e2ePrisma(5);
 
   // Find all qa_e2e_ accounts and their profile ids (for cascade-safe deletion)
   const accounts = await prisma.account.findMany({

@@ -8,6 +8,11 @@ export default defineConfig({
   // CI retries absorb known parallel-worker flakes (e.g. profile.spec F20 tests share the seeded
   // UTILISATEUR account); locally 0 so a real failure surfaces immediately.
   retries: process.env.CI ? 2 : 0,
+  // Bound parallelism in CI: the suite spawns per-test one-shot DB helper scripts + F-14 data-export
+  // jobs; too many concurrent Prisma pools exhaust Postgres max_connections (100). 2 workers keeps the
+  // total (API + worker + ~2 concurrent scripts, each pool-capped via _e2e-prisma.js) well under it.
+  // Locally undefined = Playwright's core-based default.
+  workers: process.env.CI ? 2 : undefined,
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
