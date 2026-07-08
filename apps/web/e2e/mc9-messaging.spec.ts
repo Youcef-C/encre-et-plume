@@ -277,13 +277,13 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
       // A opens the widget on the DM thread and reads it (badge → 1, only the group left unread).
       await fab(pageA).click();
       await rowByName(pageA, 'E2E MSG_B').click();
-      await expect(panel(pageA).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
+      await expect(panel(pageA).getByRole('log', { name: 'Messages' }).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
       await expect(fab(pageA)).toHaveAttribute('aria-label', 'Messages, 1 non lus', { timeout: 10_000 });
 
       // B opens the same DM (from B's perspective, the DM shows MSG_A's name).
       await fab(pageB).click();
       await rowByName(pageB, 'E2E MSG_A').click();
-      await expect(panel(pageB).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
+      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
 
       // B types → A's list is showing the thread (not the list) so assert via the thread typing line
       // instead of the row; go back to the list on A momentarily to see the row-level indicator too.
@@ -295,9 +295,9 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
       // B sends "Bonjour !" — A must receive it live, no reload.
       await panel(pageB).getByLabel('Écrire un message').fill('Bonjour !');
       await panel(pageB).getByRole('button', { name: 'Envoyer' }).click();
-      await expect(panel(pageB).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // B's own optimistic→ack bubble
+      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // B's own optimistic→ack bubble
 
-      await expect(panel(pageA).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // realtime delivery, NO reload
+      await expect(panel(pageA).getByRole('log', { name: 'Messages' }).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // realtime delivery, NO reload
       // A was actively reading the open thread → the message is auto-marked read; B should see "Lu" under it.
       await expect(panel(pageB).getByText('Lu', { exact: true })).toBeVisible({ timeout: 10_000 });
 
@@ -330,7 +330,7 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
       await rowByName(pageB, 'E2E MSG_A').click();
       await panel(pageB).getByLabel('Écrire un message').fill('Toujours là ?');
       await panel(pageB).getByRole('button', { name: 'Envoyer' }).click();
-      await expect(panel(pageB).getByText('Toujours là ?')).toBeVisible({ timeout: 10_000 });
+      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('Toujours là ?')).toBeVisible({ timeout: 10_000 });
 
       // A never reloaded /decouvrir — the FAB badge must still bump live.
       await expect(async () => {
@@ -358,6 +358,9 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
     try {
       await loginApi(uCtx, ACCOUNTS.MSG_A.email);
       const reqRes = await uCtx.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.MSG_CONTACT.id } });
+      // Idempotent: 409 "déjà en contact" means the desired end state (an accepted connection)
+      // already exists — proceed. Only a fresh 201 needs the accept step below.
+      if (reqRes.status() === 409) return;
       if (reqRes.status() !== 201) throw new Error(`connection request failed: ${reqRes.status()} ${await reqRes.text()}`);
       const { id: requestId } = (await reqRes.json()) as { id: string };
 
