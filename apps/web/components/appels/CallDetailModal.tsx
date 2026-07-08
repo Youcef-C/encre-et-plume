@@ -198,7 +198,7 @@ export default function CallDetailModal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label="Fermer la fenêtre"
             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 4, display: 'inline-flex' }}
           >
             <XIcon size={18} />

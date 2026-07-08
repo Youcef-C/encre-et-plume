@@ -175,7 +175,7 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     // Reopen, close via the "Fermer" button.
     await trigger.click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('button', { name: 'Fermer' }).click();
+    await page.getByRole('button', { name: 'Fermer la fenêtre' }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await expect(page).toHaveURL('/candidatures-recues');
 
@@ -195,8 +195,8 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     await page.getByRole('button', { name: 'Voir l\'appel « Polar nocturne »' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Fermer' })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Fermer' }).click();
+    await expect(dialog.getByRole('button', { name: 'Fermer la fenêtre' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Fermer la fenêtre' }).click();
     await expect(dialog).not.toBeVisible();
   });
 
