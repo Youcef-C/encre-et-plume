@@ -32,7 +32,13 @@ export interface ContactsResponse {
   items: ContactItem[];
 }
 
-/** GET /connections/requests item — one incoming pending request. */
+/** Direction for GET /connections/requests: 'incoming' (received, default) or 'outgoing' (sent). */
+export type ConnectionRequestDirection = 'incoming' | 'outgoing';
+
+/**
+ * GET /connections/requests item — one pending request. For `incoming`, `from` is the requester;
+ * for `outgoing`, `from` carries the addressee (the person you sent the request to).
+ */
 export interface ConnectionRequestItem {
   id: string;
   from: {

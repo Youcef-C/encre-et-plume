@@ -103,11 +103,15 @@ const searchItem = (over: Partial<PeopleSearchItem> = {}): PeopleSearchItem => (
 function mockAll(opts: {
   contacts?: ContactItem[];
   requests?: ConnectionRequestItem[];
+  sent?: ConnectionRequestItem[];
   suggestions?: MatchSuggestion[];
   incompleteProfile?: boolean;
 } = {}) {
   vi.mocked(api.getContacts).mockResolvedValue({ items: opts.contacts ?? [contact()] });
-  vi.mocked(api.getConnectionRequests).mockResolvedValue({ items: opts.requests ?? [request()] });
+  // Incoming (no arg) vs outgoing (direction='outgoing') return distinct lists.
+  vi.mocked(api.getConnectionRequests).mockImplementation((direction) =>
+    Promise.resolve({ items: direction === 'outgoing' ? opts.sent ?? [] : opts.requests ?? [request()] }),
+  );
   vi.mocked(api.getConnectionSuggestions).mockResolvedValue({
     items: opts.suggestions ?? [suggestion()],
     incompleteProfile: opts.incompleteProfile ?? false,
@@ -127,7 +131,7 @@ function renderClient(acc: AccountSummary | null = account) {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ContactsClient — tabs & counts (FE-1)', () => {
-  it('renders the page title and three tabs with live counts + badge', async () => {
+  it('renders the page title and four tabs with live counts + badge', async () => {
     mockAll({ contacts: [contact(), contact({ userId: 'u2', name: 'Hugo D.' })], requests: [request(), request({ id: 'req-2' })] });
     renderClient();
 
@@ -137,7 +141,34 @@ describe('ContactsClient — tabs & counts (FE-1)', () => {
     expect(within(tabs).getByRole('tab', { name: /contacts · 2/i })).toBeInTheDocument();
     // Demandes tab announces its pending count in the accessible name
     expect(within(tabs).getByRole('tab', { name: /demandes.*2/i })).toBeInTheDocument();
+    expect(within(tabs).getByRole('tab', { name: /envoyées/i })).toBeInTheDocument();
     expect(within(tabs).getByRole('tab', { name: /suggestions/i })).toBeInTheDocument();
+  });
+});
+
+describe('ContactsClient — Envoyées tab (outgoing pending requests)', () => {
+  it('shows outgoing pending requests read-only with an "En attente" badge and no decide buttons', async () => {
+    const user = userEvent.setup();
+    mockAll({ sent: [request({ id: 'out-1', from: { userId: 'u-zoe', slug: 'zoe-k', name: 'Zoé K.', avatarUrl: null, role: 'dessinateur' } })] });
+    renderClient();
+
+    await user.click(await screen.findByRole('tab', { name: /envoyées/i }));
+
+    const panel = await screen.findByRole('tabpanel', { name: /envoyées/i });
+    expect(within(panel).getByRole('link', { name: 'Zoé K.' })).toHaveAttribute('href', '/zoe-k');
+    expect(within(panel).getByText(/en attente/i)).toBeInTheDocument();
+    // Read-only: no Accepter / Refuser here (that lives on the Demandes tab).
+    expect(within(panel).queryByRole('button', { name: /accepter|refuser/i })).not.toBeInTheDocument();
+    // The outgoing list was fetched with the outgoing direction.
+    expect(api.getConnectionRequests).toHaveBeenCalledWith('outgoing');
+  });
+
+  it('shows the empty state when no requests are pending', async () => {
+    const user = userEvent.setup();
+    mockAll({ sent: [] });
+    renderClient();
+    await user.click(await screen.findByRole('tab', { name: /envoyées/i }));
+    expect(await screen.findByText('Aucune demande envoyée')).toBeInTheDocument();
   });
 });
 

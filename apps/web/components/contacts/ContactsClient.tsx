@@ -27,7 +27,7 @@ import CountBadge from '../CountBadge';
 import BlockConfirmModal from '../blocks/BlockConfirmModal';
 
 type PanelState = 'loading' | 'ready' | 'error';
-type TabKey = 'contacts' | 'demandes' | 'suggestions';
+type TabKey = 'contacts' | 'demandes' | 'envoyees' | 'suggestions';
 
 const ROLE_LABEL: Record<CreatorRole, string> = {
   scenariste: 'Scénariste',
@@ -37,6 +37,7 @@ const ROLE_LABEL: Record<CreatorRole, string> = {
 const TABS: { key: TabKey; id: string }[] = [
   { key: 'contacts', id: 'contacts' },
   { key: 'demandes', id: 'demandes' },
+  { key: 'envoyees', id: 'envoyees' },
   { key: 'suggestions', id: 'suggestions' },
 ];
 
@@ -204,6 +205,39 @@ function RequestRow({
           Refuser
         </button>
       </div>
+    </li>
+  );
+}
+
+// ─── Envoyées row (outgoing pending request — read-only) ─────────────────────────────────────
+
+function SentRequestRow({ req }: { req: ConnectionRequestItem }) {
+  return (
+    <li style={rowBox}>
+      <span aria-hidden="true" style={avatarStyle(req.from.avatarUrl)} />
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Link href={`/${req.from.slug}`} style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)', textDecoration: 'none' }}>
+            {req.from.name}
+          </Link>
+          <RoleChip role={req.from.role} />
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink2)', marginTop: 4 }}>{req.context}</div>
+      </div>
+      <span
+        style={{
+          marginLeft: 'auto',
+          fontSize: 12,
+          fontWeight: 700,
+          color: 'var(--ink2)',
+          border: '2px solid var(--ink2)',
+          borderRadius: 5,
+          padding: '4px 10px',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        ● En attente
+      </span>
     </li>
   );
 }
@@ -483,15 +517,18 @@ export default function ContactsClient() {
 
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [requests, setRequests] = useState<ConnectionRequestItem[]>([]);
+  const [sentRequests, setSentRequests] = useState<ConnectionRequestItem[]>([]);
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
   const [incompleteProfile, setIncompleteProfile] = useState(false);
 
   const [contactsState, setContactsState] = useState<PanelState>('loading');
   const [requestsState, setRequestsState] = useState<PanelState>('loading');
+  const [sentState, setSentState] = useState<PanelState>('loading');
   const [suggestionsState, setSuggestionsState] = useState<PanelState>('loading');
 
   const [contactsRetry, setContactsRetry] = useState(0);
   const [requestsRetry, setRequestsRetry] = useState(0);
+  const [sentRetry, setSentRetry] = useState(0);
   const [suggestionsRetry, setSuggestionsRetry] = useState(0);
 
   const [actionError, setActionError] = useState('');
@@ -537,6 +574,23 @@ export default function ContactsClient() {
       cancelled = true;
     };
   }, [account, requestsRetry]);
+
+  useEffect(() => {
+    if (!account) return;
+    let cancelled = false;
+    setSentState('loading');
+    api
+      .getConnectionRequests('outgoing')
+      .then((res) => {
+        if (cancelled) return;
+        setSentRequests(res.items);
+        setSentState('ready');
+      })
+      .catch(() => !cancelled && setSentState('error'));
+    return () => {
+      cancelled = true;
+    };
+  }, [account, sentRetry]);
 
   useEffect(() => {
     if (!account) return;
@@ -742,7 +796,9 @@ export default function ContactsClient() {
               ? `Contacts · ${contactsCount}`
               : t.key === 'demandes'
                 ? 'Demandes'
-                : 'Suggestions';
+                : t.key === 'envoyees'
+                  ? 'Envoyées'
+                  : 'Suggestions';
           return (
             <button
               key={t.key}
@@ -848,6 +904,23 @@ export default function ContactsClient() {
                 <ul style={ulReset}>
                   {requests.map((r) => (
                     <RequestRow key={r.id} req={r} onDecide={decideRequest} />
+                  ))}
+                </ul>
+              ))}
+          </div>
+
+          <div id="tabpanel-envoyees" role="tabpanel" aria-labelledby="tab-envoyees" hidden={tab !== 'envoyees'}>
+            {tab === 'envoyees' &&
+              (sentState === 'loading' ? (
+                <LoadingList label="Chargement des demandes envoyées…" />
+              ) : sentState === 'error' ? (
+                <ErrorPanel message="Impossible de charger les demandes envoyées." onRetry={() => setSentRetry((k) => k + 1)} />
+              ) : sentRequests.length === 0 ? (
+                <EmptyPanel title="Aucune demande envoyée" hint="Les demandes de connexion que vous envoyez apparaîtront ici en attendant une réponse." />
+              ) : (
+                <ul style={ulReset}>
+                  {sentRequests.map((r) => (
+                    <SentRequestRow key={r.id} req={r} />
                   ))}
                 </ul>
               ))}

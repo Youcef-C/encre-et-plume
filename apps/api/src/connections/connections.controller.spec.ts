@@ -58,9 +58,14 @@ describe('ConnectionsController', () => {
     expect(service.removeContact).toHaveBeenCalledWith('acc-owner', 'acc-x');
   });
 
-  it('lists incoming requests for the session account', async () => {
+  it('lists incoming requests for the session account by default', async () => {
     await controller.listRequests(req('acc-owner'));
-    expect(service.listRequests).toHaveBeenCalledWith('acc-owner');
+    expect(service.listRequests).toHaveBeenCalledWith('acc-owner', 'incoming');
+  });
+
+  it('lists outgoing requests when direction=outgoing', async () => {
+    await controller.listRequests(req('acc-owner'), 'outgoing');
+    expect(service.listRequests).toHaveBeenCalledWith('acc-owner', 'outgoing');
   });
 
   it('creates a request from the session account (never a client id)', async () => {

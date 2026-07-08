@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   ConnectionRequestDto,
   ConnectionRequestsResponse,
@@ -46,8 +46,11 @@ export class ConnectionsController {
   }
 
   @Get('connections/requests')
-  listRequests(@Req() req: AuthRequest): Promise<ConnectionRequestsResponse> {
-    return this.service.listRequests(req.accountId);
+  listRequests(
+    @Req() req: AuthRequest,
+    @Query('direction') direction?: string,
+  ): Promise<ConnectionRequestsResponse> {
+    return this.service.listRequests(req.accountId, direction === 'outgoing' ? 'outgoing' : 'incoming');
   }
 
   @Post('connections/requests')

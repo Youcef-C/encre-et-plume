@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ConnectionRequestDto,
+  ConnectionRequestDirection,
   ConnectionRequestItem,
   ConnectionRequestsResponse,
   ConnectionState,
@@ -119,26 +120,39 @@ export class ConnectionsService {
     return { id: row.id, status: row.status as ConnectionStatus };
   }
 
-  async listRequests(viewerId: string): Promise<ConnectionRequestsResponse> {
+  async listRequests(
+    viewerId: string,
+    direction: ConnectionRequestDirection = 'incoming',
+  ): Promise<ConnectionRequestsResponse> {
+    // incoming: requests sent TO the viewer (they decide). outgoing: requests the viewer SENT,
+    // still awaiting a response — mapped to the addressee so the caller sees who they asked.
+    const outgoing = direction === 'outgoing';
     const rows = (await this.prisma.connection.findMany({
-      where: { addresseeId: viewerId, status: 'pending' },
+      where: outgoing
+        ? { requesterId: viewerId, status: 'pending' }
+        : { addresseeId: viewerId, status: 'pending' },
       orderBy: { createdAt: 'desc' },
       take: LIST_CAP,
-      include: { requester: { select: REQUESTER_SELECT } },
-    })) as unknown as { id: string; context: string; createdAt: Date; requester: RefRow }[];
+      include: outgoing
+        ? { addressee: { select: REQUESTER_SELECT } }
+        : { requester: { select: REQUESTER_SELECT } },
+    })) as unknown as { id: string; context: string; createdAt: Date; requester?: RefRow; addressee?: RefRow }[];
 
-    const items: ConnectionRequestItem[] = rows.map((r) => ({
-      id: r.id,
-      from: {
-        userId: r.requester.id,
-        slug: r.requester.profileSlug,
-        name: r.requester.displayName,
-        avatarUrl: r.requester.avatar,
-        role: (r.requester.profile?.creatorRoles?.[0] ?? null) as CreatorRole | null,
-      },
-      context: r.context,
-      createdAt: r.createdAt.toISOString(),
-    }));
+    const items: ConnectionRequestItem[] = rows.map((r) => {
+      const party = (outgoing ? r.addressee : r.requester) as RefRow;
+      return {
+        id: r.id,
+        from: {
+          userId: party.id,
+          slug: party.profileSlug,
+          name: party.displayName,
+          avatarUrl: party.avatar,
+          role: (party.profile?.creatorRoles?.[0] ?? null) as CreatorRole | null,
+        },
+        context: r.context,
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
     return { items };
   }
 

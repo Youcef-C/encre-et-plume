@@ -414,4 +414,22 @@ describe('ConnectionsService.listRequests', () => {
       createdAt: '2026-07-07T10:00:00.000Z',
     });
   });
+
+  it('returns OUTGOING pending requests mapped to the addressee when direction=outgoing', async () => {
+    const prisma = makePrisma();
+    prisma.connection.findMany.mockResolvedValue([
+      { id: 'req-2', context: 'souhaite se connecter', createdAt: new Date('2026-07-07T11:00:00.000Z'), addressee: accountRef('acc-to', ['dessinateur']) },
+    ]);
+    const { service } = build(prisma);
+    const res = await service.listRequests('viewer', 'outgoing');
+    const args = prisma.connection.findMany.mock.calls[0][0];
+    expect(args.where).toEqual({ requesterId: 'viewer', status: 'pending' });
+    expect(args.include).toEqual({ addressee: { select: expect.anything() } });
+    expect(res.items[0]).toEqual({
+      id: 'req-2',
+      from: { userId: 'acc-to', slug: 'slug-acc-to', name: 'Name acc-to', avatarUrl: null, role: 'dessinateur' },
+      context: 'souhaite se connecter',
+      createdAt: '2026-07-07T11:00:00.000Z',
+    });
+  });
 });

@@ -566,6 +566,7 @@ export const respondInvitation = (
 import type {
   ContactsResponse,
   ConnectionRequestsResponse,
+  ConnectionRequestDirection,
   CreateConnectionRequestBody,
   DecideConnectionRequestBody,
   ConnectionRequestDto,
@@ -580,8 +581,12 @@ export const getContacts = (): Promise<ContactsResponse> =>
 export const removeContact = (userId: string): Promise<void> =>
   request<void>(`/contacts/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 
-export const getConnectionRequests = (): Promise<ConnectionRequestsResponse> =>
-  request<ConnectionRequestsResponse>('/connections/requests');
+export const getConnectionRequests = (
+  direction?: ConnectionRequestDirection,
+): Promise<ConnectionRequestsResponse> =>
+  request<ConnectionRequestsResponse>(
+    `/connections/requests${direction === 'outgoing' ? '?direction=outgoing' : ''}`,
+  );
 
 export const sendConnectionRequest = (toUser: string): Promise<ConnectionRequestDto> =>
   request<ConnectionRequestDto>('/connections/requests', {
