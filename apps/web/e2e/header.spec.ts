@@ -6,7 +6,8 @@
  *   - Primary nav links visible with correct hrefs; active link highlighted
  *   - Search "Rechercher…" entry point visible in both auth states
  *   - Avatar menu entries (logged-in): Mon profil, Likes & ma liste,
- *     Notifications, Mes candidatures, Candidatures reçues, Se déconnecter
+ *     Notifications, Mes candidatures, Mes appels à projets (MC-7 rename, was
+ *     "Candidatures reçues"), Se déconnecter
  *   - Role-gated links per role (demo switcher, hermetic via page.route)
  *   - Contextual "＋ Poster" button appears ONLY on /decouvrir
  *   - Notification badge absent at stub count 0 (badge seam, F-5 owns real count)
@@ -224,11 +225,12 @@ test('F4-E2E-11: avatar menu shows Notifications', async ({ page }) => {
   await expect(item).toHaveAttribute('href', '/notifications');
 });
 
-test('F4-E2E-12: avatar menu shows Mes candidatures + Candidatures reçues', async ({ page }) => {
+test('F4-E2E-12: avatar menu shows Mes candidatures + Mes appels à projets (MC-7 rename)', async ({ page }) => {
   await mockLoginAndLandHome(page, { displayName: 'Candidat User' });
   await page.getByRole('button', { name: /menu de candidat user/i }).click();
   await expect(page.getByRole('menuitem', { name: /mes candidatures/i })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /candidatures reçues/i })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /mes appels à projets/i })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^candidatures reçues$/i })).toHaveCount(0);
 });
 
 test('F4-E2E-13: avatar menu shows Déconnexion (F-1 regression)', async ({ page }) => {

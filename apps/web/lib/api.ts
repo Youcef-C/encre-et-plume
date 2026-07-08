@@ -456,7 +456,7 @@ export const getCalls = (limit = 2): Promise<CallsResponse> =>
   request<CallsResponse>(`/calls?limit=${limit}`);
 
 // ─── Appels à projets board (MC-4) ────────────────────────────────────────────
-import type { CallsBoardQuery, CallsBoardResponse, CreateCallRequest, CallCard, CallDetail } from '@encre-et-plume/shared';
+import type { CallsBoardQuery, CallsBoardResponse, CreateCallRequest, UpdateCallRequest, CallCard, CallDetail } from '@encre-et-plume/shared';
 
 export const getCallsBoard = (query: CallsBoardQuery = {}): Promise<CallsBoardResponse> => {
   const q = new URLSearchParams();
@@ -473,6 +473,13 @@ export const getCallDetail = (id: string): Promise<CallDetail> =>
 
 export const createCall = (body: CreateCallRequest): Promise<CallCard> =>
   request<CallCard>('/calls', { method: 'POST', body: JSON.stringify(body) });
+
+// MC-7 round 3: owner call management. PATCH edits fields (open calls only); DELETE (204) removes it.
+export const updateCall = (id: string, body: UpdateCallRequest): Promise<CallCard> =>
+  request<CallCard>(`/calls/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) });
+
+export const deleteCall = (id: string): Promise<void> =>
+  request<void>(`/calls/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ─── Apply to a call "Candidater" (MC-5) ──────────────────────────────────────
 import type { ApplyToCallRequest, ApplicationDto } from '@encre-et-plume/shared';
@@ -496,6 +503,21 @@ export const getMyApplications = (query: MyApplicationsQuery = {}): Promise<MyAp
 // Withdraw a pending application (204). Owner extension — DELETE /me/applications/:id.
 export const withdrawApplication = (id: string): Promise<void> =>
   request<void>(`/me/applications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ─── Candidatures reçues "Mes appels à projets" (MC-7) ────────────────────────
+import type { ReceivedApplicationsResponse } from '@encre-et-plume/shared';
+
+export const getReceivedApplications = (): Promise<ReceivedApplicationsResponse> =>
+  request<ReceivedApplicationsResponse>('/me/calls/applications');
+
+export const decideApplication = (
+  id: string,
+  status: 'accepted' | 'rejected',
+): Promise<ApplicationDto> =>
+  request<ApplicationDto>(`/applications/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 
 // ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
 import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';

@@ -9,13 +9,13 @@ import Link from 'next/link';
 import {
   GENRES,
   type CallDirection,
-  type ApplicationStatus,
   type CreatorRole,
   type MyApplicationRow,
   type MyApplicationsStatusFilter,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
+import StatusBadge from './StatusBadge';
 
 type Screen = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -60,30 +60,6 @@ function chipStyle(active: boolean): React.CSSProperties {
   return active
     ? { ...chipBase, background: 'var(--accent)', color: '#fff' }
     : { ...chipBase, background: 'var(--card)', color: 'var(--ink)' };
-}
-
-// Status badge — text + glyph, never color-only (prototype 2162/2168/2174).
-function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const map: Record<ApplicationStatus, { text: string; style: React.CSSProperties }> = {
-    pending: {
-      text: '● En attente',
-      style: { background: 'var(--card)', color: 'var(--accent)', border: '2px solid var(--accent)' },
-    },
-    accepted: {
-      text: '✓ Acceptée',
-      style: { background: '#1f8a5b', color: '#fff', border: '2px solid var(--ink)' },
-    },
-    rejected: {
-      text: '✕ Refusée',
-      style: { background: 'var(--card)', color: 'var(--ink2)', border: '2px solid var(--ink2)' },
-    },
-  };
-  const { text, style } = map[status];
-  return (
-    <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 5, padding: '3px 10px', whiteSpace: 'nowrap', ...style }}>
-      {text}
-    </span>
-  );
 }
 
 // Halftone-dot placeholder for a call with no cover (all seeded rows) — mirrors the board card.

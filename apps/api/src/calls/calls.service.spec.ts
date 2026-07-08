@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { CallsService, parseCallsLimit } from './calls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
@@ -481,6 +481,17 @@ describe('CallsService.findDetail', () => {
     expect(detail.sampleUrl).toBe('t1'); // board thumb still the first sample thumb
   });
 
+  // MC-7 F5: raw genres/format/scope for the owner edit-form pre-fill (additive contract).
+  it('exposes raw genres/format/scope for the edit form', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(
+      CALL_ROW({ genres: ['seinen', 'thriller'], format: 'serie', scope: '~120 planches' }),
+    );
+    const detail = await service.findDetail('viewer', 'call-1');
+    expect(detail.genres).toEqual(['seinen', 'thriller']);
+    expect(detail.format).toBe('serie');
+    expect(detail.scope).toBe('~120 planches');
+  });
+
   it('omits pending/failed media (not returned by the ready-filtered media query)', async () => {
     prisma.projectCallAsset.findMany.mockResolvedValue([
       { callId: 'call-1', mediaId: 's1', position: 0 },
@@ -606,5 +617,170 @@ describe('CallsService.closeIfFilled (MC-4X §8 — MC-7 accept seam)', () => {
   it('returns false for an unknown call', async () => {
     prisma.projectCall.findUnique.mockResolvedValue(null);
     expect(await service.closeIfFilled('nope')).toBe(false);
+  });
+});
+
+// ── MC-7 round 3: owner field edit (PATCH /calls/:id) ─────────────────────────
+describe('CallsService.updateCall', () => {
+  let service: CallsService;
+  let queue: { enqueue: jest.Mock };
+  let prisma: {
+    projectCall: { findUnique: jest.Mock; update: jest.Mock };
+    projectCallAsset: { findMany: jest.Mock };
+    media: { findMany: jest.Mock };
+    profile: { findUnique: jest.Mock };
+    application: { groupBy: jest.Mock };
+  };
+
+  beforeEach(() => {
+    queue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    prisma = {
+      projectCall: {
+        findUnique: jest.fn().mockResolvedValue(CALL_ROW({ authorId: 'acc-owner' })),
+        update: jest.fn().mockImplementation(({ data }) => ({ ...CALL_ROW({ authorId: 'acc-owner' }), ...data })),
+      },
+      projectCallAsset: { findMany: jest.fn().mockResolvedValue([]) },
+      media: { findMany: jest.fn().mockResolvedValue([]) },
+      profile: { findUnique: jest.fn().mockResolvedValue(null) },
+      application: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    service = new CallsService(prisma as unknown as PrismaService, queue as unknown as QueueService, {} as unknown as NotificationsService);
+  });
+
+  it('400s an empty body (no field to change)', async () => {
+    await expect(service.updateCall('acc-owner', 'call-1', {})).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('400s when status:closed is combined with a field edit', async () => {
+    await expect(
+      service.updateCall('acc-owner', 'call-1', { status: 'closed', title: 'X' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('delegates {status:closed} alone to closeEarly (unchanged close behavior)', async () => {
+    const card = await service.updateCall('acc-owner', 'call-1', { status: 'closed' });
+    expect(prisma.projectCall.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'call-1' }, data: { status: 'closed' } }),
+    );
+    expect(card.status).toBe('closed');
+  });
+
+  it('404s an unknown call', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(null);
+    await expect(service.updateCall('acc-owner', 'nope', { title: 'X' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('403s a non-owner (no existence leak — same shape as an owner edit path)', async () => {
+    await expect(service.updateCall('someone-else', 'call-1', { title: 'X' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('409s a closed call (settled record — edit refused)', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(CALL_ROW({ authorId: 'acc-owner', status: 'closed' }));
+    await expect(service.updateCall('acc-owner', 'call-1', { title: 'X' })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('persists title/description and re-derives tags from genres/scope/format', async () => {
+    const card = await service.updateCall('acc-owner', 'call-1', {
+      title: '« Nouveau »',
+      description: 'Nouvelle desc.',
+      genres: ['shonen'],
+      format: 'serie',
+      scope: '~80 planches',
+    });
+    const data = prisma.projectCall.update.mock.calls[0][0].data;
+    expect(data.title).toBe('« Nouveau »');
+    expect(data.description).toBe('Nouvelle desc.');
+    expect(data.genres).toEqual(['shonen']);
+    expect(data.format).toBe('serie');
+    expect(data.scope).toBe('~80 planches');
+    expect(data.tags).toEqual(['Shōnen', '~80 planches']); // genre FR label + scope
+    expect(card.title).toBe('« Nouveau »');
+  });
+
+  it('re-derives seekingRoles from edited seats', async () => {
+    await service.updateCall('acc-owner', 'call-1', { seats: { scenariste: 2 } });
+    const data = prisma.projectCall.update.mock.calls[0][0].data;
+    expect(data.seats).toEqual({ scenariste: 2 });
+    expect(data.seekingRoles).toEqual(['scenariste']);
+  });
+
+  it('409s when reducing a role below its accepted-application count', async () => {
+    prisma.application.groupBy.mockResolvedValue([{ callId: 'call-1', appliedAs: 'dessinateur', _count: { _all: 1 } }]);
+    await expect(
+      service.updateCall('acc-owner', 'call-1', { seats: { scenariste: 1 } }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.projectCall.update).not.toHaveBeenCalled();
+  });
+
+  it('allows reducing seats to exactly the accepted count', async () => {
+    prisma.application.groupBy.mockResolvedValue([{ callId: 'call-1', appliedAs: 'dessinateur', _count: { _all: 1 } }]);
+    await service.updateCall('acc-owner', 'call-1', { seats: { dessinateur: 1 } });
+    expect(prisma.projectCall.update).toHaveBeenCalled();
+  });
+
+  it('updates closesAt and enqueues a fresh versioned-key close-call job on a deadline change', async () => {
+    const deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    await service.updateCall('acc-owner', 'call-1', { deadline });
+    const data = prisma.projectCall.update.mock.calls[0][0].data;
+    expect(data.closesAt).toBeInstanceOf(Date);
+    expect(queue.enqueue).toHaveBeenCalledWith(
+      'calls',
+      'close-call',
+      { callId: 'call-1' },
+      expect.objectContaining({ idempotencyKey: `close-call-call-1-${new Date(deadline).getTime()}` }),
+    );
+  });
+
+  it('does not enqueue a job when the deadline is untouched', async () => {
+    await service.updateCall('acc-owner', 'call-1', { title: 'X' });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+// ── MC-7 round 3: owner delete (DELETE /calls/:id) ────────────────────────────
+describe('CallsService.deleteCall', () => {
+  let service: CallsService;
+  let notifications: { create: jest.Mock };
+  let prisma: {
+    projectCall: { findUnique: jest.Mock; delete: jest.Mock };
+    application: { count: jest.Mock };
+  };
+
+  beforeEach(() => {
+    notifications = { create: jest.fn().mockResolvedValue(undefined) };
+    prisma = {
+      projectCall: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'call-1', authorId: 'acc-owner' }),
+        delete: jest.fn().mockResolvedValue({ id: 'call-1' }),
+      },
+      application: { count: jest.fn().mockResolvedValue(0) },
+    };
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, notifications as unknown as NotificationsService);
+  });
+
+  it('404s an unknown call', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(null);
+    await expect(service.deleteCall('acc-owner', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('403s a non-owner', async () => {
+    await expect(service.deleteCall('someone-else', 'call-1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.projectCall.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the call for the owner (non-accepted applications cascade at the DB level)', async () => {
+    await service.deleteCall('acc-owner', 'call-1');
+    expect(prisma.projectCall.delete).toHaveBeenCalledWith({ where: { id: 'call-1' } });
+  });
+
+  it('409s when the call has an accepted application, leaving the call intact', async () => {
+    prisma.application.count.mockResolvedValue(1);
+    await expect(service.deleteCall('acc-owner', 'call-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.projectCall.delete).not.toHaveBeenCalled();
+  });
+
+  it('creates no notification on delete', async () => {
+    await service.deleteCall('acc-owner', 'call-1');
+    expect(notifications.create).not.toHaveBeenCalled();
   });
 });

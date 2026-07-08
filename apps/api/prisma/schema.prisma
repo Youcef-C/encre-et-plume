@@ -33,6 +33,8 @@ enum NotifType {
   like
   comment
   system // F-14: system notifications (data export ready, etc.)
+  application_accepted // MC-7: owner accepted an applicant
+  application_rejected // MC-7: owner rejected an applicant
 }
 
 // ── DR-1 Work/Chapter/Announcement enums ───────────────────────────────────────
@@ -633,7 +635,7 @@ enum ApplicationStatus {
 model Application {
   id                    String            @id @default(cuid())
   callId                String
-  call                  ProjectCall       @relation(fields: [callId], references: [id])
+  call                  ProjectCall       @relation(fields: [callId], references: [id], onDelete: Cascade)
   applicantId           String
   applicant             Account           @relation(fields: [applicantId], references: [id])
   sampleUrl             String // denormalized display URL of the FIRST sample — MC-6/MC-7 render this thumbnail

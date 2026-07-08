@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { CallCard, MediaResponse } from '@encre-et-plume/shared';
+import type { CallCard, CallDetail, MediaResponse } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, createCall: vi.fn(), getMyProjects: vi.fn(() => Promise.resolve({ items: [] })) };
+  return {
+    ...actual,
+    createCall: vi.fn(),
+    updateCall: vi.fn(),
+    getMyProjects: vi.fn(() => Promise.resolve({ items: [] })),
+  };
 });
 
 // §8: request one seat for a role via its stepper "＋" button.
@@ -69,6 +74,38 @@ function futureDate(days: number): string {
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+// A full CallDetail for edit-mode pre-fill (round 3, F3-2). Deadline 20d out for a stable YYYY-MM-DD.
+const editDeadlineISO = new Date(`${futureDate(20)}T00:00:00`).toISOString();
+const detail: CallDetail = {
+  id: 'call-edit',
+  heading: 'DESSINATEUR CHERCHE SCÉNARISTE',
+  title: 'Titre initial',
+  tags: ['Seinen', 'One-shot'],
+  authorName: 'Moi',
+  closesInDays: 20,
+  applicationCount: 2,
+  direction: 'illustratorSeeksWriter',
+  description: 'Description initiale.',
+  sampleUrl: null,
+  status: 'open',
+  deadline: editDeadlineISO,
+  isOwner: true,
+  hasApplied: false,
+  myApplicationId: null,
+  viewerHasRole: false,
+  seekingRoles: ['scenariste'],
+  seats: { scenariste: 2 },
+  acceptedByRole: { scenariste: 1 },
+  remainingSeats: 1,
+  createdAt: '2026-07-01T00:00:00.000Z',
+  samples: [],
+  documents: [],
+  team: [],
+  genres: ['seinen'],
+  format: 'one_shot',
+  scope: '~120 planches',
+};
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -200,5 +237,78 @@ describe('PostCallModal', () => {
     expect(payload.sampleMediaIds[0]).toMatch(/^media-img-/);
     expect(payload.documentMediaIds).toHaveLength(1);
     expect(payload.documentMediaIds[0]).toMatch(/^media-doc-/);
+  });
+
+  // ─── Round 3: edit mode (reuse the form, pre-filled, PATCH) ──────────────────
+  describe('edit mode', () => {
+    const editProps = () => ({
+      edit: { callId: 'call-edit', initial: detail },
+      onUpdated: vi.fn(),
+    });
+
+    it('renders the edit dialog with a pre-filled form and the D13 immutability note', () => {
+      render(<PostCallModal onClose={vi.fn()} onCreated={vi.fn()} {...editProps()} />);
+      expect(screen.getByRole('dialog', { name: "Modifier l'appel" })).toBeInTheDocument();
+      expect(screen.getByLabelText('Titre')).toHaveValue('Titre initial');
+      expect(screen.getByLabelText('Description')).toHaveValue('Description initiale.');
+      expect(screen.getByLabelText('Ampleur')).toHaveValue('~120 planches');
+      expect(screen.getByLabelText('Date de clôture')).toHaveValue(futureDate(20));
+      // Pre-filled genre chip + selected format.
+      expect(screen.getByText('Seinen')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'One-shot' })).toHaveAttribute('aria-pressed', 'true');
+      // D13: uploads + project hidden, replaced by a note.
+      expect(screen.queryByRole('button', { name: 'upload image' })).not.toBeInTheDocument();
+      expect(
+        screen.getByText('Les visuels, les documents et le projet lié ne sont pas modifiables.'),
+      ).toBeInTheDocument();
+    });
+
+    it('disables the seat "−" at the accepted-applicants floor', () => {
+      render(<PostCallModal onClose={vi.fn()} onCreated={vi.fn()} {...editProps()} />);
+      // 1 scénariste accepted → seats at 2, "−" allowed down to 1 then disabled. Verify it is enabled at 2…
+      const minus = screen.getByRole('button', { name: 'Retirer un poste Scénariste' });
+      expect(minus).toBeEnabled();
+    });
+
+    it('cannot reduce a seat below its accepted floor', async () => {
+      const user = userEvent.setup();
+      render(<PostCallModal onClose={vi.fn()} onCreated={vi.fn()} {...editProps()} />);
+      const minus = screen.getByRole('button', { name: 'Retirer un poste Scénariste' });
+      await user.click(minus); // 2 → 1 (floor = accepted 1)
+      expect(minus).toBeDisabled();
+    });
+
+    it('submits only the form fields via updateCall and calls onUpdated', async () => {
+      const updated: CallCard = { ...created, id: 'call-edit', title: 'Titre modifié' };
+      (api.updateCall as ReturnType<typeof vi.fn>).mockResolvedValue(updated);
+      const user = userEvent.setup();
+      const props = editProps();
+      const onClose = vi.fn();
+      render(<PostCallModal onClose={onClose} onCreated={vi.fn()} {...props} />);
+
+      const title = screen.getByLabelText('Titre');
+      await user.clear(title);
+      await user.type(title, 'Titre modifié');
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+      await waitFor(() => expect(api.updateCall).toHaveBeenCalledTimes(1));
+      const [id, body] = (api.updateCall as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(id).toBe('call-edit');
+      expect(body).toMatchObject({
+        title: 'Titre modifié',
+        description: 'Description initiale.',
+        genres: ['seinen'],
+        format: 'one_shot',
+        scope: '~120 planches',
+        seats: { scenariste: 2 },
+      });
+      // D13: never sends media ids or a project id.
+      expect(body.sampleMediaIds).toBeUndefined();
+      expect(body.documentMediaIds).toBeUndefined();
+      expect(body.projectId).toBeUndefined();
+      expect(props.onUpdated).toHaveBeenCalledWith(updated);
+      expect(onClose).toHaveBeenCalled();
+      expect(api.createCall).not.toHaveBeenCalled();
+    });
   });
 });

@@ -9,7 +9,9 @@ export type NotifType =
   | 'release'
   | 'like'
   | 'comment'
-  | 'system'; // F-14: system notifications (data export ready, etc.)
+  | 'system' // F-14: system notifications (data export ready, etc.)
+  | 'application_accepted' // MC-7: the call owner accepted the applicant's candidature
+  | 'application_rejected'; // MC-7: the call owner did not retain the applicant's candidature
 
 export type NotifArea = 'messages' | 'demandes' | 'signalements' | 'autres';
 

@@ -83,3 +83,22 @@ export interface MyApplicationsResponse {
   total: number; // count for the ACTIVE status filter (drives pagination)
   totalAll: number; // unfiltered count — the "Toutes · N" chip
 }
+
+// ── MC-7 "Mes appels à projets" — applications received on the caller's own calls ──
+
+/** One owned call and its received applications (only calls with ≥1 application). */
+export interface ReceivedCallGroup {
+  callId: string;
+  callTitle: string; // ProjectCall.title
+  applications: ApplicationDto[]; // newest-first; applicant/samples/message/status per row
+}
+
+/** GET /me/calls/applications — groups ordered by call createdAt desc. */
+export interface ReceivedApplicationsResponse {
+  groups: ReceivedCallGroup[];
+}
+
+/** PATCH /applications/{id} body — pending → accepted | rejected only, decision final. */
+export interface DecideApplicationRequest {
+  status: Extract<ApplicationStatus, 'accepted' | 'rejected'>;
+}

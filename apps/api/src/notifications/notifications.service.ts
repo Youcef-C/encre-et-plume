@@ -21,6 +21,10 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   like: 'autres',
   comment: 'autres',
   system: 'autres', // F-14: system notifications (data export ready, etc.)
+  // MC-7: decision notifs stay in 'autres' — the 'demandes' badge is owner-facing "new applicants",
+  // a decision must not inflate the applicant's demandes badge.
+  application_accepted: 'autres',
+  application_rejected: 'autres',
 };
 
 type SourceUserRow = { displayName: string; profileSlug: string; avatar: string | null } | null;

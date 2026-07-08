@@ -13,18 +13,21 @@ import {
   CALL_MAX_DOCUMENTS,
   CALL_MAX_SEATS_PER_ROLE,
   CREATOR_ROLES,
+  GENRES,
   resolveGenreId,
   type CreatorRole,
   type SeatCounts,
   type CallFormat,
   type CallCard,
+  type CallDetail,
   type CreateCallRequest,
+  type UpdateCallRequest,
   type ApiError,
   type MediaResponse,
   type MediaVariants,
   type ProjectSummary,
 } from '@encre-et-plume/shared';
-import { createCall, getMyProjects } from '../../lib/api';
+import { createCall, updateCall, getMyProjects } from '../../lib/api';
 import { isDocumentType, ROLE_LABEL } from '../../lib/calls';
 import { XIcon } from '../icons';
 import GenreChip from '../GenreChip';
@@ -130,30 +133,55 @@ function tomorrowISO(): string {
   return d.toISOString().slice(0, 10);
 }
 
+// ISO → local YYYY-MM-DD for the date input (round-trips the create-mode local-midnight submit).
+function isoToDateInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Genre ids → canonical FR labels for the edit-mode chip pre-fill.
+function genreIdsToLabels(ids: string[]): string[] {
+  return ids.map((id) => GENRES.find((g) => g.id === id)?.fr).filter((fr): fr is string => !!fr);
+}
+
 export default function PostCallModal({
   onClose,
   onCreated,
+  edit,
+  onUpdated,
 }: {
   onClose: () => void;
   onCreated: (card: CallCard) => void;
+  // Round 3 (F3-2): pre-filled EDIT mode over the same form. When absent, create mode is unchanged.
+  edit?: { callId: string; initial: CallDetail };
+  onUpdated?: (card: CallCard) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'post-call-title';
+  const isEdit = !!edit;
+  const initial = edit?.initial;
 
   // §8: per-role seat counts (0 = not sought). The author position is derived server-side from the
   // profile, so there is no "Je suis :" picker. An optional linked project stays (req6).
-  const [seats, setSeats] = useState<Record<CreatorRole, number>>({ scenariste: 0, dessinateur: 0 });
+  const [seats, setSeats] = useState<Record<CreatorRole, number>>({
+    scenariste: initial?.seats.scenariste ?? 0,
+    dessinateur: initial?.seats.dessinateur ?? 0,
+  });
   const [projectId, setProjectId] = useState('');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [genres, setGenres] = useState<string[]>([]); // canonical FR labels
-  const [format, setFormat] = useState<CallFormat | null>(null);
-  const [scope, setScope] = useState('');
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [genres, setGenres] = useState<string[]>(initial ? genreIdsToLabels(initial.genres) : []); // canonical FR labels
+  const [format, setFormat] = useState<CallFormat | null>(initial?.format ?? null);
+  const [scope, setScope] = useState(initial?.scope ?? '');
   // MC-4X: several sample images (max CALL_MAX_SAMPLES) + PDF documents (max CALL_MAX_DOCUMENTS).
   const [samples, setSamples] = useState<{ id: string; thumb: string }[]>([]);
   const [documents, setDocuments] = useState<{ id: string; name: string }[]>([]);
-  const [deadline, setDeadline] = useState('');
+  const [deadline, setDeadline] = useState(isoToDateInput(initial?.deadline ?? null));
+
+  // Edit-mode seat floor: cannot drop a role below its accepted-application count (mirror of the B3-2 server rule).
+  const seatFloor = (r: CreatorRole): number => (isEdit ? (initial?.acceptedByRole[r] ?? 0) : 0);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -181,7 +209,7 @@ export default function PostCallModal({
     setGenres((cur) => cur.filter((g) => g !== fr));
   }
   function setSeat(r: CreatorRole, delta: number) {
-    setSeats((cur) => ({ ...cur, [r]: Math.max(0, Math.min(CALL_MAX_SEATS_PER_ROLE, cur[r] + delta)) }));
+    setSeats((cur) => ({ ...cur, [r]: Math.max(seatFloor(r), Math.min(CALL_MAX_SEATS_PER_ROLE, cur[r] + delta)) }));
   }
 
   function validate(): Record<string, string> {
@@ -205,24 +233,40 @@ export default function PostCallModal({
     const genreIds = genres.map((g) => resolveGenreId(g)).filter((id): id is string => !!id);
     const seatsBody: SeatCounts = {};
     for (const r of CREATOR_ROLES) if (seats[r] > 0) seatsBody[r] = seats[r];
-    const body: CreateCallRequest = {
-      seats: seatsBody,
-      title: title.trim(),
-      description: description.trim(),
-      genres: genreIds,
-      ...(format ? { format } : {}),
-      ...(scope.trim() ? { scope: scope.trim() } : {}),
-      ...(projectId ? { projectId } : {}),
-      ...(samples.length ? { sampleMediaIds: samples.map((s) => s.id) } : {}),
-      ...(documents.length ? { documentMediaIds: documents.map((d) => d.id) } : {}),
-      // Send an ISO datetime so the server's future check is unambiguous.
-      deadline: new Date(`${deadline}T00:00:00`).toISOString(),
-    };
+    // ISO datetime so the server's future check is unambiguous.
+    const deadlineISO = new Date(`${deadline}T00:00:00`).toISOString();
 
     setPending(true);
     try {
-      const card = await createCall(body);
-      onCreated(card);
+      if (isEdit && edit) {
+        // Round 3: field edit only — never touch samples/documents/project (D13).
+        const body: UpdateCallRequest = {
+          seats: seatsBody,
+          title: title.trim(),
+          description: description.trim(),
+          genres: genreIds,
+          ...(format ? { format } : {}),
+          ...(scope.trim() ? { scope: scope.trim() } : {}),
+          deadline: deadlineISO,
+        };
+        const card = await updateCall(edit.callId, body);
+        onUpdated?.(card);
+      } else {
+        const body: CreateCallRequest = {
+          seats: seatsBody,
+          title: title.trim(),
+          description: description.trim(),
+          genres: genreIds,
+          ...(format ? { format } : {}),
+          ...(scope.trim() ? { scope: scope.trim() } : {}),
+          ...(projectId ? { projectId } : {}),
+          ...(samples.length ? { sampleMediaIds: samples.map((s) => s.id) } : {}),
+          ...(documents.length ? { documentMediaIds: documents.map((d) => d.id) } : {}),
+          deadline: deadlineISO,
+        };
+        const card = await createCall(body);
+        onCreated(card);
+      }
       onClose();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -285,7 +329,7 @@ export default function PostCallModal({
             id={titleId}
             style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}
           >
-            Poster un appel
+            {isEdit ? "Modifier l'appel" : 'Poster un appel'}
           </h2>
           <button
             type="button"
@@ -313,9 +357,9 @@ export default function PostCallModal({
                   <button
                     type="button"
                     onClick={() => setSeat(r, -1)}
-                    disabled={seats[r] === 0}
+                    disabled={seats[r] <= seatFloor(r)}
                     aria-label={`Retirer un poste ${ROLE_LABEL[r]}`}
-                    style={stepBtn(seats[r] === 0)}
+                    style={stepBtn(seats[r] <= seatFloor(r))}
                   >
                     −
                   </button>
@@ -341,8 +385,8 @@ export default function PostCallModal({
             )}
           </div>
 
-          {/* Optional link to one of the author's own projects. */}
-          {projects.length > 0 && (
+          {/* Optional link to one of the author's own projects. Hidden in edit mode (D13). */}
+          {!isEdit && projects.length > 0 && (
             <div style={field}>
               <label htmlFor="post-call-project" style={label}>
                 Lier à un projet <span style={{ color: 'var(--ink2)', fontWeight: 500 }}>(facultatif)</span>
@@ -466,8 +510,16 @@ export default function PostCallModal({
             />
           </div>
 
+          {/* Edit mode (D13): media + linked project are not editable — the contract carries no media ids. */}
+          {isEdit && (
+            <p style={{ fontSize: 12, color: 'var(--ink2)', margin: '0 0 14px' }}>
+              Les visuels, les documents et le projet lié ne sont pas modifiables.
+            </p>
+          )}
+
           {/* Visuels et documents — ONE combined box; images and PDF/text route by content-type,
-              per-family caps (5 visuels, 3 documents) enforced via extraValidate. */}
+              per-family caps (5 visuels, 3 documents) enforced via extraValidate. Create-only (D13). */}
+          {!isEdit && (
           <div style={field}>
             <span style={label}>
               Visuels et documents{' '}
@@ -565,6 +617,7 @@ export default function PostCallModal({
               />
             )}
           </div>
+          )}
 
           {/* Date de clôture */}
           <div style={field}>
@@ -620,7 +673,13 @@ export default function PostCallModal({
               opacity: pending ? 0.6 : 1,
             }}
           >
-            {pending ? 'Publication…' : "Publier l'appel"}
+            {isEdit
+              ? pending
+                ? 'Enregistrement…'
+                : 'Enregistrer'
+              : pending
+                ? 'Publication…'
+                : "Publier l'appel"}
           </button>
         </div>
       </div>

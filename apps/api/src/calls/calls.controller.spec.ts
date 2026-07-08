@@ -16,7 +16,8 @@ describe('CallsController', () => {
     findOpenCalls: jest.Mock;
     findBoard: jest.Mock;
     createCall: jest.Mock;
-    closeEarly: jest.Mock;
+    updateCall: jest.Mock;
+    deleteCall: jest.Mock;
     findDetail: jest.Mock;
   };
 
@@ -25,7 +26,8 @@ describe('CallsController', () => {
       findOpenCalls: jest.fn().mockResolvedValue({ items: [] }),
       findBoard: jest.fn().mockResolvedValue({ items: [], page: 1, pageSize: 10, total: 0 }),
       createCall: jest.fn().mockResolvedValue({ id: 'call-new' }),
-      closeEarly: jest.fn().mockResolvedValue({ id: 'call-1', status: 'closed' }),
+      updateCall: jest.fn().mockResolvedValue({ id: 'call-1', status: 'closed' }),
+      deleteCall: jest.fn().mockResolvedValue(undefined),
       findDetail: jest.fn().mockResolvedValue({ id: 'call-1', samples: [], documents: [] }),
     };
     const module: TestingModule = await Test.createTestingModule({
@@ -81,9 +83,14 @@ describe('CallsController', () => {
     expect(service.createCall).toHaveBeenCalledWith('acc-1', dto);
   });
 
-  it('closes a call early scoped to the session account', async () => {
-    await controller.close(req(), 'call-1', { status: 'closed' });
-    expect(service.closeEarly).toHaveBeenCalledWith('acc-1', 'call-1');
+  it('routes a PATCH to updateCall scoped to the session account (close or field edit)', async () => {
+    await controller.update(req(), 'call-1', { status: 'closed' });
+    expect(service.updateCall).toHaveBeenCalledWith('acc-1', 'call-1', { status: 'closed' });
+  });
+
+  it('routes a DELETE to deleteCall scoped to the session account', async () => {
+    await controller.remove(req(), 'call-1');
+    expect(service.deleteCall).toHaveBeenCalledWith('acc-1', 'call-1');
   });
 
   it('routes the detail request to findDetail, scoped to the session account (MC-4X)', async () => {

@@ -23,7 +23,7 @@ import type { CallFormat, SeatCounts } from '@encre-et-plume/shared';
 const GENRE_IDS = new Set(GENRES.map((g) => g.id));
 
 /** Every array element must be a known F-20 GENRES id (trust boundary — never a free label). */
-function IsGenreIds(validationOptions?: ValidationOptions) {
+export function IsGenreIds(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isGenreIds',
@@ -41,7 +41,7 @@ function IsGenreIds(validationOptions?: ValidationOptions) {
  * MC-4X §8: seats = a plain object of role→count. Keys must be CREATOR_ROLES, values integers in
  * 1..CALL_MAX_SEATS_PER_ROLE, at least one seat total. (The service re-normalises defensively.)
  */
-function IsSeatCounts(validationOptions?: ValidationOptions) {
+export function IsSeatCounts(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isSeatCounts',
@@ -67,7 +67,7 @@ function IsSeatCounts(validationOptions?: ValidationOptions) {
 }
 
 /** Deadline must be a parseable ISO date strictly in the future. */
-function IsFutureIsoDate(validationOptions?: ValidationOptions) {
+export function IsFutureIsoDate(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isFutureIsoDate',

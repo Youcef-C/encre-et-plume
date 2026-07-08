@@ -90,10 +90,30 @@ export interface CallDetail extends CallCard {
   samples: string[]; // web-variant URLs of ALL ready call_sample assets, position order
   documents: CallDocument[]; // ready call_document assets, position order
   team: InvitationUserRef[]; // MC-4X req6: author + linked-project accepted collaborators + accepted applicants of this call
+  // MC-7 F5: raw values for the owner edit-form pre-fill (CallCard only carries display `tags`).
+  genres: string[]; // GENRES ids (F-20)
+  format: CallFormat | null;
+  scope: string | null;
 }
 
 export interface CloseCallRequest {
   status: 'closed';
+}
+
+/**
+ * MC-7 round 3 — PATCH /calls/:id. All fields optional (≥1 required, enforced server-side).
+ * `status: 'closed'` is the close branch and is EXCLUSIVE (may not combine with a field edit);
+ * every other field is an owner field-edit on an OPEN call only.
+ */
+export interface UpdateCallRequest {
+  status?: 'closed';
+  title?: string;
+  description?: string;
+  genres?: string[]; // GENRES ids, 1–5
+  format?: CallFormat;
+  scope?: string;
+  seats?: SeatCounts; // re-derives seekingRoles; may not drop a role below its accepted count
+  deadline?: string; // ISO date, must be future; re-arms the auto-close job with a versioned key
 }
 
 /** Payload for the `calls` queue `close-call` delayed job (auto-close at deadline). */

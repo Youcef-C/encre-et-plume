@@ -46,7 +46,7 @@ function chipStyle(active: boolean): React.CSSProperties {
     : { ...chipBase, background: 'var(--card)', color: 'var(--ink)' };
 }
 
-// Outline stub buttons (Mes candidatures / Candidatures reçues) — no-op until MC-6/MC-7.
+// Outline nav buttons (Mes candidatures / Mes appels à projets) — both live (MC-6/MC-7).
 const outlineBtn: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
@@ -227,13 +227,13 @@ export default function AppelsClient() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: 0 }}>Appels à projets</h1>
         <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          {/* MC-6: live link. "Candidatures reçues" stays a stub until MC-7. */}
           <Link href="/mes-candidatures" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Mes candidatures
           </Link>
-          <button type="button" onClick={() => {}} style={outlineBtn}>
-            Candidatures reçues
-          </button>
+          {/* MC-7: received applicants on the owner's own calls. */}
+          <Link href="/candidatures-recues" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            Mes appels à projets
+          </Link>
           <button
             type="button"
             onClick={() => setPosting(true)}
@@ -362,6 +362,12 @@ export default function AppelsClient() {
           onCandidater={(c) => {
             setDetailCallId(null);
             setApplyTarget(c);
+          }}
+          // Round 3: owner edit/delete on the board's own detail modal — refetch the board list.
+          onChanged={() => setRetryKey((k) => k + 1)}
+          onDeleted={() => {
+            setDetailCallId(null);
+            setRetryKey((k) => k + 1);
           }}
         />
       )}

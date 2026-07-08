@@ -82,6 +82,9 @@ const detail = (over: Partial<CallDetail> = {}): CallDetail => ({
   samples: [],
   documents: [],
   team: [],
+  genres: ['seinen'],
+  format: null,
+  scope: null,
   ...over,
 });
 

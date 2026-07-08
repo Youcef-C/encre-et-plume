@@ -36,6 +36,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { CreateCallDto } from './dto/create-call.dto';
+import type { UpdateCallDto } from './dto/update-call.dto';
 import type { ApplyToCallDto } from './dto/apply-to-call.dto';
 
 const CALLS_DEFAULT_LIMIT = 2;
@@ -398,6 +399,111 @@ export class CallsService {
     return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole.get(updated.id) ?? {});
   }
 
+  // ── MC-7 round 3: owner field edit (PATCH /calls/:id — same route as close-early) ────────────
+  /**
+   * Owner edit of an OPEN call. `status:'closed'` alone delegates to the untouched `closeEarly`;
+   * any other field is a field edit (mutually exclusive with the close branch). Seats can never drop
+   * a role below its accepted-application count (a started collaboration); `seekingRoles`/`tags` are
+   * re-derived server-side. A deadline change re-arms the auto-close job with a versioned key so a
+   * stale delayed job from the old deadline can't win (paired with the processor's `closesAt` guard).
+   */
+  async updateCall(viewerId: string, id: string, dto: UpdateCallDto): Promise<CallCard> {
+    const keys = (Object.keys(dto) as (keyof UpdateCallDto)[]).filter((k) => dto[k] !== undefined);
+    if (keys.length === 0) throw new BadRequestException('Aucune modification fournie.');
+    if (dto.status === 'closed') {
+      if (keys.some((k) => k !== 'status')) {
+        throw new BadRequestException('Clôture et modification ne peuvent pas être combinées.');
+      }
+      return this.closeEarly(viewerId, id); // untouched close behavior
+    }
+
+    const row = (await this.prisma.projectCall.findUnique({ where: { id } })) as unknown as CallRow | null;
+    if (!row) throw new NotFoundException('Appel introuvable.');
+    if (row.authorId !== viewerId) throw new ForbiddenException('Seul l’auteur peut modifier cet appel.');
+    if (derivedStatus(row) === 'closed') throw new ConflictException('Cet appel est clôturé.');
+
+    const acceptedByRole = (await this.resolveAcceptedByRole([id])).get(id) ?? {};
+
+    const data: Record<string, unknown> = {};
+    if (dto.title !== undefined) data['title'] = dto.title;
+    if (dto.description !== undefined) data['description'] = dto.description;
+
+    if (dto.genres !== undefined) data['genres'] = dto.genres;
+    if (dto.format !== undefined) data['format'] = dto.format ?? null;
+    if (dto.scope !== undefined) data['scope'] = dto.scope ?? null;
+    if (dto.genres !== undefined || dto.format !== undefined || dto.scope !== undefined) {
+      const genres = dto.genres ?? row.genres;
+      const scope = dto.scope !== undefined ? dto.scope : row.scope ?? undefined;
+      const format = (dto.format !== undefined ? dto.format : (row.format as CallFormat | null)) ?? undefined;
+      data['tags'] = composeTags(genres, scope, format);
+    }
+
+    if (dto.seats !== undefined) {
+      const seats = normalizeSeats(dto.seats);
+      // Conservative floor: an accepted applicant is a started collaboration — never orphan them.
+      for (const r of Object.keys(acceptedByRole) as CreatorRole[]) {
+        const accepted = acceptedByRole[r] ?? 0;
+        if (accepted > 0 && (seats[r] ?? 0) < accepted) {
+          throw new ConflictException('Impossible de réduire les postes sous le nombre de candidatures acceptées.');
+        }
+      }
+      data['seats'] = seats;
+      data['seekingRoles'] = (Object.keys(seats) as CreatorRole[]).filter((r) => (seats[r] ?? 0) > 0);
+    }
+
+    let newClosesAt: Date | null = null;
+    if (dto.deadline !== undefined) {
+      newClosesAt = new Date(dto.deadline);
+      data['closesAt'] = newClosesAt;
+    }
+
+    const updated = (await this.prisma.projectCall.update({ where: { id }, data })) as unknown as CallRow;
+
+    if (newClosesAt) {
+      // F4: versioned key — the create-time `close-call-${id}` key would be deduped by BullMQ, so a
+      // stale job from the old deadline would survive. A new key re-arms; the processor's `closesAt`
+      // guard neutralises the stale one. (':' is illegal in BullMQ custom ids — hyphens only.)
+      await this.queue.enqueue(
+        'calls',
+        'close-call',
+        { callId: id },
+        { delayMs: Math.max(0, newClosesAt.getTime() - Date.now()), idempotencyKey: `close-call-${id}-${newClosesAt.getTime()}` },
+      );
+    }
+
+    const [assetMedia, viewerRoles] = await Promise.all([
+      this.loadCallAssetMedia([id]),
+      this.getViewerRoles(viewerId),
+    ]);
+    return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole);
+  }
+
+  // ── MC-7 round 3: owner delete (DELETE /calls/:id) ───────────────────────────
+  /**
+   * Owner delete of a call. Refused (409) if ANY application is `accepted` — that's a started
+   * collaboration (MC-8 seam) and the counterpart's MC-6 history; the escape hatch is close-early.
+   * Otherwise pending/rejected applications cascade-delete at the DB level (Application.call
+   * onDelete: Cascade → ApplicationAsset / ProjectCallAsset cascade beneath). No notification is sent
+   * to pending applicants.
+   * ponytail: no 'call withdrawn' notif — add a NotifType if applicant confusion shows up.
+   */
+  async deleteCall(viewerId: string, id: string): Promise<void> {
+    const row = (await this.prisma.projectCall.findUnique({
+      where: { id },
+      select: { id: true, authorId: true },
+    })) as { authorId: string | null } | null;
+    if (!row) throw new NotFoundException('Appel introuvable.');
+    if (row.authorId !== viewerId) throw new ForbiddenException('Seul l’auteur peut supprimer cet appel.');
+
+    const accepted = await this.prisma.application.count({ where: { callId: id, status: 'accepted' } });
+    if (accepted > 0) {
+      throw new ConflictException(
+        'Impossible de supprimer : des candidatures ont déjà été acceptées. Clôturez l’appel plutôt.',
+      );
+    }
+    await this.prisma.projectCall.delete({ where: { id } });
+  }
+
   // ── MC-5 apply "Candidater" (MC-4X: role-gated, server-derived appliedAs, multi-sample) ─────
   async apply(viewerId: string, callId: string, dto: ApplyToCallDto): Promise<ApplicationDto> {
     const call = (await this.prisma.projectCall.findUnique({ where: { id: callId } })) as
@@ -568,7 +674,17 @@ export class CallsService {
       .map((a) => ({ mediaId: '', url: a.variants!.orig as string, size: a.size ?? 0 }));
 
     const card = this.mapCard(row, viewerId, assetMedia, viewerRoles, appliedIds.get(id) ?? null, acceptedByRole.get(id) ?? {});
-    return { ...card, createdAt: row.createdAt.toISOString(), samples, documents, team };
+    return {
+      ...card,
+      createdAt: row.createdAt.toISOString(),
+      samples,
+      documents,
+      team,
+      // MC-7 F5: raw values for the owner edit-form pre-fill (already loaded — no extra query).
+      genres: row.genres,
+      format: (row.format as CallFormat | null) ?? null,
+      scope: row.scope ?? null,
+    };
   }
 
   /**
@@ -777,7 +893,8 @@ export function toApplicationSamples(assets: { url: string; kind: string; size: 
 }
 
 // MC-4X req6: shared account→ref select/shape/mapper (applicant refs AND team members).
-const ACCOUNT_REF_SELECT = {
+// Exported for MC-7 ReceivedApplicationsService (same applicant ref shape).
+export const ACCOUNT_REF_SELECT = {
   id: true,
   displayName: true,
   profileSlug: true,
@@ -803,7 +920,8 @@ function accountToUserRef(u: AccountRefRow): InvitationUserRef {
   };
 }
 
-function toApplicationDto(row: ApplicationRow): ApplicationDto {
+// Exported for MC-7 ReceivedApplicationsService — same row → ApplicationDto mapping.
+export function toApplicationDto(row: ApplicationRow): ApplicationDto {
   return {
     id: row.id,
     callId: row.callId,

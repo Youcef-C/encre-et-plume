@@ -15,10 +15,11 @@ describe('CloseCallProcessor', () => {
     expect(processor.queue).toBe('calls');
   });
 
-  it('flips an open call to closed (scoped to still-open rows)', async () => {
+  it('flips an open, due call to closed (scoped to still-open rows past their deadline)', async () => {
     await processor.process({ callId: 'call-1' }, {} as Job);
+    // MC-7 F4: the `closesAt <= now` guard means a stale job after a deadline EXTENSION is a no-op.
     expect(prisma.projectCall.updateMany).toHaveBeenCalledWith({
-      where: { id: 'call-1', status: 'open' },
+      where: { id: 'call-1', status: 'open', closesAt: { lte: expect.any(Date) } },
       data: { status: 'closed' },
     });
   });

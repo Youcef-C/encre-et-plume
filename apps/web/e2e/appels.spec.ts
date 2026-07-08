@@ -6,7 +6,7 @@
  * GET/POST /calls integration + auth gate. Login as camille.roux@seed.encre-et-plume.local /
  * password123 (dr1-camille-roux, single-role scénariste).
  *
- * Seed fixtures (backend-notes.md — 8 board calls, board fetches status:'all'). MC-4X: each call's
+ * Seed fixtures (backend-notes.md — 10 board calls, board fetches status:'all'). MC-4X: each call's
  * `authorRole`/`seekingRole` fixture fields are still declared in seed.js and derived into
  * `authorRoles[]` + `seats` (1 seat per sought role) at load time — so a call "seeking dessinateur"
  * below means `seats: { dessinateur: 1 }`, `seekingRoles: ['dessinateur']`:
@@ -21,7 +21,11 @@
  *     dessinateur→scenariste, non-seinen, oldest on the board — the calls the dedicated
  *     MC6_APPLICANT_ACCOUNT has applied to (one is 'accepted': Comédie douce-amère → team + Postes
  *     "Scénariste : 1/1" is live-checkable without MC-7's accept endpoint).
- *     They only grow the TOTAL count (8), not the dessinateur-seeking (3) / seinen (2) filter counts.
+ *   + 2 MC-7 fixtures (Polar nocturne + round-3's « Brouillon d'été », both dessinateur→scenariste,
+ *     genre action) — owned by appels.mc7@seed.encre-et-plume.local, exercised end-to-end in
+ *     mc7-candidatures-recues.spec.ts (the second fixture backs the round-3 edit/delete e2e).
+ *     MC-6 + MC-7 fixtures only grow the TOTAL count (10), not the dessinateur-seeking (3) /
+ *     seinen (2) filter counts (both picked seekingRoles/genre precisely to keep those stable).
  *
  * The navbar "Trouver" dropdown entry point to /appels is covered in header.spec.ts.
  */
@@ -52,10 +56,13 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('MC4-E1: header, tagline, filter row, and the 5 named MC-4 rows render (8 total with MC-6 fixtures)', async ({ page }) => {
+  test('MC4-E1: header, tagline, filter row, and the 5 named MC-4 rows render (10 total with MC-6+MC-7 fixtures)', async ({ page }) => {
     // MC-6: "Mes candidatures" is now a live link (was a no-op stub button pre-MC-6).
     await expect(page.getByRole('link', { name: 'Mes candidatures' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Candidatures reçues' })).toBeVisible();
+    // MC-7: "Candidatures reçues" was renamed "Mes appels à projets" and is now a live link
+    // (was a no-op stub button pre-MC-7).
+    await expect(page.getByRole('link', { name: 'Mes appels à projets' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Candidatures reçues' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '＋ Poster un appel' })).toBeVisible();
     await expect(
       page.getByText("Postez un scénario en quête d'un trait, ou un univers en quête d'une histoire."),
@@ -69,7 +76,7 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     // §8 — no native <select> anywhere on this page (OnBrandMultiSelect is custom).
     expect(await page.locator('select').count()).toBe(0);
 
-    await expect(board(page)).toHaveCount(8);
+    await expect(board(page)).toHaveCount(10);
     await expect(cardByTitle(page, '« Lames de Brume »')).toBeVisible();
     await expect(cardByTitle(page, 'One-shot fantastique')).toBeVisible();
     await expect(cardByTitle(page, 'Comédie romantique')).toBeVisible();
@@ -152,7 +159,7 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     // Re-click clears (same pattern as /trouver's role toggle).
     await dessinateur.click();
     await expect(dessinateur).toHaveAttribute('aria-pressed', 'false');
-    await expect(board(page)).toHaveCount(8);
+    await expect(board(page)).toHaveCount(10);
   });
 
   test('MC4-E6: genre filter {Seinen} narrows the board, with a removable chip inside the popover, trigger shows (N)', async ({
@@ -176,7 +183,7 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     await expect(cardByTitle(page, 'One-shot fantastique')).not.toBeVisible();
 
     await page.getByRole('button', { name: 'Retirer Seinen' }).click();
-    await expect(board(page)).toHaveCount(8);
+    await expect(board(page)).toHaveCount(10);
   });
 
   test('MC4-E7: dashed sample-slot placeholder has an accessible label on seed cards without a sample', async ({
@@ -235,7 +242,7 @@ test.describe('Appels à projets — signed in (dr1-camille-roux)', () => {
     await expect(newCard.getByText('SCÉNARISTE CHERCHE DESSINATEUR·RICE')).toBeVisible();
     // The poster is the viewer's own new call — no Candidater.
     await expect(newCard.getByRole('button', { name: 'Candidater' })).toHaveCount(0);
-    await expect(board(page)).toHaveCount(9);
+    await expect(board(page)).toHaveCount(11);
     // Prepended means it's also the first DOM row (still true, asserted separately from identity).
     await expect(board(page).first()).toHaveText(/Brume Écarlate/);
   });

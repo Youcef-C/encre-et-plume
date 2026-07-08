@@ -7,10 +7,12 @@
 // author/meta/chips/deadline/applicant count, and the same gated Candidater as the board card.
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CREATOR_ROLES, type CallDetail } from '@encre-et-plume/shared';
-import { getCallDetail } from '../../lib/api';
+import { CREATOR_ROLES, type CallCard, type CallDetail, type ApiError } from '@encre-et-plume/shared';
+import { getCallDetail, deleteCall } from '../../lib/api';
 import { roleGateHint, ROLE_LABEL } from '../../lib/calls';
+import { formatBytes } from '../../lib/format';
 import { XIcon } from '../icons';
+import PostCallModal from './PostCallModal';
 
 function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivElement | null>) {
   if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -36,16 +38,11 @@ function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivEle
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' });
 const fmtDate = (iso: string) => dateFmt.format(new Date(iso));
 
-// bytes → "2,3 Mo" (fr-FR, one decimal).
-function fmtSize(bytes: number): string {
-  const mo = bytes / 1_048_576;
-  return `${mo.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mo`;
-}
-
+// F3-4 contrast: ink (not ink2) — kills the washed 11px labels; AA in both themes.
 const sectionHeading: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
-  color: 'var(--ink2)',
+  color: 'var(--ink)',
   letterSpacing: '.03em',
   margin: '18px 0 8px',
 };
@@ -54,7 +51,7 @@ const chip: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   background: 'var(--paper)',
-  border: '1.5px solid var(--ink)',
+  border: '2px solid var(--ink)', // F3-4: bold-border rule (was the app's only 1.5px outlier)
   borderRadius: 5,
   padding: '1px 8px',
 };
@@ -68,6 +65,17 @@ const closedBadge: React.CSSProperties = {
   padding: '2px 9px',
 };
 
+const footerBtn: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 6,
+  padding: '9px 18px',
+  minHeight: 44,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
 type State =
   | { status: 'loading' }
   | { status: 'ready'; call: CallDetail }
@@ -77,16 +85,38 @@ export default function CallDetailModal({
   callId,
   onClose,
   onCandidater,
+  onChanged,
+  onDeleted,
 }: {
   callId: string;
   onClose: () => void;
   onCandidater: (call: CallDetail) => void;
+  // Round 3 (F3-3): owner edit/delete ripples for the host page (selector/board refetch). No-op defaults.
+  onChanged?: () => void;
+  onDeleted?: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'call-detail-title';
   const hintId = 'call-detail-role-hint';
   const [state, setState] = useState<State>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCall(callId);
+      onDeleted?.();
+      onClose();
+    } catch (err) {
+      setDeleting(false);
+      setDeleteError((err as ApiError).message ?? 'Suppression impossible.');
+    }
+  }
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -108,6 +138,7 @@ export default function CallDetailModal({
   const showGate = call && !closed && !call.isOwner;
 
   return (
+    <>
     <div
       onClick={onClose}
       style={{
@@ -161,7 +192,7 @@ export default function CallDetailModal({
             zIndex: 1,
           }}
         >
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', color: 'var(--ink2)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', color: 'var(--ink)' }}>
             Détail de l&apos;appel
           </span>
           <button
@@ -314,7 +345,7 @@ export default function CallDetailModal({
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        Document {i + 1} (PDF · {fmtSize(doc.size)})
+                        Document {i + 1} (PDF · {formatBytes(doc.size)})
                       </a>
                     </li>
                   ))}
@@ -413,70 +444,121 @@ export default function CallDetailModal({
               bottom: 0,
             }}
           >
-            <button type="button" onClick={onClose} style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)' }}>
-              Fermer
-            </button>
-
-            {closed ? (
-              <span style={closedBadge}>Clôturé</span>
-            ) : call.isOwner ? null : call.hasApplied ? (
-              <span
-                style={{
-                  background: 'var(--tone)',
-                  color: 'var(--ink2)',
-                  border: '2px solid var(--ink)',
-                  borderRadius: 6,
-                  padding: '9px 18px',
-                  fontWeight: 700,
-                  fontSize: 14,
-                }}
+            {confirming ? (
+              // Round 3 (F3-3): inline on-brand delete confirm — MC-6 pattern, no window.confirm.
+              <div
+                role="group"
+                aria-label="Confirmer la suppression de l'appel"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, width: '100%' }}
               >
-                Candidature envoyée
-              </span>
-            ) : call.viewerHasRole ? (
-              <button
-                type="button"
-                onClick={() => onCandidater(call)}
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  border: '2px solid var(--ink)',
-                  borderRadius: 6,
-                  padding: '9px 18px',
-                  minHeight: 44,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  boxShadow: '3px 3px 0 var(--shadow)',
-                }}
-              >
-                Candidater
-              </button>
+                <span style={{ fontSize: 13, color: 'var(--ink2)' }}>Supprimer cet appel et ses candidatures ?</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete()}
+                    disabled={deleting}
+                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: deleting ? 0.6 : 1 }}
+                  >
+                    Confirmer la suppression
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirming(false);
+                      setDeleteError(null);
+                    }}
+                    disabled={deleting}
+                    style={{ ...footerBtn, background: 'var(--card)' }}
+                  >
+                    Annuler
+                  </button>
+                </span>
+                {deleteError && (
+                  <span role="alert" style={{ width: '100%', textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>
+                    {deleteError}
+                  </span>
+                )}
+              </div>
             ) : (
-              <button
-                type="button"
-                disabled
-                aria-describedby={hintId}
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  border: '2px solid var(--ink)',
-                  borderRadius: 6,
-                  padding: '9px 18px',
-                  minHeight: 44,
-                  cursor: 'not-allowed',
-                  fontFamily: 'inherit',
-                  background: 'var(--tone)',
-                  color: 'var(--ink2)',
-                }}
-              >
-                Candidater
-              </button>
+              <>
+                <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+                  Fermer
+                </button>
+
+                {call.isOwner ? (
+                  // Owner controls (D12): Éditer only on open calls; Supprimer always (destructive outline).
+                  <>
+                    {closed && <span style={closedBadge}>Clôturé</span>}
+                    {!closed && (
+                      <button type="button" onClick={() => setEditing(true)} style={{ ...footerBtn, background: 'var(--card)' }}>
+                        Éditer
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setConfirming(true);
+                      }}
+                      style={{ ...footerBtn, background: 'var(--card)', border: '2px solid var(--accent)', color: 'var(--accent)' }}
+                    >
+                      Supprimer
+                    </button>
+                  </>
+                ) : closed ? (
+                  <span style={closedBadge}>Clôturé</span>
+                ) : call.hasApplied ? (
+                  <span
+                    style={{
+                      background: 'var(--tone)',
+                      color: 'var(--ink)', // F3-4: ink (was ink2 — the real AA fail)
+                      border: '2px solid var(--ink)',
+                      borderRadius: 6,
+                      padding: '9px 18px',
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    Candidature envoyée
+                  </span>
+                ) : call.viewerHasRole ? (
+                  <button
+                    type="button"
+                    onClick={() => onCandidater(call)}
+                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)' }}
+                  >
+                    Candidater
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    aria-describedby={hintId}
+                    style={{ ...footerBtn, cursor: 'not-allowed', background: 'var(--tone)', color: 'var(--ink)' }}
+                  >
+                    Candidater
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
       </div>
     </div>
+
+      {/* Round 3: owner edit — the shared form in pre-filled edit mode; own overlay stacks above. */}
+      {editing && call && (
+        <PostCallModal
+          onClose={() => setEditing(false)}
+          onCreated={() => {}}
+          edit={{ callId, initial: call }}
+          onUpdated={() => {
+            setEditing(false);
+            setReloadKey((k) => k + 1);
+            onChanged?.();
+          }}
+        />
+      )}
+    </>
   );
 }

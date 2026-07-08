@@ -379,6 +379,29 @@ const PROJECT_CALLS = [
     description: 'Un voyage initiatique à travers des mondes flottants — décors posés, il me manque le récit.',
     closesAt: inDays(28), applicationCount: 1, status: 'open', createdAt: inMinutes(-3),
   },
+  // MC-7 "Mes appels à projets": one call OWNED by the login-tested MC7_OWNER_ACCOUNT with 3 received
+  // applications (seeded below). authorSlug → the owner Account id so the account owns it. Kept OLDEST
+  // (createdAt inMinutes(-4)) so the /trouver newest-2 preview window is untouched, and
+  // seekingRoles:['scenariste'] + genre 'action' (non-seinen) so appels.spec's dessinateur→3 / seinen→2
+  // filter counts stay valid. Grows the default board total (status:'all') by 1 — appels.spec bumped.
+  {
+    id: 'mc7-call-nocturne', title: 'Polar nocturne', authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
+    authorRole: 'dessinateur', seekingRoles: ['scenariste'], genres: ['action'], tags: ['Action'],
+    description: 'Un polar urbain sous la pluie — décors et personnages posés, il me manque la plume.',
+    closesAt: inDays(25), applicationCount: 3, status: 'open', createdAt: inMinutes(-4),
+  },
+  // MC-7 round 3: a SECOND call owned by MC7_OWNER_ACCOUNT, older than nocturne (so nocturne stays
+  // the selector's default selection — round-2 E1 assertions untouched) and with exactly one PENDING
+  // application (F7: a call needs ≥1 application to appear in the MC-7 selector at all). Zero
+  // accepted applications ⇒ safe to edit/delete without hitting the accepted-applicant 409 guard —
+  // this is the fixture the round-3 edit/delete e2e (E10/E11) exercises. genre 'action' (same
+  // no-filter-ripple choice as nocturne). Grows the default board total (status:'all') by a further 1.
+  {
+    id: 'mc7-call-brouillon', title: "Brouillon d'été", authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
+    authorRole: 'dessinateur', seekingRoles: ['scenariste'], genres: ['action'], tags: ['Action'],
+    description: 'Idée encore en chantier — un carnet de voyage estival, il me manque la plume pour le texte.',
+    closesAt: inDays(20), applicationCount: 1, status: 'open', createdAt: inMinutes(-10),
+  },
 ];
 
 // MC-6: the dedicated MC6_APPLICANT_ACCOUNT's own applications, one per status, to the three
@@ -429,6 +452,35 @@ const MC6_APPLICANT_ACCOUNT = {
   slug: 'mc6-candidatures-fixture',
   role: 'scenariste',
 };
+
+// MC-7: a dedicated login-tested call OWNER for "Mes appels à projets" e2e
+// (mc7-candidatures-recues.spec.ts). Standalone (NOT in PARTNERS/CREATORS — those feed directory
+// count assertions) so it can't perturb other suites. Owns one call (mc7-call-nocturne) that three
+// scénariste seed accounts have applied to; the spec logs in as this account and accepts/rejects.
+const MC7_OWNER_ACCOUNT = {
+  email: 'appels.mc7@seed.encre-et-plume.local',
+  displayName: 'Testeur Appels (MC-7)',
+  slug: 'mc7-appels-fixture',
+  role: 'dessinateur',
+};
+
+// MC-7: the three applications received on mc7-call-nocturne, from existing scénariste seed accounts
+// (distinct applicants — @@unique([callId, applicantId])). Statuses seeded directly; the accept/reject
+// e2e mutates two of them (the seed wipe resets on every reseed → repeatable). Distinct createdAt so
+// the newest-first row order is assertable.
+const MC7_RECEIVED = [
+  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-lea-b', status: 'pending', createdAt: inDays(-1),
+    message: "Vos ambiances nocturnes collent à mon écriture — 6 chapitres d'un polar lyonnais déjà maquettés." },
+  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-noe-p', status: 'pending', createdAt: inDays(-3), message: '' },
+  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-diego-s', status: 'rejected', createdAt: inDays(-6),
+    message: "Un pitch SF à tiroirs, si le polar peut glisser vers l'anticipation." },
+  // MC-7 round 3: the one pending application on mc7-call-brouillon (F7 — a zero-application call
+  // never appears in the MC-7 selector). Diego reused as the applicant: he's already an MC-7 seed
+  // account with a portfolio, and grepped confirmed no e2e spec asserts his own "Mes candidatures"
+  // count anywhere, so a second application under his name can't perturb another suite.
+  { callId: 'mc7-call-brouillon', applicantSlug: 'mc1-diego-s', status: 'pending', createdAt: inDays(-2),
+    message: 'Un carnet illustré, je peux poser le texte de voyage qui va avec.' },
+];
 
 async function main() {
   const hash = bcrypt.hashSync('password123', 10);
@@ -542,6 +594,19 @@ async function main() {
     }
   }
 
+  // MC-7: dedicated login-tested call OWNER for "Mes appels à projets" e2e. Must run before the
+  // PROJECT_CALLS loop below, which resolves mc7-call-nocturne's authorSlug → this account's id.
+  {
+    const account = await prisma.account.upsert({
+      where: { email: MC7_OWNER_ACCOUNT.email },
+      create: { email: MC7_OWNER_ACCOUNT.email, displayName: MC7_OWNER_ACCOUNT.displayName, passwordHash: hash, profileSlug: MC7_OWNER_ACCOUNT.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
+      update: { displayName: MC7_OWNER_ACCOUNT.displayName, profileSlug: MC7_OWNER_ACCOUNT.slug, emailVerifiedAt: new Date() },
+    });
+    await ensureConsent(account.id);
+    const profileData = { accountId: account.id, creatorRoles: [MC7_OWNER_ACCOUNT.role] };
+    await prisma.profile.upsert({ where: { accountId: account.id }, create: profileData, update: profileData });
+  }
+
   // MC-1: partner-directory creator fixtures (Account + Profile + 2 PortfolioItems each).
   for (const p of PARTNERS) {
     const account = await prisma.account.upsert({
@@ -612,6 +677,32 @@ async function main() {
           },
         });
       }
+    }
+  }
+
+  // MC-7: seed the applications RECEIVED on the owner's calls (mc7-call-nocturne + round-3's
+  // mc7-call-brouillon). Each applicant is an existing scénariste seed account with PortfolioItems
+  // (created above); reuse its first one as the sample (position 0). appliedAs = 'scenariste' (both
+  // calls' seekingRole).
+  for (const app of MC7_RECEIVED) {
+    const applicant = await prisma.account.findUnique({ where: { profileSlug: app.applicantSlug }, select: { id: true } });
+    const profile = applicant && (await prisma.profile.findUnique({ where: { accountId: applicant.id }, select: { id: true } }));
+    const sample = profile && (await prisma.portfolioItem.findFirst({ where: { profileId: profile.id }, orderBy: { order: 'asc' }, select: { id: true, image: true } }));
+    if (applicant && sample) {
+      await prisma.application.create({
+        data: {
+          callId: app.callId,
+          applicantId: applicant.id,
+          sampleUrl: sample.image,
+          message: app.message,
+          status: app.status,
+          appliedAs: 'scenariste',
+          createdAt: app.createdAt,
+          assets: {
+            create: [{ portfolioItemId: sample.id, url: sample.image, kind: 'image', position: 0 }],
+          },
+        },
+      });
     }
   }
 

@@ -405,11 +405,11 @@ describe('Header — dropdown entries', () => {
     expect(item).toHaveAttribute('href', '/mes-candidatures');
   });
 
-  it('shows Candidatures reçues link', async () => {
+  it('shows Mes appels à projets link', async () => {
     const user = userEvent.setup();
     renderHeader({ account: mockAccount });
     await openMenu(user);
-    const item = await screen.findByRole('menuitem', { name: /candidatures reçues/i });
+    const item = await screen.findByRole('menuitem', { name: /mes appels à projets/i });
     expect(item).toHaveAttribute('href', '/candidatures-recues');
   });
 
@@ -529,7 +529,7 @@ describe('Header — F-5 area badges', () => {
     expect(screen.getByRole('button', { name: /3 notifications non lues/i })).toBeInTheDocument();
   });
 
-  it('shows Demandes badge on Candidatures reçues dropdown entry', async () => {
+  it('shows Demandes badge on Mes appels à projets dropdown entry', async () => {
     const user = userEvent.setup();
     renderHeaderWithCounts(mockAccount, { demandes: 2 });
     await user.click(screen.getByRole('button', { name: /menu de yuki moreau/i }));

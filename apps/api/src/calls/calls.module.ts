@@ -5,6 +5,8 @@ import { CallsController } from './calls.controller';
 import { CallsService } from './calls.service';
 import { MyApplicationsController } from './my-applications.controller';
 import { MyApplicationsService } from './my-applications.service';
+import { ReceivedApplicationsController } from './received-applications.controller';
+import { ReceivedApplicationsService } from './received-applications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
@@ -19,7 +21,14 @@ import { NotificationsModule } from '../notifications/notifications.module';
     }),
     NotificationsModule, // F-5 seam: notify the call owner on a new MC-5 application
   ],
-  controllers: [CallsController, MyApplicationsController],
-  providers: [CallsService, MyApplicationsService, PrismaService, RedisService, SessionGuard],
+  controllers: [CallsController, MyApplicationsController, ReceivedApplicationsController],
+  providers: [
+    CallsService,
+    MyApplicationsService,
+    ReceivedApplicationsService,
+    PrismaService,
+    RedisService,
+    SessionGuard,
+  ],
 })
 export class CallsModule {}

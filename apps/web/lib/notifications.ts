@@ -1,6 +1,6 @@
 import type { ComponentType, CSSProperties } from 'react';
 import type { NotifType } from '@encre-et-plume/shared';
-import { CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, WarningIcon } from '../components/icons';
+import { CheckIcon, CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, WarningIcon, XIcon } from '../components/icons';
 
 // French label composer per notification type (single source of truth on web)
 export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
@@ -12,6 +12,9 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   release:          ()  => 'Nouveau chapitre disponible',
   like:             (n) => `${n} a aimé votre planche`,
   comment:          (n) => `${n} a commenté votre œuvre`,
+  // MC-7: the call owner decided on the applicant's candidature
+  application_accepted: (n) => `${n} a accepté votre candidature`,
+  application_rejected: (n) => `${n} n'a pas retenu votre candidature`,
   // F-14: system notification (e.g. export ready)
   system:           ()  => 'Notification système',
 };
@@ -26,6 +29,8 @@ export const NOTIF_ICON: Record<NotifType, ComponentType<{ size?: number; style?
   release:          FlagIcon,
   like:             HeartIcon,
   comment:          PenIcon,
+  application_accepted: CheckIcon,
+  application_rejected: XIcon,
   system:           CircleDotIcon,
 };
 
@@ -39,6 +44,9 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   release:          '/lire',
   like:             '/notifications',
   comment:          '/notifications',
+  // MC-7: decision on the applicant's candidature → their own "Mes candidatures"
+  application_accepted: '/mes-candidatures',
+  application_rejected: '/mes-candidatures',
   // F-14: system (export ready) → parametres for download link
   system:           '/parametres',
 };

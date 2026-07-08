@@ -694,7 +694,7 @@ export default function Header() {
                 Mes candidatures
               </Link>
 
-              {/* Candidatures reçues */}
+              {/* Mes appels à projets (received applicants — MC-7) */}
               <Link
                 href="/candidatures-recues"
                 role="menuitem"
@@ -704,7 +704,7 @@ export default function Header() {
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                   <span style={iconStyle}><InboxIcon size={16} /></span>
-                  Candidatures reçues
+                  Mes appels à projets
                 </span>
                 <CountBadge
                   count={counts.demandes}

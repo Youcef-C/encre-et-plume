@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CallDetail } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', () => ({
   getCallDetail: vi.fn(),
+  updateCall: vi.fn(),
+  deleteCall: vi.fn(),
+  createCall: vi.fn(),
+  getMyProjects: vi.fn(() => Promise.resolve({ items: [] })),
 }));
 
 vi.mock('next/link', () => ({
@@ -43,9 +47,13 @@ const base: CallDetail = {
   samples: [],
   documents: [],
   team: [],
+  genres: ['seinen'],
+  format: 'serie',
+  scope: '~120 planches',
 };
 
 const getDetail = () => api.getCallDetail as ReturnType<typeof vi.fn>;
+const getDelete = () => api.deleteCall as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -128,7 +136,7 @@ describe('CallDetailModal', () => {
     // Security §7: documents download instead of rendering, with a safe rel.
     expect(link1).toHaveAttribute('download');
     expect(link1).toHaveAttribute('rel', expect.stringContaining('noopener'));
-    expect(screen.getByRole('link', { name: /Document 2 \(PDF · 0,5 Mo\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Document 2 \(PDF · 500,0 Ko\)/ })).toBeInTheDocument();
   });
 
   it('shows an error state with a working retry', async () => {
@@ -181,5 +189,86 @@ describe('CallDetailModal', () => {
     await screen.findByText('« Lames de Brume »');
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // ─── Round 3: owner edit / delete controls (F3-3) ────────────────────────────
+  describe('owner controls', () => {
+    it('shows Éditer + Supprimer for the owner, and neither for a non-owner', async () => {
+      open({ isOwner: true });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.getByRole('button', { name: 'Éditer' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument();
+    });
+
+    it('hides the owner controls for a non-owner', async () => {
+      open({ isOwner: false });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.queryByRole('button', { name: 'Éditer' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Supprimer' })).not.toBeInTheDocument();
+    });
+
+    it('hides Éditer on a closed call but keeps Supprimer', async () => {
+      open({ isOwner: true, status: 'closed' });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.queryByRole('button', { name: 'Éditer' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument();
+    });
+
+    it('opens the pre-filled edit dialog from Éditer', async () => {
+      const user = userEvent.setup();
+      open({ isOwner: true });
+      await user.click(await screen.findByRole('button', { name: 'Éditer' }));
+      expect(await screen.findByRole('dialog', { name: "Modifier l'appel" })).toBeInTheDocument();
+      expect(screen.getByLabelText('Titre')).toHaveValue('« Lames de Brume »');
+    });
+
+    it('confirms inline before deleting — Annuler backs out without calling the API', async () => {
+      const user = userEvent.setup();
+      open({ isOwner: true });
+      await user.click(await screen.findByRole('button', { name: 'Supprimer' }));
+      const group = screen.getByRole('group', { name: "Confirmer la suppression de l'appel" });
+      expect(within(group).getByText('Supprimer cet appel et ses candidatures ?')).toBeInTheDocument();
+      await user.click(within(group).getByRole('button', { name: 'Annuler' }));
+      expect(api.deleteCall).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Supprimer' })).toBeInTheDocument();
+    });
+
+    it('deletes on confirm, then fires onDeleted and onClose', async () => {
+      getDelete().mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      const onDeleted = vi.fn();
+      const { onClose } = open({ isOwner: true }, { onDeleted });
+      await user.click(await screen.findByRole('button', { name: 'Supprimer' }));
+      await user.click(screen.getByRole('button', { name: 'Confirmer la suppression' }));
+      await waitFor(() => expect(api.deleteCall).toHaveBeenCalledWith('call-1'));
+      expect(onDeleted).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('shows the server 409 message when deletion is refused', async () => {
+      getDelete().mockRejectedValue({
+        statusCode: 409,
+        message: 'Impossible de supprimer : des candidatures ont déjà été acceptées. Clôturez l’appel plutôt.',
+        error: 'CONFLICT',
+      });
+      const user = userEvent.setup();
+      open({ isOwner: true });
+      await user.click(await screen.findByRole('button', { name: 'Supprimer' }));
+      await user.click(screen.getByRole('button', { name: 'Confirmer la suppression' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/candidatures ont déjà été acceptées/);
+    });
+  });
+
+  // ─── Round 3: contrast fixes (F3-4) ──────────────────────────────────────────
+  describe('contrast', () => {
+    it('renders the "Candidature envoyée" pill in ink (AA fix)', async () => {
+      open({ hasApplied: true, myApplicationId: 'app-3' });
+      expect(await screen.findByText('Candidature envoyée')).toHaveStyle({ color: 'var(--ink)' });
+    });
+
+    it('renders section headings in ink (AA fix)', async () => {
+      open();
+      expect(await screen.findByText('Description')).toHaveStyle({ color: 'var(--ink)' });
+    });
   });
 });

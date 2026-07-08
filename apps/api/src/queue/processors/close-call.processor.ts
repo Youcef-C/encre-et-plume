@@ -17,8 +17,11 @@ export class CloseCallProcessor implements JobProcessor<CloseCallJob> {
   constructor(private readonly prisma: PrismaService) {}
 
   async process(data: CloseCallJob, _job: Job): Promise<void> {
+    // MC-7 F4: the `closesAt <= now` guard makes a stale delayed job harmless after a deadline
+    // EXTENSION — it would otherwise close the call at the OLD deadline. A due auto-close still fires
+    // (the job runs AT closesAt); an owner's early close is a separate direct-update path.
     const { count } = await this.prisma.projectCall.updateMany({
-      where: { id: data.callId, status: 'open' },
+      where: { id: data.callId, status: 'open', closesAt: { lte: new Date() } },
       data: { status: 'closed' },
     });
     if (count > 0) this.logger.log(`Auto-closed call ${data.callId}`);

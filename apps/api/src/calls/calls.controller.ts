@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type {
   ApplicationDto,
   CallCard,
@@ -11,7 +11,7 @@ import type {
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { CallsService, parseCallsLimit, type CallsBoardQueryParsed } from './calls.service';
 import { CreateCallDto } from './dto/create-call.dto';
-import { CloseCallDto } from './dto/close-call.dto';
+import { UpdateCallDto } from './dto/update-call.dto';
 import { ApplyToCallDto } from './dto/apply-to-call.dto';
 
 /** Normalize a query value into a string[] (repeated key → array, single → one-element array). */
@@ -62,10 +62,18 @@ export class CallsController {
     return this.service.findDetail(req.accountId, id);
   }
 
+  // MC-7 round 3: one PATCH handles both close-early (`{ status: 'closed' }`) and an owner field edit.
+  // The DTO validates each field; the service enforces exclusivity, ownership, and the open-only rule.
   @Patch(':id')
-  close(@Req() req: AuthRequest, @Param('id') id: string, @Body() _dto: CloseCallDto): Promise<CallCard> {
-    // _dto validates the body is exactly { status: 'closed' } (400 otherwise); the action is fixed.
-    return this.service.closeEarly(req.accountId, id);
+  update(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateCallDto): Promise<CallCard> {
+    return this.service.updateCall(req.accountId, id, dto);
+  }
+
+  // MC-7 round 3: owner delete. 204 no content; 409 when any application is already accepted.
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Req() req: AuthRequest, @Param('id') id: string): Promise<void> {
+    return this.service.deleteCall(req.accountId, id);
   }
 
   // MC-5 "Candidater": the applicant is always the session account, never a body field.
