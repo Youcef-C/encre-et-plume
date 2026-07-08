@@ -20,6 +20,14 @@ const SPECS = [
   { key: 'ADMIN2',      email: 'qa_e2e_admin2@test.com',      slug: 'e2e-admin2' },
   { key: 'ADMIN3',      email: 'qa_e2e_admin3@test.com',      slug: 'e2e-admin3' },
   { key: 'FRESH',       email: 'qa_e2e_fresh@test.com',       slug: 'e2e-fresh' },
+  // MC-9 dedicated messaging fixtures — no OTHER spec file references these, so parallel siblings
+  // (notifications/profile/roles/media/onboarding/search, which all share UTILISATEUR/TARGET/ADMIN)
+  // cannot mutate this suite's seeded unread counts or role state out from under it.
+  { key: 'MSG_A',       email: 'qa_e2e_msg_a@test.com',       slug: 'e2e-msg-a' },
+  { key: 'MSG_B',       email: 'qa_e2e_msg_b@test.com',       slug: 'e2e-msg-b' },
+  { key: 'MSG_C',       email: 'qa_e2e_msg_c@test.com',       slug: 'e2e-msg-c' },
+  { key: 'MSG_CONTACT', email: 'qa_e2e_msg_contact@test.com', slug: 'e2e-msg-contact' },
+  { key: 'MSG_FRESH',   email: 'qa_e2e_msg_fresh@test.com',   slug: 'e2e-msg-fresh' },
 ];
 
 async function main() {
@@ -87,13 +95,15 @@ async function main() {
     }
   }
 
-  // ── MC-9: seed messaging fixtures for the two standard e2e accounts ──────────
+  // ── MC-9: seed messaging fixtures for the dedicated MSG_A/MSG_B/MSG_C accounts ───────────────
   // Deterministic timestamps (ordering-stable). Reset first so each run is hermetic: delete every
   // conversation any seeded account participates in (cascade removes its participants + messages).
+  // Dedicated (not UTILISATEUR/TARGET/ADMIN) so parallel siblings that log in as those shared
+  // accounts can't touch this suite's unread-count fixtures.
   {
-    const u = accounts.UTILISATEUR.id;
-    const t = accounts.TARGET.id;
-    const admin = accounts.ADMIN.id;
+    const u = accounts.MSG_A.id;
+    const t = accounts.MSG_B.id;
+    const admin = accounts.MSG_C.id;
     const seededIds = Object.values(accounts).map((a) => a.id);
 
     const parts = await prisma.conversationParticipant.findMany({
@@ -106,7 +116,7 @@ async function main() {
     }
 
     const D = (iso) => new Date(iso);
-    // DM UTILISATEUR ⇄ TARGET — 2 messages from TARGET after UTILISATEUR's lastReadAt → 2 unread for U.
+    // DM MSG_A ⇄ MSG_B — 2 messages from MSG_B after MSG_A's lastReadAt → 2 unread for MSG_A.
     const dmKey = [u, t].sort().join(':');
     await prisma.conversation.create({
       data: {
@@ -129,7 +139,7 @@ async function main() {
       },
     });
 
-    // Group "Projet · Lames de Brume" — 1 message from TARGET, unread for UTILISATEUR (preview row).
+    // Group "Projet · Lames de Brume" — 1 message from MSG_B, unread for MSG_A (preview row).
     await prisma.conversation.create({
       data: {
         type: 'group',

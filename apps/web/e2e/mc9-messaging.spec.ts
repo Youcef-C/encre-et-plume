@@ -5,24 +5,31 @@
  * gateway actually fans out across two independent browser contexts. Hermeticity traps (heeded):
  *   - the gateway only exists on a FRESHLY BUILT+STARTED API — a stale :3001 makes every realtime
  *     assertion fail confusingly. QA killed stale servers + flushed `rl:*` before this run.
- *   - `apps/api/prisma/e2e-seed.js` (driven by global-setup.ts) seeds, for the two standard e2e
- *     accounts (UTILISATEUR ⇄ TARGET), deterministic messaging fixtures:
- *       - a DM with 3 messages, the last 2 (from TARGET) unread for UTILISATEUR;
- *       - a group "Projet · Lames de Brume" (UTILISATEUR + TARGET + ADMIN) with 1 unread TARGET
+ *   - `apps/api/prisma/e2e-seed.js` (driven by global-setup.ts) seeds, for two DEDICATED e2e
+ *     accounts (MSG_A ⇄ MSG_B), deterministic messaging fixtures:
+ *       - a DM with 3 messages, the last 2 (from MSG_B) unread for MSG_A;
+ *       - a group "Projet · Lames de Brume" (MSG_A + MSG_B + MSG_C) with 1 unread MSG_B
  *         message "nemu planche 4 prêt".
- *     → UTILISATEUR's launcher badge starts at totalUnread = 3 (2 DM + 1 group).
+ *     → MSG_A's launcher badge starts at totalUnread = 3 (2 DM + 1 group).
  *
- * Account map (from .e2e-accounts.json): UTILISATEUR = "E2E UTILISATEUR", TARGET = "E2E TARGET".
+ * Isolation note (fixed a real CI flake): this suite used to read/assert this seeded state on the
+ * SHARED hermetic accounts UTILISATEUR / TARGET / ADMIN. Six OTHER spec files (notifications,
+ * profile, roles, media, onboarding, search) also log in as those same accounts, and CI runs spec
+ * FILES in parallel — a sibling mutating UTILISATEUR's state mid-run flaked this suite's absolute
+ * unread-count/message-count assertions (e.g. badge asserted "3 non lus", observed "1 non lus").
+ * Fix: MSG_A/MSG_B/MSG_C/MSG_CONTACT/MSG_FRESH are dedicated to THIS spec — grep confirms no other
+ * spec file references them — so no sibling can contaminate them regardless of run order/parallelism.
+ *
+ * Account map (from .e2e-accounts.json): MSG_A = "E2E MSG_A", MSG_B = "E2E MSG_B".
  * displayName is always `E2E ${KEY}` (e2e-seed.js) — used verbatim in list-row / preview assertions.
  *
- * For the realtime F-5 scope (RT-1/2/3) this suite uses ADMIN2 / ADMIN3 / FRESH — three accounts
- * untouched by the messaging fixtures and reseeded from scratch every full e2e run (global-teardown
- * deletes every qa_e2e_* account + its Connections/Notifications at the end of the PREVIOUS run,
- * global-setup upserts fresh ones at the start of this one) — so their connection/notification state
- * is guaranteed empty at the start of THIS run, same precondition roles.spec.ts already relies on.
- * ADMIN2 is also used (separately, connected to UTILISATEUR) as the "＋ Groupe" contact and the
- * /contacts "Message" seam target — kept apart from FRESH so the two don't cross-pollute each
- * other's "starts at zero" assumptions.
+ * For the realtime F-5 scope (RT-1/2/3) this suite uses ADMIN2 / ADMIN3 / MSG_FRESH. ADMIN2/ADMIN3
+ * are only used here as connection-request SENDERS (their role is irrelevant to that); MSG_FRESH is
+ * the dedicated (not roles.spec.ts-shared) recipient whose "zero pending requests" baseline must hold
+ * regardless of what roles.spec.ts does to the shared FRESH account concurrently.
+ * The "＋ Groupe" contact and the /contacts "Message" seam target both use the dedicated MSG_CONTACT
+ * account (connected to MSG_A) instead of the shared ADMIN2, so neither reads state ADMIN2's other
+ * consumers (roles.spec.ts mutates its role) could disturb.
  */
 import { test, expect, type Page, type APIRequestContext, type BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
@@ -82,8 +89,8 @@ function waitForEvent<T = unknown>(socket: Socket, event: string, timeoutMs: num
 const fab = (page: Page) => page.getByRole('button', { name: /^Messages/ });
 const panel = (page: Page) => page.getByRole('dialog', { name: 'Messages' });
 // A row's accessible name is its bold conv.name — matched EXACTLY. Loose substring matching is unsafe
-// here: a group row's preview embeds the sender's display name (e.g. "E2E TARGET : nemu planche 4
-// prêt"), which collides with a DM row literally named "E2E TARGET".
+// here: a group row's preview embeds the sender's display name (e.g. "E2E MSG_B : nemu planche 4
+// prêt"), which collides with a DM row literally named "E2E MSG_B".
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -95,10 +102,10 @@ const rowByName = (page: Page, name: string) =>
 test.describe.configure({ mode: 'serial' });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Core widget: anatomy, states, a11y, responsive (single UTILISATEUR context)
+// Core widget: anatomy, states, a11y, responsive (single MSG_A context)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', () => {
+test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
   test('MC9-E0: logged-out — no launcher bubble anywhere', async ({ page }) => {
     await page.goto('/');
     await expect(fab(page)).toHaveCount(0);
@@ -107,7 +114,7 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
   test('MC9-E1: FAB shows the seeded unread badge; panel header/controls/search/list rows replica', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
 
     const launcher = fab(page);
     await expect(launcher).toBeVisible();
@@ -126,22 +133,22 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
     // Group row is newest (lastMessageAt 13:00 > DM's 12:03) → listed first.
     const groupRow = rowByName(page, 'Projet · Lames de Brume');
     await expect(groupRow).toBeVisible();
-    await expect(groupRow.getByText('E2E TARGET : nemu planche 4 prêt')).toBeVisible();
+    await expect(groupRow.getByText('E2E MSG_B : nemu planche 4 prêt')).toBeVisible();
     await expect(groupRow.getByLabel('1 non lu')).toBeVisible();
 
-    const dmRow = rowByName(page, 'E2E TARGET');
+    const dmRow = rowByName(page, 'E2E MSG_B');
     await expect(dmRow).toBeVisible();
     await expect(dmRow.getByText('On se cale un créneau demain ?')).toBeVisible();
     await expect(dmRow.getByLabel('2 non lu')).toBeVisible();
   });
 
   test('MC9-E2: search filters the list (client-side, auto-applies)', async ({ page }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
     const search = panel(page).getByRole('searchbox', { name: 'Rechercher une conversation' });
     await search.fill('Lames de Brume');
     await expect(rowByName(page, 'Projet · Lames de Brume')).toBeVisible();
-    await expect(rowByName(page, 'E2E TARGET')).toHaveCount(0);
+    await expect(rowByName(page, 'E2E MSG_B')).toHaveCount(0);
     await search.fill('zzz-no-match');
     await expect(panel(page).getByText('Aucune conversation trouvée.')).toBeVisible();
   });
@@ -149,9 +156,9 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
   test('MC9-E3: opening the DM shows history, composer, mark-read clears the row + badge; reload persists', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
-    await rowByName(page, 'E2E TARGET').click();
+    await rowByName(page, 'E2E MSG_B').click();
 
     const dialog = panel(page);
     await expect(dialog.getByText('Salut, tu es dispo cette semaine ?')).toBeVisible({ timeout: 10_000 });
@@ -170,7 +177,7 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
   test('MC9-E4: a11y — Esc closes the panel (list view) and refocuses the FAB; minimize collapses to the FAB', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     const launcher = fab(page);
     await launcher.click();
     const dialog = panel(page);
@@ -195,9 +202,9 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
   test('MC9-E4b: Esc still closes the panel once a thread is open (focus stays inside the dialog)', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
-    await rowByName(page, 'E2E TARGET').click();
+    await rowByName(page, 'E2E MSG_B').click();
     await expect(panel(page).getByRole('log', { name: 'Messages' })).toBeVisible({ timeout: 10_000 });
 
     // Focus was re-homed into the dialog subtree (not dropped to <body>).
@@ -215,7 +222,7 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
   test('MC9-E5: responsive — 375/768/1280px, full-width sheet on mobile, no overflow, FAB tap target ≥44px', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
 
     await page.setViewportSize({ width: 375, height: 800 });
     await page.reload();
@@ -254,7 +261,7 @@ test.describe('MC-9 widget anatomy — UTILISATEUR (seeded unread fixtures)', ()
 // Realtime messaging — two independent browser contexts, real Redis-adapter socket.io.
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('MC-9 realtime messaging — context A (UTILISATEUR) + context B (TARGET)', () => {
+test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)', () => {
   test('MC9-E6: B sends a message via the UI → A (widget already open on the DM, no reload) receives the bubble + list/badge bump live; A marks read → B sees "Lu"', async ({
     browser,
   }) => {
@@ -264,24 +271,24 @@ test.describe('MC-9 realtime messaging — context A (UTILISATEUR) + context B (
       const pageA = await ctxA.newPage();
       const pageB = await ctxB.newPage();
 
-      await login(pageA, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
-      await login(pageB, ACCOUNTS.TARGET.email, /menu de e2e target/i);
+      await login(pageA, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+      await login(pageB, ACCOUNTS.MSG_B.email, /menu de e2e msg_b/i);
 
       // A opens the widget on the DM thread and reads it (badge → 1, only the group left unread).
       await fab(pageA).click();
-      await rowByName(pageA, 'E2E TARGET').click();
+      await rowByName(pageA, 'E2E MSG_B').click();
       await expect(panel(pageA).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
       await expect(fab(pageA)).toHaveAttribute('aria-label', 'Messages, 1 non lus', { timeout: 10_000 });
 
-      // B opens the same DM (from B's perspective, the DM shows UTILISATEUR's name).
+      // B opens the same DM (from B's perspective, the DM shows MSG_A's name).
       await fab(pageB).click();
-      await rowByName(pageB, 'E2E UTILISATEUR').click();
+      await rowByName(pageB, 'E2E MSG_A').click();
       await expect(panel(pageB).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
 
       // B types → A's list is showing the thread (not the list) so assert via the thread typing line
       // instead of the row; go back to the list on A momentarily to see the row-level indicator too.
       await panel(pageB).getByLabel('Écrire un message').fill('Un message qui déclenche typing');
-      await expect(panel(pageA).getByText('E2E TARGET écrit…')).toBeVisible({ timeout: 8_000 });
+      await expect(panel(pageA).getByText('E2E MSG_B écrit…')).toBeVisible({ timeout: 8_000 });
       await panel(pageB).getByLabel('Écrire un message').fill(''); // stop typing (blur/clear)
       await panel(pageB).getByLabel('Écrire un message').blur();
 
@@ -311,16 +318,16 @@ test.describe('MC-9 realtime messaging — context A (UTILISATEUR) + context B (
       const pageA = await ctxA.newPage();
       const pageB = await ctxB.newPage();
 
-      await login(pageA, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+      await login(pageA, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
       await pageA.goto('/decouvrir');
       await expect(pageA.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
       // Widget starts closed on this fresh page load.
       await expect(panel(pageA)).toHaveCount(0);
       const before = await fab(pageA).getAttribute('aria-label');
 
-      await login(pageB, ACCOUNTS.TARGET.email, /menu de e2e target/i);
+      await login(pageB, ACCOUNTS.MSG_B.email, /menu de e2e msg_b/i);
       await fab(pageB).click();
-      await rowByName(pageB, 'E2E UTILISATEUR').click();
+      await rowByName(pageB, 'E2E MSG_A').click();
       await panel(pageB).getByLabel('Écrire un message').fill('Toujours là ?');
       await panel(pageB).getByRole('button', { name: 'Envoyer' }).click();
       await expect(panel(pageB).getByText('Toujours là ?')).toBeVisible({ timeout: 10_000 });
@@ -342,19 +349,19 @@ test.describe('MC-9 realtime messaging — context A (UTILISATEUR) + context B (
 // ＋ Groupe creation + the MC-8 contacts "Message" seam (needs an accepted connection first).
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('MC-9 group creation + MC-8 « Message » seam (UTILISATEUR ⇄ ADMIN2)', () => {
+test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONTACT)', () => {
   test.beforeAll(async ({ playwright }) => {
-    // Establish an accepted connection UTILISATEUR ⇄ ADMIN2 so ADMIN2 appears as a selectable contact
-    // in the "＋ Groupe" multi-select and as a Contacts row for the MC-8 seam test.
+    // Establish an accepted connection MSG_A ⇄ MSG_CONTACT so MSG_CONTACT appears as a selectable
+    // contact in the "＋ Groupe" multi-select and as a Contacts row for the MC-8 seam test.
     const uCtx = await playwright.request.newContext();
     const aCtx = await playwright.request.newContext();
     try {
-      await loginApi(uCtx, ACCOUNTS.UTILISATEUR.email);
-      const reqRes = await uCtx.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.ADMIN2.id } });
+      await loginApi(uCtx, ACCOUNTS.MSG_A.email);
+      const reqRes = await uCtx.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.MSG_CONTACT.id } });
       if (reqRes.status() !== 201) throw new Error(`connection request failed: ${reqRes.status()} ${await reqRes.text()}`);
       const { id: requestId } = (await reqRes.json()) as { id: string };
 
-      await loginApi(aCtx, ACCOUNTS.ADMIN2.email);
+      await loginApi(aCtx, ACCOUNTS.MSG_CONTACT.email);
       const decideRes = await aCtx.patch(`${API}/connections/requests/${requestId}`, { data: { status: 'accepted' } });
       if (decideRes.status() !== 200) throw new Error(`accept failed: ${decideRes.status()} ${await decideRes.text()}`);
     } finally {
@@ -366,7 +373,7 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (UTILISATEUR ⇄ AD
   test('MC9-E8: "＋ Groupe" — name + a contact via OnBrandMultiSelect → thread opens empty, send works', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
     await panel(page).getByRole('button', { name: '＋ Groupe' }).click();
 
@@ -374,7 +381,7 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (UTILISATEUR ⇄ AD
     await expect(modal).toBeVisible({ timeout: 10_000 });
     await modal.getByLabel('Nom du groupe').fill('Projet · Test QA');
     await modal.getByRole('button', { name: /^Contacts/ }).click();
-    await modal.getByRole('checkbox', { name: 'E2E ADMIN2' }).check();
+    await modal.getByRole('checkbox', { name: 'E2E MSG_CONTACT' }).check();
     await modal.getByRole('button', { name: 'Créer le groupe' }).click();
 
     await expect(modal).toHaveCount(0);
@@ -385,17 +392,17 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (UTILISATEUR ⇄ AD
     await expect(dialog.getByText('Bienvenue dans le groupe !')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('MC9-E9: /contacts « Message à E2E ADMIN2 » opens (or starts) the DM directly (openMsg behavior)', async ({
+  test('MC9-E9: /contacts « Message à E2E MSG_CONTACT » opens (or starts) the DM directly (openMsg behavior)', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await page.goto('/contacts');
     await expect(page.getByRole('heading', { name: 'Contacts & connexions', level: 1 })).toBeVisible({
       timeout: 10_000,
     });
-    const row = page.locator('li').filter({ hasText: 'E2E ADMIN2' });
+    const row = page.locator('li').filter({ hasText: 'E2E MSG_CONTACT' });
     await expect(row).toBeVisible({ timeout: 10_000 });
-    const messageBtn = row.getByRole('button', { name: 'Message à E2E ADMIN2' });
+    const messageBtn = row.getByRole('button', { name: 'Message à E2E MSG_CONTACT' });
     await expect(messageBtn).toBeEnabled();
     await messageBtn.click();
 
@@ -418,7 +425,7 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (UTILISATEUR ⇄ AD
 
 const ATTACHMENT_FIXTURE = path.join(__dirname, 'fixtures/avatar-50x50.jpg');
 
-test.describe('MC-9 composer attachments — Round 2 send path (UTILISATEUR ⇄ TARGET)', () => {
+test.describe('MC-9 composer attachments — Round 2 send path (MSG_A ⇄ MSG_B)', () => {
   test('MC9-E10: A attaches an image and sends attachment-only → B\'s open thread receives it live (message:new) and renders an AttachmentTile via the signed URL', async ({
     browser,
   }) => {
@@ -428,15 +435,15 @@ test.describe('MC-9 composer attachments — Round 2 send path (UTILISATEUR ⇄ 
       const pageA = await ctxA.newPage();
       const pageB = await ctxB.newPage();
 
-      await login(pageA, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
-      await login(pageB, ACCOUNTS.TARGET.email, /menu de e2e target/i);
+      await login(pageA, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+      await login(pageB, ACCOUNTS.MSG_B.email, /menu de e2e msg_b/i);
 
       await fab(pageA).click();
-      await rowByName(pageA, 'E2E TARGET').click();
+      await rowByName(pageA, 'E2E MSG_B').click();
       await expect(panel(pageA).getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
 
       await fab(pageB).click();
-      await rowByName(pageB, 'E2E UTILISATEUR').click();
+      await rowByName(pageB, 'E2E MSG_A').click();
       await expect(panel(pageB).getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
 
       // Pick the fixture via the hidden <input type="file"> — setInputFiles does not require
@@ -489,9 +496,9 @@ test.describe('MC-9 composer attachments — Round 2 send path (UTILISATEUR ⇄ 
   test('MC9-E11: removing a chip before send excludes it — the message goes out text-only, no new attachment tile', async ({
     page,
   }) => {
-    await login(page, ACCOUNTS.UTILISATEUR.email, /menu de e2e utilisateur/i);
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
-    await rowByName(page, 'E2E TARGET').click();
+    await rowByName(page, 'E2E MSG_B').click();
     await expect(panel(page).getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
     // Wait for the async message-history fetch to actually settle before counting anything below —
     // a known seeded message renders only once messagesState reaches 'ready'.
@@ -524,7 +531,7 @@ test.describe('MC-9 composer attachments — Round 2 send path (UTILISATEUR ⇄ 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('BE-RT1 — realtime F-5 notifications (connection requests → live header badge)', () => {
-  test('RT-1/RT-2/RT-3: FRESH\'s own socket receives unread:changed only for ITS OWN events; the header "demandes en attente" badge updates live with no reload', async ({
+  test('RT-1/RT-2/RT-3: MSG_FRESH\'s own socket receives unread:changed only for ITS OWN events; the header "demandes en attente" badge updates live with no reload', async ({
     browser,
     playwright,
   }) => {
@@ -534,28 +541,32 @@ test.describe('BE-RT1 — realtime F-5 notifications (connection requests → li
     let rawFreshSocket: Socket | null = null;
     try {
       const freshPage = await freshCtx.newPage();
-      await login(freshPage, ACCOUNTS.FRESH.email, /menu de e2e fresh/i);
+      await login(freshPage, ACCOUNTS.MSG_FRESH.email, /menu de e2e msg_fresh/i);
 
-      // Baseline: FRESH has zero pending connection requests → no "Demandes" badge.
-      await freshPage.getByRole('button', { name: /menu de e2e fresh/i }).click();
+      // Baseline: MSG_FRESH has zero pending connection requests → no "Demandes" badge. Dedicated
+      // (not the shared FRESH account roles.spec.ts also resets/uses) so this baseline can't be
+      // disturbed by a sibling spec running concurrently.
+      await freshPage.getByRole('button', { name: /menu de e2e msg_fresh/i }).click();
       await expect(freshPage.getByRole('img', { name: /demandes en attente/i })).toHaveCount(0);
 
-      // A raw, independent socket authenticated as FRESH (protocol-level proof, decoupled from the UI).
+      // A raw, independent socket authenticated as MSG_FRESH (protocol-level proof, decoupled from the UI).
       const cookie = await sessionCookie(freshCtx);
       rawFreshSocket = rawSocket(cookie);
       await waitForEvent(rawFreshSocket, 'connect', 10_000);
 
-      // RT-3 (negative): ADMIN2 → ADMIN3 connection request never targets FRESH's room.
+      // RT-3 (negative): ADMIN2 → ADMIN3 connection request never targets MSG_FRESH's room. ADMIN2/
+      // ADMIN3 are used here only as request senders — their role (mutated by roles.spec.ts) is
+      // irrelevant to sending a connection request.
       await loginApi(admin2Api, ACCOUNTS.ADMIN2.email);
       const otherReq = await admin2Api.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.ADMIN3.id } });
       expect(otherReq.status()).toBe(201);
       const leaked = await waitForEvent(rawFreshSocket, 'unread:changed', 2_000);
-      expect(leaked).toBeNull(); // FRESH's socket must NOT see an event meant for ADMIN3
+      expect(leaked).toBeNull(); // MSG_FRESH's socket must NOT see an event meant for ADMIN3
 
-      // RT-1 (positive): ADMIN3 → FRESH connection request DOES reach FRESH's own room.
+      // RT-1 (positive): ADMIN3 → MSG_FRESH connection request DOES reach MSG_FRESH's own room.
       await loginApi(admin3Api, ACCOUNTS.ADMIN3.email);
       const receivedPromise = waitForEvent(rawFreshSocket, 'unread:changed', 10_000);
-      const reqToFresh = await admin3Api.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.FRESH.id } });
+      const reqToFresh = await admin3Api.post(`${API}/connections/requests`, { data: { toUser: ACCOUNTS.MSG_FRESH.id } });
       expect(reqToFresh.status()).toBe(201);
       const received = await receivedPromise;
       expect(received).not.toBeNull();
