@@ -47,4 +47,89 @@ describe('OnBrandSelect', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
   });
+
+  it('is not searchable by default: opening shows no filter input', async () => {
+    const user = userEvent.setup();
+    render(
+      <OnBrandSelect aria-label="Trier" value="a" onChange={() => {}}>
+        <option value="a">Alpha</option>
+        <option value="b">Bravo</option>
+      </OnBrandSelect>,
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Trier' }));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  describe('searchable mode', () => {
+    function Countries() {
+      return (
+        <OnBrandSelect
+          aria-label="Pays"
+          searchable
+          searchPlaceholder="Rechercher un pays"
+          value=""
+          onChange={() => {}}
+        >
+          <option value="">—</option>
+          <option value="FR">France</option>
+          <option value="DE">Allemagne</option>
+          <option value="JP">Japon</option>
+        </OnBrandSelect>
+      );
+    }
+
+    it('filters options by case-insensitive substring as you type', async () => {
+      const user = userEvent.setup();
+      render(<Countries />);
+      await user.click(screen.getByRole('combobox', { name: 'Pays' }));
+      const search = screen.getByRole('textbox', { name: 'Rechercher un pays' });
+      expect(search).toHaveFocus();
+      await user.type(search, 'jap');
+      expect(screen.getByRole('option', { name: 'Japon' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'France' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'Allemagne' })).not.toBeInTheDocument();
+    });
+
+    it('selects a filtered option with ArrowDown + Enter', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <OnBrandSelect aria-label="Pays" searchable searchPlaceholder="Rechercher un pays" value="" onChange={onChange}>
+          <option value="">—</option>
+          <option value="FR">France</option>
+          <option value="DE">Allemagne</option>
+          <option value="JP">Japon</option>
+        </OnBrandSelect>,
+      );
+      await user.click(screen.getByRole('combobox', { name: 'Pays' }));
+      await user.type(screen.getByRole('textbox', { name: 'Rechercher un pays' }), 'alle');
+      await user.keyboard('{ArrowDown}{Enter}');
+      expect(onChange).toHaveBeenCalledWith({ target: { value: 'DE' } });
+    });
+
+    it('shows "Aucun résultat" when nothing matches', async () => {
+      const user = userEvent.setup();
+      render(<Countries />);
+      await user.click(screen.getByRole('combobox', { name: 'Pays' }));
+      await user.type(screen.getByRole('textbox', { name: 'Rechercher un pays' }), 'zzz');
+      expect(screen.getByText('Aucun résultat')).toBeInTheDocument();
+      expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    });
+
+    it('closes on Escape and resets the query on reopen', async () => {
+      const user = userEvent.setup();
+      render(<Countries />);
+      const trigger = screen.getByRole('combobox', { name: 'Pays' });
+      await user.click(trigger);
+      await user.type(screen.getByRole('textbox', { name: 'Rechercher un pays' }), 'jap');
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+      await user.click(trigger);
+      // query reset: the search box is empty and all options are back
+      expect(screen.getByRole('textbox', { name: 'Rechercher un pays' })).toHaveValue('');
+      expect(screen.getByRole('option', { name: 'France' })).toBeInTheDocument();
+    });
+  });
 });

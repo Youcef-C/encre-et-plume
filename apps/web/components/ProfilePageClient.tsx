@@ -774,6 +774,10 @@ export default function ProfilePageClient({ slug }: Props) {
                     {/* Switching away from France nulls the FR-only région (server enforces too, B9). */}
                     <OnBrandSelect
                       id="edit-country"
+                      searchable
+                      searchPlaceholder="Rechercher un pays"
+                      // Match the ep-input height (Spécialité) so the row lines up.
+                      style={{ padding: '10px 14px', fontSize: 15 }}
                       value={editData.country ?? ''}
                       onChange={(e) => {
                         const country = e.target.value || null;
@@ -799,6 +803,9 @@ export default function ProfilePageClient({ slug }: Props) {
                     </label>
                     <OnBrandSelect
                       id="edit-region"
+                      searchable
+                      searchPlaceholder="Rechercher une région"
+                      style={{ padding: '10px 14px', fontSize: 15 }}
                       value={editData.region ?? ''}
                       onChange={(e) =>
                         setEditData((d) => d && { ...d, region: (e.target.value as PartnerRegion) || null })

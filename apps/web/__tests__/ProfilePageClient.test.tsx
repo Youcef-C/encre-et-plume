@@ -67,7 +67,7 @@ const mockProfile: ProfileResponse = {
   displayName: 'Yuki Moreau',
   avatar: null,
   coverImage: null,
-  roleLine: 'encre & screentone · Lyon, FR',
+  roleLine: 'encre & screentone',
   specialty: 'encre & screentone',
   city: 'Lyon, FR',
   bio: 'Ma biographie.',
@@ -148,7 +148,7 @@ describe('ProfilePageClient — loaded', () => {
   it('renders roleLine when present', async () => {
     renderProfile('yuki-moreau');
     await screen.findByText('Yuki Moreau');
-    expect(screen.getByText('encre & screentone · Lyon, FR')).toBeInTheDocument();
+    expect(screen.getByText('encre & screentone')).toBeInTheDocument();
   });
 
   it('renders seeking banner when seeking.active is true', async () => {
@@ -675,9 +675,9 @@ describe('ProfilePageClient — MC-1 country + région location (round 2)', () =
     vi.mocked(updateMyProfile).mockResolvedValue(mockProfile);
   });
 
-  it('shows the composed location (French région) in read mode', async () => {
+  it('shows the composed location ("Région, Pays") in read mode', async () => {
     renderProfile('yuki-moreau', null);
-    expect(await screen.findByText('Bretagne')).toBeInTheDocument();
+    expect(await screen.findByText('Bretagne, France')).toBeInTheDocument();
   });
 
   it('offers "Pays" with French country names and no "Ville" input in edit mode', async () => {
@@ -699,6 +699,25 @@ describe('ProfilePageClient — MC-1 country + région location (round 2)', () =
     expect(screen.getByLabelText('Région')).toBeInTheDocument();
     await pickCountry(user, 'Japon');
     expect(screen.queryByLabelText('Région')).not.toBeInTheDocument();
+  });
+
+  it('lets the owner filter the "Pays" list by typing, then pick a narrowed option', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByLabelText('Pays'));
+    const search = screen.getByRole('textbox', { name: 'Rechercher un pays' });
+    await user.type(search, 'jap');
+    // list narrows to the match; unrelated countries drop out
+    expect(screen.getByRole('option', { name: 'Japon' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'France' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('option', { name: 'Japon' }));
+    // picking updates the value: Région (FR-only) disappears and save sends JP
+    expect(screen.queryByLabelText('Région')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    expect(vi.mocked(updateMyProfile).mock.calls[0][0]).toMatchObject({ country: 'JP' });
   });
 
   it('PATCHes {country, region} with region nulled when leaving France, and never sends city', async () => {

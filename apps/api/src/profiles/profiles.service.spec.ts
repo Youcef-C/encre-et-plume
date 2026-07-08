@@ -113,7 +113,8 @@ describe('ProfilesService', () => {
       expect(res.tags).toEqual(['Seinen', 'Thriller']);
       expect(res.specialty).toBe('encre & screentone');
       expect(res.city).toBe('Lyon, FR');
-      expect(res.roleLine).toBe('encre & screentone · Lyon, FR');
+      // roleLine no longer includes the city (location shows as "Région, Pays" instead).
+      expect(res.roleLine).toBe('encre & screentone');
       expect(res.counters).toEqual({ followers: 0, likes: 0, works: 0, supporters: 0 });
     });
 

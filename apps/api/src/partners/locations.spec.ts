@@ -48,7 +48,7 @@ describe('formatLocationFr', () => {
   });
 
   it('shows the French région for a French profile', () => {
-    expect(formatLocationFr('FR', 'Bretagne')).toBe('Bretagne');
+    expect(formatLocationFr('FR', 'Bretagne')).toBe('Bretagne, France');
   });
 
   it('shows "France" for a French profile with no région', () => {

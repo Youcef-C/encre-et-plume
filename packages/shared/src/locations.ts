@@ -60,6 +60,7 @@ export function countryLabelFr(code: string): string {
  */
 export function formatLocationFr(country: string | null, region: string | null): string | null {
   if (!country) return null;
-  if (country === 'FR') return region ?? 'France';
+  // "Région, Pays" for France when a région is set; otherwise just the country name.
+  if (country === 'FR') return region ? `${region}, France` : 'France';
   return countryLabelFr(country);
 }

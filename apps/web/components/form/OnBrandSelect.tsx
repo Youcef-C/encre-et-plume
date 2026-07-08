@@ -29,6 +29,9 @@ type Props = {
   style?: CSSProperties;
   disabled?: boolean;
   'aria-label'?: string;
+  // Opt-in text filter for long lists (e.g. countries). Default keeps the exact old behavior.
+  searchable?: boolean;
+  searchPlaceholder?: string;
 };
 
 function optionText(node: ReactNode): string {
@@ -58,6 +61,8 @@ export default function OnBrandSelect({
   style,
   disabled,
   'aria-label': ariaLabel,
+  searchable = false,
+  searchPlaceholder,
 }: Props) {
   const options = parseOptions(children);
   const current = value ?? '';
@@ -66,11 +71,17 @@ export default function OnBrandSelect({
 
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(selectedIndex >= 0 ? selectedIndex : 0);
+  const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const typeahead = useRef<{ buf: string; t: ReturnType<typeof setTimeout> | null }>({ buf: '', t: null });
   const listId = useId();
   const optId = (i: number) => `${listId}-opt-${i}`;
+
+  // The list navigation/commit operate over the filtered view when searchable.
+  const q = query.trim().toLowerCase();
+  const list = searchable && q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
 
   useEffect(() => {
     if (!open) return;
@@ -81,9 +92,19 @@ export default function OnBrandSelect({
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
+  // Reset the query and focus the filter box each time the popover opens.
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+    } else if (searchable) {
+      searchRef.current?.focus();
+    }
+  }, [open, searchable]);
+
   function openList() {
     if (disabled) return;
-    setActive(selectedIndex >= 0 ? selectedIndex : 0);
+    const i = list.findIndex((o) => o.value === current);
+    setActive(i >= 0 ? i : list.findIndex((o) => !o.disabled));
     setOpen(true);
   }
   function close() {
@@ -91,21 +112,29 @@ export default function OnBrandSelect({
     triggerRef.current?.focus();
   }
   function commit(i: number) {
-    const o = options[i];
+    const o = list[i];
     if (!o || o.disabled) return;
     onChange?.({ target: { value: o.value } });
     setOpen(false);
     triggerRef.current?.focus();
   }
   function move(delta: number) {
+    if (list.length === 0) return;
     let i = active;
-    for (let n = 0; n < options.length; n++) {
-      i = (i + delta + options.length) % options.length;
-      if (!options[i].disabled) {
+    for (let n = 0; n < list.length; n++) {
+      i = (i + delta + list.length) % list.length;
+      if (!list[i].disabled) {
         setActive(i);
         return;
       }
     }
+  }
+  function onSearch(next: string) {
+    setQuery(next);
+    // Keep the active option valid within the new filtered view.
+    const nq = next.trim().toLowerCase();
+    const nextList = nq ? options.filter((o) => o.label.toLowerCase().includes(nq)) : options;
+    setActive(nextList.findIndex((o) => !o.disabled));
   }
   function typeAhead(key: string) {
     if (typeahead.current.t) clearTimeout(typeahead.current.t);
@@ -126,7 +155,7 @@ export default function OnBrandSelect({
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openList();
-      } else if (e.key.length === 1) {
+      } else if (!searchable && e.key.length === 1) {
         typeAhead(e.key);
       }
       return;
@@ -146,22 +175,28 @@ export default function OnBrandSelect({
         break;
       case 'Home':
         e.preventDefault();
-        setActive(options.findIndex((o) => !o.disabled));
+        setActive(list.findIndex((o) => !o.disabled));
         break;
       case 'End':
         e.preventDefault();
-        setActive(options.length - 1);
+        setActive(list.length - 1);
         break;
       case 'Enter':
-      case ' ':
         e.preventDefault();
         commit(active);
+        break;
+      case ' ':
+        // In searchable mode Space types into the filter box; only commit for plain selects.
+        if (!searchable) {
+          e.preventDefault();
+          commit(active);
+        }
         break;
       case 'Tab':
         setOpen(false);
         break;
       default:
-        if (e.key.length === 1) typeAhead(e.key);
+        if (!searchable && e.key.length === 1) typeAhead(e.key);
     }
   }
 
@@ -210,50 +245,89 @@ export default function OnBrandSelect({
       </button>
 
       {open && (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label={ariaLabel}
+        <div
           style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
             left: 0,
             zIndex: 30,
             minWidth: '100%',
-            maxHeight: 320,
-            overflow: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: '6px 0',
             background: 'var(--card)',
             border: '2px solid var(--ink)',
             borderRadius: 6,
             boxShadow: '3px 3px 0 var(--shadow)',
+            overflow: 'hidden',
           }}
         >
-          {options.map((o, i) => (
-            <li
-              key={o.value + i}
-              id={optId(i)}
-              role="option"
-              aria-selected={o.value === current}
-              aria-disabled={o.disabled || undefined}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => commit(i)}
-              style={{
-                padding: '7px 12px',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: o.disabled ? 'default' : 'pointer',
-                color: o.disabled ? 'var(--ink2)' : 'var(--ink)',
-                background:
-                  i === active ? 'var(--accent-soft)' : o.value === current ? 'var(--tone)' : 'transparent',
-              }}
-            >
-              {o.label}
-            </li>
-          ))}
-        </ul>
+          {searchable && (
+            <div style={{ padding: 6, borderBottom: '2px solid var(--ink)' }}>
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                aria-controls={listId}
+                autoComplete="off"
+                style={{
+                  width: '100%',
+                  minHeight: 44,
+                  boxSizing: 'border-box',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '7px 9px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  background: 'var(--card)',
+                  color: 'var(--ink)',
+                }}
+              />
+            </div>
+          )}
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={ariaLabel}
+            style={{
+              maxHeight: 320,
+              overflow: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: '6px 0',
+            }}
+          >
+            {list.length === 0 ? (
+              <li aria-disabled="true" style={{ padding: '7px 12px', fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
+                Aucun résultat
+              </li>
+            ) : (
+              list.map((o, i) => (
+                <li
+                  key={o.value + i}
+                  id={optId(i)}
+                  role="option"
+                  aria-selected={o.value === current}
+                  aria-disabled={o.disabled || undefined}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => commit(i)}
+                  style={{
+                    padding: '7px 12px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: o.disabled ? 'default' : 'pointer',
+                    color: o.disabled ? 'var(--ink2)' : 'var(--ink)',
+                    background:
+                      i === active ? 'var(--accent-soft)' : o.value === current ? 'var(--tone)' : 'transparent',
+                  }}
+                >
+                  {o.label}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );

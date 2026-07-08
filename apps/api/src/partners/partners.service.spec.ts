@@ -130,7 +130,7 @@ describe('PartnersService', () => {
           name: 'Théo M.',
           avatarUrl: null,
           role: 'dessinateur',
-          location: 'Auvergne-Rhône-Alpes', // composed from country 'FR' + région
+          location: 'Auvergne-Rhône-Alpes, France', // composed "Région, Pays" from country 'FR' + région
           styleTags: ['Encre dense'],
           genreTags: ['Seinen'],
           portfolioThumbs: ['/a.jpg', '/b.jpg'],

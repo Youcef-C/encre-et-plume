@@ -124,8 +124,8 @@ export class ProfilesService {
   private compose(account: AccountRow, profile: ProfileRow): ProfileResponse {
     const specialty = profile?.specialty ?? null;
     const city = profile?.city ?? null;
-    const parts = [specialty, city].filter(Boolean);
-    const roleLine = parts.length ? parts.join(' · ') : null;
+    // roleLine no longer surfaces the city — location shows as "Région, Pays" (formatLocationFr).
+    const roleLine = specialty || null;
 
     const seekingActive = profile?.seekingActive ?? false;
     const seekingTargetRole = (profile?.seekingTargetRole ?? null) as SeekingTargetRole | null;
