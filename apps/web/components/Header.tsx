@@ -19,6 +19,7 @@ import {
   GearIcon,
   HeartIcon,
   InboxIcon,
+  InviteIcon,
   MailIcon,
   MenuIcon,
   PenIcon,
@@ -622,6 +623,18 @@ export default function Header() {
                 </div>
               </div>
 
+              {/* Mon profil */}
+              <Link
+                href={`/${account.slug}`}
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="ep-menu-item"
+                style={menuItemStyle}
+              >
+                <span style={iconStyle}><UserIcon size={16} /></span>
+                Mon profil
+              </Link>
+
               {/* Notifications */}
               <Link
                 href="/notifications"
@@ -656,16 +669,16 @@ export default function Header() {
                 )}
               </Link>
 
-              {/* Mon profil */}
+              {/* Invitations (received collab proposals — MC-3) */}
               <Link
-                href={`/${account.slug}`}
+                href="/invitations"
                 role="menuitem"
                 onClick={() => setMenuOpen(false)}
                 className="ep-menu-item"
                 style={menuItemStyle}
               >
-                <span style={iconStyle}><UserIcon size={16} /></span>
-                Mon profil
+                <span style={iconStyle}><InviteIcon size={16} /></span>
+                Invitations
               </Link>
 
               {/* ponytail: Revenus item omitted — MR-* monetization not built; add when MR-2 lands */}

@@ -99,6 +99,22 @@ describe('NotificationsInbox', () => {
     expect(screen.getByText(/sora v\. a aimé votre planche/i)).toBeInTheDocument();
   });
 
+  it('filters by type when a chip is clicked (client-side, no refetch)', async () => {
+    // unreadItem is a 'message', readItem is a 'like' (Réactions bucket)
+    vi.mocked(api.getNotifications).mockResolvedValue([unreadItem, readItem]);
+    renderInbox();
+    await waitFor(() =>
+      expect(screen.getByText(/camille roux vous a envoyé un message/i)).toBeInTheDocument()
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /^messages$/i }));
+
+    expect(screen.getByText(/camille roux vous a envoyé un message/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sora v\. a aimé votre planche/i)).not.toBeInTheDocument();
+    // client-side only — the list was fetched exactly once
+    expect(api.getNotifications).toHaveBeenCalledTimes(1);
+  });
+
   it('unread item has an unread indicator (accent dot)', async () => {
     vi.mocked(api.getNotifications).mockResolvedValue([unreadItem]);
     renderInbox();

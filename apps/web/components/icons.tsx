@@ -90,6 +90,16 @@ export function MailIcon(p: IconProps) {
   );
 }
 
+// MC-3: open-envelope glyph for the "Invitations" (received collab proposals) entry.
+export function InviteIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M3 9l9-5.5L21 9v9a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+      <path d="M3 9l9 6 9-6" />
+    </Svg>
+  );
+}
+
 export function UserIcon(p: IconProps) {
   return (
     <Svg {...p}>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback, createElement } from 'react';
+import { useEffect, useState, useCallback, useMemo, createElement } from 'react';
 import { useRouter } from 'next/navigation';
-import type { NotificationItem } from '@encre-et-plume/shared';
+import type { NotificationItem, NotifType } from '@encre-et-plume/shared';
 import {
   getNotifications,
   markNotificationRead,
@@ -11,6 +11,28 @@ import {
 import { useUnreadCounts } from '../lib/unread';
 import { NOTIF_LABEL, NOTIF_ICON, notificationHref, relativeTime } from '../lib/notifications';
 import { MailIcon } from './icons';
+
+// ─── Type filter buckets (FU-2) ──────────────────────────────────────────────
+type NotifBucket = 'all' | 'invitations' | 'messages' | 'reactions' | 'system';
+
+// Map each NotifType into a filter bucket; unmapped types fall into "Système".
+const BUCKET_BY_TYPE: Partial<Record<NotifType, NotifBucket>> = {
+  invitation: 'invitations',
+  connection_request: 'invitations',
+  connection_accepted: 'invitations',
+  message: 'messages',
+  like: 'reactions',
+  comment: 'reactions',
+};
+const bucketOf = (t: NotifType): NotifBucket => BUCKET_BY_TYPE[t] ?? 'system';
+
+const BUCKET_FILTERS: { key: NotifBucket; label: string }[] = [
+  { key: 'all', label: 'Toutes' },
+  { key: 'invitations', label: 'Invitations' },
+  { key: 'messages', label: 'Messages' },
+  { key: 'reactions', label: 'Réactions' },
+  { key: 'system', label: 'Système' },
+];
 
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 function Skeleton() {
@@ -144,6 +166,12 @@ export default function NotificationsInbox() {
   const [items, setItems] = useState<NotificationItem[] | null>(null);
   const [error, setError] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [bucket, setBucket] = useState<NotifBucket>('all');
+
+  const visibleItems = useMemo(
+    () => (bucket === 'all' ? items ?? [] : (items ?? []).filter((n) => bucketOf(n.type) === bucket)),
+    [items, bucket],
+  );
 
   const load = useCallback(() => {
     setError(false);
@@ -257,6 +285,39 @@ export default function NotificationsInbox() {
         Vos invitations, sorties et réactions récentes.
       </div>
 
+      {/* Type filter chips (FU-2) — auto-apply on click, client-side over the fetched page */}
+      <div
+        role="group"
+        aria-label="Filtrer par type"
+        style={{ display: 'flex', gap: 8, marginBottom: 20, fontSize: 13, fontWeight: 700, flexWrap: 'wrap' }}
+      >
+        {BUCKET_FILTERS.map(({ key, label }) => {
+          const active = bucket === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setBucket(key)}
+              style={{
+                background: active ? 'var(--accent)' : 'var(--card)',
+                color: active ? '#fff' : 'var(--ink)',
+                border: '2px solid var(--ink)',
+                borderRadius: 5,
+                padding: '6px 12px',
+                minHeight: 44,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                fontWeight: 700,
+                fontSize: 13,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Body */}
       {items === null && !error ? (
         <Skeleton />
@@ -274,7 +335,7 @@ export default function NotificationsInbox() {
         >
           Une erreur est survenue. Veuillez réessayer.
         </div>
-      ) : items!.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div
           style={{
             textAlign: 'center',
@@ -287,12 +348,14 @@ export default function NotificationsInbox() {
           </div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>Aucune notification</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>
-            Vos invitations et activités apparaîtront ici.
+            {bucket === 'all'
+              ? 'Vos invitations et activités apparaîtront ici.'
+              : 'Aucune notification de ce type.'}
           </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {items!.map((item) => (
+          {visibleItems.map((item) => (
             <NotifItem key={item.id} item={item} onRead={handleMarkRead} />
           ))}
         </div>

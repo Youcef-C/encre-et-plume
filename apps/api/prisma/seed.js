@@ -795,6 +795,40 @@ async function main() {
       const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null };
       await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
     }
+
+    // MC-3 (receive side): collaboration invitations RECEIVED by the demo login (Camille) FROM other
+    // seeded creators, across every status so the /invitations inbox renders each variant. The verb
+    // shown is the inviter's complementary craft (dessinateur → "écrire", scenariste → "dessiner").
+    // Idempotent: wipe Camille's received invitations first, then recreate (invitations use cuid ids,
+    // so there is no stable id to upsert on).
+    await prisma.invitation.deleteMany({ where: { toUserId: camille.id } });
+    const RECEIVED_INVITATIONS = [
+      { fromSlug: 'dr1-yuki-moreau', projectId: 'mc3-proj-lames-de-brume', status: 'pending', createdAt: inDays(0),
+        message: "J'ai adoré ton encrage sur Onibi — ton trait collerait parfaitement à l'ambiance pluvieuse du tome 2. J'imagine un récit en quatre arcs, beaucoup de scènes nocturnes, un chapitre par mois. Dis-moi ce que tu en penses !" },
+      { fromSlug: 'mc1-ines-k', projectId: null, status: 'pending', createdAt: inDays(-1),
+        message: "J'ai l'univers et les décors, mais il me manque une vraie histoire. Tu serais partant·e ? J'ai déjà une vingtaine de planches de recherches et un bestiaire complet." },
+      { fromSlug: 'mc1-theo-m', projectId: 'mc3-proj-spectres-avril', status: 'pending', createdAt: inDays(-2),
+        message: 'Une idée de one-shot fantastique, on en parle ?' },
+      { fromSlug: 'mc1-hugo-d', projectId: 'mc3-proj-carnet-encre', status: 'accepted', createdAt: inDays(-4), respondedAt: inDays(-3),
+        message: 'On lance le projet ensemble, hâte de commencer !' },
+      { fromSlug: 'mc1-lea-b', projectId: null, status: 'declined', createdAt: inDays(-8), respondedAt: inDays(-7),
+        message: 'Une comédie romantique légère, ça te tente ?' },
+    ];
+    for (const inv of RECEIVED_INVITATIONS) {
+      const from = await prisma.account.findUnique({ where: { profileSlug: inv.fromSlug } });
+      if (!from) continue;
+      await prisma.invitation.create({
+        data: {
+          fromUserId: from.id,
+          toUserId: camille.id,
+          projectId: inv.projectId,
+          message: inv.message,
+          status: inv.status,
+          createdAt: inv.createdAt,
+          respondedAt: inv.respondedAt ?? null,
+        },
+      });
+    }
   }
 
   // DR-10: minor test account (no creator profile — a plain reader). emailVerifiedAt is set at

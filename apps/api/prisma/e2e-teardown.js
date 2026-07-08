@@ -100,6 +100,15 @@ async function main() {
     await prisma.illustration.updateMany({ where: { artistId: { in: accountIds } }, data: { artistId: null } });
   }
 
+  // 4g. MC-3: Invitations FK-restrict Account deletion (fromUserId/toUserId) and Project deletion
+  // (projectId). Drop invitations touching a seeded account, then the Projects those accounts own.
+  if (accountIds.length > 0) {
+    await prisma.invitation.deleteMany({
+      where: { OR: [{ fromUserId: { in: accountIds } }, { toUserId: { in: accountIds } }] },
+    });
+    await prisma.project.deleteMany({ where: { ownerId: { in: accountIds } } });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

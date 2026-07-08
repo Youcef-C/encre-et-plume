@@ -171,6 +171,12 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 4px 4px 0 var(--shadow);
 }
 
+/* MC-3: sender name on the invitations list reads as a link to the profile. */
+.ep-invite-sender:hover b {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 /* Form input */
 .ep-input {
   width: 100%;

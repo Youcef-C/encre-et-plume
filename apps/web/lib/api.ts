@@ -527,13 +527,40 @@ export const getMatchSuggestions = (limit?: number): Promise<MatchSuggestionsRes
   request<MatchSuggestionsResponse>(`/matches/suggestions${limit ? `?limit=${limit}` : ''}`);
 
 // ─── Collaboration invitations "Proposer une collab" (MC-3) ───────────────────
-import type { MyProjectsResponse, CreateInvitationRequest, InvitationDto } from '@encre-et-plume/shared';
+import type {
+  MyProjectsResponse,
+  CreateInvitationRequest,
+  InvitationDto,
+  InvitationsResponse,
+  InvitationDirection,
+  RespondInvitationRequest,
+} from '@encre-et-plume/shared';
 
 export const getMyProjects = (): Promise<MyProjectsResponse> =>
   request<MyProjectsResponse>('/projects/mine');
 
 export const createInvitation = (body: CreateInvitationRequest): Promise<InvitationDto> =>
   request<InvitationDto>('/invitations', { method: 'POST', body: JSON.stringify(body) });
+
+export const listInvitations = (
+  direction: InvitationDirection,
+  page?: number,
+  pageSize?: number,
+): Promise<InvitationsResponse> => {
+  const q = new URLSearchParams({ direction });
+  if (page) q.set('page', String(page));
+  if (pageSize) q.set('pageSize', String(pageSize));
+  return request<InvitationsResponse>(`/invitations?${q.toString()}`);
+};
+
+export const respondInvitation = (
+  id: string,
+  status: RespondInvitationRequest['status'],
+): Promise<InvitationDto> =>
+  request<InvitationDto>(`/invitations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status } satisfies RespondInvitationRequest),
+  });
 
 // ─── Contacts & connexions (MC-8) ─────────────────────────────────────────────
 import type {

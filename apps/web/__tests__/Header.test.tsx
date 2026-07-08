@@ -397,6 +397,15 @@ describe('Header — dropdown entries', () => {
     expect(item).toHaveAttribute('href', '/notifications');
   });
 
+  it('shows Invitations link to /invitations (MC-3)', async () => {
+    const user = userEvent.setup();
+    renderHeader({ account: mockAccount });
+    await openMenu(user);
+    const item = await screen.findByRole('menuitem', { name: /^invitations$/i });
+    expect(item).toHaveAttribute('href', '/invitations');
+    expect(item).toHaveClass('ep-menu-item');
+  });
+
   it('shows Mes candidatures link', async () => {
     const user = userEvent.setup();
     renderHeader({ account: mockAccount });

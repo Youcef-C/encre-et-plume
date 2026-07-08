@@ -45,7 +45,7 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   message:          '/contacts',
   application:      '/candidatures-recues',
   report:           '/admin',
-  invitation:       '/candidatures-recues',
+  invitation:       '/invitations',
   project_activity: '/tableau-de-bord',
   release:          '/lire',
   like:             '/notifications',

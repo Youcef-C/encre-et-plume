@@ -33,6 +33,11 @@ const SPECS = [
   { key: 'MC10_A',      email: 'qa_e2e_mc10_a@test.com',      slug: 'e2e-mc10-a' },
   { key: 'MC10_B',      email: 'qa_e2e_mc10_b@test.com',      slug: 'e2e-mc10-b' },
   { key: 'MC10_FRESH',  email: 'qa_e2e_mc10_fresh@test.com',  slug: 'e2e-mc10-fresh' },
+  // MC-3 dedicated invitations-inbox fixtures — no other spec file references these, so the inbox's
+  // absolute status/filter/count assertions can't be disturbed by a parallel sibling responding.
+  { key: 'INV_INBOX',   email: 'qa_e2e_inv_inbox@test.com',   slug: 'e2e-inv-inbox' },
+  { key: 'INV_FROM_A',  email: 'qa_e2e_inv_from_a@test.com',  slug: 'e2e-inv-from-a' }, // dessinateur → invites to "écrire"
+  { key: 'INV_FROM_B',  email: 'qa_e2e_inv_from_b@test.com',  slug: 'e2e-inv-from-b' }, // scenariste → invites to "dessiner"
 ];
 
 async function main() {
@@ -247,6 +252,52 @@ async function main() {
         category: 'personnages',
         publishedAt: new Date('2026-07-08T08:00:00.000Z'),
       },
+    });
+  }
+
+  // ── MC-3: invitations-inbox fixtures for the dedicated INV_INBOX account ──────────────────────
+  // INV_INBOX receives collab invitations across every status from two inviters with fixed creator
+  // roles (A dessinateur → "écrire", B scenariste → "dessiner"). Hermetic: wipe INV_INBOX's received
+  // invitations + notifications first. One invitation notification proves the /invitations href fix.
+  {
+    const inbox = accounts.INV_INBOX.id;
+    const fromA = accounts.INV_FROM_A.id; // dessinateur
+    const fromB = accounts.INV_FROM_B.id; // scenariste
+
+    // Inviter profiles must carry creatorRoles[0] so the DTO's from.role (→ verb) resolves.
+    for (const [id, role] of [[fromA, 'dessinateur'], [fromB, 'scenariste']]) {
+      await prisma.profile.upsert({
+        where: { accountId: id },
+        update: { creatorRoles: [role] },
+        create: { accountId: id, creatorRoles: [role] },
+      });
+    }
+
+    await prisma.invitation.deleteMany({ where: { toUserId: inbox } });
+    await prisma.notification.deleteMany({ where: { recipientId: inbox } });
+
+    // A project owned by inviter A so the "Ouvrir" action on the accepted row has a target.
+    const proj = await prisma.project.upsert({
+      where: { id: 'e2e-inv-project-a' },
+      update: { ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
+      create: { id: 'e2e-inv-project-a', ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
+    });
+
+    const D = (iso) => new Date(iso);
+    await prisma.invitation.createMany({
+      data: [
+        { fromUserId: fromA, toUserId: inbox, projectId: proj.id, status: 'pending', createdAt: D('2026-07-08T09:00:00.000Z'),
+          message: "J'ai adoré ton trait — ton encrage collerait parfaitement à l'ambiance pluvieuse du tome 2. J'imagine un récit en quatre arcs, beaucoup de scènes nocturnes, un chapitre par mois." },
+        { fromUserId: fromB, toUserId: inbox, projectId: null, status: 'accepted', createdAt: D('2026-07-06T09:00:00.000Z'), respondedAt: D('2026-07-07T09:00:00.000Z'),
+          message: 'On lance le projet ensemble.' },
+        { fromUserId: fromB, toUserId: inbox, projectId: null, status: 'declined', createdAt: D('2026-07-04T09:00:00.000Z'), respondedAt: D('2026-07-05T09:00:00.000Z'),
+          message: 'Une comédie romantique, ça te tente ?' },
+      ],
+    });
+
+    // One invitation notification so the e2e can assert it links to /invitations (NOTIF_HREF fix).
+    await prisma.notification.create({
+      data: { recipientId: inbox, type: 'invitation', sourceUserId: fromA, createdAt: D('2026-07-08T09:00:00.000Z') },
     });
   }
 
