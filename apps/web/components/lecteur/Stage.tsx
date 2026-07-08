@@ -15,6 +15,8 @@ type Props = {
   page: number;
   spreadMode: 'single' | 'double';
   onRetry: () => void;
+  /** True once the chapter list has loaded and is empty — a legitimate state, not an error. */
+  noChapters?: boolean;
 };
 
 // Story update (2026-07-04): manga pages are forced to a fixed manga page ratio (~2:3 portrait);
@@ -218,7 +220,20 @@ function RomanPages({
   );
 }
 
-export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, onRetry }: Props) {
+export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, onRetry, noChapters }: Props) {
+  // A work without any chapter is a normal state, not an error (owner rule: error messages
+  // are for errors only).
+  if (noChapters) {
+    return (
+      <div role="status" style={{ textAlign: 'center', color: '#f1ece1', padding: 40 }}>
+        <p style={{ marginBottom: 6, fontWeight: 700 }}>Aucun chapitre à lire pour le moment.</p>
+        <p style={{ fontSize: 13, color: '#b8ae9f', margin: 0 }}>
+          Cette œuvre n&rsquo;a pas encore publié de chapitre.
+        </p>
+      </div>
+    );
+  }
+
   if (pagesState === 'loading') {
     return (
       <div

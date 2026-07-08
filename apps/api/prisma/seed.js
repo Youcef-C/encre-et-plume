@@ -320,26 +320,26 @@ const PARTNERS = [
 const inMinutes = (n) => new Date(Date.now() - 60 * 60 * 1000 + n * 60 * 1000);
 const PROJECT_CALLS = [
   {
-    title: '« Lames de Brume »', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille R.',
+    title: '« Lames de Brume »', authorRole: 'scenariste', seekingRoles: ['dessinateur'], authorName: 'Camille R.',
     genres: ['seinen', 'thriller'], scope: '~120 planches', tags: ['Seinen', 'Thriller', '~120 planches'],
     description: "Un thriller urbain mélancolique. J'ai 6 chapitres écrits, je cherche un trait à l'encre dense pour porter l'ambiance pluvieuse.",
     closesAt: inDays(12), applicationCount: 0, status: 'open', createdAt: inMinutes(0),
   },
   {
-    title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.',
+    title: 'One-shot fantastique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Théo M.',
     genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
     description: "J'ai le character design et l'univers d'un monde de brume. Il me manque l'histoire — cherche un·e scénariste pour un one-shot de 40 pages.",
     closesAt: null, applicationCount: 5, status: 'open', createdAt: inMinutes(1),
   },
   {
-    title: 'Comédie romantique', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Maya L.',
+    title: 'Comédie romantique', authorRole: 'scenariste', seekingRoles: ['dessinateur'], authorName: 'Maya L.',
     genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
     description: 'Série courte feel-good, trait rond et chaleureux souhaité. 8 chapitres prévus.',
     closesAt: inDays(20), applicationCount: 2, status: 'open', createdAt: inMinutes(2),
   },
   {
     // Closed call → renders "Clôturé", no "Candidater".
-    title: 'Recueil horrifique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Marta L.',
+    title: 'Recueil horrifique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Marta L.',
     genres: ['horror'], format: 'one_shot', tags: ['Horreur', 'One-shot'],
     description: 'Anthologie de courtes histoires d’épouvante — appel clos, merci à toutes et tous.',
     closesAt: inDays(-3), applicationCount: 9, status: 'closed', createdAt: inMinutes(3),
@@ -348,38 +348,41 @@ const PROJECT_CALLS = [
     // Owned by the login-tested account → viewer sees no "Candidater" on their own call.
     // Newest of the 5 (createdAt inMinutes(4)) — the /trouver preview band (limit=2, newest-first)
     // deterministically surfaces this one; trouver.spec.ts MC1-E9 asserts on it explicitly.
-    title: 'Seinen urbain', authorRole: 'scenariste', seekingRole: 'dessinateur', authorName: 'Camille Roux', authorSlug: 'dr1-camille-roux',
+    title: 'Seinen urbain', authorRole: 'scenariste', seekingRoles: ['dessinateur'], authorName: 'Camille Roux', authorSlug: 'dr1-camille-roux',
     genres: ['seinen'], scope: '~90 planches', tags: ['Seinen', '~90 planches'],
     description: 'Récit choral dans un Lyon nocturne. Scénario prêt, je cherche un·e dessinateur·rice pour un partenariat au long cours.',
     closesAt: inDays(30), applicationCount: 1, status: 'open', createdAt: inMinutes(4),
   },
-  // MC-6 "Mes candidatures": three calls dr1-camille-roux has applied to (one per status). Kept
+  // MC-6 "Mes candidatures": three calls the dedicated MC6_APPLICANT_ACCOUNT has applied to (one
+  // per status; QA fix — was dr1-camille-roux, moved to stop racing mc5-apply-call.spec.ts's
+  // camille mutations under parallel Playwright workers). Kept
   // deliberately OLDEST (inMinutes negative → bottom of the createdAt-desc board) so the /trouver
   // preview's newest-2 window is untouched, and ALL seekingRole:'scenariste' + non-seinen genres so
   // the appels.spec role/genre filter counts (dessinateur→3, seinen→2) stay valid. They DO grow the
   // default board total (status:'all') from 5 to 8 — appels.spec's total-count assertions are bumped
   // accordingly. Explicit ids so the applications below can reference them.
   {
-    id: 'mc6-call-fantastique', title: 'Récit fantastique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Théo M.',
+    id: 'mc6-call-fantastique', title: 'Récit fantastique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Théo M.',
     genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
     description: "Univers de brume et de spectres, character design prêt — cherche un·e scénariste pour lui donner une histoire.",
     closesAt: inDays(15), applicationCount: 1, status: 'open', createdAt: inMinutes(-1),
   },
   {
-    id: 'mc6-call-comedie', title: 'Comédie douce-amère', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Maya L.',
+    id: 'mc6-call-comedie', title: 'Comédie douce-amère', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Maya L.',
     genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
     description: 'Série courte feel-good, trait rond et chaleureux — je cherche une plume pour porter les dialogues.',
     closesAt: inDays(22), applicationCount: 1, status: 'open', createdAt: inMinutes(-2),
   },
   {
-    id: 'mc6-call-aventure', title: 'Aventure onirique', authorRole: 'dessinateur', seekingRole: 'scenariste', authorName: 'Sora K.',
+    id: 'mc6-call-aventure', title: 'Aventure onirique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Sora K.',
     genres: ['adventure'], tags: ['Aventure'],
     description: 'Un voyage initiatique à travers des mondes flottants — décors posés, il me manque le récit.',
     closesAt: inDays(28), applicationCount: 1, status: 'open', createdAt: inMinutes(-3),
   },
 ];
 
-// MC-6: dr1-camille-roux's own applications, one per status, to the three mc6-call-* calls above.
+// MC-6: the dedicated MC6_APPLICANT_ACCOUNT's own applications, one per status, to the three
+// mc6-call-* calls above.
 // Statuses are seeded directly (MC-7's accept/reject PATCH doesn't exist yet). Distinct createdAt
 // (newest-first: pending → accepted → rejected) so the "Mes candidatures" order is assertable.
 const MY_APPLICATIONS = [
@@ -412,6 +415,19 @@ const MINOR_ACCOUNT = {
   displayName: 'Compte Mineur (test)',
   slug: 'dr10-minor-testeur',
   birthdate: new Date(new Date().getFullYear() - 12, 0, 1), // ~12 years old, always a minor
+};
+
+// MC-6: a dedicated login-tested account for "Mes candidatures" e2e (mc6-mes-candidatures.spec.ts).
+// QA fix: this used to reuse dr1-camille-roux, but camille is ALSO mc5-apply-call.spec.ts's dedicated
+// account (it applies to "One-shot fantastique" there) — when Playwright runs spec files in parallel
+// workers (CI default), both specs mutated/read camille's application list concurrently, racing the
+// mc6 exact-count assertions ("Toutes · 3" etc.). Standalone (not in PARTNERS/CREATORS — those feed
+// directory-listing count assertions in trouver.spec.ts) so adding it can't perturb other suites.
+const MC6_APPLICANT_ACCOUNT = {
+  email: 'candidatures.mc6@seed.encre-et-plume.local',
+  displayName: 'Testeuse Candidatures (MC-6)',
+  slug: 'mc6-candidatures-fixture',
+  role: 'scenariste',
 };
 
 async function main() {
@@ -505,6 +521,27 @@ async function main() {
     }
   }
 
+  // MC-6: dedicated "Mes candidatures" e2e account (see MC6_APPLICANT_ACCOUNT comment above for why
+  // it's not dr1-camille-roux) + 2 PortfolioItems (same pattern as camille's above, needed for the
+  // apply modal's portfolio-pick path in mc6-mes-candidatures.spec.ts's reapply test). Must run
+  // before the MC-6 applications block below, which looks this account up.
+  {
+    const account = await prisma.account.upsert({
+      where: { email: MC6_APPLICANT_ACCOUNT.email },
+      create: { email: MC6_APPLICANT_ACCOUNT.email, displayName: MC6_APPLICANT_ACCOUNT.displayName, passwordHash: hash, profileSlug: MC6_APPLICANT_ACCOUNT.slug, role: 'utilisateur', emailVerifiedAt: new Date() },
+      update: { displayName: MC6_APPLICANT_ACCOUNT.displayName, profileSlug: MC6_APPLICANT_ACCOUNT.slug, emailVerifiedAt: new Date() },
+    });
+    await ensureConsent(account.id);
+    const profileData = { accountId: account.id, creatorRoles: [MC6_APPLICANT_ACCOUNT.role] };
+    const profile = await prisma.profile.upsert({ where: { accountId: account.id }, create: profileData, update: profileData });
+    await prisma.portfolioItem.deleteMany({ where: { profileId: profile.id } });
+    for (let i = 0; i < 2; i++) {
+      await prisma.portfolioItem.create({
+        data: { profileId: profile.id, image: `https://example.com/portfolio/${MC6_APPLICANT_ACCOUNT.slug}-${i}.jpg`, caption: `Échantillon ${i + 1}`, order: i },
+      });
+    }
+  }
+
   // MC-1: partner-directory creator fixtures (Account + Profile + 2 PortfolioItems each).
   for (const p of PARTNERS) {
     const account = await prisma.account.upsert({
@@ -533,10 +570,16 @@ async function main() {
   // MC-5: applications FK-reference calls (onDelete: Restrict), so wipe them first — this also resets
   // applicationCount to the fixture values below, keeping the MC-5 apply e2e repeatable across reseeds.
   // Optional-chained: the Application model ships with MC-5; older checkouts/CI clients lack it.
+  // MC-4X: ApplicationAsset cascades on application delete; ProjectCallAsset cascades on call delete.
+  // The explicit projectCallAsset.deleteMany is a no-op safety (Cascade covers it).
   await prisma.application?.deleteMany({});
+  await prisma.projectCallAsset?.deleteMany({});
   await prisma.projectCall.deleteMany({});
   for (const call of PROJECT_CALLS) {
-    const { authorSlug, ...data } = call;
+    // MC-4X §8: fixtures still declare authorRole + seekingRoles; derive authorRoles[] + 1 seat each.
+    const { authorSlug, authorRole, ...data } = call;
+    data.authorRoles = [authorRole];
+    data.seats = Object.fromEntries((data.seekingRoles || []).map((r) => [r, 1]));
     if (authorSlug) {
       const owner = await prisma.account.findUnique({ where: { profileSlug: authorSlug }, select: { id: true } });
       data.authorId = owner?.id ?? null;
@@ -544,23 +587,28 @@ async function main() {
     await prisma.projectCall.create({ data });
   }
 
-  // MC-6: seed dr1-camille-roux's own applications (one per status) to the mc6-call-* calls. Runs
-  // after her PortfolioItems exist (block above) — reuse her first one as the denormalized sampleUrl.
+  // MC-6: seed the dedicated MC6_APPLICANT_ACCOUNT's own applications (one per status) to the
+  // mc6-call-* calls. Runs after her PortfolioItems exist (block above) — reuse her first one as
+  // the denormalized sampleUrl. QA fix: moved off dr1-camille-roux (see MC6_APPLICANT_ACCOUNT
+  // comment) to stop racing mc5-apply-call.spec.ts's camille mutations under parallel workers.
   {
-    const applicant = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' }, select: { id: true } });
+    const applicant = await prisma.account.findUnique({ where: { profileSlug: MC6_APPLICANT_ACCOUNT.slug }, select: { id: true } });
     const profile = applicant && (await prisma.profile.findUnique({ where: { accountId: applicant.id }, select: { id: true } }));
     const sample = profile && (await prisma.portfolioItem.findFirst({ where: { profileId: profile.id }, orderBy: { order: 'asc' }, select: { id: true, image: true } }));
     if (applicant && sample) {
       for (const app of MY_APPLICATIONS) {
+        // MC-4X: the sample now lives in ApplicationAsset (position 0); sampleUrl stays denormalized.
         await prisma.application.create({
           data: {
             callId: app.callId,
             applicantId: applicant.id,
-            samplePortfolioItemId: sample.id,
             sampleUrl: sample.image,
             message: '',
             status: app.status,
             createdAt: app.createdAt,
+            assets: {
+              create: [{ portfolioItemId: sample.id, url: sample.image, kind: 'image', position: 0 }],
+            },
           },
         });
       }

@@ -128,6 +128,8 @@ function ApplicationRow({
 
   const genreLabel = app.callGenres.length ? GENRE_FR.get(app.callGenres[0]) ?? app.callGenres[0] : null;
   const meta = [DIRECTION_LABEL[app.callDirection], genreLabel, app.ownerName].filter(Boolean).join(' · ');
+  // MC-4X: the applicant's own first image sample feeds the row thumb; the call cover is the fallback.
+  const thumbUrl = app.samples.find((s) => s.kind === 'image')?.url ?? app.callSampleUrl;
 
   async function confirmWithdraw() {
     setBusy(true);
@@ -157,10 +159,10 @@ function ApplicationRow({
         ...(app.status === 'rejected' ? { opacity: 0.72 } : {}),
       }}
     >
-      {app.callSampleUrl ? (
+      {thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={app.callSampleUrl}
+          src={thumbUrl}
           alt=""
           width={60}
           height={80}

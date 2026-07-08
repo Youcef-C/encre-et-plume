@@ -9,18 +9,27 @@ import { useEffect, useRef, useState } from 'react';
 import {
   CALL_FORMATS,
   CALL_FORMAT_LABELS,
+  CALL_MAX_SAMPLES,
+  CALL_MAX_DOCUMENTS,
+  CALL_MAX_SEATS_PER_ROLE,
+  CREATOR_ROLES,
   resolveGenreId,
-  type CallDirection,
+  type CreatorRole,
+  type SeatCounts,
   type CallFormat,
   type CallCard,
   type CreateCallRequest,
   type ApiError,
   type MediaResponse,
+  type MediaVariants,
+  type ProjectSummary,
 } from '@encre-et-plume/shared';
-import { createCall } from '../../lib/api';
+import { createCall, getMyProjects } from '../../lib/api';
+import { isDocumentType, ROLE_LABEL } from '../../lib/calls';
 import { XIcon } from '../icons';
 import GenreChip from '../GenreChip';
 import GenreSuggestInput from '../GenreSuggestInput';
+import OnBrandSelect from '../form/OnBrandSelect';
 import UploadControl from '../UploadControl';
 
 function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivElement | null>) {
@@ -44,12 +53,6 @@ function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivEle
   }
 }
 
-// Direction chips — the "Je cherche" that a poster fills. Maps to the API's CallDirection:
-// seeking a dessinateur ⇒ writerSeeksIllustrator; seeking a scénariste ⇒ illustratorSeeksWriter.
-const DIRECTION_OPTIONS: { value: CallDirection; label: string }[] = [
-  { value: 'writerSeeksIllustrator', label: 'Un·e dessinateur·rice' },
-  { value: 'illustratorSeeksWriter', label: 'Un·e scénariste' },
-];
 
 const label: React.CSSProperties = {
   fontSize: 12,
@@ -89,6 +92,24 @@ function chipStyle(active: boolean): React.CSSProperties {
     : { ...chipBase, background: 'var(--card)', color: 'var(--ink)' };
 }
 
+// Compact − / ＋ seat stepper button.
+function stepBtn(disabled: boolean): React.CSSProperties {
+  return {
+    width: 44,
+    height: 44,
+    flex: 'none',
+    fontSize: 18,
+    fontWeight: 700,
+    lineHeight: 1,
+    border: '2px solid var(--ink)',
+    borderRadius: 6,
+    background: disabled ? 'var(--tone)' : 'var(--card)',
+    color: disabled ? 'var(--ink2)' : 'var(--ink)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontFamily: 'inherit',
+  };
+}
+
 const footerBtn: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
@@ -119,13 +140,19 @@ export default function PostCallModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'post-call-title';
 
-  const [direction, setDirection] = useState<CallDirection | null>(null);
+  // §8: per-role seat counts (0 = not sought). The author position is derived server-side from the
+  // profile, so there is no "Je suis :" picker. An optional linked project stays (req6).
+  const [seats, setSeats] = useState<Record<CreatorRole, number>>({ scenariste: 0, dessinateur: 0 });
+  const [projectId, setProjectId] = useState('');
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [genres, setGenres] = useState<string[]>([]); // canonical FR labels
   const [format, setFormat] = useState<CallFormat | null>(null);
   const [scope, setScope] = useState('');
-  const [sampleMediaId, setSampleMediaId] = useState<string | null>(null);
+  // MC-4X: several sample images (max CALL_MAX_SAMPLES) + PDF documents (max CALL_MAX_DOCUMENTS).
+  const [samples, setSamples] = useState<{ id: string; thumb: string }[]>([]);
+  const [documents, setDocuments] = useState<{ id: string; name: string }[]>([]);
   const [deadline, setDeadline] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -136,16 +163,30 @@ export default function PostCallModal({
     dialogRef.current?.focus();
   }, []);
 
+  // Load the author's own projects for the optional "lier à un projet" picker (best-effort).
+  useEffect(() => {
+    let cancelled = false;
+    getMyProjects()
+      .then((res) => !cancelled && setProjects(res.items))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function addGenre(fr: string) {
     setGenres((cur) => (cur.includes(fr) ? cur : [...cur, fr]));
   }
   function removeGenre(fr: string) {
     setGenres((cur) => cur.filter((g) => g !== fr));
   }
+  function setSeat(r: CreatorRole, delta: number) {
+    setSeats((cur) => ({ ...cur, [r]: Math.max(0, Math.min(CALL_MAX_SEATS_PER_ROLE, cur[r] + delta)) }));
+  }
 
   function validate(): Record<string, string> {
     const next: Record<string, string> = {};
-    if (!direction) next.direction = 'Choisissez qui vous cherchez.';
+    if (!CREATOR_ROLES.some((r) => seats[r] > 0)) next.seats = 'Choisissez au moins un poste recherché.';
     if (!title.trim()) next.title = 'Le titre est requis.';
     if (!description.trim()) next.description = 'La description est requise.';
     if (genres.length === 0) next.genres = 'Ajoutez au moins un genre.';
@@ -162,14 +203,18 @@ export default function PostCallModal({
     if (Object.keys(next).length > 0) return;
 
     const genreIds = genres.map((g) => resolveGenreId(g)).filter((id): id is string => !!id);
+    const seatsBody: SeatCounts = {};
+    for (const r of CREATOR_ROLES) if (seats[r] > 0) seatsBody[r] = seats[r];
     const body: CreateCallRequest = {
-      direction: direction!,
+      seats: seatsBody,
       title: title.trim(),
       description: description.trim(),
       genres: genreIds,
       ...(format ? { format } : {}),
       ...(scope.trim() ? { scope: scope.trim() } : {}),
-      ...(sampleMediaId ? { sampleMediaId } : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(samples.length ? { sampleMediaIds: samples.map((s) => s.id) } : {}),
+      ...(documents.length ? { documentMediaIds: documents.map((d) => d.id) } : {}),
       // Send an ISO datetime so the server's future check is unambiguous.
       deadline: new Date(`${deadline}T00:00:00`).toISOString(),
     };
@@ -253,30 +298,70 @@ export default function PostCallModal({
         </div>
 
         <div style={{ padding: '16px 18px' }}>
-          {/* Direction */}
+          {/* Postes recherchés — per-role seat count (0..5, 0 = not sought; ≥1 total to submit). */}
           <div style={field}>
-            <span style={label} id="post-call-direction-label">
-              Je cherche :
+            <span style={label} id="post-call-seats-label">
+              Postes recherchés
             </span>
-            <div role="group" aria-labelledby="post-call-direction-label" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {DIRECTION_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  aria-pressed={direction === opt.value}
-                  onClick={() => setDirection(opt.value)}
-                  style={chipStyle(direction === opt.value)}
+            <div role="group" aria-labelledby="post-call-seats-label" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {CREATOR_ROLES.map((r) => (
+                <div
+                  key={r}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, border: '2px solid var(--ink)', borderRadius: 8, padding: '6px 10px', background: 'var(--card)' }}
                 >
-                  {opt.label}
-                </button>
+                  <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>{ROLE_LABEL[r]}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSeat(r, -1)}
+                    disabled={seats[r] === 0}
+                    aria-label={`Retirer un poste ${ROLE_LABEL[r]}`}
+                    style={stepBtn(seats[r] === 0)}
+                  >
+                    −
+                  </button>
+                  <span aria-live="polite" style={{ minWidth: 20, textAlign: 'center', fontSize: 15, fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                    {seats[r]}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSeat(r, 1)}
+                    disabled={seats[r] >= CALL_MAX_SEATS_PER_ROLE}
+                    aria-label={`Ajouter un poste ${ROLE_LABEL[r]}`}
+                    style={stepBtn(seats[r] >= CALL_MAX_SEATS_PER_ROLE)}
+                  >
+                    ＋
+                  </button>
+                </div>
               ))}
             </div>
-            {errors.direction && (
+            {errors.seats && (
               <p role="alert" style={errText}>
-                {errors.direction}
+                {errors.seats}
               </p>
             )}
           </div>
+
+          {/* Optional link to one of the author's own projects. */}
+          {projects.length > 0 && (
+            <div style={field}>
+              <label htmlFor="post-call-project" style={label}>
+                Lier à un projet <span style={{ color: 'var(--ink2)', fontWeight: 500 }}>(facultatif)</span>
+              </label>
+              <OnBrandSelect
+                id="post-call-project"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                aria-label="Lier à un projet"
+              >
+                <option value="">Aucun projet lié</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </OnBrandSelect>
+            </div>
+          )}
 
           {/* Titre */}
           <div style={field}>
@@ -381,13 +466,104 @@ export default function PostCallModal({
             />
           </div>
 
-          {/* Visuel d'exemple */}
+          {/* Visuels et documents — ONE combined box; images and PDF/text route by content-type,
+              per-family caps (5 visuels, 3 documents) enforced via extraValidate. */}
           <div style={field}>
-            <UploadControl
-              kind="call_sample"
-              label="Visuel d'exemple"
-              onUploaded={(m: MediaResponse) => setSampleMediaId(m.id)}
-            />
+            <span style={label}>
+              Visuels et documents{' '}
+              <span style={{ color: 'var(--ink2)', fontWeight: 500 }}>
+                ({samples.length}/{CALL_MAX_SAMPLES} visuels · {documents.length}/{CALL_MAX_DOCUMENTS} documents)
+              </span>
+            </span>
+
+            {samples.length > 0 && (
+              <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {samples.map((s, i) => (
+                  <li key={s.id} style={{ position: 'relative', width: 48, height: 62, flex: 'none' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={s.thumb}
+                      alt={`Visuel d'exemple ${i + 1}`}
+                      width={48}
+                      height={62}
+                      style={{ width: 48, height: 62, objectFit: 'cover', border: '2px solid var(--ink)', borderRadius: 5, display: 'block' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSamples((cur) => cur.filter((x) => x.id !== s.id))}
+                      aria-label={`Retirer le visuel ${i + 1}`}
+                      style={{
+                        position: 'absolute',
+                        top: -8,
+                        right: -8,
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        background: 'var(--card)',
+                        border: '2px solid var(--ink)',
+                        color: 'var(--ink)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 0,
+                      }}
+                    >
+                      <XIcon size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {documents.length > 0 && (
+              <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {documents.map((d, i) => (
+                  <li key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 10px', background: 'var(--card)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      ✓ {d.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDocuments((cur) => cur.filter((x) => x.id !== d.id))}
+                      aria-label={`Retirer le document ${i + 1}`}
+                      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 2, display: 'inline-flex', flex: 'none' }}
+                    >
+                      <XIcon size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {samples.length >= CALL_MAX_SAMPLES && documents.length >= CALL_MAX_DOCUMENTS ? (
+              <p style={{ fontSize: 12, color: 'var(--ink2)', margin: 0 }}>
+                Maximum {CALL_MAX_SAMPLES} visuels et {CALL_MAX_DOCUMENTS} documents.
+              </p>
+            ) : (
+              <UploadControl
+                key={`${samples.length}-${documents.length}`}
+                kind="call_sample"
+                documentKind="call_document"
+                label="Ajouter un fichier"
+                onUploaded={(m: MediaResponse, filename?: string) => {
+                  if (m.kind === 'call_document') {
+                    setDocuments((cur) => [...cur, { id: m.id, name: filename ?? 'Document' }]);
+                  } else {
+                    setSamples((cur) => [...cur, { id: m.id, thumb: (m.variants as MediaVariants).thumb }]);
+                  }
+                }}
+                extraValidate={(file) =>
+                  isDocumentType(file.type)
+                    ? documents.length >= CALL_MAX_DOCUMENTS
+                      ? `Maximum ${CALL_MAX_DOCUMENTS} documents.`
+                      : null
+                    : samples.length >= CALL_MAX_SAMPLES
+                      ? `Maximum ${CALL_MAX_SAMPLES} visuels.`
+                      : null
+                }
+              />
+            )}
           </div>
 
           {/* Date de clôture */}

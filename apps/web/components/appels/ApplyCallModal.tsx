@@ -1,25 +1,28 @@
 'use client';
 
-// MC-5 — "Candidater" application modal. Replica of the prototype CANDIDATER MODAL section
+// MC-5 / MC-4X — "Candidater" application modal. Replica of the prototype CANDIDATER MODAL section
 // (.dc.html lines 2780-2798): 500px ink-bordered card + hard offset shadow, header, then in body
-// order **VOTRE MESSAGE** (textarea) FIRST, then **JOINDRE UN ÉCHANTILLON** — a single row that
-// shows the applicant's portfolio pieces as selectable thumbnails, a file adder, and the verbatim
-// "ou lier mon portfolio" text all at once (no mode switch). Footer Annuler / Envoyer ma candidature.
-// Keeps the real wiring the static prototype omits: exactly ONE sample source (portfolio item XOR
-// uploaded F-10 media), client validation, POST /calls/:id/applications, and success/error states.
-// On 201 the parent flips the board card to a disabled "Candidature envoyée" via onApplied(callId).
+// order **VOTRE MESSAGE** (textarea) FIRST, then **JOINDRE UN ÉCHANTILLON** — the applicant's
+// portfolio pieces as selectable thumbnails, image/PDF file adders, and the verbatim "ou lier mon
+// portfolio" text. MC-4X: up to 3 MIXED samples (portfolio picks + uploaded images + uploaded PDFs),
+// at least 1 required, counter "n/3", POST body carries `samples[]`. The "Je candidate en tant que :"
+// toggle is GONE — the server derives appliedAs from the call's seekingRole (which the gate proves the
+// applicant holds). On 201 the parent flips the board card to "Candidature envoyée" via onApplied.
 import { useEffect, useRef, useState } from 'react';
 import {
   APPLICATION_MESSAGE_MAX,
+  APPLICATION_MAX_SAMPLES,
   type ApiError,
+  type ApplicationSampleRef,
   type ApplyToCallRequest,
   type CallCard,
-  type CallDirection,
   type CreatorRole,
   type MediaResponse,
+  type MediaVariants,
   type PortfolioItemResponse,
 } from '@encre-et-plume/shared';
 import { getMe, getProfile, getProfilePortfolio, applyToCall } from '../../lib/api';
+import { ROLE_LABEL } from '../../lib/calls';
 import { XIcon } from '../icons';
 import UploadControl from '../UploadControl';
 
@@ -50,15 +53,16 @@ type PortfolioState =
   | { status: 'ready'; items: PortfolioItemResponse[] }
   | { status: 'error' };
 
-// The role a call is looking for (its author's inverse). Drives the apply-as toggle default.
-function soughtRole(direction: CallDirection): CreatorRole {
-  return direction === 'writerSeeksIllustrator' ? 'dessinateur' : 'scenariste';
-}
+// One chosen sample (up to APPLICATION_MAX_SAMPLES, mixed sources). `id` is the portfolioItemId
+// (portfolio) or the mediaId (image/document); `key` gives uploads a stable React key.
+type Picked =
+  | { source: 'portfolio'; id: string; thumb: string; alt: string }
+  | { source: 'image'; id: string; thumb: string }
+  | { source: 'document'; id: string; name: string };
 
-const ROLE_LABEL: Record<CreatorRole, string> = {
-  scenariste: 'Scénariste',
-  dessinateur: 'Dessinateur·rice',
-};
+function toRef(p: Picked): ApplicationSampleRef {
+  return p.source === 'portfolio' ? { portfolioItemId: p.id } : { mediaId: p.id };
+}
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -99,12 +103,11 @@ export default function ApplyCallModal({
   const sampleErrId = 'apply-call-sample-error';
 
   const [portfolio, setPortfolio] = useState<PortfolioState>({ status: 'loading' });
-  // Dual-role applicants pick the role they apply as; single-role users see no toggle (server default).
-  const [dualRole, setDualRole] = useState(false);
-  const [appliedAs, setAppliedAs] = useState<CreatorRole>(soughtRole(call.direction));
-  const [portfolioItemId, setPortfolioItemId] = useState<string | null>(null);
-  const [sampleMediaId, setSampleMediaId] = useState<string | null>(null);
+  const [samples, setSamples] = useState<Picked[]>([]);
   const [message, setMessage] = useState('');
+  // req6: when the call seeks >1 role the applicant also holds, they pick which role they apply as.
+  const [chooserRoles, setChooserRoles] = useState<CreatorRole[]>([]);
+  const [appliedAs, setAppliedAs] = useState<CreatorRole | null>(null);
 
   const [uploadBusy, setUploadBusy] = useState(false);
   const [sampleError, setSampleError] = useState(false);
@@ -117,8 +120,8 @@ export default function ApplyCallModal({
     dialogRef.current?.focus();
   }, []);
 
-  // Load the applicant's portfolio pieces for the inline thumbnail picker, and their creator roles
-  // (a dual-role applicant gets the apply-as toggle; default = the call's sought role when they have it).
+  // Load the applicant's portfolio pieces for the inline thumbnail picker, plus their creator roles —
+  // needed only to decide whether to show the "j'applique en tant que" chooser (multi-role calls).
   useEffect(() => {
     let cancelled = false;
     getMe()
@@ -126,11 +129,10 @@ export default function ApplyCallModal({
       .then(([profile, its]) => {
         if (cancelled) return;
         const roles = profile.creatorRoles ?? [];
-        const both = roles.includes('scenariste') && roles.includes('dessinateur');
-        setDualRole(both);
-        if (both) {
-          const sought = soughtRole(call.direction);
-          setAppliedAs(roles.includes(sought) ? sought : roles[0]);
+        const intersection = call.seekingRoles.filter((r) => roles.includes(r));
+        if (intersection.length > 1) {
+          setChooserRoles(intersection);
+          setAppliedAs(intersection[0]);
         }
         setPortfolio({ status: 'ready', items: its });
       })
@@ -138,30 +140,44 @@ export default function ApplyCallModal({
     return () => {
       cancelled = true;
     };
-  }, [call.direction]);
+  }, [call.seekingRoles]);
 
-  // Exactly ONE sample source — the last one chosen wins (picking a thumbnail clears an upload and
-  // vice-versa), so the POST body always carries a single field.
-  function pickPortfolioItem(id: string) {
-    setPortfolioItemId((cur) => (cur === id ? null : id));
-    setSampleMediaId(null);
-    setSampleError(false);
-  }
-  function onUploaded(media: MediaResponse) {
-    setSampleMediaId(media.id);
-    setPortfolioItemId(null);
-    setSampleError(false);
+  const atMax = samples.length >= APPLICATION_MAX_SAMPLES;
+  const uploads = samples.filter((s) => s.source !== 'portfolio');
+
+  function isPortfolioPicked(id: string) {
+    return samples.some((s) => s.source === 'portfolio' && s.id === id);
   }
 
-  const sampleBody: ApplyToCallRequest | null = sampleMediaId
-    ? { sampleMediaId }
-    : portfolioItemId
-      ? { samplePortfolioItemId: portfolioItemId }
-      : null;
+  function togglePortfolio(item: PortfolioItemResponse, alt: string) {
+    setSampleError(false);
+    setSamples((cur) => {
+      const idx = cur.findIndex((s) => s.source === 'portfolio' && s.id === item.id);
+      if (idx >= 0) return cur.filter((_, i) => i !== idx);
+      if (cur.length >= APPLICATION_MAX_SAMPLES) return cur;
+      return [...cur, { source: 'portfolio', id: item.id, thumb: item.image, alt }];
+    });
+  }
+
+  // ONE combined box: images land as application_sample, PDF/text as application_document — routed
+  // by the returned media.kind. Both count toward the same 3-sample cap.
+  function onUploaded(media: MediaResponse, filename?: string) {
+    setSampleError(false);
+    setSamples((cur) => {
+      if (cur.length >= APPLICATION_MAX_SAMPLES) return cur;
+      return media.kind === 'application_document'
+        ? [...cur, { source: 'document', id: media.id, name: filename ?? 'Document' }]
+        : [...cur, { source: 'image', id: media.id, thumb: (media.variants as MediaVariants).thumb }];
+    });
+  }
+
+  function removeUpload(mediaId: string) {
+    setSamples((cur) => cur.filter((s) => !(s.source !== 'portfolio' && s.id === mediaId)));
+  }
 
   async function handleSubmit() {
     if (pending || uploadBusy) return;
-    if (!sampleBody) {
+    if (samples.length === 0) {
       setSampleError(true);
       return;
     }
@@ -169,11 +185,13 @@ export default function ApplyCallModal({
     setServerError(null);
     setPending(true);
     try {
-      const created = await applyToCall(call.id, {
-        ...sampleBody,
+      const body: ApplyToCallRequest = {
+        samples: samples.map(toRef),
         ...(message.trim() ? { message: message.trim() } : {}),
-        ...(dualRole ? { appliedAs } : {}),
-      });
+        // Only sent when the chooser is shown (multi-role intersection); otherwise the server derives it.
+        ...(chooserRoles.length > 1 && appliedAs ? { appliedAs } : {}),
+      };
+      const created = await applyToCall(call.id, body);
       setSent(true);
       onApplied(call.id, created.id);
     } catch (err) {
@@ -273,12 +291,12 @@ export default function ApplyCallModal({
           </div>
         ) : (
           <div style={{ padding: '16px 18px' }}>
-            {/* Apply-as role toggle — only for applicants who hold BOTH creator roles (owner add). */}
-            {dualRole && (
+            {/* req6: role chooser — only when the call seeks >1 role the applicant holds. */}
+            {chooserRoles.length > 1 && (
               <div role="group" aria-label="Je candidate en tant que :" style={{ marginBottom: 14 }}>
                 <div style={{ ...sectionLabel, marginBottom: 8 }}>Je candidate en tant que :</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(['scenariste', 'dessinateur'] as CreatorRole[]).map((r) => {
+                  {chooserRoles.map((r) => {
                     const active = appliedAs === r;
                     return (
                       <button
@@ -332,37 +350,44 @@ export default function ApplyCallModal({
               }}
             />
 
-            {/* JOINDRE UN ÉCHANTILLON — second (2790). Portfolio thumbnails + file adder + link, one row. */}
+            {/* JOINDRE UN ÉCHANTILLON — second (2790). Up to 3 mixed samples with a live counter. */}
             <div
               role="group"
               aria-labelledby="apply-call-sample-label"
               aria-describedby={sampleError ? sampleErrId : undefined}
             >
-              <div id="apply-call-sample-label" style={{ ...sectionLabel, margin: '14px 0 8px' }}>
-                JOINDRE UN ÉCHANTILLON
+              <div
+                id="apply-call-sample-label"
+                style={{ ...sectionLabel, margin: '14px 0 8px', display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}
+              >
+                <span>JOINDRE UN ÉCHANTILLON</span>
+                <span style={{ color: 'var(--accent)' }}>{samples.length}/{APPLICATION_MAX_SAMPLES}</span>
               </div>
 
               {items.length > 0 && (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
                   {items.map((item, i) => {
-                    const selected = portfolioItemId === item.id;
+                    const selected = isPortfolioPicked(item.id);
                     const alt = item.caption ?? `Échantillon ${i + 1}`;
+                    const disabled = !selected && atMax;
                     return (
                       <button
                         key={item.id}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => pickPortfolioItem(item.id)}
+                        disabled={disabled}
+                        onClick={() => togglePortfolio(item, alt)}
                         style={{
                           padding: 0,
                           width: 60,
                           height: 78,
                           border: `2px solid ${selected ? 'var(--accent)' : 'var(--ink)'}`,
                           borderRadius: 5,
-                          cursor: 'pointer',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
                           background: 'var(--card)',
                           overflow: 'hidden',
                           boxShadow: selected ? '3px 3px 0 var(--accent)' : 'none',
+                          opacity: disabled ? 0.45 : 1,
                           flex: 'none',
                         }}
                       >
@@ -382,14 +407,57 @@ export default function ApplyCallModal({
                 </div>
               )}
 
-              {/* File adder — reuses the F-10 presigned-upload flow (labelled input, type/size allowlist,
-                  progress). Shown inline alongside the thumbnails; no mode switch. */}
-              <UploadControl
-                kind="application_sample"
-                label="Fichier d'échantillon"
-                onUploaded={onUploaded}
-                onBusyChange={setUploadBusy}
-              />
+              {/* Removable list of the uploaded (non-portfolio) samples — image thumbs + PDF chips. */}
+              {uploads.length > 0 && (
+                <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {uploads.map((s) => (
+                    <li
+                      key={s.id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        border: '2px solid var(--ink)',
+                        borderRadius: 6,
+                        padding: s.source === 'image' ? 4 : '6px 10px',
+                        background: 'var(--card)',
+                      }}
+                    >
+                      {s.source === 'image' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.thumb} alt="Échantillon téléversé" width={40} height={52} style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 3, display: 'block' }} />
+                      ) : (
+                        <span style={{ fontSize: 12, fontWeight: 700, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          ✓ {s.name}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeUpload(s.id)}
+                        aria-label="Retirer cet échantillon"
+                        style={{ background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 2, display: 'inline-flex' }}
+                      >
+                        <XIcon size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* ONE combined file adder — image, PDF or text. Remounted after each success (key on
+                  the count) so a fresh idle control appears. Hidden once 3 samples are chosen. */}
+              {atMax ? (
+                <p style={{ fontSize: 12, color: 'var(--ink2)', margin: 0 }}>Maximum {APPLICATION_MAX_SAMPLES} échantillons.</p>
+              ) : (
+                <UploadControl
+                  key={samples.length}
+                  kind="application_sample"
+                  documentKind="application_document"
+                  label="Ajouter un échantillon"
+                  onUploaded={onUploaded}
+                  onBusyChange={setUploadBusy}
+                />
+              )}
 
               {sampleError && (
                 <p id={sampleErrId} role="alert" style={errText}>

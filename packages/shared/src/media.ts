@@ -14,6 +14,8 @@ export const MEDIA_KINDS = [
   'contest',
   'call_sample', // MC-4: "Appels à projets" sample image (public)
   'application_sample', // MC-5: "Candidater" work-sample upload (public — portfolio parity)
+  'call_document', // MC-4X: "Appels à projets" PDF scenario attachment (public, no image derivatives)
+  'application_document', // MC-4X: "Candidater" PDF work-sample (public, no image derivatives)
 ] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
@@ -28,6 +30,10 @@ export const UPLOAD_ALLOWED_CONTENT_TYPES = [
   'image/avif',
 ] as const;
 export type AllowedContentType = (typeof UPLOAD_ALLOWED_CONTENT_TYPES)[number];
+
+// MC-4X: document kinds (call_document / application_document) allow ONLY PDF/TXT and skip image processing.
+export const DOCUMENT_MEDIA_KINDS = ['call_document', 'application_document'] as const;
+export const DOCUMENT_ALLOWED_CONTENT_TYPES = ['application/pdf', 'text/plain'] as const;
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 export const MAX_IMAGE_DIMENSION = 8000; // px, per side

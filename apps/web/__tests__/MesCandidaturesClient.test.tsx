@@ -50,6 +50,7 @@ const row = (over: Partial<MyApplicationRow> = {}): MyApplicationRow => ({
   ownerName: 'Camille R.',
   status: 'pending',
   appliedAs: null,
+  samples: [],
   createdAt: '2026-06-18T10:00:00.000Z',
   ...over,
 });

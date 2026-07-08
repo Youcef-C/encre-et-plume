@@ -2,8 +2,10 @@
  * MC-6 — "Mes candidatures" (route /mes-candidatures) e2e acceptance suite.
  *
  * Real backend + seeded dev DB (apps/api/prisma/seed.js) — not hermetic, exercises the real
- * GET/DELETE /me/applications integration. Login as camille.roux@seed.encre-et-plume.local /
- * password123 (dr1-camille-roux), who has 3 seeded applications (backend-notes.md §Seed):
+ * GET/DELETE /me/applications integration. Login as candidatures.mc6@seed.encre-et-plume.local /
+ * password123 (mc6-candidatures-fixture — a dedicated account, NOT camille: camille is also
+ * mc5-apply-call.spec.ts's dedicated account, and sharing her raced these exact-count assertions
+ * under parallel Playwright workers), who has 3 seeded applications (backend-notes.md §Seed):
  *   Récit fantastique      (mc6-call-fantastique) — pending  — newest  (createdAt -2j)
  *   Comédie douce-amère    (mc6-call-comedie)     — accepted —         (createdAt -5j)
  *   Aventure onirique      (mc6-call-aventure)    — rejected — oldest  (createdAt -9j)
@@ -26,7 +28,7 @@ import * as path from 'path';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const PASSWORD = 'password123';
-const CAMILLE_EMAIL = 'camille.roux@seed.encre-et-plume.local';
+const MC6_EMAIL = 'candidatures.mc6@seed.encre-et-plume.local'; // dedicated account — see file header
 const THEO_EMAIL = 'theo.m@seed.encre-et-plume.local';
 // Dedicated accounts for the QA-added scenarios below — all unused by any other e2e spec (grepped),
 // so applying to / withdrawing from calls here can't collide with appels.spec / mc5-apply-call.spec's
@@ -48,9 +50,9 @@ async function login(page: Page, email: string) {
 const rows = (page: Page) => page.locator('.ep-candidature-row');
 const rowByTitle = (page: Page, title: string) => rows(page).filter({ hasText: title });
 
-test.describe('MC-6 "Mes candidatures" — signed in (dr1-camille-roux)', () => {
+test.describe('MC-6 "Mes candidatures" — signed in (dedicated mc6-candidatures-fixture account)', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page, CAMILLE_EMAIL);
+    await login(page, MC6_EMAIL);
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
   });
@@ -192,7 +194,7 @@ test('MC6-E8: logged-out visit to /mes-candidatures shows the connect prompt', a
 });
 
 test('MC6-E9: smoke — /appels "Mes candidatures" header link navigates to the page', async ({ page }) => {
-  await login(page, CAMILLE_EMAIL);
+  await login(page, MC6_EMAIL);
   await page.goto('/appels');
   await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
   await page.getByRole('link', { name: 'Mes candidatures' }).click();
@@ -242,15 +244,26 @@ test.describe('MC-6 owner extension — withdraw from the /appels board card', (
   });
 });
 
-// ─── QA addition: owner extension — appliedAs role toggle for a dual-role applicant ──────────────
+// ─── QA addition: owner extension — appliedAs derivation for a dual-role applicant ───────────────
 //
 // No seeded fixture account has both creatorRoles (camille is single-role scenariste, per
 // backend-notes.md). Per the QA brief: grant a seed account the second role live via
 // `PATCH /profiles/me` (page.request shares the page's session cookie) instead of relying on an
-// ad-hoc, non-reseedable dual-role row. Uses "Comédie romantique" (MC-4 fixture, scenariste-authored,
-// seeking dessinateur) — untouched by any exact-count assertion in appels.spec / mc5-apply-call.spec.
-test.describe('MC-6 owner extension — appliedAs role toggle', () => {
-  test('MC6-E11: dual-role applicant sees "Je candidate en tant que :", can switch roles, and the choice is echoed on Mes candidatures', async ({
+// ad-hoc, non-reseedable dual-role row.
+//
+// MC-4X req6 note: the "Je candidate en tant que :" chooser only renders when the call seeks
+// MULTIPLE roles AND the applicant holds more than one of them (`seekingRoles ∩ creatorRoles`
+// length > 1). Every seeded call has exactly ONE seekingRole (the multi-role-calls migration
+// backfilled 1:1), so no seeded fixture can show the chooser — that specific rendering path is
+// unit-tested (ApplyCallModal.test.tsx: "shows the toggle for a dual-role applicant … (multi)") and
+// was additionally live-verified once against a scratch multi-seat call created via the API during
+// this QA pass (see qa-report.md — chooser appeared, role switch worked, appliedAs round-tripped);
+// that scratch call was removed by the final reseed so it never pollutes appels.spec's board counts.
+// What IS safe to keep as a permanent regression here: a dual-role applicant applying to a
+// single-role-seeking seeded call must NOT see a spurious chooser, and appliedAs still derives
+// correctly (to the one role both she and the call share).
+test.describe('MC-6 owner extension — appliedAs derivation (dual-role applicant, single-role call)', () => {
+  test('MC6-E11: dual-role applicant applying to a single-role-seeking call sees NO chooser; appliedAs still derives correctly', async ({
     page,
   }) => {
     await login(page, NOE_EMAIL);
@@ -263,20 +276,14 @@ test.describe('MC-6 owner extension — appliedAs role toggle', () => {
     await page.goto('/appels');
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    const card = page.locator('.ep-call-board-card').filter({ hasText: 'Comédie romantique' });
+    // Aventure onirique (mc6-call-aventure) seeks scénariste only — NOE holds it (and dessinateur
+    // too), but the intersection with the call's single sought role is exactly 1 → no chooser.
+    const card = page.locator('.ep-call-board-card').filter({ hasText: 'Aventure onirique' });
+    await expect(card.getByRole('button', { name: 'Candidater' })).toBeEnabled();
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
 
-    const toggle = dialog.getByRole('group', { name: 'Je candidate en tant que :' });
-    await expect(toggle).toBeVisible();
-    // Default = the call's sought role (author scenariste → seeks dessinateur).
-    await expect(toggle.getByRole('button', { name: 'Dessinateur·rice' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(toggle.getByRole('button', { name: 'Scénariste' })).toHaveAttribute('aria-pressed', 'false');
-
-    // Switch the choice.
-    await toggle.getByRole('button', { name: 'Scénariste' }).click();
-    await expect(toggle.getByRole('button', { name: 'Scénariste' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(toggle.getByRole('button', { name: 'Dessinateur·rice' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog.getByRole('group', { name: 'Je candidate en tant que :' })).toHaveCount(0);
 
     await dialog.getByAltText('Échantillon 1').click();
     await dialog.getByRole('button', { name: 'Envoyer ma candidature' }).click();
@@ -285,16 +292,16 @@ test.describe('MC-6 owner extension — appliedAs role toggle', () => {
 
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
-    const row = page.locator('.ep-candidature-row').filter({ hasText: 'Comédie romantique' });
+    const row = page.locator('.ep-candidature-row').filter({ hasText: 'Aventure onirique' });
     await expect(row.getByText('En tant que scénariste')).toBeVisible();
   });
 
-  test('MC6-E12: single-role applicant sees no apply-as toggle (no regression)', async ({ page }) => {
+  test('MC6-E12: single-role applicant sees no apply-as chooser (no regression)', async ({ page }) => {
     await login(page, LEA_EMAIL);
     await page.goto('/appels');
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    const card = page.locator('.ep-call-board-card').filter({ hasText: 'Comédie romantique' });
+    const card = page.locator('.ep-call-board-card').filter({ hasText: 'Récit fantastique' });
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
     await expect(dialog.getByRole('group', { name: 'Je candidate en tant que :' })).toHaveCount(0);
@@ -305,28 +312,35 @@ test.describe('MC-6 owner extension — appliedAs role toggle', () => {
 
 // ─── QA addition: owner extension — UploadControl preview shape (never a circle outside avatars) ──
 test.describe('MC-6 owner extension — sample preview is never a circle', () => {
-  test('MC6-E13: the apply-modal sample preview renders as a rounded rectangle, not a circle', async ({ page }) => {
-    await login(page, LEA_EMAIL);
+  test('MC6-E13: an uploaded application sample renders as a rounded rectangle, not a circle', async ({ page }) => {
+    await login(page, HUGO_EMAIL);
     await page.goto('/appels');
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
 
-    const card = page.locator('.ep-call-board-card').filter({ hasText: 'Comédie romantique' });
+    // Hugo (dessinateur) applies to "« Lames de Brume »" (seeks dessinateur) — role-eligible.
+    const card = page.locator('.ep-call-board-card').filter({ hasText: '« Lames de Brume »' });
+    await expect(card.getByRole('button', { name: 'Candidater' })).toBeEnabled();
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
 
     const fileInput = dialog.locator('input[type="file"]');
     await fileInput.setInputFiles({ name: 'sample.jpg', mimeType: 'image/jpeg', buffer: SAMPLE_FIXTURE });
 
-    // application_sample uploads skip the avatar crop step and go straight to upload → processing →
-    // ready (worker runs inline locally per .env WORKER_INLINE=true). "Changer" only renders in the
-    // ready state, next to the thumbnail preview.
-    await expect(dialog.getByRole('button', { name: 'Changer' })).toBeVisible({ timeout: 30_000 });
+    // MC-4X: ApplyCallModal remounts its combined UploadControl on every successful upload
+    // (`key={samples.length}`, multi-sample UX) — the control's OWN transient "ready" state (with a
+    // "Changer" button) never stably paints; React batches the child's local ready-state update with
+    // the parent's `onUploaded` state update that changes the key, so the OLD instance unmounts before
+    // that frame renders (confirmed via a captured DOM snapshot: the drop zone is back to idle text
+    // immediately). The real, persisted result users see is the uploaded item added to the "JOINDRE UN
+    // ÉCHANTILLON" list — that thumbnail (not UploadControl's own ready-state <img>) is what must never
+    // render as a circle here; it's a separate, hardcoded `borderRadius: 3` in ApplyCallModal.tsx.
+    const listItem = dialog.getByRole('listitem').filter({ has: page.getByAltText('Échantillon téléversé') });
+    await expect(listItem).toBeVisible({ timeout: 30_000 });
+    await expect(dialog.getByText('1/3')).toBeVisible();
 
-    const previewImg = dialog.locator('img[alt="Fichier d\'échantillon"]');
-    await expect(previewImg).toBeVisible();
+    const previewImg = listItem.getByAltText('Échantillon téléversé');
     const borderRadius = await previewImg.evaluate((el) => getComputedStyle(el).borderRadius);
     expect(borderRadius).not.toBe('50%');
-    expect(borderRadius).toBe('6px');
 
     await previewImg.screenshot({ path: 'test-results/mc6-upload-preview-not-circle.png' });
 

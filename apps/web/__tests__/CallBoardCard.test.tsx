@@ -20,6 +20,11 @@ const base: CallCard = {
   isOwner: false,
   hasApplied: false,
   myApplicationId: null,
+  viewerHasRole: true,
+  seekingRoles: ['dessinateur'],
+  seats: { dessinateur: 1 },
+  acceptedByRole: {},
+  remainingSeats: 1,
 };
 
 describe('CallBoardCard', () => {
@@ -42,6 +47,18 @@ describe('CallBoardCard', () => {
     render(<CallBoardCard call={{ ...base, closesInDays: null, deadline: null, applicationCount: 5 }} />);
     expect(screen.getByText('5 candidatures')).toBeInTheDocument();
     expect(screen.queryByText(/Clôture dans/)).not.toBeInTheDocument();
+  });
+
+  // §8 remaining seats.
+  it('shows pluralized remaining seats on an open call and none when closed', () => {
+    const { rerender } = render(<CallBoardCard call={{ ...base, remainingSeats: 3 }} />);
+    expect(screen.getByText('3 places restantes')).toBeInTheDocument();
+    rerender(<CallBoardCard call={{ ...base, remainingSeats: 1 }} />);
+    expect(screen.getByText('1 place restante')).toBeInTheDocument();
+    rerender(<CallBoardCard call={{ ...base, remainingSeats: 0 }} />);
+    expect(screen.queryByText(/place/)).not.toBeInTheDocument();
+    rerender(<CallBoardCard call={{ ...base, status: 'closed', remainingSeats: 2 }} />);
+    expect(screen.queryByText(/restante/)).not.toBeInTheDocument();
   });
 
   it('marks a closed call and hides Candidater', () => {
@@ -94,5 +111,50 @@ describe('CallBoardCard', () => {
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', 'https://cdn/x.jpg');
     expect(img).toHaveAttribute('alt', expect.stringContaining('Lames de Brume'));
+  });
+
+  // MC-4X role gate.
+  it('disables Candidater with an explanatory hint when the viewer lacks the sought role', () => {
+    const onCandidater = vi.fn();
+    render(<CallBoardCard call={{ ...base, viewerHasRole: false }} onCandidater={onCandidater} />);
+    const btn = screen.getByRole('button', { name: 'Candidater' });
+    expect(btn).toBeDisabled();
+    const hint = screen.getByText('Cet appel recherche un·e dessinateur·rice.');
+    expect(hint).toBeInTheDocument();
+    expect(btn).toHaveAttribute('aria-describedby', hint.id);
+    btn.click();
+    expect(onCandidater).not.toHaveBeenCalled();
+  });
+
+  it('uses the scénariste hint when the call seeks a scénariste', () => {
+    render(<CallBoardCard call={{ ...base, seekingRoles: ['scenariste'], viewerHasRole: false }} />);
+    expect(screen.getByText('Cet appel recherche un·e scénariste.')).toBeInTheDocument();
+  });
+
+  it('lists both sought roles in the hint on a multi-role call', () => {
+    render(<CallBoardCard call={{ ...base, seekingRoles: ['dessinateur', 'scenariste'], viewerHasRole: false }} />);
+    expect(
+      screen.getByText('Cet appel recherche un·e dessinateur·rice ou un·e scénariste.'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps Candidater active when the viewer holds the sought role', () => {
+    render(<CallBoardCard call={{ ...base, viewerHasRole: true }} onCandidater={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Candidater' })).toBeEnabled();
+    expect(screen.queryByText(/Cet appel recherche/)).not.toBeInTheDocument();
+  });
+
+  // MC-4X "Voir le détail" — present on every card (open / closed / own).
+  it('renders "Voir le détail" and fires the callback on open, closed and own cards', async () => {
+    for (const over of [{}, { status: 'closed' as const }, { isOwner: true }]) {
+      const onVoirDetail = vi.fn();
+      const { unmount } = render(
+        <CallBoardCard call={{ ...base, ...over }} onVoirDetail={onVoirDetail} />,
+      );
+      const btn = screen.getByRole('button', { name: /Voir le détail/ });
+      btn.click();
+      expect(onVoirDetail).toHaveBeenCalledTimes(1);
+      unmount();
+    }
   });
 });

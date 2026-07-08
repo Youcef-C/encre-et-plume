@@ -10,8 +10,15 @@ import {
   registerDecorator,
   type ValidationOptions,
 } from 'class-validator';
-import { CALL_DIRECTIONS, CALL_FORMATS, GENRES } from '@encre-et-plume/shared';
-import type { CallDirection, CallFormat } from '@encre-et-plume/shared';
+import {
+  CALL_FORMATS,
+  CALL_MAX_DOCUMENTS,
+  CALL_MAX_SAMPLES,
+  CALL_MAX_SEATS_PER_ROLE,
+  CREATOR_ROLES,
+  GENRES,
+} from '@encre-et-plume/shared';
+import type { CallFormat, SeatCounts } from '@encre-et-plume/shared';
 
 const GENRE_IDS = new Set(GENRES.map((g) => g.id));
 
@@ -25,6 +32,35 @@ function IsGenreIds(validationOptions?: ValidationOptions) {
       options: { message: 'Genre inconnu.', ...validationOptions },
       validator: {
         validate: (value: unknown) => Array.isArray(value) && value.every((v) => typeof v === 'string' && GENRE_IDS.has(v)),
+      },
+    });
+  };
+}
+
+/**
+ * MC-4X §8: seats = a plain object of role→count. Keys must be CREATOR_ROLES, values integers in
+ * 1..CALL_MAX_SEATS_PER_ROLE, at least one seat total. (The service re-normalises defensively.)
+ */
+function IsSeatCounts(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isSeatCounts',
+      target: object.constructor,
+      propertyName,
+      options: { message: 'Postes recherchés invalides.', ...validationOptions },
+      validator: {
+        validate: (value: unknown) => {
+          if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+          const entries = Object.entries(value as Record<string, unknown>);
+          if (entries.length === 0) return false;
+          let total = 0;
+          for (const [role, count] of entries) {
+            if (!(CREATOR_ROLES as readonly string[]).includes(role)) return false;
+            if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > CALL_MAX_SEATS_PER_ROLE) return false;
+            total += count;
+          }
+          return total >= 1;
+        },
       },
     });
   };
@@ -50,8 +86,9 @@ function IsFutureIsoDate(validationOptions?: ValidationOptions) {
 }
 
 export class CreateCallDto {
-  @IsIn(CALL_DIRECTIONS, { message: 'Direction invalide.' })
-  direction!: CallDirection;
+  // MC-4X §8: authorRole is derived server-side from the profile — not accepted here.
+  @IsSeatCounts()
+  seats!: SeatCounts;
 
   @IsString()
   @IsNotEmpty({ message: 'Le titre est requis.' })
@@ -79,8 +116,20 @@ export class CreateCallDto {
   scope?: string;
 
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(CALL_MAX_SAMPLES, { message: "Cinq visuels d'exemple maximum." })
+  @IsString({ each: true })
+  sampleMediaIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(CALL_MAX_DOCUMENTS, { message: 'Trois documents maximum.' })
+  @IsString({ each: true })
+  documentMediaIds?: string[];
+
+  @IsOptional()
   @IsString()
-  sampleMediaId?: string;
+  projectId?: string;
 
   @IsFutureIsoDate()
   deadline!: string;

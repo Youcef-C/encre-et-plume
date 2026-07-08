@@ -9,14 +9,14 @@ import type {
 import { MY_APPLICATIONS_PAGE_SIZE } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { directionOf } from './calls.service';
+import { directionOf, resolveCallSampleThumbs, toApplicationSamples } from './calls.service';
 
 export interface MyApplicationsQueryParsed {
   status: MyApplicationsStatusFilter; // 'all' by default (controller supplies)
   page: number; // 1-based, already clamped ≥ 1
 }
 
-// Application.findMany with { include: { call: true } } — only the fields MC-6 renders.
+// Application.findMany with { include: { call: true, assets } } — only the fields MC-6 renders.
 interface AppRow {
   id: string;
   callId: string;
@@ -25,11 +25,11 @@ interface AppRow {
   createdAt: Date;
   call: {
     title: string;
-    authorRole: string;
+    authorRoles: string[];
     authorName: string;
     genres: string[];
-    sampleMediaId: string | null;
   };
+  assets: { url: string; kind: string; size: number | null; position: number }[];
 }
 
 /**
@@ -55,7 +55,7 @@ export class MyApplicationsService {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * MY_APPLICATIONS_PAGE_SIZE,
         take: MY_APPLICATIONS_PAGE_SIZE,
-        include: { call: true },
+        include: { call: true, assets: { orderBy: { position: 'asc' } } },
       }) as unknown as Promise<AppRow[]>,
       this.prisma.application.count({ where }),
     ]);
@@ -114,19 +114,9 @@ export class MyApplicationsService {
     }
   }
 
-  /** Single batched Media lookup for every call cover on the page (no N+1). */
-  private async resolveCallThumbs(rows: AppRow[]): Promise<Map<string, string>> {
-    const ids = rows.map((r) => r.call.sampleMediaId).filter((v): v is string => !!v);
-    if (ids.length === 0) return new Map();
-    const media = (await this.prisma.media.findMany({
-      where: { id: { in: ids }, status: 'ready' },
-      select: { id: true, variants: true },
-    })) as { id: string; variants: { thumb?: string } | null }[];
-    const out = new Map<string, string>();
-    for (const m of media) {
-      if (m.variants?.thumb) out.set(m.id, m.variants.thumb);
-    }
-    return out;
+  /** MC-4X: batched call-cover thumbs (first ready call_sample) for every call on the page. */
+  private resolveCallThumbs(rows: AppRow[]): Promise<Map<string, string>> {
+    return resolveCallSampleThumbs(this.prisma, [...new Set(rows.map((r) => r.callId))]);
   }
 
   private mapRow(r: AppRow, thumbs: Map<string, string>): MyApplicationRow {
@@ -134,12 +124,13 @@ export class MyApplicationsService {
       id: r.id,
       callId: r.callId,
       callTitle: r.call.title,
-      callDirection: directionOf(r.call.authorRole),
+      callDirection: directionOf(r.call.authorRoles[0] ?? 'scenariste'),
       callGenres: r.call.genres,
-      callSampleUrl: r.call.sampleMediaId ? thumbs.get(r.call.sampleMediaId) ?? null : null,
+      callSampleUrl: thumbs.get(r.callId) ?? null,
       ownerName: r.call.authorName,
       status: r.status,
       appliedAs: (r.appliedAs ?? null) as CreatorRole | null,
+      samples: toApplicationSamples(r.assets ?? []),
       createdAt: r.createdAt.toISOString(),
     };
   }

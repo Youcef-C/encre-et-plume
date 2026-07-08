@@ -1,15 +1,24 @@
 /**
  * MC-5 — "Candidater" application flow e2e acceptance suite.
  *
- * Real backend + seeded dev DB (apps/api/prisma/seed.js) — not hermetic, exercises the real
- * POST /calls/:id/applications + board `hasApplied` integration. Login as
- * camille.roux@seed.encre-et-plume.local / password123 (dr1-camille-roux), who has 2 seeded
- * PortfolioItems for the portfolio-pick path (backend-notes.md §Seed).
+ * Extended for MC-4X: role-gated applications (a call's Candidater button is disabled unless the
+ * viewer's creatorRoles include the call's seekingRoles), samples[] (was single sampleMediaId /
+ * samplePortfolioItemId), no more appliedAs toggle (server-derived). Real backend + seeded dev DB
+ * (apps/api/prisma/seed.js) — not hermetic, exercises the real POST /calls/:id/applications +
+ * board `hasApplied` integration. Login as camille.roux@seed.encre-et-plume.local / password123
+ * (dr1-camille-roux, single-role scénariste), who has 2 seeded PortfolioItems for the
+ * portfolio-pick path (backend-notes.md §Seed).
  *
  * Seed fixtures relevant here (see appels.spec.ts header for the full board):
- *   One-shot fantastique  — open, not owned by camille, no deadline, 5 candidatures → 6 after apply.
+ *   One-shot fantastique  — open, not owned by camille, no deadline, seeks SCÉNARISTE (camille
+ *                           holds it — role gate passes), 5 candidatures → 6 after apply.
  *   Recueil horrifique    — CLOSED (deadline passed) → "Clôturé", no Candidater button.
  *   Seinen urbain         — owned by camille (the logged-in viewer) → no Candidater button.
+ *   « Lames de Brume »    — seeks DESSINATEUR·RICE only — camille is role-gated here (disabled
+ *                           Candidater + hint); used below for the Escape/responsive tests since
+ *                           those interact with the modal without ever submitting an application
+ *                           (MC-4X moved the "open a modal that doesn't submit" tests off it — see
+ *                           MC5-E10 for the explicit role-gate-blocks-the-modal assertion).
  *
  * `application.deleteMany({})` runs on every reseed (before ProjectCall.deleteMany, FK Restrict) so
  * this suite is repeatable — reseed-before-e2e is the established QA flow for this story.
@@ -61,20 +70,21 @@ test.describe('MC-5 "Candidater" — signed in (dr1-camille-roux)', () => {
     await expect(dialog).toBeVisible();
   });
 
-  test('MC5-E3: portfolio thumbnails and the file adder are shown together (no mode-toggle chips)', async ({
+  test('MC5-E3: portfolio thumbnails and the combined file adder are shown together, with a live n/3 counter', async ({
     page,
   }) => {
     const card = cardByTitle(page, 'One-shot fantastique');
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
 
-    // The prototype's "JOINDRE UN ÉCHANTILLON" row shows both sample sources at once — the
-    // portfolio thumbnails and the file adder — with no mode switch. Only ONE is submitted (XOR),
-    // enforced by selection, not by hiding the other affordance.
+    // MC-4X: up to 3 mixed samples (portfolio picks + uploaded images/PDFs), ONE combined adder —
+    // the prototype's "JOINDRE UN ÉCHANTILLON" row shows both sources at once, no mode switch.
     await expect(dialog.getByAltText('Échantillon 1')).toBeVisible();
-    await expect(dialog.getByLabel("Fichier d'échantillon")).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Mon portfolio' })).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: 'Téléverser un fichier' })).toHaveCount(0);
+    await expect(dialog.getByLabel('Ajouter un échantillon')).toBeVisible();
+    await expect(dialog.getByText('0/3')).toBeVisible();
+
+    await dialog.getByAltText('Échantillon 1').click();
+    await expect(dialog.getByText('1/3')).toBeVisible();
   });
 
   test('MC5-E4: happy path — pick a portfolio sample + message → success → card flips + count bumps → survives reload', async ({
@@ -124,14 +134,17 @@ test.describe('MC-5 "Candidater" — signed in (dr1-camille-roux)', () => {
   });
 
   test('MC5-E7: Escape closes the modal without submitting', async ({ page }) => {
-    const card = cardByTitle(page, '« Lames de Brume »');
+    // Récit fantastique (mc6-call-fantastique) also seeks scénariste — camille is eligible — and,
+    // unlike One-shot fantastique, is untouched by MC5-E4 (which runs earlier in this same file and
+    // applies there), so its Candidater button is still guaranteed enabled here.
+    const card = cardByTitle(page, 'Récit fantastique');
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     // No candidature was sent — the card is unaffected.
-    await expect(cardByTitle(page, '« Lames de Brume »').getByRole('button', { name: 'Candidater' })).toBeVisible();
+    await expect(cardByTitle(page, 'Récit fantastique').getByRole('button', { name: 'Candidater' })).toBeVisible();
   });
 
   test('MC5-E8: modal is usable at 375px, 768px and 1280px (no horizontal overflow, CTA reachable)', async ({
@@ -143,7 +156,7 @@ test.describe('MC-5 "Candidater" — signed in (dr1-camille-roux)', () => {
       { width: 1280, height: 900 },
     ]) {
       await page.setViewportSize(size);
-      const card = cardByTitle(page, '« Lames de Brume »');
+      const card = cardByTitle(page, 'Récit fantastique');
       await card.getByRole('button', { name: 'Candidater' }).click();
       const dialog = page.getByRole('dialog', { name: 'Candidater' });
       await expect(dialog).toBeVisible();
@@ -155,6 +168,14 @@ test.describe('MC-5 "Candidater" — signed in (dr1-camille-roux)', () => {
       await page.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);
     }
+  });
+
+  test('MC5-E10 (MC-4X role gate): a role-gated call never opens the apply modal', async ({ page }) => {
+    // « Lames de Brume » seeks dessinateur·rice only — camille (scénariste) is disabled here.
+    const card = cardByTitle(page, '« Lames de Brume »');
+    const btn = card.getByRole('button', { name: 'Candidater' });
+    await expect(btn).toBeDisabled();
+    await expect(page.getByRole('dialog', { name: 'Candidater' })).toHaveCount(0);
   });
 });
 

@@ -71,6 +71,8 @@ enum MediaKind {
   contest
   call_sample
   application_sample
+  call_document
+  application_document
 }
 
 enum MediaStatus {
@@ -275,6 +277,7 @@ model Project {
   cover       String? // image URL; null -> halftone placeholder
   createdAt   DateTime     @default(now())
   invitations Invitation[]
+  calls       ProjectCall[] // MC-4X req6: calls linked to this project
 
   @@index([ownerId])
 }
@@ -583,8 +586,11 @@ model Announcement {
 model ProjectCall {
   id               String    @id @default(cuid())
   title            String // "« Lames de Brume »"
-  authorRole       String // 'scenariste' | 'dessinateur' (CREATOR_ROLES)
-  seekingRole      String // the complement — role sought
+  authorRoles      String[]  @default([]) // MC-4X §8: the author's creator role(s), snapshot of profile.creatorRoles (was single authorRole)
+  seekingRoles     String[]  @default([]) // MC-4X req6: role(s) sought (1..2, = seats keys); kept for the board `has` filter
+  seats            Json      @default("{}") // MC-4X §8: seat counts per sought role, e.g. { "dessinateur": 2, "scenariste": 1 }
+  projectId        String? // MC-4X req6: optional link to an author-owned Project
+  project          Project?  @relation(fields: [projectId], references: [id])
   authorId         String? // nullable, seed-friendly (mirror Illustration.artistId)
   authorName       String // denormalized display name
   tags             String[]  @default([]) // denormalized display chips (genre labels + scope/format)
@@ -592,15 +598,28 @@ model ProjectCall {
   genres           String[]  @default([]) // MC-4: GENRES ids (F-20) — used for board filtering
   format           String? // MC-4: 'serie' | 'one_shot'
   scope            String? // MC-4: free text, e.g. "~120 planches"
-  sampleMediaId    String? // MC-4: FK-by-convention to Media.id (kind 'call_sample')
   closesAt         DateTime? // null → FE meta falls back to applicationCount; MC-4: the deadline
   applicationCount Int       @default(0)
   status           String    @default("open") // MC-4 owns transitions
   createdAt        DateTime  @default(now())
   applications     Application[] // MC-5: applications submitted to this call
+  assets           ProjectCallAsset[] // MC-4X: sample images + PDF documents (was single sampleMediaId)
 
   @@index([status, createdAt])
   @@index([authorId])
+}
+
+// MC-4X: a call's sample images (kind 'call_sample') and PDF documents (kind 'call_document'),
+// ordered by position. Asset TYPE lives on Media.kind (no assetType column). Composite PK — no
+// surrogate id. Backfill preserved every pre-MC-4X call's single sampleMediaId at position 0.
+model ProjectCallAsset {
+  callId   String
+  mediaId  String
+  position Int
+  call     ProjectCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@id([callId, mediaId])
+  @@index([callId, position])
 }
 
 // ── MC-5: Candidater — apply to a call ────────────────────────────────────────
@@ -617,16 +636,32 @@ model Application {
   call                  ProjectCall       @relation(fields: [callId], references: [id])
   applicantId           String
   applicant             Account           @relation(fields: [applicantId], references: [id])
-  sampleMediaId         String? // F-10 Media.id (kind 'application_sample'), FK-by-convention
-  samplePortfolioItemId String? // F-3 PortfolioItem.id — the "select a portfolio piece" path
-  sampleUrl             String // denormalized display URL — MC-6/MC-7 render this
+  sampleUrl             String // denormalized display URL of the FIRST sample — MC-6/MC-7 render this thumbnail
   message               String            @default("")
   status                ApplicationStatus @default(pending)
-  appliedAs             String? // MC-6: the CreatorRole the applicant applied AS (dual-role users); null = unspecified
+  appliedAs             String? // the CreatorRole the applicant applied AS (server-derived = call seekingRole); null on historical rows
   createdAt             DateTime          @default(now())
+  assets                ApplicationAsset[] // MC-4X: 1..3 mixed samples (was single sampleMediaId/samplePortfolioItemId)
 
   @@unique([callId, applicantId]) // one application per user per call — DB-level backstop
   @@index([applicantId, createdAt]) // MC-6 "Mes candidatures" reads
+}
+
+// MC-4X: an application's samples (1..3), each an uploaded Media (image/PDF) XOR a PortfolioItem,
+// ordered by position. Display info denormalized (url/kind/size) so reads need no join — mirrors the
+// existing Application.sampleUrl denormalization. Backfill preserved the single sample at position 0.
+model ApplicationAsset {
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  mediaId         String? // F-10 Media.id (kind 'application_sample' | 'application_document'), FK-by-convention
+  portfolioItemId String? // F-3 PortfolioItem.id — FK-by-convention
+  url             String // denormalized display URL (image thumb / portfolio image / document CDN url)
+  kind            String // 'image' | 'document'
+  size            Int? // bytes — documents only
+  position        Int
+
+  @@id([applicationId, position])
+  @@index([applicationId])
 }
 
 // ── DR-2: catalog "Découvrir" (Contest banner + editor picks) ────────────────

@@ -65,14 +65,19 @@ export class S3StorageService {
     return Buffer.concat(chunks);
   }
 
-  /** Upload a buffer. Used for EXIF-stripped original and generated variants. */
-  async putObject(key: string, buffer: Buffer, contentType: string): Promise<void> {
+  /**
+   * Upload a buffer. Used for EXIF-stripped originals, generated variants, and (with
+   * contentDisposition='attachment') verified document originals — S3/MinIO stores the disposition
+   * as object metadata and replays it on GET, forcing download over in-origin rendering.
+   */
+  async putObject(key: string, buffer: Buffer, contentType: string, contentDisposition?: string): Promise<void> {
     const cmd = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
       Body: buffer,
       ContentType: contentType,
       ContentLength: buffer.length,
+      ...(contentDisposition ? { ContentDisposition: contentDisposition } : {}),
     });
     await this.client.send(cmd);
   }

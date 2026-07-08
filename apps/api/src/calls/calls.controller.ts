@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req, UseGuards } f
 import type {
   ApplicationDto,
   CallCard,
+  CallDetail,
   CallsBoardResponse,
   CallsResponse,
   CallStatus,
@@ -52,6 +53,13 @@ export class CallsController {
   @HttpCode(201)
   create(@Req() req: AuthRequest, @Body() dto: CreateCallDto): Promise<CallCard> {
     return this.service.createCall(req.accountId, dto);
+  }
+
+  // MC-4X: full call detail (description, all samples/documents, author, dates, viewer flags).
+  // Declared AFTER the bare @Get() so the board route keeps its specificity.
+  @Get(':id')
+  detail(@Req() req: AuthRequest, @Param('id') id: string): Promise<CallDetail> {
+    return this.service.findDetail(req.accountId, id);
   }
 
   @Patch(':id')

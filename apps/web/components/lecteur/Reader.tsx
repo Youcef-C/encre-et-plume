@@ -45,6 +45,9 @@ export default function Reader({ slug }: { slug: string }) {
   const [workState, setWorkState] = useState<WorkState>('loading');
   const [work, setWork] = useState<WorkDetail | null>(null);
   const [chapters, setChapters] = useState<WorkChapterDto[]>([]);
+  // Distinguishes "chapter list still loading/failed" from "loaded and truly empty" — a work
+  // with zero chapters is a normal state and must not surface the pages error UI.
+  const [chaptersLoaded, setChaptersLoaded] = useState(false);
 
   const initialChapter = Math.max(1, parseInt(searchParams.get('chapitre') ?? '1', 10) || 1);
   const initialPage = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
@@ -75,6 +78,7 @@ export default function Reader({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setWorkState('loading');
+    setChaptersLoaded(false);
     api
       .getWork(slug)
       .then((data) => {
@@ -89,7 +93,10 @@ export default function Reader({ slug }: { slug: string }) {
     api
       .getWorkChapters(slug, 1)
       .then((r) => {
-        if (!cancelled) setChapters(r.items);
+        if (!cancelled) {
+          setChapters(r.items);
+          setChaptersLoaded(true);
+        }
       })
       .catch(() => {});
     return () => {
@@ -353,6 +360,7 @@ export default function Reader({ slug }: { slug: string }) {
               page={page}
               spreadMode={effectiveSpreadMode}
               onRetry={() => setPagesRetryKey((k) => k + 1)}
+              noChapters={chaptersLoaded && chapters.length === 0}
             />
             {!showAgeGate && paywallChapter && (
               <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
@@ -444,6 +452,7 @@ export default function Reader({ slug }: { slug: string }) {
                   page={page}
                   spreadMode={effectiveSpreadMode}
                   onRetry={() => setPagesRetryKey((k) => k + 1)}
+                  noChapters={chaptersLoaded && chapters.length === 0}
                 />
                 {!showAgeGate && paywallChapter && (
                   <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />

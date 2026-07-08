@@ -2,11 +2,19 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import type { MediaKind, MediaResponse, MediaVariants } from '@encre-et-plume/shared';
-import { UPLOAD_ALLOWED_CONTENT_TYPES, MAX_UPLOAD_BYTES } from '@encre-et-plume/shared';
+import {
+  UPLOAD_ALLOWED_CONTENT_TYPES,
+  MAX_UPLOAD_BYTES,
+  DOCUMENT_MEDIA_KINDS,
+  DOCUMENT_ALLOWED_CONTENT_TYPES,
+} from '@encre-et-plume/shared';
 import { requestUpload, finalizeMedia, getMedia } from '../lib/api';
 import AvatarCropModal from './AvatarCropModal';
 
 const ALLOWED_TYPES = new Set<string>(UPLOAD_ALLOWED_CONTENT_TYPES);
+const DOCUMENT_TYPES = new Set<string>(DOCUMENT_ALLOWED_CONTENT_TYPES);
+const DOCUMENT_KINDS = new Set<string>(DOCUMENT_MEDIA_KINDS);
+const COMBINED_ACCEPT = [...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES].join(',');
 const MAX_MB = Math.round(MAX_UPLOAD_BYTES / 1_048_576);
 
 type Phase =
@@ -25,9 +33,18 @@ export interface UploadControlProps {
   accept?: string;
   /** Existing image URL shown as initial context (not displayed in idle state) */
   currentUrl?: string | null;
-  onUploaded: (media: MediaResponse) => void;
+  /**
+   * MC-4X: ONE combined box for both families — when set, images upload as `kind` and PDF/text files
+   * upload as `documentKind`, routed by the picked file's content-type. Parents read `media.kind` in
+   * onUploaded to place each result. Omit for the single-kind behaviour used everywhere else.
+   */
+  documentKind?: MediaKind;
+  /** MC-4X: `filename` carries the original File.name (documents have no image variants to show). */
+  onUploaded: (media: MediaResponse, filename?: string) => void;
   /** Called whenever the busy state changes (busy = cropping | uploading | processing). */
   onBusyChange?: (busy: boolean) => void;
+  /** MC-4X: parent cap gate — return a French message to reject a picked file (e.g. its family is full). */
+  extraValidate?: (file: File) => string | null;
 }
 
 const POLL_MAX_ATTEMPTS = 60; // 60s timeout for image processing
@@ -36,8 +53,10 @@ export default function UploadControl({
   kind,
   label,
   accept,
+  documentKind,
   onUploaded,
   onBusyChange,
+  extraValidate,
 }: UploadControlProps) {
   const uid = useId();
   const labelId = `uc-label-${uid}`;
@@ -45,6 +64,13 @@ export default function UploadControl({
   const inputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [dragOver, setDragOver] = useState(false);
+  // MC-4X: remember the picked file's name so a document (no image variants) can render "✓ {name}".
+  const fileNameRef = useRef<string | undefined>(undefined);
+  const combined = !!documentKind; // ONE box accepting both families
+  const isDocument = DOCUMENT_KINDS.has(kind); // single-kind document box (legacy path)
+  // The kind a picked file uploads as: doc content-types → documentKind, everything else → kind.
+  const kindForFile = (file: File): MediaKind =>
+    combined && DOCUMENT_TYPES.has(file.type) ? documentKind! : kind;
 
   // Refs for abort-on-cancel / unmount
   const xhrRef = useRef<XMLHttpRequest | null>(null);
@@ -72,11 +98,17 @@ export default function UploadControl({
   }, [phase.kind, onBusyChange]);
 
   const validate = (file: File): string | null => {
-    if (!ALLOWED_TYPES.has(file.type))
+    if (combined) {
+      if (!ALLOWED_TYPES.has(file.type) && !DOCUMENT_TYPES.has(file.type))
+        return 'Format non pris en charge (image, PDF ou texte)';
+    } else if (isDocument) {
+      if (!DOCUMENT_TYPES.has(file.type)) return 'Format non pris en charge (PDF, TXT)';
+    } else if (!ALLOWED_TYPES.has(file.type)) {
       return 'Format non pris en charge (JPEG, PNG, WebP, AVIF)';
+    }
     if (file.size > MAX_UPLOAD_BYTES)
       return `Fichier trop volumineux (max ${MAX_MB} Mo)`;
-    return null;
+    return extraValidate?.(file) ?? null;
   };
 
   /** User-initiated abort: stop XHR + poll timer and return to idle. */
@@ -107,7 +139,7 @@ export default function UploadControl({
           if (abortedRef.current || !mountedRef.current) return;
           if (m.status === 'ready') {
             setPhase({ kind: 'ready', media: m });
-            onUploaded(m);
+            onUploaded(m, fileNameRef.current);
           } else if (m.status === 'failed') {
             setPhase({ kind: 'error', message: 'Optimisation échouée. Réessayez.' });
           } else if (attempt + 1 >= POLL_MAX_ATTEMPTS) {
@@ -125,12 +157,12 @@ export default function UploadControl({
   }
 
   /** Full presign → PUT (XHR with progress) → finalize → poll flow. */
-  const startUpload = async (blob: Blob, contentType: string) => {
+  const startUpload = async (blob: Blob, contentType: string, uploadKind: MediaKind = kind) => {
     // Reset abort flag at the start of each fresh upload.
     abortedRef.current = false;
     try {
       const { mediaId, uploadUrl } = await requestUpload({
-        kind,
+        kind: uploadKind,
         contentType,
         size: blob.size,
       });
@@ -188,12 +220,13 @@ export default function UploadControl({
       setPhase({ kind: 'error', message: err });
       return;
     }
+    fileNameRef.current = file.name;
     if (kind === 'avatar') {
       // Show crop UI first for avatar uploads — no distortion.
       const objectUrl = URL.createObjectURL(file);
       setPhase({ kind: 'cropping', file, objectUrl });
     } else {
-      void startUpload(file, file.type);
+      void startUpload(file, file.type, kindForFile(file));
     }
   };
 
@@ -234,6 +267,10 @@ export default function UploadControl({
 
   const isWorking = phase.kind === 'uploading' || phase.kind === 'processing';
   const variants = phase.kind === 'ready' ? (phase.media.variants as MediaVariants) : null;
+  // The ready item shows as a document when the box is single-doc, or (combined) when the uploaded
+  // media landed as a document kind.
+  const readyIsDocument =
+    phase.kind === 'ready' && (isDocument || DOCUMENT_KINDS.has(phase.media.kind));
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -256,7 +293,7 @@ export default function UploadControl({
       <input
         ref={inputRef}
         type="file"
-        accept={accept ?? UPLOAD_ALLOWED_CONTENT_TYPES.join(',')}
+        accept={accept ?? (combined ? COMBINED_ACCEPT : isDocument ? 'application/pdf,text/plain' : UPLOAD_ALLOWED_CONTENT_TYPES.join(','))}
         onChange={handleInputChange}
         style={{ display: 'none' }}
         aria-hidden="true"
@@ -291,7 +328,13 @@ export default function UploadControl({
           }}
         >
           {phase.kind === 'idle' && (
-            <span>Glissez une image ou cliquez pour choisir</span>
+            <span>
+              {combined
+                ? 'Glissez une image, un PDF ou un fichier texte, ou cliquez pour choisir'
+                : isDocument
+                  ? 'Glissez un PDF ou cliquez pour choisir'
+                  : 'Glissez une image ou cliquez pour choisir'}
+            </span>
           )}
 
           {phase.kind === 'cropping' && (
@@ -335,6 +378,21 @@ export default function UploadControl({
             <span style={{ color: 'var(--accent)' }}>{phase.message}</span>
           )}
         </button>
+      ) : readyIsDocument ? (
+        /* Ready (document): no image variants — confirm the filename. */
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ✓ {fileNameRef.current ?? 'Document'}
+          </span>
+          <button
+            type="button"
+            onClick={reset}
+            className="ep-btn-secondary"
+            style={{ fontSize: 13, padding: '6px 12px', flexShrink: 0 }}
+          >
+            Changer
+          </button>
+        </div>
       ) : (
         /* Ready: show thumbnail preview */
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -7,6 +7,7 @@
 // MC-5 no-op stub, hidden on closed calls and on the viewer's own calls.
 import { useState } from 'react';
 import type { CallCard } from '@encre-et-plume/shared';
+import { roleGateHint } from '../../lib/calls';
 
 const chip: React.CSSProperties = {
   fontSize: 11,
@@ -30,17 +31,25 @@ function statusText(call: CallCard): string {
   return `${call.applicationCount} candidatures`;
 }
 
+// §8: "1 place restante" / "N places restantes".
+function seatsText(remaining: number): string {
+  return `${remaining} place${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}`;
+}
+
 export default function CallBoardCard({
   call,
   onCandidater,
+  onVoirDetail,
   onWithdraw,
 }: {
   call: CallCard;
   onCandidater?: () => void;
+  onVoirDetail?: () => void;
   onWithdraw?: (applicationId: string) => Promise<void> | void;
 }) {
   const closed = call.status === 'closed';
   const showCandidater = !closed && !call.isOwner;
+  const hintId = `call-role-hint-${call.id}`;
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -163,13 +172,43 @@ export default function CallBoardCard({
           ) : (
             <span>{statusText(call)}</span>
           )}
+          {!closed && call.remainingSeats > 0 && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{seatsText(call.remainingSeats)}</span>
+            </>
+          )}
+
+          {/* Actions — "Voir le détail" (all cards) then the state-dependent Candidater slot. */}
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {onVoirDetail && (
+              <button
+                type="button"
+                onClick={onVoirDetail}
+                aria-label={`Voir le détail — ${call.title}`}
+                style={{
+                  background: 'var(--card)',
+                  color: 'var(--ink)',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '7px 14px',
+                  minHeight: 44,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                Voir le détail
+              </button>
+            )}
 
           {showCandidater &&
             (call.hasApplied ? (
               // MC-5: already applied — the label carries the state (not color-only). MC-6 owner
               // extension: a "Retirer" affordance (inline confirm) withdraws a pending application
               // and flips the card back to "Candidater".
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     background: 'var(--tone)',
@@ -247,12 +286,11 @@ export default function CallBoardCard({
                     </button>
                   ))}
               </span>
-            ) : (
+            ) : call.viewerHasRole ? (
               <button
                 type="button"
                 onClick={onCandidater}
                 style={{
-                  marginLeft: 'auto',
                   background: 'var(--ink)',
                   color: 'var(--paper)',
                   border: '2px solid var(--ink)',
@@ -267,8 +305,36 @@ export default function CallBoardCard({
               >
                 Candidater
               </button>
+            ) : (
+              // MC-4X role gate: the call seeks a role the viewer lacks — disabled + French hint
+              // (mirrors the server rule via CallCard.viewerHasRole; the apply modal never opens).
+              <button
+                type="button"
+                disabled
+                aria-describedby={hintId}
+                style={{
+                  background: 'var(--tone)',
+                  color: 'var(--ink2)',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 6,
+                  padding: '7px 16px',
+                  minHeight: 44,
+                  fontWeight: 700,
+                  fontFamily: 'inherit',
+                  cursor: 'not-allowed',
+                }}
+              >
+                Candidater
+              </button>
             ))}
+          </span>
         </div>
+
+        {showCandidater && !call.hasApplied && !call.viewerHasRole && (
+          <p id={hintId} style={{ fontSize: 12, color: 'var(--ink2)', margin: '8px 0 0', textAlign: 'right' }}>
+            {roleGateHint(call.seekingRoles)}
+          </p>
+        )}
       </div>
     </article>
   );

@@ -16,6 +16,7 @@ import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import CallBoardCard from './CallBoardCard';
 import PostCallModal from './PostCallModal';
 import ApplyCallModal from './ApplyCallModal';
+import CallDetailModal from './CallDetailModal';
 
 type Status = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -92,6 +93,7 @@ export default function AppelsClient() {
   const [retryKey, setRetryKey] = useState(0);
   const [posting, setPosting] = useState(false);
   const [applyTarget, setApplyTarget] = useState<CallCard | null>(null);
+  const [detailCallId, setDetailCallId] = useState<string | null>(null);
 
   const filterKey = JSON.stringify({ role, genres, retryKey });
 
@@ -179,6 +181,8 @@ export default function AppelsClient() {
     el.focus({ preventScroll: true });
     el.style.outline = '3px solid var(--accent)';
     el.style.outlineOffset = '3px';
+    // MC-4X (F4): the deep link also opens the detail modal for that call.
+    setDetailCallId(deepLinkCallId);
     const t = setTimeout(() => {
       el.style.outline = '';
       el.style.outlineOffset = '';
@@ -321,6 +325,7 @@ export default function AppelsClient() {
                 key={c.id}
                 call={c}
                 onCandidater={() => setApplyTarget(c)}
+                onVoirDetail={() => setDetailCallId(c.id)}
                 onWithdraw={(applicationId) => handleWithdraw(c.id, applicationId)}
               />
             ))}
@@ -349,6 +354,17 @@ export default function AppelsClient() {
       )}
 
       {posting && <PostCallModal onClose={() => setPosting(false)} onCreated={handleCreated} />}
+
+      {detailCallId && (
+        <CallDetailModal
+          callId={detailCallId}
+          onClose={() => setDetailCallId(null)}
+          onCandidater={(c) => {
+            setDetailCallId(null);
+            setApplyTarget(c);
+          }}
+        />
+      )}
 
       {applyTarget && (
         <ApplyCallModal

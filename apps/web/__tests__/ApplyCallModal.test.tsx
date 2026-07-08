@@ -10,22 +10,34 @@ vi.mock('../lib/api', () => ({
   applyToCall: vi.fn(),
 }));
 
-// Mock UploadControl — the file adder is always inline (no mode toggle). Exposes buttons to drive
-// onUploaded / onBusyChange without the real presign flow.
+// Mock the single combined UploadControl — exposes an "upload image" and an "upload doc" button, each
+// firing onUploaded with a MediaResponse carrying the routed `kind` (the parent reads media.kind), plus
+// a "busy" button firing onBusyChange, so tests drive the flow without the real presign path.
 vi.mock('../components/UploadControl', () => ({
   default: ({
     onUploaded,
     onBusyChange,
   }: {
-    onUploaded: (m: MediaResponse) => void;
+    onUploaded: (m: MediaResponse, filename?: string) => void;
     onBusyChange?: (b: boolean) => void;
   }) => (
     <div>
-      <button type="button" onClick={() => onUploaded({ id: 'media-9' } as MediaResponse)}>
-        mock-uploaded
+      <button
+        type="button"
+        onClick={() =>
+          onUploaded({ id: 'media-img', kind: 'application_sample', variants: { thumb: 'https://cdn/thumb.jpg' } } as unknown as MediaResponse)
+        }
+      >
+        upload image
+      </button>
+      <button
+        type="button"
+        onClick={() => onUploaded({ id: 'media-doc', kind: 'application_document', variants: {} } as MediaResponse, 'scenario.pdf')}
+      >
+        upload doc
       </button>
       <button type="button" onClick={() => onBusyChange?.(true)}>
-        mock-busy
+        busy
       </button>
     </div>
   ),
@@ -50,6 +62,11 @@ const call: CallCard = {
   isOwner: false,
   hasApplied: false,
   myApplicationId: null,
+  viewerHasRole: true,
+  seekingRoles: ['dessinateur'],
+  seats: { dessinateur: 1 },
+  acceptedByRole: {},
+  remainingSeats: 1,
 };
 
 const me = { slug: 'yuki-moreau' } as AccountSummary;
@@ -67,7 +84,7 @@ const apply = () => api.applyToCall as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.clearAllMocks();
   getMe().mockResolvedValue(me);
-  // Single-role by default — the "Je candidate en tant que :" toggle stays hidden.
+  // Single-role by default (dessinateur) — the multi-role chooser stays hidden.
   getProfile().mockResolvedValue({ creatorRoles: ['dessinateur'] });
   getPortfolio().mockResolvedValue(items);
   apply().mockResolvedValue({ id: 'app-1', callId: 'call-1' });
@@ -86,7 +103,6 @@ describe('ApplyCallModal', () => {
     const dialog = screen.getByRole('dialog', { name: 'Candidater' });
     expect(dialog).toBeInTheDocument();
     await waitFor(() => expect(dialog).toHaveFocus());
-    // The call being applied to is named for the applicant.
     expect(screen.getByText(/« Lames de Brume »/)).toBeInTheDocument();
   });
 
@@ -94,18 +110,47 @@ describe('ApplyCallModal', () => {
     open();
     const message = screen.getByText('VOTRE MESSAGE');
     const sample = await screen.findByText('JOINDRE UN ÉCHANTILLON');
-    // Node.DOCUMENT_POSITION_FOLLOWING (4) — message precedes sample in document order.
     expect(message.compareDocumentPosition(sample) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('shows portfolio thumbnails and the file adder together, with no mode-toggle chips', async () => {
+  it('has no "Je candidate en tant que :" chooser for a single-intersection call', async () => {
     open();
     await screen.findByRole('button', { name: /Encre nocturne/ });
-    // File adder (mock UploadControl) is present at the same time — no switching.
-    expect(screen.getByRole('button', { name: 'mock-uploaded' })).toBeInTheDocument();
-    // The invented toggle chips must not exist.
-    expect(screen.queryByRole('button', { name: 'Mon portfolio' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Téléverser un fichier' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Je candidate en tant que :')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dessinateur·rice' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scénariste' })).not.toBeInTheDocument();
+  });
+
+  // req6: the chooser appears only when the call seeks >1 role the viewer also holds.
+  it('shows the role chooser and sends appliedAs on a multi-role call the viewer dual-holds', async () => {
+    getProfile().mockResolvedValue({ creatorRoles: ['scenariste', 'dessinateur'] });
+    const user = userEvent.setup();
+    render(
+      <ApplyCallModal
+        call={{ ...call, seekingRoles: ['dessinateur', 'scenariste'] }}
+        onClose={vi.fn()}
+        onApplied={vi.fn()}
+      />,
+    );
+    await screen.findByText('Je candidate en tant que :');
+    // Default = the first intersection role.
+    expect(screen.getByRole('button', { name: 'Dessinateur·rice' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Scénariste' }));
+    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
+        samples: [{ portfolioItemId: 'pf-1' }],
+        appliedAs: 'scenariste',
+      }),
+    );
+  });
+
+  it('shows the sample counter starting at 0/3', async () => {
+    open();
+    await screen.findByRole('button', { name: /Encre nocturne/ });
+    expect(screen.getByText('0/3')).toBeInTheDocument();
   });
 
   it('blocks submit and shows the sample-required message when no sample is chosen', async () => {
@@ -118,7 +163,7 @@ describe('ApplyCallModal', () => {
     expect(onApplied).not.toHaveBeenCalled();
   });
 
-  it('posts the picked portfolio item and message, then confirms and fires onApplied', async () => {
+  it('posts the picked portfolio item as a samples[] ref with the message (no appliedAs)', async () => {
     const user = userEvent.setup();
     const { onApplied } = open();
     await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
@@ -127,7 +172,7 @@ describe('ApplyCallModal', () => {
 
     await waitFor(() =>
       expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
-        samplePortfolioItemId: 'pf-1',
+        samples: [{ portfolioItemId: 'pf-1' }],
         message: 'Bonjour !',
       }),
     );
@@ -135,23 +180,60 @@ describe('ApplyCallModal', () => {
     expect(onApplied).toHaveBeenCalledWith('call-1', 'app-1');
   });
 
-  it('shows only the file adder when the portfolio is empty (no thumbnails)', async () => {
-    getPortfolio().mockResolvedValue([]);
-    open();
-    // File adder present…
-    expect(await screen.findByRole('button', { name: 'mock-uploaded' })).toBeInTheDocument();
-    // …and no portfolio thumbnails.
-    expect(screen.queryByRole('button', { name: /Échantillon/ })).not.toBeInTheDocument();
-  });
-
-  it('posts an uploaded media id via the file adder (upload wins over portfolio)', async () => {
+  it('posts an uploaded image as a samples[] media ref', async () => {
     const user = userEvent.setup();
     open();
-    await user.click(await screen.findByRole('button', { name: 'mock-uploaded' }));
+    await user.click(await screen.findByRole('button', { name: 'upload image' }));
     await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
     await waitFor(() =>
-      expect(api.applyToCall).toHaveBeenCalledWith('call-1', { sampleMediaId: 'media-9' }),
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', { samples: [{ mediaId: 'media-img' }] }),
     );
+  });
+
+  it('posts an uploaded PDF as a samples[] media ref and lists its filename', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: 'upload doc' }));
+    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', { samples: [{ mediaId: 'media-doc' }] }),
+    );
+  });
+
+  it('accepts up to 3 mixed samples, updates the counter and hides the adders at the cap', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+    await user.click(screen.getByRole('button', { name: 'upload image' }));
+    await user.click(screen.getByRole('button', { name: 'upload doc' }));
+    expect(await screen.findByText('3/3')).toBeInTheDocument();
+    expect(screen.getByText('Maximum 3 échantillons.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'upload image' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
+    await waitFor(() =>
+      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
+        samples: [{ portfolioItemId: 'pf-1' }, { mediaId: 'media-img' }, { mediaId: 'media-doc' }],
+      }),
+    );
+  });
+
+  it('removes an uploaded sample from the list', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: 'upload doc' }));
+    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retirer cet échantillon' }));
+    expect(screen.queryByText('✓ scenario.pdf')).not.toBeInTheDocument();
+    expect(screen.getByText('0/3')).toBeInTheDocument();
+  });
+
+  it('shows only the file adders when the portfolio is empty (no thumbnails)', async () => {
+    getPortfolio().mockResolvedValue([]);
+    open();
+    expect(await screen.findByRole('button', { name: 'upload image' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Échantillon/ })).not.toBeInTheDocument();
   });
 
   it('surfaces the server French error message in an alert (closed / duplicate 409)', async () => {
@@ -167,7 +249,7 @@ describe('ApplyCallModal', () => {
   it('disables submit while an upload is in progress', async () => {
     const user = userEvent.setup();
     open();
-    await user.click(await screen.findByRole('button', { name: 'mock-busy' }));
+    await user.click(await screen.findByRole('button', { name: 'busy' }));
     expect(screen.getByRole('button', { name: 'Envoyer ma candidature' })).toBeDisabled();
   });
 
@@ -176,51 +258,5 @@ describe('ApplyCallModal', () => {
     const { onClose } = open();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
-  });
-
-  // Owner addition (MC-6): dual-role applicants pick which role they apply as.
-  it('hides the apply-as toggle for a single-role applicant and sends no appliedAs', async () => {
-    const user = userEvent.setup();
-    open();
-    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
-    expect(screen.queryByText('Je candidate en tant que :')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
-    await waitFor(() =>
-      expect(api.applyToCall).toHaveBeenCalledWith('call-1', { samplePortfolioItemId: 'pf-1' }),
-    );
-  });
-
-  it('shows the toggle for a dual-role applicant, defaults to the sought role, and sends appliedAs', async () => {
-    getProfile().mockResolvedValue({ creatorRoles: ['scenariste', 'dessinateur'] });
-    const user = userEvent.setup();
-    open(); // call sought role = dessinateur (writerSeeksIllustrator)
-    await screen.findByText('Je candidate en tant que :');
-    // Default = the sought role.
-    expect(screen.getByRole('button', { name: 'Dessinateur·rice' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Scénariste' })).toHaveAttribute('aria-pressed', 'false');
-
-    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
-    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
-    await waitFor(() =>
-      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
-        samplePortfolioItemId: 'pf-1',
-        appliedAs: 'dessinateur',
-      }),
-    );
-  });
-
-  it('sends the switched role when the dual-role applicant flips the toggle', async () => {
-    getProfile().mockResolvedValue({ creatorRoles: ['scenariste', 'dessinateur'] });
-    const user = userEvent.setup();
-    open();
-    await user.click(await screen.findByRole('button', { name: 'Scénariste' }));
-    await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
-    await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
-    await waitFor(() =>
-      expect(api.applyToCall).toHaveBeenCalledWith('call-1', {
-        samplePortfolioItemId: 'pf-1',
-        appliedAs: 'scenariste',
-      }),
-    );
   });
 });

@@ -178,6 +178,36 @@ describe('MediaService', () => {
         }),
       );
     });
+
+    // ── MC-4X: document kinds (PDF-only allowlist) ──────────────────────────
+    it('accepts application/pdf for the call_document kind (public, .pdf ext)', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'call_document' }));
+      const result = await service.requestUpload('acc-1', { kind: 'call_document', contentType: 'application/pdf', size: 2048 });
+      expect(result.bucketKey).toMatch(/^call_document\/acc-1\/[a-f0-9]+\.pdf$/);
+      expect(prisma.media.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ kind: 'call_document', visibility: 'public' }) }),
+      );
+    });
+
+    it('accepts application/pdf for the application_document kind', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'application_document' }));
+      await expect(
+        service.requestUpload('acc-1', { kind: 'application_document', contentType: 'application/pdf', size: 2048 }),
+      ).resolves.toBeDefined();
+    });
+
+    it('rejects image types for a document kind (PDF-only)', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'call_document', contentType: 'image/jpeg', size: 2048 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.media.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects application/pdf for an image kind (raster-only)', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'call_sample', contentType: 'application/pdf', size: 2048 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 
   // ── finalize ──────────────────────────────────────────────────────────────
@@ -266,6 +296,79 @@ describe('MediaService', () => {
       );
       expect(result.id).toBe('media-1');
       expect(result.status).toBe('pending'); // worker flips to ready
+    });
+
+    // ── MC-4X §7: document finalize — content-verify + attachment re-store, no sharp ──
+    const pdfDoc = () =>
+      makeMedia({ kind: 'call_document', contentType: 'application/pdf', bucketKey: 'call_document/acc-1/media-1.pdf' });
+    const txtDoc = () =>
+      makeMedia({ kind: 'application_document', contentType: 'text/plain', bucketKey: 'application_document/acc-1/media-1.txt' });
+
+    it('finalizes a real PDF (magic bytes ok) to ready, no sharp, no image-processing enqueue', async () => {
+      const docMedia = pdfDoc();
+      prisma.media.findUnique.mockResolvedValue(docMedia);
+      s3.headObject.mockResolvedValue({ contentType: 'application/pdf', size: 4096 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('%PDF-1.7\n%âãÏÓ\n1 0 obj', 'latin1'));
+      prisma.media.update.mockImplementation(({ data }) => ({ ...docMedia, ...data }));
+
+      const result = await service.finalize('acc-1', 'media-1');
+
+      expect(result.status).toBe('ready');
+      expect(result.variants).toEqual({ orig: 'https://cdn/call_document/acc-1/media-1.pdf' });
+      expect(queue.enqueue).not.toHaveBeenCalled(); // no image-processing job
+    });
+
+    it('re-stores the verified document with Content-Disposition: attachment (forced download)', async () => {
+      const docMedia = pdfDoc();
+      prisma.media.findUnique.mockResolvedValue(docMedia);
+      s3.headObject.mockResolvedValue({ contentType: 'application/pdf', size: 4096 });
+      const bytes = Buffer.from('%PDF-1.4 body', 'latin1');
+      s3.getObjectBuffer.mockResolvedValue(bytes);
+      prisma.media.update.mockImplementation(({ data }) => ({ ...docMedia, ...data }));
+
+      await service.finalize('acc-1', 'media-1');
+
+      expect(s3.putObject).toHaveBeenCalledWith('call_document/acc-1/media-1.pdf', bytes, 'application/pdf', 'attachment');
+    });
+
+    it('rejects a fake PDF whose bytes are actually HTML — 400, marks failed, deletes the object', async () => {
+      const docMedia = pdfDoc();
+      prisma.media.findUnique.mockResolvedValue(docMedia);
+      s3.headObject.mockResolvedValue({ contentType: 'application/pdf', size: 4096 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('<!DOCTYPE html><script>evil()</script>'));
+
+      await expect(service.finalize('acc-1', 'media-1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.media.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'failed' } }),
+      );
+      expect(s3.deleteObject).toHaveBeenCalledWith('call_document/acc-1/media-1.pdf');
+      expect(s3.putObject).not.toHaveBeenCalled();
+    });
+
+    it('finalizes a real text/plain document to ready (regression: .txt must not hit sharp → 500)', async () => {
+      const docMedia = txtDoc();
+      prisma.media.findUnique.mockResolvedValue(docMedia);
+      s3.headObject.mockResolvedValue({ contentType: 'text/plain', size: 512 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('Synopsis du scénario — chapitre 1.'));
+      prisma.media.update.mockImplementation(({ data }) => ({ ...docMedia, ...data }));
+
+      const result = await service.finalize('acc-1', 'media-1');
+
+      expect(result.status).toBe('ready');
+      expect(result.variants).toEqual({ orig: 'https://cdn/application_document/acc-1/media-1.txt' });
+      expect(s3.putObject).toHaveBeenCalledWith('application_document/acc-1/media-1.txt', expect.any(Buffer), 'text/plain', 'attachment');
+      expect(queue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('rejects a text/plain that is disguised markup — 400, marks failed, deletes the object', async () => {
+      const docMedia = txtDoc();
+      prisma.media.findUnique.mockResolvedValue(docMedia);
+      s3.headObject.mockResolvedValue({ contentType: 'text/plain', size: 512 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('  <html><body>phish</body></html>'));
+
+      await expect(service.finalize('acc-1', 'media-1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(s3.deleteObject).toHaveBeenCalledWith('application_document/acc-1/media-1.txt');
+      expect(s3.putObject).not.toHaveBeenCalled();
     });
   });
 

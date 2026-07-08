@@ -324,6 +324,20 @@ describe('Reader (DR-4 FE-1)', () => {
     await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
   });
 
+  it('shows a friendly empty state (not the error card) for a work with zero chapters', async () => {
+    vi.mocked(api.getWork).mockResolvedValue(work);
+    vi.mocked(api.getWorkChapters).mockResolvedValue({ ...chaptersResponse, items: [] });
+    vi.mocked(api.getChapterPages).mockRejectedValue({ statusCode: 404, message: 'Introuvable' });
+    vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+    render(<Reader slug="lames-de-brume" />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Aucun chapitre à lire pour le moment.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Impossible de charger cette page.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('opens the paywall automatically for a deep link to a locked chapter (403)', async () => {
     searchParams = new URLSearchParams('chapitre=4');
     vi.mocked(api.getWork).mockResolvedValue(work);

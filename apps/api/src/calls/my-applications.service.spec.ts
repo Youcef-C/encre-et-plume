@@ -12,12 +12,12 @@ const APP = (o: Partial<Record<string, unknown>> = {}) => ({
   createdAt: new Date('2026-07-07T10:00:00.000Z'),
   call: {
     title: '« Lames de Brume »',
-    authorRole: 'scenariste',
+    authorRoles: ['scenariste'],
     seekingRole: 'dessinateur',
     authorName: 'Camille R.',
     genres: ['seinen', 'thriller'],
-    sampleMediaId: null,
   },
+  assets: [],
   ...o,
 });
 
@@ -25,6 +25,7 @@ describe('MyApplicationsService.list', () => {
   let service: MyApplicationsService;
   let prisma: {
     application: { findMany: jest.Mock; count: jest.Mock };
+    projectCallAsset: { findMany: jest.Mock };
     media: { findMany: jest.Mock };
   };
 
@@ -34,6 +35,7 @@ describe('MyApplicationsService.list', () => {
         findMany: jest.fn().mockResolvedValue([APP()]),
         count: jest.fn().mockResolvedValue(1),
       },
+      projectCallAsset: { findMany: jest.fn().mockResolvedValue([]) },
       media: { findMany: jest.fn().mockResolvedValue([]) },
     };
     service = new MyApplicationsService(
@@ -62,34 +64,56 @@ describe('MyApplicationsService.list', () => {
       ownerName: 'Camille R.',
       status: 'pending',
       appliedAs: 'dessinateur',
+      samples: [],
       createdAt: '2026-07-07T10:00:00.000Z',
     });
   });
 
+  it('exposes the application own samples (position order) from its ApplicationAsset rows', async () => {
+    prisma.application.findMany.mockResolvedValue([
+      APP({
+        assets: [
+          { url: 'https://cdn/a.webp', kind: 'image', size: null, position: 0 },
+          { url: 'https://cdn/b.pdf', kind: 'document', size: 2048, position: 1 },
+        ],
+      }),
+    ]);
+    const res = await service.list('acc-me', { status: 'all', page: 1 });
+    expect(res.items[0].samples).toEqual([
+      { url: 'https://cdn/a.webp', kind: 'image', size: null },
+      { url: 'https://cdn/b.pdf', kind: 'document', size: 2048 },
+    ]);
+  });
+
   it('derives illustratorSeeksWriter when the call author is a dessinateur', async () => {
     prisma.application.findMany.mockResolvedValue([
-      APP({ call: { ...APP().call, authorRole: 'dessinateur', seekingRole: 'scenariste' } }),
+      APP({ call: { ...APP().call, authorRoles: ['dessinateur'], seekingRoles: ['scenariste'] } }),
     ]);
     const res = await service.list('acc-me', { status: 'all', page: 1 });
     expect(res.items[0].callDirection).toBe('illustratorSeeksWriter');
   });
 
-  it('resolves the call cover thumb from Media in a single batched lookup (no N+1)', async () => {
+  it('resolves the call cover thumb from the first call_sample asset in a single batched lookup (no N+1)', async () => {
     prisma.application.findMany.mockResolvedValue([
-      APP({ id: 'a1', call: { ...APP().call, sampleMediaId: 'med-1' } }),
-      APP({ id: 'a2', callId: 'call-2', call: { ...APP().call, sampleMediaId: 'med-2' } }),
+      APP({ id: 'a1', callId: 'call-1' }),
+      APP({ id: 'a2', callId: 'call-2' }),
+    ]);
+    prisma.projectCallAsset.findMany.mockResolvedValue([
+      { callId: 'call-1', mediaId: 'med-1', position: 0 },
+      { callId: 'call-2', mediaId: 'med-2', position: 0 },
     ]);
     prisma.media.findMany.mockResolvedValue([
       { id: 'med-1', variants: { thumb: 'https://cdn/thumb-1.webp' } },
       { id: 'med-2', variants: { thumb: 'https://cdn/thumb-2.webp' } },
     ]);
     const res = await service.list('acc-me', { status: 'all', page: 1 });
+    expect(prisma.projectCallAsset.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.media.findMany).toHaveBeenCalledTimes(1);
     expect(res.items[0].callSampleUrl).toBe('https://cdn/thumb-1.webp');
     expect(res.items[1].callSampleUrl).toBe('https://cdn/thumb-2.webp');
   });
 
-  it('never queries Media when no call has a cover (no wasted round-trip)', async () => {
+  it('never queries Media when no call has a cover asset (no wasted round-trip)', async () => {
     await service.list('acc-me', { status: 'all', page: 1 });
     expect(prisma.media.findMany).not.toHaveBeenCalled();
   });

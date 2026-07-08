@@ -456,7 +456,7 @@ export const getCalls = (limit = 2): Promise<CallsResponse> =>
   request<CallsResponse>(`/calls?limit=${limit}`);
 
 // ─── Appels à projets board (MC-4) ────────────────────────────────────────────
-import type { CallsBoardQuery, CallsBoardResponse, CreateCallRequest, CallCard } from '@encre-et-plume/shared';
+import type { CallsBoardQuery, CallsBoardResponse, CreateCallRequest, CallCard, CallDetail } from '@encre-et-plume/shared';
 
 export const getCallsBoard = (query: CallsBoardQuery = {}): Promise<CallsBoardResponse> => {
   const q = new URLSearchParams();
@@ -466,6 +466,10 @@ export const getCallsBoard = (query: CallsBoardQuery = {}): Promise<CallsBoardRe
   if (query.page) q.set('page', String(query.page));
   return request<CallsBoardResponse>(`/calls${q.toString() ? `?${q.toString()}` : ''}`);
 };
+
+// MC-4X: full call detail (GET /calls/:id) — samples gallery + PDF documents for the detail modal.
+export const getCallDetail = (id: string): Promise<CallDetail> =>
+  request<CallDetail>(`/calls/${encodeURIComponent(id)}`);
 
 export const createCall = (body: CreateCallRequest): Promise<CallCard> =>
   request<CallCard>('/calls', { method: 'POST', body: JSON.stringify(body) });

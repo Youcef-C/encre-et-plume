@@ -9,7 +9,7 @@ function errorsFor(payload: Record<string, unknown>) {
 const FUTURE = new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString();
 
 const VALID = (o: Record<string, unknown> = {}) => ({
-  direction: 'writerSeeksIllustrator',
+  seats: { dessinateur: 1 },
   title: '« Lames de Brume »',
   description: 'Un thriller urbain mélancolique.',
   genres: ['seinen', 'thriller'],
@@ -29,9 +29,29 @@ describe('CreateCallDto', () => {
     expect(errorsFor(VALID({ scope: undefined, format: 'one_shot', genres: ['supernatural'] }))).toHaveLength(0);
   });
 
-  it('rejects a missing/invalid direction', () => {
-    expect(propsOf(VALID({ direction: undefined }))).toContain('direction');
-    expect(propsOf(VALID({ direction: 'sideways' }))).toContain('direction');
+  it('does NOT accept authorRole (derived server-side — no such field validated)', () => {
+    // authorRole is no longer part of the DTO; whitelisting strips it, it never validates.
+    expect(errorsFor(VALID({ authorRole: 'scenariste' }))).toHaveLength(0);
+  });
+
+  it('rejects a missing/empty seats object', () => {
+    expect(propsOf(VALID({ seats: undefined }))).toContain('seats');
+    expect(propsOf(VALID({ seats: {} }))).toContain('seats');
+  });
+
+  it('rejects an unknown role key or a non-positive / over-cap count', () => {
+    expect(propsOf(VALID({ seats: { wizard: 1 } }))).toContain('seats');
+    expect(propsOf(VALID({ seats: { dessinateur: 0 } }))).toContain('seats');
+    expect(propsOf(VALID({ seats: { dessinateur: 6 } }))).toContain('seats');
+    expect(propsOf(VALID({ seats: { dessinateur: 1.5 } }))).toContain('seats');
+  });
+
+  it('accepts a two-role seats object at the per-role cap', () => {
+    expect(errorsFor(VALID({ seats: { dessinateur: 5, scenariste: 2 } }))).toHaveLength(0);
+  });
+
+  it('accepts an optional projectId', () => {
+    expect(errorsFor(VALID({ projectId: 'proj-1' }))).toHaveLength(0);
   });
 
   it('rejects an empty or over-long title', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AccountSummary, CallCard, CallsBoardResponse } from '@encre-et-plume/shared';
+import type { AccountSummary, CallCard, CallDetail, CallsBoardResponse } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -9,12 +9,14 @@ vi.mock('../lib/api', async (importOriginal) => {
   return {
     ...actual,
     getCallsBoard: vi.fn(),
+    getCallDetail: vi.fn(),
     createCall: vi.fn(),
     applyToCall: vi.fn(),
     withdrawApplication: vi.fn(),
     getMe: vi.fn(),
     getProfile: vi.fn(),
     getProfilePortfolio: vi.fn(),
+    getMyProjects: vi.fn(() => Promise.resolve({ items: [] })),
   };
 });
 
@@ -66,6 +68,20 @@ const call = (over: Partial<CallCard> = {}): CallCard => ({
   isOwner: false,
   hasApplied: false,
   myApplicationId: null,
+  viewerHasRole: true,
+  seekingRoles: ['dessinateur'],
+  seats: { dessinateur: 1 },
+  acceptedByRole: {},
+  remainingSeats: 1,
+  ...over,
+});
+
+const detail = (over: Partial<CallDetail> = {}): CallDetail => ({
+  ...call(),
+  createdAt: '2026-07-01T00:00:00.000Z',
+  samples: [],
+  documents: [],
+  team: [],
   ...over,
 });
 
@@ -89,6 +105,7 @@ const getBoard = () => api.getCallsBoard as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.clearAllMocks();
   searchParams = new URLSearchParams();
+  (api.getCallDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail());
 });
 
 describe('AppelsClient (MC-4 board)', () => {
@@ -138,7 +155,7 @@ describe('AppelsClient (MC-4 board)', () => {
 
     await user.click(screen.getByRole('button', { name: '＋ Poster un appel' }));
     const dialog = screen.getByRole('dialog', { name: 'Poster un appel' });
-    await user.click(within(dialog).getByRole('button', { name: 'Un·e dessinateur·rice' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Ajouter un poste Dessinateur·rice' }));
     await user.type(within(dialog).getByLabelText('Titre'), 'Tout neuf');
     await user.type(within(dialog).getByLabelText('Description'), 'Une histoire.');
     await user.type(within(dialog).getByRole('combobox', { name: 'Ajouter un genre' }), 'Seinen{Enter}');
@@ -170,7 +187,7 @@ describe('AppelsClient (MC-4 board)', () => {
     await user.click(await within(dialog).findByRole('button', { name: /Encre/ }));
     await user.click(within(dialog).getByRole('button', { name: 'Envoyer ma candidature' }));
 
-    await waitFor(() => expect(api.applyToCall).toHaveBeenCalledWith('c9', { samplePortfolioItemId: 'pf-1' }));
+    await waitFor(() => expect(api.applyToCall).toHaveBeenCalledWith('c9', { samples: [{ portfolioItemId: 'pf-1' }] }));
     // Confirmation shown; close the modal (Escape avoids the header X / footer "Fermer" name clash).
     await within(dialog).findByText('Candidature envoyée !');
     await user.keyboard('{Escape}');
@@ -196,6 +213,29 @@ describe('AppelsClient (MC-4 board)', () => {
       const el = document.getElementById('call-deep-1');
       expect(el?.style.outline).toContain('var(--accent)');
     });
+  });
+
+  it('opens the detail modal from "Voir le détail" and shows the fetched detail', async () => {
+    getBoard().mockResolvedValue(board([call({ id: 'c9', title: '« Cible »' })]));
+    (api.getCallDetail as ReturnType<typeof vi.fn>).mockResolvedValue(
+      detail({ id: 'c9', title: '« Cible »', description: 'Description complète du projet.' }),
+    );
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Cible »');
+
+    await user.click(screen.getByRole('button', { name: /Voir le détail/ }));
+    await waitFor(() => expect(api.getCallDetail).toHaveBeenCalledWith('c9'));
+    expect(await screen.findByText('Description complète du projet.')).toBeInTheDocument();
+  });
+
+  it('opens the detail modal too when ?call= deep-links a call', async () => {
+    searchParams = new URLSearchParams('call=deep-1');
+    getBoard().mockResolvedValue(board([call({ id: 'deep-1', title: '« Cible »' })]));
+    (api.getCallDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail({ id: 'deep-1', title: '« Cible »' }));
+    renderClient();
+    await waitFor(() => expect(api.getCallDetail).toHaveBeenCalledWith('deep-1'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
   it('withdraws from the board and flips the card back to "Candidater"', async () => {

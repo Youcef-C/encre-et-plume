@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto';
 import {
   MEDIA_KINDS,
   UPLOAD_ALLOWED_CONTENT_TYPES,
+  DOCUMENT_ALLOWED_CONTENT_TYPES,
+  DOCUMENT_MEDIA_KINDS,
   MAX_UPLOAD_BYTES,
   MAX_IMAGE_DIMENSION,
 } from '@encre-et-plume/shared';
@@ -33,9 +35,31 @@ const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_S = 3600;
 
 // Visibility defaults: attachment and chapter_page are private by default.
+// MC-4X: document kinds stay PUBLIC (detail links are plain CDN URLs).
 const PRIVATE_KINDS = new Set<MediaKind>(['attachment', 'chapter_page']);
 
+// MC-4X: kinds that accept ONLY application/pdf and skip the image pipeline.
+const DOCUMENT_KINDS = new Set<MediaKind>(DOCUMENT_MEDIA_KINDS as readonly MediaKind[]);
+
 const SIGNED_URL_TTL = () => Number(process.env['MEDIA_SIGNED_URL_TTL'] ?? 300);
+
+// MC-4X §7: content-verify document bytes (the trust boundary — client headers are not trusted).
+// PDF: must start with the "%PDF-" magic. Plain text: must NOT be disguised markup (HTML/SVG/XML/JS)
+// or a NUL-heavy binary. Returns false to reject. Embedded PDF JS is neutralised at serving time by
+// Content-Disposition: attachment, so PDFs only need the magic check here.
+const PDF_MAGIC = Buffer.from('%PDF-');
+const MARKUP_MARKERS = ['<!doctype', '<html', '<script', '<svg', '<?xml'];
+
+function isVerifiedDocument(buffer: Buffer, contentType: string): boolean {
+  if (contentType === 'application/pdf') {
+    return buffer.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC);
+  }
+  // text/plain (and any future text document type): reject disguised markup + binary-posing-as-text.
+  const head = buffer.subarray(0, 1024).toString('utf8').trimStart().toLowerCase();
+  if (MARKUP_MARKERS.some((m) => head.includes(m))) return false;
+  if (buffer.subarray(0, 512).includes(0x00)) return false; // NUL-heavy → not real plain text
+  return true;
+}
 
 function extFromContentType(ct: string): string {
   const map: Record<string, string> = {
@@ -43,6 +67,8 @@ function extFromContentType(ct: string): string {
     'image/png': 'png',
     'image/webp': 'webp',
     'image/avif': 'avif',
+    'application/pdf': 'pdf',
+    'text/plain': 'txt',
   };
   return map[ct] ?? 'bin';
 }
@@ -74,8 +100,12 @@ export class MediaService {
     if (!(MEDIA_KINDS as readonly string[]).includes(dto.kind)) {
       throw new BadRequestException(`kind must be one of: ${MEDIA_KINDS.join(', ')}`);
     }
-    // Validate contentType allowlist (SVG excluded — XSS risk)
-    if (!(UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]).includes(dto.contentType)) {
+    // Validate contentType allowlist — kind-aware: document kinds accept ONLY application/pdf;
+    // every other kind keeps the raster allowlist (SVG excluded — XSS risk).
+    const allowed = DOCUMENT_KINDS.has(dto.kind as MediaKind)
+      ? (DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[])
+      : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
+    if (!allowed.includes(dto.contentType)) {
       throw new BadRequestException(`contentType not allowed: ${dto.contentType}`);
     }
     // Validate size
@@ -157,6 +187,29 @@ export class MediaService {
     if (head.size > MAX_UPLOAD_BYTES) {
       await this.prisma.media.update({ where: { id: mediaId }, data: { status: 'failed' } });
       throw new BadRequestException(`Object exceeds max size of ${MAX_UPLOAD_BYTES} bytes`);
+    }
+
+    // MC-4X §7: documents (PDF/TXT) skip sharp, but the client's declared content-type is NOT trusted.
+    // Download the (≤10 MB) bytes, VERIFY the real content (PDF magic / plain-text is not disguised
+    // markup or a NUL-heavy binary), then re-store with Content-Disposition: attachment so the CDN
+    // forces download instead of in-origin rendering — killing PDF-embedded JS and sniffing vectors.
+    if ((DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[]).includes(declaredContentType)) {
+      const buffer = await this.s3.getObjectBuffer(bucketKey);
+      if (!isVerifiedDocument(buffer, declaredContentType)) {
+        await this.prisma.media.update({ where: { id: mediaId }, data: { status: 'failed' } });
+        await this.s3.deleteObject(bucketKey);
+        throw new BadRequestException('Ce document est invalide ou potentiellement dangereux.');
+      }
+      await this.s3.putObject(bucketKey, buffer, declaredContentType, 'attachment');
+      const readyDoc = await this.prisma.media.update({
+        where: { id: mediaId },
+        data: {
+          status: 'ready',
+          size: head.size || declaredSize,
+          variants: { orig: this.s3.publicUrl(bucketKey) } as never,
+        },
+      });
+      return toMediaResponse(readyDoc as unknown as Record<string, unknown>);
     }
 
     // Download for dimension check + EXIF strip

@@ -165,6 +165,97 @@ describe('UploadControl — idle state', () => {
   });
 });
 
+describe('UploadControl — document kind', () => {
+  it('renders document idle copy and accepts PDF + text', () => {
+    render(<UploadControl kind="call_document" label="Ajouter un document (PDF)" onUploaded={vi.fn()} />);
+    expect(screen.getByText('Glissez un PDF ou cliquez pour choisir')).toBeInTheDocument();
+    expect(getFileInput()).toHaveAttribute('accept', 'application/pdf,text/plain');
+  });
+
+  it('rejects an image file with a French error and no upload', async () => {
+    const onUploaded = vi.fn();
+    render(<UploadControl kind="call_document" label="Ajouter un document (PDF)" onUploaded={onUploaded} />);
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['x'], 'photo.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(screen.getByText('Format non pris en charge (PDF, TXT)')).toBeInTheDocument());
+    expect(requestUpload).not.toHaveBeenCalled();
+    expect(onUploaded).not.toHaveBeenCalled();
+  });
+
+  it('uploads a PDF and, once ready, shows the filename and passes it to onUploaded', async () => {
+    const onUploaded = vi.fn();
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, status: 'ready' });
+
+    render(<UploadControl kind="call_document" label="Ajouter un document (PDF)" onUploaded={onUploaded} />);
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['%PDF-1.4'], 'scenario.pdf', { type: 'application/pdf' })] },
+    });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+
+    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(onUploaded).toHaveBeenCalledWith(expect.objectContaining({ status: 'ready' }), 'scenario.pdf'),
+    );
+  });
+});
+
+describe('UploadControl — combined box (documentKind)', () => {
+  it('accepts every family and routes an image to the image kind', async () => {
+    const onUploaded = vi.fn();
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'call_sample', status: 'ready' });
+
+    render(
+      <UploadControl kind="call_sample" documentKind="call_document" label="Ajouter un fichier" onUploaded={onUploaded} />,
+    );
+    expect(getFileInput()).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp,image/avif,application/pdf,text/plain');
+    expect(screen.getByText('Glissez une image, un PDF ou un fichier texte, ou cliquez pour choisir')).toBeInTheDocument();
+
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['img'], 'art.png', { type: 'image/png' })] },
+    });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalledWith(expect.objectContaining({ kind: 'call_sample' })));
+  });
+
+  it('routes a PDF to the document kind', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'call_document', status: 'ready' });
+
+    render(
+      <UploadControl kind="call_sample" documentKind="call_document" label="Ajouter un fichier" onUploaded={vi.fn()} />,
+    );
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['%PDF'], 'brief.pdf', { type: 'application/pdf' })] },
+    });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalledWith(expect.objectContaining({ kind: 'call_document' })));
+  });
+
+  it('rejects a picked file when extraValidate returns a message', async () => {
+    const onUploaded = vi.fn();
+    render(
+      <UploadControl
+        kind="call_sample"
+        documentKind="call_document"
+        label="Ajouter un fichier"
+        onUploaded={onUploaded}
+        extraValidate={() => 'Maximum 5 visuels.'}
+      />,
+    );
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['img'], 'art.png', { type: 'image/png' })] },
+    });
+    await waitFor(() => expect(screen.getByText('Maximum 5 visuels.')).toBeInTheDocument());
+    expect(requestUpload).not.toHaveBeenCalled();
+    expect(onUploaded).not.toHaveBeenCalled();
+  });
+});
+
 describe('UploadControl — client-side validation', () => {
   it('rejects oversize file and shows French error without calling requestUpload', async () => {
     const onUploaded = vi.fn();
@@ -327,7 +418,7 @@ describe('UploadControl — upload flow', () => {
     capturedXHR!.onload?.();
 
     await waitFor(() =>
-      expect(onUploaded).toHaveBeenCalledWith(expect.objectContaining({ id: 'media-1', status: 'ready' }))
+      expect(onUploaded.mock.calls[0][0]).toEqual(expect.objectContaining({ id: 'media-1', status: 'ready' })),
     );
   });
 
