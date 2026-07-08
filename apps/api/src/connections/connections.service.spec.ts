@@ -294,6 +294,61 @@ describe('ConnectionsService.removeContact', () => {
   });
 });
 
+describe('ConnectionsService.stateBetween (MC-8)', () => {
+  it("returns 'none' when there is no connection row", async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue(null);
+    const { service } = build(prisma);
+    expect(await service.stateBetween('viewer', 'target')).toBe('none');
+    expect(prisma.connection.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { OR: [{ requesterId: 'viewer', addresseeId: 'target' }, { requesterId: 'target', addresseeId: 'viewer' }] } }),
+    );
+  });
+
+  it("returns 'connected' for an accepted pair", async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue({ requesterId: 'viewer', addresseeId: 'target', status: 'accepted' });
+    const { service } = build(prisma);
+    expect(await service.stateBetween('viewer', 'target')).toBe('connected');
+  });
+
+  it("returns 'pending_out' when the viewer is the requester of a pending row", async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue({ requesterId: 'viewer', addresseeId: 'target', status: 'pending' });
+    const { service } = build(prisma);
+    expect(await service.stateBetween('viewer', 'target')).toBe('pending_out');
+  });
+
+  it("returns 'pending_in' when the target is the requester of a pending row", async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue({ requesterId: 'target', addresseeId: 'viewer', status: 'pending' });
+    const { service } = build(prisma);
+    expect(await service.stateBetween('viewer', 'target')).toBe('pending_in');
+  });
+});
+
+describe('ConnectionsService.withdrawRequest (MC-8)', () => {
+  it('404s when there is no pending outgoing request to the user (unknown / accepted / not-owner)', async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue(null);
+    const { service } = build(prisma);
+    await expect(service.withdrawRequest('viewer', 'target')).rejects.toThrow(NotFoundException);
+    await expect(service.withdrawRequest('viewer', 'target')).rejects.toThrow('Demande introuvable.');
+    expect(prisma.connection.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes only the viewer-sent pending row (requester=viewer, addressee=target, pending)', async () => {
+    const prisma = makePrisma();
+    prisma.connection.findFirst.mockResolvedValue(CONN({ id: 'c7', status: 'pending', requesterId: 'viewer', addresseeId: 'target' }));
+    const { service } = build(prisma);
+    await service.withdrawRequest('viewer', 'target');
+    expect(prisma.connection.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { requesterId: 'viewer', addresseeId: 'target', status: 'pending' } }),
+    );
+    expect(prisma.connection.delete).toHaveBeenCalledWith({ where: { id: 'c7' } });
+  });
+});
+
 describe('ConnectionsService.ensureConnected (MC-3/MC-7 seam)', () => {
   it('creates an accepted row when none exists, without notifying', async () => {
     const prisma = makePrisma();

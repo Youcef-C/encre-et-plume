@@ -3,6 +3,7 @@ import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole, Partner
 import { normalizeGenres } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlocksService } from '../blocks/blocks.service';
+import { ConnectionsService } from '../connections/connections.service';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 
 type AccountRow = {
@@ -33,6 +34,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly blocks: BlocksService,
+    private readonly connections: ConnectionsService,
   ) {}
 
   async getBySlug(slug: string, viewerId?: string): Promise<ProfileResponse> {
@@ -42,9 +44,13 @@ export class ProfilesService {
     });
     if (!account) throw new NotFoundException();
     const base = this.compose(account, account.profile);
-    // MC-10 round 2 (D8): directional block flags — only for a signed-in viewer who isn't the owner.
+    // MC-10 (D8) block flags + MC-8 (D12) connectionState — only for a signed-in viewer who isn't the owner.
     if (viewerId && viewerId !== account.id) {
-      return { ...base, ...(await this.blocks.pairFlags(viewerId, account.id)) };
+      const [flags, connectionState] = await Promise.all([
+        this.blocks.pairFlags(viewerId, account.id),
+        this.connections.stateBetween(viewerId, account.id),
+      ]);
+      return { ...base, ...flags, connectionState };
     }
     return base;
   }
@@ -156,6 +162,8 @@ export class ProfilesService {
       // MC-10 round 2 (D8): default both false; getBySlug overlays pairFlags for a signed-in non-owner viewer.
       viewerHasBlocked: false,
       blockedByTarget: false,
+      // MC-8 (D12): default 'none'; getBySlug overlays stateBetween for a signed-in non-owner viewer.
+      connectionState: 'none',
     };
   }
 }

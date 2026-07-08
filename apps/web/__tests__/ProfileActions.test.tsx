@@ -13,9 +13,12 @@ vi.mock('../lib/api', () => ({
   createInvitation: vi.fn(),
   createBlock: vi.fn().mockResolvedValue({ id: 'b1', userId: 'theo-1', kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }),
   deleteBlock: vi.fn().mockResolvedValue(undefined),
+  sendConnectionRequest: vi.fn().mockResolvedValue({ id: 'c1', status: 'pending' }),
+  withdrawConnectionRequest: vi.fn().mockResolvedValue(undefined),
+  removeContact: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { deleteBlock } from '../lib/api';
+import { deleteBlock, sendConnectionRequest, withdrawConnectionRequest, removeContact } from '../lib/api';
 
 const profile = {
   userId: 'theo-1',
@@ -26,6 +29,7 @@ const profile = {
   creatorRoles: ['dessinateur'],
   viewerHasBlocked: false,
   blockedByTarget: false,
+  connectionState: 'none',
 } as unknown as ProfileResponse;
 
 const account: AccountSummary = {
@@ -129,5 +133,68 @@ describe('ProfileActions', () => {
     // The overflow now offers "Débloquer".
     await user.click(await screen.findByRole('button', { name: /plus d'actions sur le profil de théo m\./i }));
     expect(await screen.findByRole('menuitem', { name: /débloquer théo m\./i })).toBeInTheDocument();
+  });
+
+  // ── MC-8 (D12): connect CTA driven by connectionState ─────────────────────
+  describe('connect CTA reflects connectionState', () => {
+    it('none → "Se connecter" sends a request and flips to "Demande envoyée"', async () => {
+      const user = userEvent.setup();
+      render(<ProfileActions profile={{ ...profile, connectionState: 'none' } as unknown as ProfileResponse} account={account} />);
+      await user.click(screen.getByRole('button', { name: /se connecter/i }));
+      expect(sendConnectionRequest).toHaveBeenCalledWith('theo-1');
+      expect(await screen.findByText('Demande envoyée')).toBeInTheDocument();
+    });
+
+    it('pending_out → "Annuler la demande" withdraws and flips back to "Se connecter"', async () => {
+      const user = userEvent.setup();
+      render(<ProfileActions profile={{ ...profile, connectionState: 'pending_out' } as unknown as ProfileResponse} account={account} />);
+      expect(screen.getByText('Demande envoyée')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /annuler la demande/i }));
+      expect(withdrawConnectionRequest).toHaveBeenCalledWith('theo-1');
+      expect(await screen.findByRole('button', { name: /se connecter/i })).toBeInTheDocument();
+    });
+
+    it('pending_in → "Répondre" links to /contacts', () => {
+      render(<ProfileActions profile={{ ...profile, connectionState: 'pending_in' } as unknown as ProfileResponse} account={account} />);
+      expect(screen.getByRole('link', { name: /répondre/i })).toHaveAttribute('href', '/contacts');
+    });
+
+    it('connected → single "Connecté" button that swaps to "Se déconnecter" on hover and disconnects', async () => {
+      const user = userEvent.setup();
+      render(<ProfileActions profile={{ ...profile, connectionState: 'connected' } as unknown as ProfileResponse} account={account} />);
+      // Rest label is "✓ Connecté" (green); the action (accessible name) is "Se déconnecter".
+      expect(screen.getByText('✓ Connecté')).toBeInTheDocument();
+      const btn = screen.getByRole('button', { name: /se déconnecter de théo m\./i });
+      // Hover swaps the visible label to the undo action.
+      await user.hover(btn);
+      expect(screen.getByText('Se déconnecter')).toBeInTheDocument();
+      // Clicking disconnects and flips back to "Se connecter".
+      await user.click(btn);
+      expect(removeContact).toHaveBeenCalledWith('theo-1');
+      expect(await screen.findByRole('button', { name: /se connecter/i })).toBeInTheDocument();
+    });
+
+    it('pending_out button swaps "Demande envoyée" → "Annuler la demande" on hover', async () => {
+      const user = userEvent.setup();
+      render(<ProfileActions profile={{ ...profile, connectionState: 'pending_out' } as unknown as ProfileResponse} account={account} />);
+      expect(screen.getByText('Demande envoyée')).toBeInTheDocument();
+      await user.hover(screen.getByRole('button', { name: /annuler la demande/i }));
+      expect(screen.getByText('Annuler la demande')).toBeInTheDocument();
+    });
+
+    it('soft-block: blocking a connected profile removes the connection CTA', async () => {
+      const user = userEvent.setup();
+      render(<ProfileActions profile={{ ...profile, connectionState: 'connected' } as unknown as ProfileResponse} account={account} />);
+      expect(screen.getByText('✓ Connecté')).toBeInTheDocument();
+      // Block via the overflow → confirm modal.
+      await user.click(screen.getByRole('button', { name: /plus d'actions sur le profil de théo m\./i }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Bloquer' }));
+      const dialog = await screen.findByRole('dialog', { name: /bloquer théo m\./i });
+      await user.click(within(dialog).getByRole('button', { name: 'Bloquer' }));
+      // The connection is severed: no "Connecté", no connect/disconnect button at all.
+      expect(await screen.findByText('Compte bloqué.')).toBeInTheDocument();
+      expect(screen.queryByText('✓ Connecté')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /se (dé)?connecter/i })).not.toBeInTheDocument();
+    });
   });
 });

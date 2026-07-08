@@ -86,6 +86,7 @@ const mockProfile: ProfileResponse = {
   availability: 'ouvert',
   viewerHasBlocked: false,
   blockedByTarget: false,
+  connectionState: 'none',
 };
 
 const mockAccount: AccountSummary = {

@@ -8,6 +8,7 @@ import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { BlocksModule } from '../blocks/blocks.module';
+import { ConnectionsModule } from '../connections/connections.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BlocksModule } from '../blocks/blocks.module';
       signOptions: { expiresIn: '7d' },
     }),
     BlocksModule, // MC-10: pairFlags / isBlockedPair for directional block state + portfolio hiding
+    ConnectionsModule, // MC-8: stateBetween for the profile connectionState (D12)
   ],
   controllers: [ProfilesController],
   providers: [ProfilesService, SessionGuard, OptionalSessionGuard, PrismaService, RedisService],

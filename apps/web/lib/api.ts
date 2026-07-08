@@ -594,6 +594,10 @@ export const sendConnectionRequest = (toUser: string): Promise<ConnectionRequest
     body: JSON.stringify({ toUser } satisfies CreateConnectionRequestBody),
   });
 
+// MC-8 (D12): withdraw the viewer's pending outgoing request to a target user.
+export const withdrawConnectionRequest = (userId: string): Promise<void> =>
+  request<void>(`/connections/requests/sent/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+
 export const decideConnectionRequest = (
   id: string,
   status: DecideConnectionRequestBody['status'],

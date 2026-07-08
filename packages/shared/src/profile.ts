@@ -1,6 +1,7 @@
 // Shared profile contracts for F-3 (creator profile & portfolio).
 import type { PartnerRegion, PartnerAvailability } from './partners.js'; // MC-1 directory columns
 import type { CreatorRole } from './onboarding.js'; // F-2/F-17 creator sub-roles
+import type { ConnectionState } from './connections.js'; // MC-8 viewer↔owner connection CTA state
 
 /** Creator crafts a profile may seek to pair with (seeking.targetRole). MC-2 matching input. */
 export const SEEKING_TARGET_ROLES = ['scénariste', 'dessinateur·rice'] as const;
@@ -59,6 +60,9 @@ export interface ProfileResponse {
    *  shows "Cet utilisateur vous a bloqué·e." */
   viewerHasBlocked: boolean;
   blockedByTarget: boolean;
+  /** MC-8: connection CTA state of the signed-in viewer toward this profile owner (D12). 'none' for
+   *  anonymous viewers and for the owner viewing their own profile. Drives the profile connect button. */
+  connectionState: ConnectionState;
 }
 
 /** PATCH /profiles/me body. All fields optional; only provided fields change. */

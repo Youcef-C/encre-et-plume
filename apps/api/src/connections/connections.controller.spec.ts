@@ -26,6 +26,7 @@ describe('ConnectionsController', () => {
       listRequests: jest.fn().mockResolvedValue({ items: [] }),
       createRequest: jest.fn().mockResolvedValue({ id: 'c1', status: 'pending' }),
       decide: jest.fn().mockResolvedValue({ id: 'c1', status: 'accepted' }),
+      withdrawRequest: jest.fn().mockResolvedValue(undefined),
       suggestions: jest.fn().mockResolvedValue({ items: [], incompleteProfile: false }),
       peopleSearch: jest.fn().mockResolvedValue({ items: [] }),
     };
@@ -76,6 +77,11 @@ describe('ConnectionsController', () => {
   it('decides a request scoped to the session account (id from the path, status from the body)', async () => {
     await controller.decide(req('acc-owner'), 'c9', { status: 'accepted' } as DecideConnectionRequestDto);
     expect(service.decide).toHaveBeenCalledWith('acc-owner', 'c9', 'accepted');
+  });
+
+  it('withdraws a sent request by the target user id from the path, scoped to the session account', async () => {
+    await controller.withdrawRequest(req('acc-owner'), 'acc-x');
+    expect(service.withdrawRequest).toHaveBeenCalledWith('acc-owner', 'acc-x');
   });
 
   it('returns suggestions for the session account', async () => {

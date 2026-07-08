@@ -216,6 +216,29 @@ export class ConnectionsService {
     return { items };
   }
 
+  /**
+   * MC-8 D12: the connection CTA state of `viewerId` toward `targetId` — one pair query, no N+1. Backs
+   * the profile connect button and reuses the same classification as people-search.
+   */
+  async stateBetween(viewerId: string, targetId: string): Promise<ConnectionState> {
+    const c = await this.prisma.connection.findFirst({
+      where: this.pairWhere(viewerId, targetId),
+      select: { requesterId: true, addresseeId: true, status: true },
+    });
+    return this.classifyState(viewerId, c);
+  }
+
+  /** MC-8: withdraw a request the viewer SENT. Target-based (callers know the other user's id, not the
+   *  request id). Only a still-pending outgoing row matches; silent (mirrors decline — no notification). */
+  async withdrawRequest(viewerId: string, targetUserId: string): Promise<void> {
+    const row = await this.prisma.connection.findFirst({
+      where: { requesterId: viewerId, addresseeId: targetUserId, status: 'pending' },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('Demande introuvable.');
+    await this.prisma.connection.delete({ where: { id: row.id } });
+  }
+
   async removeContact(viewerId: string, userId: string): Promise<void> {
     const row = await this.prisma.connection.findFirst({
       where: { status: 'accepted', ...this.pairWhere(viewerId, userId) },
@@ -258,13 +281,8 @@ export class ConnectionsService {
         })
       : [];
 
-    const stateFor = (id: string): ConnectionState => {
-      const c = conns.find((x) => x.requesterId === id || x.addresseeId === id);
-      if (!c) return 'none';
-      if (c.status === 'accepted') return 'connected';
-      if (c.status === 'pending') return c.requesterId === viewerId ? 'pending_out' : 'pending_in';
-      return 'none';
-    };
+    const stateFor = (id: string): ConnectionState =>
+      this.classifyState(viewerId, conns.find((x) => x.requesterId === id || x.addresseeId === id) ?? null);
 
     return {
       items: rows.map((r) => ({
@@ -298,6 +316,14 @@ export class ConnectionsService {
       if (isP2002(e)) return; // race: another path connected them first
       throw e;
     }
+  }
+
+  /** D12: fold a connection pair row (viewer-relative) into a ConnectionState. */
+  private classifyState(viewerId: string, c: { requesterId: string; status: string } | null): ConnectionState {
+    if (!c) return 'none';
+    if (c.status === 'accepted') return 'connected';
+    if (c.status === 'pending') return c.requesterId === viewerId ? 'pending_out' : 'pending_in';
+    return 'none';
   }
 
   private pairWhere(a: string, b: string) {

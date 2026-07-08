@@ -19,6 +19,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     getConnectionSuggestions: vi.fn(),
     searchPeople: vi.fn(),
     sendConnectionRequest: vi.fn(),
+    withdrawConnectionRequest: vi.fn().mockResolvedValue(undefined),
     decideConnectionRequest: vi.fn(),
     removeContact: vi.fn(),
     createBlock: vi.fn().mockResolvedValue({ id: 'b1', userId: 'u-lea', kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }),
@@ -169,6 +170,43 @@ describe('ContactsClient — Envoyées tab (outgoing pending requests)', () => {
     renderClient();
     await user.click(await screen.findByRole('tab', { name: /envoyées/i }));
     expect(await screen.findByText('Aucune demande envoyée')).toBeInTheDocument();
+  });
+
+  it('a request sent from Suggestions appears in the Envoyées tab in real time (no reload)', async () => {
+    const user = userEvent.setup();
+    mockAll({ sent: [] }); // default suggestions include Mika T.
+    vi.mocked(api.sendConnectionRequest).mockResolvedValue({ id: 'new-1', status: 'pending' });
+    renderClient();
+
+    await user.click(await screen.findByRole('tab', { name: /suggestions/i }));
+    await user.click(await screen.findByRole('button', { name: /se connecter avec mika t\./i }));
+
+    await user.click(screen.getByRole('tab', { name: /envoyées/i }));
+    const panel = await screen.findByRole('tabpanel', { name: /envoyées/i });
+    expect(await within(panel).findByText('Mika T.')).toBeInTheDocument();
+    expect(within(panel).getByText('Demande de connexion envoyée')).toBeInTheDocument();
+  });
+
+  it('frames the row from the sender side ("Demande de connexion envoyée", not the incoming context)', async () => {
+    const user = userEvent.setup();
+    mockAll({ sent: [request({ id: 'out-1', context: 'souhaite se connecter', from: { userId: 'u-zoe', slug: 'zoe-k', name: 'Zoé K.', avatarUrl: null, role: 'dessinateur' } })] });
+    renderClient();
+    await user.click(await screen.findByRole('tab', { name: /envoyées/i }));
+
+    const panel = await screen.findByRole('tabpanel', { name: /envoyées/i });
+    expect(within(panel).getByText('Demande de connexion envoyée')).toBeInTheDocument();
+    expect(within(panel).queryByText(/souhaite se connecter/i)).not.toBeInTheDocument();
+  });
+
+  it('"Retirer" withdraws the sent request by target id and removes the row optimistically', async () => {
+    const user = userEvent.setup();
+    mockAll({ sent: [request({ id: 'out-1', from: { userId: 'u-zoe', slug: 'zoe-k', name: 'Zoé K.', avatarUrl: null, role: 'dessinateur' } })] });
+    renderClient();
+    await user.click(await screen.findByRole('tab', { name: /envoyées/i }));
+
+    await user.click(await screen.findByRole('button', { name: /retirer la demande envoyée à zoé k\./i }));
+    expect(api.withdrawConnectionRequest).toHaveBeenCalledWith('u-zoe');
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Zoé K.' })).not.toBeInTheDocument());
   });
 });
 

@@ -209,9 +209,11 @@ function RequestRow({
   );
 }
 
-// ─── Envoyées row (outgoing pending request — read-only) ─────────────────────────────────────
+// ─── Envoyées row (outgoing pending request — withdrawable) ──────────────────────────────────
+// `req.from` is mapped server-side to the ADDRESSEE (the person we asked), so the copy reads from
+// the sender's side and the withdraw keys on `req.from.userId` (DELETE /connections/requests/sent/:id).
 
-function SentRequestRow({ req }: { req: ConnectionRequestItem }) {
+function SentRequestRow({ req, onWithdraw }: { req: ConnectionRequestItem; onWithdraw: (req: ConnectionRequestItem) => void }) {
   return (
     <li style={rowBox}>
       <span aria-hidden="true" style={avatarStyle(req.from.avatarUrl)} />
@@ -222,22 +224,31 @@ function SentRequestRow({ req }: { req: ConnectionRequestItem }) {
           </Link>
           <RoleChip role={req.from.role} />
         </div>
-        <div style={{ fontSize: 13, color: 'var(--ink2)', marginTop: 4 }}>{req.context}</div>
+        <div style={{ fontSize: 13, color: 'var(--ink2)', marginTop: 4 }}>Demande de connexion envoyée</div>
       </div>
-      <span
-        style={{
-          marginLeft: 'auto',
-          fontSize: 12,
-          fontWeight: 700,
-          color: 'var(--ink2)',
-          border: '2px solid var(--ink2)',
-          borderRadius: 5,
-          padding: '4px 10px',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        ● En attente
-      </span>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--ink2)',
+            border: '2px solid var(--ink2)',
+            borderRadius: 5,
+            padding: '4px 10px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ● En attente
+        </span>
+        <button
+          type="button"
+          onClick={() => onWithdraw(req)}
+          aria-label={`Retirer la demande envoyée à ${req.from.name}`}
+          style={actionBtn}
+        >
+          Retirer
+        </button>
+      </div>
     </li>
   );
 }
@@ -696,24 +707,61 @@ export default function ContactsClient() {
     setAnnounce('Compte bloqué.');
   }
 
+  function withdrawSentRequest(req: ConnectionRequestItem) {
+    setActionError('');
+    setSentRequests((prev) => prev.filter((r) => r.id !== req.id));
+    setAnnounce(`Demande envoyée à ${req.from.name} retirée.`);
+    api.withdrawConnectionRequest(req.from.userId).catch(() => {
+      setSentRequests((prev) => (prev.some((r) => r.id === req.id) ? prev : [req, ...prev]));
+      setActionError('Retrait impossible. Veuillez réessayer.');
+    });
+  }
+
+  // Reflect a just-sent request in the Envoyées tab live (no reload). `from` carries the addressee
+  // for an outgoing request; id comes from the create response so a later withdraw can drop the row.
+  function pushSentRequest(
+    user: { userId: string; slug: string; name: string; avatarUrl: string | null; role: CreatorRole | null },
+    id: string,
+  ) {
+    setSentRequests((prev) =>
+      prev.some((r) => r.from.userId === user.userId)
+        ? prev
+        : [
+            {
+              id,
+              from: { userId: user.userId, slug: user.slug, name: user.name, avatarUrl: user.avatarUrl, role: user.role },
+              context: '',
+              createdAt: new Date().toISOString(),
+            },
+            ...prev,
+          ],
+    );
+  }
+
   function connectSuggestion(item: MatchSuggestion) {
     setActionError('');
     setSuggestions((prev) => prev.filter((s) => s.userId !== item.userId));
     setAnnounce(`Demande envoyée à ${item.name}.`);
-    api.sendConnectionRequest(item.userId).catch(() => {
-      setSuggestions((prev) => (prev.some((s) => s.userId === item.userId) ? prev : [item, ...prev]));
-      setActionError('Demande impossible. Veuillez réessayer.');
-    });
+    api
+      .sendConnectionRequest(item.userId)
+      .then((dto) => pushSentRequest(item, dto.id))
+      .catch(() => {
+        setSuggestions((prev) => (prev.some((s) => s.userId === item.userId) ? prev : [item, ...prev]));
+        setActionError('Demande impossible. Veuillez réessayer.');
+      });
   }
 
   function connectSearchResult(item: PeopleSearchItem) {
     setActionError('');
     setResults((prev) => prev.map((r) => (r.userId === item.userId ? { ...r, connectionState: 'pending_out' } : r)));
     setAnnounce(`Demande envoyée à ${item.name}.`);
-    api.sendConnectionRequest(item.userId).catch(() => {
-      setResults((prev) => prev.map((r) => (r.userId === item.userId ? { ...r, connectionState: 'none' } : r)));
-      setActionError('Demande impossible. Veuillez réessayer.');
-    });
+    api
+      .sendConnectionRequest(item.userId)
+      .then((dto) => pushSentRequest(item, dto.id))
+      .catch(() => {
+        setResults((prev) => prev.map((r) => (r.userId === item.userId ? { ...r, connectionState: 'none' } : r)));
+        setActionError('Demande impossible. Veuillez réessayer.');
+      });
   }
 
   if (sessionLoading) {
@@ -920,7 +968,7 @@ export default function ContactsClient() {
               ) : (
                 <ul style={ulReset}>
                   {sentRequests.map((r) => (
-                    <SentRequestRow key={r.id} req={r} />
+                    <SentRequestRow key={r.id} req={r} onWithdraw={withdrawSentRequest} />
                   ))}
                 </ul>
               ))}

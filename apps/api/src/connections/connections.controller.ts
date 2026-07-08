@@ -63,6 +63,15 @@ export class ConnectionsController {
     return this.service.decide(req.accountId, id, dto.status);
   }
 
+  /** MC-8: withdraw a request the viewer sent, addressed by the OTHER user's id (the profile / Envoyées
+   *  row knows the target, not the request id). Distinct HTTP verb + literal `sent` segment — no clash
+   *  with PATCH connections/requests/:id. */
+  @Delete('connections/requests/sent/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  withdrawRequest(@Req() req: AuthRequest, @Param('userId') userId: string): Promise<void> {
+    return this.service.withdrawRequest(req.accountId, userId);
+  }
+
   @Get('connections/suggestions')
   suggestions(@Req() req: AuthRequest): Promise<ConnectionSuggestionsResponse> {
     return this.service.suggestions(req.accountId);

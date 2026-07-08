@@ -81,6 +81,7 @@ describe('ProfilesService', () => {
     profile: { upsert: jest.Mock; findUnique: jest.Mock };
   };
   let blocks: { pairFlags: jest.Mock; isBlockedPair: jest.Mock };
+  let connections: { stateBetween: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -91,7 +92,12 @@ describe('ProfilesService', () => {
       pairFlags: jest.fn().mockResolvedValue({ viewerHasBlocked: false, blockedByTarget: false }),
       isBlockedPair: jest.fn().mockResolvedValue(false),
     };
-    service = new ProfilesService(prisma as unknown as PrismaService, blocks as unknown as never);
+    connections = { stateBetween: jest.fn().mockResolvedValue('none') };
+    service = new ProfilesService(
+      prisma as unknown as PrismaService,
+      blocks as unknown as never,
+      connections as unknown as never,
+    );
   });
 
   // ── getBySlug ────────────────────────────────────────────────────────────────
@@ -234,6 +240,29 @@ describe('ProfilesService', () => {
       blocks.pairFlags.mockResolvedValue({ viewerHasBlocked: false, blockedByTarget: true });
       const res = await service.getBySlug('yuki-moreau', 'viewer');
       expect(res.blockedByTarget).toBe(true);
+    });
+
+    // ── MC-8: viewer-derived connection state ──
+    it("connectionState is 'none' for an anonymous viewer (no stateBetween call)", async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      const res = await service.getBySlug('yuki-moreau');
+      expect(res.connectionState).toBe('none');
+      expect(connections.stateBetween).not.toHaveBeenCalled();
+    });
+
+    it("connectionState is 'none' when the owner views their own profile (no stateBetween call)", async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      const res = await service.getBySlug('yuki-moreau', 'acc-1');
+      expect(res.connectionState).toBe('none');
+      expect(connections.stateBetween).not.toHaveBeenCalled();
+    });
+
+    it("connectionState reflects a pending_out request from the signed-in viewer to the owner", async () => {
+      prisma.account.findUnique.mockResolvedValue({ ...BASE_ACCOUNT, profile: BASE_PROFILE });
+      connections.stateBetween.mockResolvedValue('pending_out');
+      const res = await service.getBySlug('yuki-moreau', 'viewer');
+      expect(connections.stateBetween).toHaveBeenCalledWith('viewer', 'acc-1');
+      expect(res.connectionState).toBe('pending_out');
     });
   });
 
