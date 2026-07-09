@@ -13,9 +13,13 @@ import { HeartIcon, XIcon } from '../icons';
 export default function IllustrationListCard({
   item,
   onRemove,
+  showLikes = false,
 }: {
   item: LikedIllustrationDto;
   onRemove?: (id: string) => void;
+  // Likes tab: mirror LikeCard and show the ♥ like count. Saved tab (default): the work cards show
+  // reading-progress not ♥, so illustration cards stay consistent within that tab and omit it.
+  showLikes?: boolean;
 }) {
   return (
     <div style={{ position: 'relative' }}>
@@ -32,17 +36,47 @@ export default function IllustrationListCard({
           }}
           role="img"
           aria-label={item.title}
-        />
+        >
+          {/* Likes tab: ♥ badge on the cover, top-LEFT so the remove ✕ keeps its top-right spot
+              (consistent with the Ma Liste/saved tab). */}
+          {showLikes && (
+            <span
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 9,
+                left: 9,
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                border: '2px solid var(--ink)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+              }}
+            >
+              <HeartIcon size={13} />
+            </span>
+          )}
+        </div>
         <div style={{ fontWeight: 700, marginTop: 9 }}>{item.title}</div>
         <div style={{ fontSize: 12, color: 'var(--ink2)' }}>
-          {item.artistName} · {item.categoryLabel} ·{' '}
-          <span
-            aria-label={`${formatLikeCount(item.likeCount)} j'aime`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}
-          >
-            <HeartIcon size={11} style={{ color: 'var(--accent)' }} />
-            {formatLikeCount(item.likeCount)}
-          </span>
+          {item.artistName} · {item.categoryLabel}
+          {showLikes && (
+            <>
+              {' '}
+              ·{' '}
+              <span
+                aria-label={`${formatLikeCount(item.likeCount)} j'aime`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}
+              >
+                <HeartIcon size={11} style={{ color: 'var(--accent)' }} />
+                {formatLikeCount(item.likeCount)}
+              </span>
+            </>
+          )}
         </div>
       </Link>
       {onRemove && (
@@ -54,7 +88,7 @@ export default function IllustrationListCard({
           style={{
             position: 'absolute',
             top: 9,
-            right: 9,
+            right: 9, // ✕ stays top-right on both tabs; the Likes-tab ♥ badge sits top-left.
             zIndex: 3,
             width: 26,
             height: 26,

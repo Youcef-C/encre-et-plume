@@ -255,6 +255,25 @@ async function main() {
     });
   }
 
+  // ── BE-RT1 (mc9-messaging.spec.ts realtime notifications): ADMIN2 → ADMIN3 and ADMIN3 →
+  // MSG_FRESH each need a FRESH (201) connection request every run. Reset first — a prior local
+  // run's request otherwise lingers as 'pending' and the next run's POST 409s (QA finding).
+  {
+    const admin2 = accounts.ADMIN2.id;
+    const admin3 = accounts.ADMIN3.id;
+    const msgFresh = accounts.MSG_FRESH.id;
+    await prisma.connection.deleteMany({
+      where: {
+        OR: [
+          { requesterId: admin2, addresseeId: admin3 },
+          { requesterId: admin3, addresseeId: admin2 },
+          { requesterId: admin3, addresseeId: msgFresh },
+          { requesterId: msgFresh, addresseeId: admin3 },
+        ],
+      },
+    });
+  }
+
   // ── MC-3: invitations-inbox fixtures for the dedicated INV_INBOX account ──────────────────────
   // INV_INBOX receives collab invitations across every status from two inviters with fixed creator
   // roles (A dessinateur → "écrire", B scenariste → "dessiner"). Hermetic: wipe INV_INBOX's received

@@ -376,14 +376,24 @@ export default function ManageCollectionClient({ id }: { id: string }) {
           <button type="button" onClick={() => setGoals((cur) => [...cur, { title: '', euros: '' }])} style={smallBtn}>＋ Ajouter un objectif</button>
         </fieldset>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Task C: the info fields are local state committed only here — "Sauvegarder" persists,
+            "Annuler" discards by re-seeding the last-saved values from `detail`. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => void saveInfos()}
             disabled={saving}
             style={{ ...smallBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: saving ? 0.6 : 1 }}
           >
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? 'Enregistrement…' : 'Sauvegarder'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { seed(detail); setSavedNote(false); }}
+            disabled={saving}
+            style={smallBtn}
+          >
+            Annuler
           </button>
           {savedNote && (
             <span role="status" style={{ fontSize: 13, color: 'var(--ink2)', fontWeight: 700 }}>Enregistré</span>

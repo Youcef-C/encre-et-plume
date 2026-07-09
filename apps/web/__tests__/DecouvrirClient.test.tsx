@@ -139,6 +139,49 @@ describe('DecouvrirClient (DR-2 FE-8)', () => {
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
   });
 
+  it('auto-loads the next page when the infinite-scroll sentinel intersects (button stays as fallback)', async () => {
+    // Controllable IntersectionObserver so the test can simulate the sentinel scrolling into view.
+    let io: { cb: IntersectionObserverCallback; el?: Element } | null = null;
+    class MockIO {
+      cb: IntersectionObserverCallback;
+      el?: Element;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+        io = this;
+      }
+      observe(el: Element) {
+        this.el = el;
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', MockIO);
+
+    render(<DecouvrirClient />);
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    // The fallback button is still present for no-JS / keyboard users.
+    expect(screen.getByRole('button', { name: 'Afficher plus de résultats' })).toBeInTheDocument();
+
+    const nextPage: CatalogResponse = {
+      items: [{ id: '2', slug: 'onibi', title: 'Onibi', genre: 'Fantastique', chapterCount: 14, likeCount: 1900, complete: false, format: 'Manga', cover: null, is18plus: false }],
+      total: 47,
+      page: 2,
+      pageSize: 12,
+      totalPages: 4,
+    };
+    vi.mocked(api.getCatalog).mockResolvedValueOnce(nextPage);
+
+    // Simulate the sentinel scrolling into view — no button click.
+    io!.cb([{ isIntersecting: true } as IntersectionObserverEntry], io as unknown as IntersectionObserver);
+    await waitFor(() => expect(screen.getByText('Onibi')).toBeInTheDocument());
+    expect(screen.getByText('Lames de Brume')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
   it('renders "Afficher plus de résultats" when more pages remain and appends the next page', async () => {
     const user = userEvent.setup();
     render(<DecouvrirClient />);

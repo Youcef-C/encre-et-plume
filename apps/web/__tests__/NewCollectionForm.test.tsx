@@ -32,6 +32,15 @@ describe('NewCollectionForm (DR-12 V2)', () => {
     (api.createCollection as ReturnType<typeof vi.fn>).mockResolvedValue(summary);
   });
 
+  it('portals the dialog to document.body above the navbar (z-index >= 100)', () => {
+    const { container } = render(<NewCollectionForm onClose={() => {}} onCreated={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: /Nouvelle collection/i });
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
+    const overlay = dialog.parentElement!;
+    expect(Number(overlay.style.zIndex)).toBeGreaterThanOrEqual(100);
+  });
+
   it('blocks submit with an inline error when the title is empty', async () => {
     const user = userEvent.setup();
     render(<NewCollectionForm onClose={() => {}} onCreated={() => {}} />);

@@ -345,7 +345,9 @@ export default function SalonDock() {
         left: 26,
         bottom: 26,
         zIndex: 40,
-        width: 400,
+        // Collapsed, the Comptoir is just its header bar — show it as a compact 300px dock; it
+        // expands to the full 400 panel when opened.
+        width: expanded ? 400 : 300,
         maxWidth: 'calc(100vw - 52px)',
         background: 'var(--card)',
         border: '3px solid var(--ink)',

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
-  CollectionRef,
+  CollectionChip,
   GalleryCategoryKey,
   GalleryFeatureCard,
   GalleryIllustrationCard,
@@ -124,7 +124,7 @@ export class GalleryService {
       include: {
         artist: { include: { profile: true } },
         // DR-12: collection chips on the detail page (-> /oeuvre/:slug).
-        collections: { include: { work: { select: { id: true, slug: true, title: true } } } },
+        collections: { include: { work: { select: { id: true, slug: true, title: true, coverImage: true } } } },
       },
     });
     if (!row) return null;
@@ -175,6 +175,7 @@ export class GalleryService {
       },
     });
     for (const workId of collectionIds) await this.collections.appendMembership(workId, created.id);
+    await this.invalidateListCaches(); // a newly published illustration must appear in the Galerie now
     return { id: created.id };
   }
 
@@ -209,7 +210,20 @@ export class GalleryService {
 
     await this.prisma.illustration.update({ where: { id }, data });
     await this.invalidateCollectionCaches(id); // title/visibility edits reflect on the collection œuvre pages
+    await this.invalidateListCaches(); // title/category/visibility edits reflect in the Galerie list now
     return (await this.getIllustration(id, accountId))!;
+  }
+
+  /**
+   * DELETE /illustrations/:id — owner-only hard delete (from the "Modifier" form). Uniform 404 for a
+   * non-owner/missing illustration. Membership rows cascade away (IllustrationCollection onDelete).
+   */
+  async deleteIllustration(accountId: string, id: string): Promise<void> {
+    const illu = await this.prisma.illustration.findUnique({ where: { id }, select: { artistId: true } });
+    if (!illu || illu.artistId !== accountId) throw new NotFoundException('Illustration introuvable');
+    await this.invalidateCollectionCaches(id); // capture member-collection caches BEFORE the rows cascade away
+    await this.prisma.illustration.delete({ where: { id } });
+    await this.invalidateListCaches(); // deleted illustration must leave the Galerie immediately, not at TTL
   }
 
   /** Invalidate the `work:{slug}` œuvre cache of every collection the illustration belongs to. */
@@ -219,6 +233,15 @@ export class GalleryService {
       select: { work: { select: { slug: true } } },
     });
     for (const m of memberships) await this.redis.del(`work:${m.work.slug}`).catch(() => {});
+  }
+
+  /**
+   * Invalidate the query-hashed gallery + collections LIST caches after a create/update/delete, so a
+   * removed/edited illustration disappears (or a new one appears) immediately instead of at the 60s TTL.
+   */
+  private async invalidateListCaches(): Promise<void> {
+    await this.redis.delByPattern('gallery:list:*');
+    await this.redis.delByPattern('collections:list:*');
   }
 
   /** GET /illustrations/mine — the caller's own published illustrations (manage-view add picker). */
@@ -332,7 +355,7 @@ interface IllustrationDetailRow extends IllustrationRow {
   license: string | null;
   publishedAt: Date | null;
   artist?: { id: string; profileSlug: string; avatar: string | null; profile?: { creatorRoles: string[]; city: string | null } | null } | null;
-  collections?: { work: { id: string; slug: string; title: string } }[];
+  collections?: { work: { id: string; slug: string; title: string; coverImage: string | null } }[];
 }
 
 function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
@@ -352,8 +375,8 @@ function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
     publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     artist: mapArtist(row),
     is18plus: hasPlus18Genre(row.genres),
-    // DR-12: collection chips (-> /oeuvre/:slug).
-    collections: (row.collections ?? []).map((c): CollectionRef => ({ id: c.work.id, slug: c.work.slug, title: c.work.title })),
+    // DR-12: collections the illustration belongs to (-> /oeuvre/:slug), with cover for the sidebar box.
+    collections: (row.collections ?? []).map((c): CollectionChip => ({ id: c.work.id, slug: c.work.slug, title: c.work.title, cover: c.work.coverImage ?? null })),
   };
 }
 

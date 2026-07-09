@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type WatchlistRow = {
   createdAt: Date;
-  work: { id: string; slug: string; title: string; coverImage: string | null; chapterCount: number };
+  work: { id: string; slug: string; title: string; coverImage: string | null; chapterCount: number; format: string };
 };
 
 type ProgressRow = {
@@ -17,7 +17,7 @@ type ProgressRow = {
 
 type FavoriteRow = {
   createdAt: Date;
-  work: { slug: string; title: string; coverImage: string | null; genre: string; likeCount: number };
+  work: { slug: string; title: string; coverImage: string | null; genre: string; likeCount: number; format: string };
 };
 
 type IllustrationReactionRow = { targetId: string };
@@ -46,7 +46,7 @@ export class ListService {
     const rows = (await this.prisma.watchlistItem.findMany({
       where: { accountId },
       orderBy: { createdAt: 'desc' },
-      include: { work: { select: { id: true, slug: true, title: true, coverImage: true, chapterCount: true } } },
+      include: { work: { select: { id: true, slug: true, title: true, coverImage: true, chapterCount: true, format: true } } },
     })) as unknown as WatchlistRow[];
 
     if (rows.length === 0) return [];
@@ -75,6 +75,7 @@ export class ListService {
         slug: row.work.slug,
         title: row.work.title,
         cover: row.work.coverImage,
+        format: row.work.format,
         savedAt: row.createdAt.toISOString(),
         lastChapterNumber,
         page: progress?.page ?? null,
@@ -88,13 +89,14 @@ export class ListService {
     const rows = (await this.prisma.favorite.findMany({
       where: { accountId },
       orderBy: { createdAt: 'desc' },
-      include: { work: { select: { slug: true, title: true, coverImage: true, genre: true, likeCount: true } } },
+      include: { work: { select: { slug: true, title: true, coverImage: true, genre: true, likeCount: true, format: true } } },
     })) as unknown as FavoriteRow[];
 
     return rows.map((row) => ({
       slug: row.work.slug,
       title: row.work.title,
       cover: row.work.coverImage,
+      format: row.work.format,
       genre: row.work.genre,
       likeCount: row.work.likeCount,
       likedAt: row.createdAt.toISOString(),

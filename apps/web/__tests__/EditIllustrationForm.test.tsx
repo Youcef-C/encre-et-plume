@@ -2,13 +2,16 @@
 // "Publique" when publishedAt is set), blocks an empty Titre, saves the full editable set via
 // updateIllustration and fires onSaved with the response; an API error shows a French notice.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { IllustrationDetail } from '@encre-et-plume/shared';
 
+const push = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: vi.fn() }) }));
+
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, updateIllustration: vi.fn() };
+  return { ...actual, updateIllustration: vi.fn(), deleteIllustration: vi.fn() };
 });
 
 import * as api from '../lib/api';
@@ -76,6 +79,45 @@ describe('EditIllustrationForm (DR-12 FE-13 · V12)', () => {
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved);
+  });
+
+  it('deletes the illustration via the on-brand confirm MODAL and redirects to /galerie', async () => {
+    vi.mocked(api.deleteIllustration).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+
+    // The footer button opens a confirm modal (no native window.confirm, no inline confirm).
+    await user.click(screen.getByRole('button', { name: /Supprimer l’illustration/ }));
+    const modal = screen.getByRole('alertdialog', { name: "Supprimer l'illustration" });
+    expect(api.deleteIllustration).not.toHaveBeenCalled();
+    await user.click(within(modal).getByRole('button', { name: 'Supprimer' }));
+
+    await waitFor(() => expect(api.deleteIllustration).toHaveBeenCalledWith('ill-1'));
+    expect(push).toHaveBeenCalledWith('/galerie');
+  });
+
+  it('cancelling the confirm modal closes it and does not delete', async () => {
+    vi.mocked(api.deleteIllustration).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /Supprimer l’illustration/ }));
+    const modal = screen.getByRole('alertdialog', { name: "Supprimer l'illustration" });
+    await user.click(within(modal).getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(api.deleteIllustration).not.toHaveBeenCalled();
+  });
+
+  it('shows a French notice in the modal when the deletion fails', async () => {
+    vi.mocked(api.deleteIllustration).mockRejectedValue({ statusCode: 500, message: 'Suppression impossible', error: 'ERR' });
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: /Supprimer l’illustration/ }));
+    const modal = screen.getByRole('alertdialog', { name: "Supprimer l'illustration" });
+    await user.click(within(modal).getByRole('button', { name: 'Supprimer' }));
+
+    expect(await screen.findByText('Suppression impossible')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('shows a French notice and keeps values on an API error', async () => {

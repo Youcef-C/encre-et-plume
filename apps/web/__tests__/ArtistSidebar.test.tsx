@@ -130,6 +130,34 @@ describe('ArtistSidebar (DR-6)', () => {
     expect(screen.queryByText('Plus de cet·te artiste')).not.toBeInTheDocument();
   });
 
+  // ── DR-12 (2026-07-09): sidebar refinement slots ──────────────────────────────
+  it('renders editAction inside the Détails card, and belowDetails between Détails and more-by-artist', () => {
+    render(
+      <ArtistSidebar
+        artist={linkedArtist}
+        categoryLabel="Process"
+        publishedAt="2026-06-12T00:00:00.000Z"
+        dimensionsLabel="2480 × 3508"
+        tools="Encre · CSP"
+        license="© Tous droits réservés"
+        more={more}
+        account={null}
+        editAction={<button type="button">EDIT_ACTION</button>}
+        belowDetails={<div>BELOW_CONTENT</div>}
+      />,
+    );
+    const details = screen.getByText('Détails');
+    const editBtn = screen.getByText('EDIT_ACTION');
+    const below = screen.getByText('BELOW_CONTENT');
+    const moreHeading = screen.getByText('Plus de cet·te artiste');
+
+    // editAction lives inside the Détails card (the "Détails" heading's parent card).
+    expect(details.parentElement).toContainElement(editBtn);
+    // belowDetails renders after the Détails card and before more-by-artist.
+    expect(details.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(below.compareDocumentPosition(moreHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('anonymous Suivre routes to sign-in (F-1)', async () => {
     const user = userEvent.setup();
     render(

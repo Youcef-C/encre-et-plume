@@ -16,8 +16,8 @@ vi.mock('next/link', () => ({
 import CollectionCardsGrid from '../components/galerie/CollectionCardsGrid';
 
 const cards: CollectionCard[] = [
-  { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", cover: null, count: 3, artistName: 'Yuki Moreau' },
-  { id: 'w2', slug: 'nuits-blanches', title: 'Nuits Blanches', cover: 'https://cdn/x.jpg', count: 1, artistName: 'Léo Sato' },
+  { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", cover: null, count: 3, artistName: 'Yuki Moreau', likeCount: 1200 },
+  { id: 'w2', slug: 'nuits-blanches', title: 'Nuits Blanches', cover: 'https://cdn/x.jpg', count: 1, artistName: 'Léo Sato', likeCount: 4 },
 ];
 
 describe('CollectionCardsGrid (DR-12 iter2 FE-8)', () => {
@@ -30,6 +30,14 @@ describe('CollectionCardsGrid (DR-12 iter2 FE-8)', () => {
     expect(screen.getByText('3 illustrations · collection')).toBeInTheDocument();
     // singular
     expect(screen.getByText('1 illustration · collection')).toBeInTheDocument();
+  });
+
+  it('shows each collection\'s ♥ like count (consistent with the Catalogue/Galerie cards)', () => {
+    render(<CollectionCardsGrid state="ready" items={cards} onRetry={() => {}} />);
+    // formatLikeCount(1200) -> "1,2k"; accessible label spells out "j'aime".
+    expect(screen.getByText('1,2k')).toBeInTheDocument();
+    expect(screen.getByLabelText("1,2k j'aime")).toBeInTheDocument();
+    expect(screen.getByLabelText("4 j'aime")).toBeInTheDocument();
   });
 
   it('shows the empty state "Aucune collection"', () => {

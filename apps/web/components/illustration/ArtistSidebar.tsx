@@ -30,6 +30,8 @@ export default function ArtistSidebar({
   license,
   more,
   account,
+  editAction,
+  belowDetails,
 }: {
   artist: IllustrationArtist;
   categoryLabel: string;
@@ -39,6 +41,11 @@ export default function ArtistSidebar({
   license: string;
   more: GalleryIllustrationCard[];
   account: AccountSummary | null;
+  /** DR-12 (2026-07-09): owner-only illustration-edit action rendered INSIDE the Détails card. */
+  editAction?: React.ReactNode;
+  /** DR-12 (2026-07-09): content slotted directly UNDER Détails, above "Plus de cet·te artiste"
+   *  (the Collections box). */
+  belowDetails?: React.ReactNode;
 }) {
   const { trigger, notice } = usePersonalAction(account);
 
@@ -188,7 +195,10 @@ export default function ArtistSidebar({
             </div>
           ))}
         </div>
+        {editAction && <div style={{ marginTop: 14 }}>{editAction}</div>}
       </div>
+
+      {belowDetails}
 
       {more.length > 0 && (
         <div style={sidebarCard}>

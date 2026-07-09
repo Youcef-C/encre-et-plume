@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ReactionsService } from './reactions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 
 /**
  * Interactive $transaction mock (mirrors account-erasure.processor.spec.ts's tx pattern):
@@ -89,7 +90,10 @@ describe('ReactionsService', () => {
       favorite: makeModel(),
       watchlistItem: makeModel(),
     };
-    service = new ReactionsService(prisma as unknown as PrismaService);
+    service = new ReactionsService(
+      prisma as unknown as PrismaService,
+      { del: jest.fn().mockResolvedValue(undefined), delByPattern: jest.fn().mockResolvedValue(undefined) } as unknown as RedisService,
+    );
   });
 
   describe('toggle — work', () => {

@@ -200,8 +200,8 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
     await expect(page).toHaveURL(/category=collections/);
     const seededCard = page.getByRole('link', { name: /Carnet d.Encre/ });
     await expect(seededCard).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('3 illustrations · collection')).toBeVisible();
-    await expect(page.getByText('Yuki Moreau').first()).toBeVisible();
+    await expect(seededCard.getByText('3 illustrations · collection')).toBeVisible();
+    await expect(seededCard.getByText('Yuki Moreau').first()).toBeVisible();
 
     // Create a fresh collection with a unique hashtag (via the publish-flow's inline creator —
     // the POST fires on "Créer la collection", independent of finishing the publish).
@@ -227,7 +227,7 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
     await expect(seededCard).toHaveCount(0);
   });
 
-  test('E7: a published illustration is hashtag-searchable, and its hashtags can be edited from the "Collections" panel', async ({ page }) => {
+  test('E7: a published illustration is hashtag-searchable, and its hashtags can be edited from the illustration edit form', async ({ page }) => {
     await loginAsYuki(page);
     await page.goto('/creer/illustration');
     await page.getByLabel('Titre', { exact: true }).fill(hashtagIllustrationTitle);
@@ -245,16 +245,19 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
     await page.keyboard.press('Enter');
     await expect(page.getByText(hashtagIllustrationTitle)).toBeVisible({ timeout: 10_000 });
 
-    // Owner edits the hashtags from the "Collections" panel's "Modifier" (exact label — distinct
-    // from the FE-13 "Modifier l'illustration" full-edit button).
+    // Owner edits the hashtags from the FE-13 shared `EditIllustrationForm` (the illustration
+    // Collections box is display-only post-DR-12-follow-up — hashtags are owned solely by this form).
     await page.goto(detailUrl);
     await expect(page.getByRole('heading', { level: 1, name: hashtagIllustrationTitle })).toBeVisible({ timeout: 10_000 });
     const newHashtag = `${uniqueHashtag}bis`;
-    await page.getByRole('button', { name: 'Modifier', exact: true }).click();
-    await page.getByRole('button', { name: `Retirer #${uniqueHashtag}` }).click();
-    await page.getByLabel('Hashtags', { exact: true }).fill(`#${newHashtag}`);
-    await page.getByLabel('Hashtags', { exact: true }).press(' ');
-    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await page.getByRole('button', { name: "Modifier l'illustration" }).click();
+    const dialog = page.getByRole('dialog', { name: /Modifier l.illustration/ });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: `Retirer #${uniqueHashtag}` }).click();
+    await dialog.getByLabel('Hashtags', { exact: true }).fill(`#${newHashtag}`);
+    await dialog.getByLabel('Hashtags', { exact: true }).press(' ');
+    await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 10_000 });
     await expect(page.getByText(`#${newHashtag}`)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(`#${uniqueHashtag}`, { exact: true })).toHaveCount(0);
   });
@@ -462,5 +465,32 @@ test.describe('DR-12 E10-E13 — catalogue entry, owner edit, manage-view edit, 
     await page.getByRole('button', { name: /Modifier le profil/i }).click({ timeout: 8_000 });
     await expect(page.getByText('Glissez une image ou cliquez pour choisir')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole('button', { name: 'Changer' })).toHaveCount(0);
+  });
+
+  test('E14: deleting an illustration goes through an on-brand alertdialog confirm (no window.confirm) and redirects to /galerie', async ({ page }) => {
+    await loginAsYuki(page);
+    // Throwaway illustration created directly via the API (mediaId optional) — no upload needed.
+    const createRes = await page.request.post('http://localhost:3001/illustrations', {
+      data: { title: `QA Delete Illustration ${ts}`, category: 'personnages' },
+    });
+    expect(createRes.ok()).toBe(true);
+    const { id } = (await createRes.json()) as { id: string };
+
+    await page.goto(`/illustration/${id}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: "Modifier l'illustration" }).click();
+    const editDialog = page.getByRole('dialog', { name: /Modifier l.illustration/ });
+    await expect(editDialog).toBeVisible();
+    // QA finding: the button's own text uses a CURLY apostrophe ("Supprimer l’illustration") while
+    // the confirm alertdialog's aria-label uses a STRAIGHT one ("Supprimer l'illustration") — same
+    // real copy/a11y inconsistency already noted for "Modifier l'illustration" (see E11 above).
+    await editDialog.getByRole('button', { name: /Supprimer l.illustration/ }).click();
+
+    const confirmDialog = page.getByRole('alertdialog', { name: "Supprimer l'illustration" });
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByRole('button', { name: 'Supprimer' }).click();
+
+    await expect(page).toHaveURL('/galerie', { timeout: 10_000 });
   });
 });

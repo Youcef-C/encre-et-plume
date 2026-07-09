@@ -18,6 +18,7 @@ import ChapterList from './ChapterList';
 import PlancheGrid from './PlancheGrid';
 import ReviewsSection from './ReviewsSection';
 import { TeamSidebar, DetailsSidebar, SupportCard, FundingGoals } from './Sidebar';
+import ShareReportBox from './ShareReportBox';
 
 type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
@@ -173,6 +174,7 @@ export default function OeuvreClient({ slug }: { slug: string }) {
         </div>
 
         <aside className="ep-oeuvre-aside" style={{ width: 288, flex: 'none' }}>
+          <ShareReportBox account={account} />
           <TeamSidebar team={work.team} account={account} />
           <DetailsSidebar
             format={work.format}

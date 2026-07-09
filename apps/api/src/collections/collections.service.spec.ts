@@ -322,6 +322,7 @@ describe('CollectionsService', () => {
       slug: 'carnet-d-encre',
       title: "Carnet d'Encre",
       coverImage: 'http://cdn/cover.webp',
+      likeCount: 42,
       creators: [{ order: 0, account: { displayName: 'Yuki Moreau' } }],
       _count: { collectionItems: 3 },
       ...o,
@@ -346,6 +347,7 @@ describe('CollectionsService', () => {
         cover: 'http://cdn/cover.webp',
         count: 3,
         artistName: 'Yuki Moreau',
+        likeCount: 42,
       });
     });
 
@@ -357,6 +359,12 @@ describe('CollectionsService', () => {
         { title: { contains: 'yuki', mode: 'insensitive' } },
         { creators: { some: { account: { displayName: { contains: 'yuki', mode: 'insensitive' } } } } },
       ]);
+    });
+
+    it('artist filters by EXACT creator slug (Account.profileSlug)', async () => {
+      await service.findCollections({ artist: 'yuki-moreau', tags: [], genre: [], page: 1 });
+      const and = prisma.work.findMany.mock.calls[0][0].where.AND;
+      expect(and).toContainEqual({ creators: { some: { account: { profileSlug: 'yuki-moreau' } } } });
     });
 
     it('genre matches Work.genre OR themes via fr labels', async () => {

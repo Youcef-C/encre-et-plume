@@ -19,7 +19,42 @@ type Props = {
   onRetry: () => void;
   /** True once the chapter list has loaded and is empty — a legitimate state, not an error. */
   noChapters?: boolean;
+  /** Page-turn handlers (goPrev/goNext) — same ones the arrows/keys use, so they already carry the
+   *  spread step. When both are given, transparent left/right click zones overlay the page area. */
+  onPrev?: () => void;
+  onNext?: () => void;
 };
+
+// Transparent left/right click zones over the page area. Clicking a physical side maps to
+// prev/next per reading direction (LTR: right→next, RTL: left→next), then defers entirely to
+// onPrev/onNext — so a 2-page spread advances by the spread without the zones knowing the step.
+// A center gap is left so on-image captions/controls aren't hijacked. aria-hidden + non-focusable:
+// keyboard users already page with the arrow keys and the slider (ReaderNav), so these would only
+// add duplicate, image-covering focus stops.
+// Bottom inset so the zones stop short of the fullscreen ImmersiveBar's bottom strip — its
+// controls (exit + prev/next) stay clickable even inside a stacking context that would trap the
+// bar's higher z-index. Harmless in the normal reader (that bottom margin is empty page gutter).
+const ZONE_BOTTOM_INSET = 72;
+
+function PageTurnZones({ direction, onPrev, onNext }: { direction: ReadingDirection; onPrev: () => void; onNext: () => void }) {
+  const leftTurn = direction === 'rtl' ? onNext : onPrev;
+  const rightTurn = direction === 'rtl' ? onPrev : onNext;
+  const zone = (side: 'left' | 'right'): React.CSSProperties => ({
+    position: 'absolute',
+    top: 0,
+    bottom: ZONE_BOTTOM_INSET,
+    [side]: 0,
+    width: '42%',
+    zIndex: 5,
+    cursor: 'pointer',
+  });
+  return (
+    <>
+      <div aria-hidden="true" data-testid="page-turn-left" onClick={leftTurn} style={zone('left')} />
+      <div aria-hidden="true" data-testid="page-turn-right" onClick={rightTurn} style={zone('right')} />
+    </>
+  );
+}
 
 // Story update (2026-07-04): manga pages are forced to a fixed manga page ratio (~2:3 portrait);
 // roman prose pages to A4 (1:√2). Both use the same CSS technique - `aspect-ratio` with `width`/
@@ -225,7 +260,7 @@ function RomanPages({
   );
 }
 
-export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, direction, onRetry, noChapters }: Props) {
+export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, direction, onRetry, noChapters, onPrev, onNext }: Props) {
   // A work without any chapter is a normal state, not an error (owner rule: error messages
   // are for errors only).
   if (noChapters) {
@@ -271,9 +306,18 @@ export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesSta
     return <div aria-hidden="true" style={{ width: 260, height: 340 }} />;
   }
 
-  if (pagesData.readMode === 'prose') {
-    return <RomanPages chapterNumber={chapterNumber} chapterTitle={chapterTitle} prose={pagesData.prose} page={page} spreadMode={spreadMode} direction={direction} />;
-  }
+  const content =
+    pagesData.readMode === 'prose' ? (
+      <RomanPages chapterNumber={chapterNumber} chapterTitle={chapterTitle} prose={pagesData.prose} page={page} spreadMode={spreadMode} direction={direction} />
+    ) : (
+      <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} direction={direction} />
+    );
 
-  return <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} direction={direction} />;
+  if (!onPrev || !onNext) return content;
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {content}
+      <PageTurnZones direction={direction} onPrev={onPrev} onNext={onNext} />
+    </div>
+  );
 }

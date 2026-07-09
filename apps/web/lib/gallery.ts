@@ -20,7 +20,7 @@ import {
 // DR-12 iter2 (FE-8, D10): the "Collections" chip is an FE view mode, NOT a GalleryCategoryKey — it
 // must never enter the shared category vocabulary (the BE allowlist would drop it, and it can't leak
 // into POST /illustrations). We carry it as `collectionsMode` and serialize it as category=collections.
-export type GalerieFilters = GalleryQuery & { collectionsMode?: boolean };
+export type GalerieFilters = GalleryQuery & { collectionsMode?: boolean; artist?: string };
 
 /** Sentinel URL value for the Collections view mode (kept out of GalleryCategoryKey). */
 export const COLLECTIONS_CHIP_KEY = 'collections' as const;
@@ -34,6 +34,7 @@ export const EMPTY_GALLERY_FILTERS: GalerieFilters = {
   page: 1,
   collection: undefined,
   collectionsMode: false,
+  artist: undefined,
 };
 
 /** Chip row order: "Tout" (undefined = no filter), the 5 canonical categories, then "Collections". */
@@ -68,8 +69,10 @@ export function parseGalleryFilters(params: URLSearchParams): GalerieFilters {
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : 1;
   // DR-12: opaque collection Work id — filters the grid to that collection's members.
   const collection = params.get('collection')?.trim() || undefined;
+  // 2026-07-10: creator slug (Account.profileSlug) — used by the Collections view to show a user's collections.
+  const artist = params.get('artist')?.trim() || undefined;
 
-  return { q, tags, genre, category, tri, page, collection, collectionsMode };
+  return { q, tags, genre, category, tri, page, collection, collectionsMode, artist };
 }
 
 /** Serialize GalerieFilters back into a URLSearchParams — omits defaults so shared/empty URLs stay clean. */
@@ -83,5 +86,6 @@ export function filtersToGalleryQuery(filters: GalerieFilters): URLSearchParams 
   if (filters.tri !== 'tendance') params.set('tri', filters.tri);
   if (filters.page !== 1) params.set('page', String(filters.page));
   if (filters.collection) params.set('collection', filters.collection);
+  if (filters.artist) params.set('artist', filters.artist);
   return params;
 }

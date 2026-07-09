@@ -131,11 +131,27 @@ describe('ManageCollectionClient (DR-12 V4)', () => {
     // Seeded chip is present, then add another.
     expect(await screen.findByText('#encre')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Hashtags'), 'noir ');
-    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await user.click(screen.getByRole('button', { name: 'Sauvegarder' }));
 
     await waitFor(() => expect(api.updateCollection).toHaveBeenCalled());
     const body = (api.updateCollection as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(body.hashtags).toEqual(['encre', 'noir']);
+  });
+
+  it('"Annuler" restores the last-saved info values without persisting (DR-12 Task C)', async () => {
+    const user = userEvent.setup();
+    renderManage();
+
+    const titleInput = (await screen.findByLabelText('Titre')) as HTMLInputElement;
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Titre modifié');
+    expect(titleInput.value).toBe('Titre modifié');
+
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+
+    // Nothing persisted, and the field is restored to the loaded value.
+    expect(api.updateCollection).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Titre') as HTMLInputElement).value).toBe("Carnet d'Encre");
   });
 
   it('renders the persistent cover box as one frame with the label hidden, no separate preview box (DR-12 iter3 FE-15/D23)', async () => {

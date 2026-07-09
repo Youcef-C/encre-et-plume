@@ -374,6 +374,8 @@ export default function Reader({ slug }: { slug: string }) {
               direction={readingDirection}
               onRetry={() => setPagesRetryKey((k) => k + 1)}
               noChapters={chaptersLoaded && chapters.length === 0}
+              onPrev={goPrev}
+              onNext={goNext}
             />
             {!showAgeGate && paywallChapter && (
               <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />
@@ -412,6 +414,7 @@ export default function Reader({ slug }: { slug: string }) {
             currentChapterNumber={chapterNumber}
             onLoadChapter={loadChapter}
             onOpenPaywall={openPaywall}
+            onToggleDirection={() => changeDirection(readingDirection === 'rtl' ? 'ltr' : 'rtl')}
             onExitFullscreen={toggleFullscreen}
           />
         </>
@@ -470,6 +473,8 @@ export default function Reader({ slug }: { slug: string }) {
                   direction={readingDirection}
                   onRetry={() => setPagesRetryKey((k) => k + 1)}
                   noChapters={chaptersLoaded && chapters.length === 0}
+                  onPrev={goPrev}
+                  onNext={goNext}
                 />
                 {!showAgeGate && paywallChapter && (
                   <Paywall chapter={paywallChapter} workSlug={slug} onClose={() => setPaywallChapter(null)} />

@@ -271,6 +271,16 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--ink);
   transition: background 0.12s, color 0.12s;
 }
+/* "Voir tout" style link — ink by default, turns red (accent) on hover/focus. */
+.ep-voir-tout {
+  color: var(--ink2);
+  text-decoration: none;
+  transition: color 0.12s;
+}
+.ep-voir-tout:hover,
+.ep-voir-tout:focus-visible {
+  color: var(--accent);
+}
 .ep-nav-link:hover,
 .ep-nav-link[aria-current="page"] {
   background: var(--accent);
@@ -1046,4 +1056,36 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+/* DR-12 — selectable collection row (ManageCollectionsModal): hover lift on the on-brand card. */
+.ep-pick-row {
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.ep-pick-row:hover {
+  box-shadow: 2px 2px 0 var(--shadow);
+  transform: translate(-1px, -1px);
+}
+
+/* DR-12 — horizontal scroll strip (Collections carousel): on-brand hidden scrollbar. The strip
+   stays keyboard/tab focusable (tabindex=0) so it's reachable without the bar. */
+.ep-hscroll {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge */
+}
+.ep-hscroll::-webkit-scrollbar {
+  display: none; /* WebKit/Blink */
+}
+.ep-hscroll:active {
+  cursor: grabbing;
+}
+
+/* DR-12 — Collections carousel prev/next arrows: hard-offset press feedback. */
+.ep-carousel-arrow:not(:disabled):hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.ep-carousel-arrow:not(:disabled):active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--shadow);
 }

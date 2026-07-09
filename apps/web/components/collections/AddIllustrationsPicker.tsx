@@ -128,7 +128,9 @@ export default function AddIllustrationsPicker({
           </button>
         </div>
 
-        <div style={{ padding: '14px 18px', overflowY: 'auto' }}>
+        {/* flex:1 + minHeight:0 make this the scroll container (else a long list overflows the dialog,
+            pushing the footer off-screen and leaving lower rows unreachable — QA-found bug). */}
+        <div style={{ flex: 1, minHeight: 0, padding: '14px 18px', overflowY: 'auto' }}>
           {/* Create-and-add: publish a brand-new illustration straight into this collection. */}
           <button
             type="button"

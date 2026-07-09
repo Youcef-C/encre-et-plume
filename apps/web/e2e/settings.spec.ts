@@ -314,10 +314,10 @@ for (const vp of VIEWPORTS) {
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 2);
 
-    // Nav is visible with all 6 links reachable (wraps at mobile widths, no overflow)
+    // Nav is visible with all 7 links reachable (wraps at mobile widths, no overflow)
     const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole('link')).toHaveCount(6);
+    await expect(nav.getByRole('link')).toHaveCount(7);
 
     // Tap targets: nav links stay >= 40px tall (44px target, small tolerance) at mobile
     if (vp.width === 375) {
@@ -326,7 +326,7 @@ for (const vp of VIEWPORTS) {
     }
 
     // Sections are all reachable (present in the DOM)
-    for (const id of ['notifications', 'cookies', 'securite', 'contenu-adulte', 'comptes-bloques', 'mes-donnees']) {
+    for (const id of ['notifications', 'confidentialite', 'cookies', 'securite', 'contenu-adulte', 'comptes-bloques', 'mes-donnees']) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
 

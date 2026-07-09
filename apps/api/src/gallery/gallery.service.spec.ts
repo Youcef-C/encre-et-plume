@@ -34,11 +34,11 @@ const EMPTY_QUERY: GalleryQuery = { q: undefined, tags: [], genre: [], category:
 describe('GalleryService', () => {
   let service: GalleryService;
   let prisma: {
-    illustration: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    illustration: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock };
     illustrationCollection: { findMany: jest.Mock };
     account: { findUnique: jest.Mock };
   };
-  let redis: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
+  let redis: { get: jest.Mock; set: jest.Mock; del: jest.Mock; delByPattern: jest.Mock };
   let collections: { assertCreator: jest.Mock; assertOwnsCollections: jest.Mock; appendMembership: jest.Mock };
   let media: { getForOwner: jest.Mock };
 
@@ -51,11 +51,12 @@ describe('GalleryService', () => {
         findUnique: jest.fn().mockResolvedValue({ artistId: 'acc1' }),
         create: jest.fn().mockResolvedValue({ id: 'newIllu1' }),
         update: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
       },
       illustrationCollection: { findMany: jest.fn().mockResolvedValue([]) },
       account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Yuki Moreau' }) },
     };
-    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined), del: jest.fn().mockResolvedValue(undefined) };
+    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined), del: jest.fn().mockResolvedValue(undefined), delByPattern: jest.fn().mockResolvedValue(undefined) };
     collections = {
       assertCreator: jest.fn().mockResolvedValue(undefined),
       assertOwnsCollections: jest.fn().mockResolvedValue(undefined),
@@ -496,10 +497,10 @@ describe('GalleryService', () => {
   describe('getIllustration collections (DR-12)', () => {
     it('maps membership rows to CollectionRef chips', async () => {
       prisma.illustration.findFirst.mockResolvedValue(
-        ILLUSTRATION_ROW({ collections: [{ work: { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre" } }] }),
+        ILLUSTRATION_ROW({ collections: [{ work: { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", coverImage: null } }] }),
       );
       const result = await service.getIllustration('i1');
-      expect(result?.collections).toEqual([{ id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre" }]);
+      expect(result?.collections).toEqual([{ id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", cover: null }]);
     });
 
     it('defaults collections to an empty array', async () => {
@@ -565,6 +566,26 @@ describe('GalleryService', () => {
   });
 
   // BE-9 (J9): PATCH /illustrations/:id — owner-only partial edit of the illustration itself.
+  describe('deleteIllustration (2026-07-09)', () => {
+    it('owner: deletes the illustration', async () => {
+      prisma.illustration.findUnique.mockResolvedValue({ artistId: 'acc1' });
+      prisma.illustrationCollection.findMany.mockResolvedValue([{ work: { slug: 'carnet' } }]);
+      await service.deleteIllustration('acc1', 'i1');
+      expect(prisma.illustration.delete).toHaveBeenCalledWith({ where: { id: 'i1' } });
+    });
+
+    it('non-owner: uniform 404 and no delete', async () => {
+      prisma.illustration.findUnique.mockResolvedValue({ artistId: 'other' });
+      await expect(service.deleteIllustration('acc1', 'i1')).rejects.toThrow('Illustration introuvable');
+      expect(prisma.illustration.delete).not.toHaveBeenCalled();
+    });
+
+    it('missing: uniform 404', async () => {
+      prisma.illustration.findUnique.mockResolvedValue(null);
+      await expect(service.deleteIllustration('acc1', 'i1')).rejects.toThrow('Illustration introuvable');
+    });
+  });
+
   describe('updateIllustration (DR-6/DR-12 · BE-9)', () => {
     beforeEach(() => {
       prisma.illustration.findUnique.mockResolvedValue({ artistId: 'acc1', publishedAt: new Date('2026-06-01') });

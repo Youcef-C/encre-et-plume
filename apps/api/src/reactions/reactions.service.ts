@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { ReactionKind, ReactionStateResponse, ReactionTargetType, ReactionToggleRequest, ReactionToggleResponse } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 
 // ponytail: interactive-transaction row model shape covering just what toggle() needs from
 // each Prisma delegate (create/deleteMany/update/count) — narrower than the full PrismaClient,
@@ -31,10 +32,13 @@ function isUniqueViolation(err: unknown): boolean {
  */
 @Injectable()
 export class ReactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   async toggle(accountId: string, kind: ReactionKind, on: boolean, target: ReactionToggleRequest): Promise<ReactionToggleResponse> {
-    return this.prisma.$transaction(async (tx) => {
+    const res = await this.prisma.$transaction(async (tx) => {
       const t = tx as unknown as typeof this.prisma;
 
       if (target.targetType === 'work') {
@@ -68,6 +72,19 @@ export class ReactionsService {
 
       throw new NotFoundException('Cible introuvable');
     });
+
+    // Reflect the new like/favorite count in the cached lists immediately (a like on the detail page
+    // must show on the Galerie/Catalogue on next fetch, not at the 60s TTL).
+    // ponytail: this drops the whole list-cache namespace on every toggle — fine at current scale;
+    // if like throughput dominates, move likeCount out of the cached payload or use a per-row cache.
+    if (target.targetType === 'illustration') {
+      await this.redis.delByPattern('gallery:list:*');
+    } else if (target.targetType === 'work') {
+      await this.redis.del(`work:${target.targetId}`);
+      await this.redis.delByPattern('catalog:list:*');
+      await this.redis.delByPattern('collections:list:*'); // collections are Illustration(s) Works
+    }
+    return res;
   }
 
   async getState(accountId: string, targetType: ReactionTargetType, ids: string[]): Promise<ReactionStateResponse> {

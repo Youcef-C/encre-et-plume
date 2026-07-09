@@ -32,7 +32,7 @@ export default function LikeCard({ item, onRemove }: { item: LikedWorkDto; onRem
             style={{
               position: 'absolute',
               top: 9,
-              right: 9,
+              left: 9, // ♥ badge top-left; the remove ✕ takes the top-right (consistent across cards/tabs).
               width: 26,
               height: 26,
               borderRadius: '50%',
@@ -67,7 +67,7 @@ export default function LikeCard({ item, onRemove }: { item: LikedWorkDto; onRem
         style={{
           position: 'absolute',
           top: 9,
-          left: 9,
+          right: 9,
           zIndex: 3,
           width: 26,
           height: 26,

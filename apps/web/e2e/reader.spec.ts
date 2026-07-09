@@ -668,20 +668,21 @@ test.describe('DR-4 sens de lecture (reading direction)', () => {
   test('Roman stays LTR by default (per-work default, no cross-work leak) (AC5)', async ({ page }) => {
     await mockRomanFeeds(page);
     await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
-    const group = page.getByRole('group', { name: 'Sens de lecture' });
-    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+    const dirSwitch = page.getByRole('button', { name: /Sens de lecture/ });
+    await expect(dirSwitch).toHaveAttribute('aria-pressed', 'false');
+    await expect(dirSwitch).toHaveAccessibleName(/gauche à droite/);
     const slider = page.getByRole('slider');
     await expect(slider).toHaveAttribute('dir', 'ltr');
     await page.keyboard.press('ArrowRight');
     await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 2');
   });
 
-  test('responsive: the "Sens de lecture" group wraps without overflow at 375/768/1280 (regression: reader flex-wrap)', async ({ page }) => {
+  test('responsive: the "Sens de lecture" switch wraps without overflow at 375/768/1280 (regression: reader flex-wrap)', async ({ page }) => {
     await mockMangaFeeds(page);
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/lecteur/lames-de-brume?chapitre=1');
-      await expect(page.getByRole('group', { name: 'Sens de lecture' })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Sens de lecture/ })).toBeVisible();
       const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
       expect(hasOverflow).toBe(false);
     }

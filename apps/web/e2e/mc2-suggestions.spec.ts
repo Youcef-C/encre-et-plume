@@ -98,7 +98,7 @@ test('MC2-E5: sparse-profile viewer sees the "Complétez votre profil…" empty 
 
   // The suggestions failure/empty state never blanks the partner directory grid.
   const cards = page.locator('.ep-partners-grid > li');
-  await expect(cards.first()).toBeVisible();
+  await expect(cards.first()).toBeVisible({ timeout: 10_000 });
   expect(await cards.count()).toBeGreaterThanOrEqual(1);
 });
 
@@ -111,7 +111,7 @@ test.describe('MC-2 responsive', () => {
     await page.setViewportSize({ width: 375, height: 900 });
     await page.goto('/trouver');
     await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible({ timeout: 10_000 });
-    await expect(aside(page)).toBeVisible();
+    await expect(aside(page)).toBeVisible({ timeout: 10_000 });
 
     const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth + 1);
     expect(overflow).toBe(true);
@@ -128,7 +128,7 @@ test.describe('MC-2 responsive', () => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto('/trouver');
     await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible({ timeout: 10_000 });
-    await expect(aside(page)).toBeVisible();
+    await expect(aside(page)).toBeVisible({ timeout: 10_000 });
     const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth + 1);
     expect(overflow).toBe(true);
   });

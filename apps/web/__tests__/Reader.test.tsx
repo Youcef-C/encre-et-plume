@@ -221,16 +221,15 @@ describe('Reader (DR-4 FE-1)', () => {
     render(<Reader slug="lames-de-brume" />);
     await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
     const placeholder = screen.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' });
-    const pageCard = placeholder.parentElement as HTMLElement;
-    const wrapper = pageCard.parentElement as HTMLElement;
-    // Structure: MangaPages wrapper → .ep-reader-stagearea (flex:1, definite height) →
-    // .ep-reader-stagecol (flex:1 1 0). The flex/height values live in globals.css (jsdom
-    // doesn't apply them); real cross-column geometry + page size are verified in
-    // e2e/reader.spec.ts. Here we pin the structural contract that drives that CSS.
-    const stageArea = wrapper.parentElement as HTMLElement;
-    const stageCol = stageArea.parentElement as HTMLElement;
-    expect(stageArea).toHaveClass('ep-reader-stagearea');
-    expect(stageCol).toHaveClass('ep-reader-stagecol');
+    // Structure: MangaPages wrapper → (page-turn-zones relative wrapper, DR-12) → .ep-reader-
+    // stagearea (flex:1, definite height) → .ep-reader-stagecol (flex:1 1 0). The flex/height
+    // values live in globals.css (jsdom doesn't apply them); real cross-column geometry + page
+    // size are verified in e2e/reader.spec.ts. Climb via closest() so the transparent full-size
+    // zones wrapper between MangaPages and the stage area doesn't make the contract brittle.
+    const stageArea = placeholder.closest('.ep-reader-stagearea') as HTMLElement;
+    const stageCol = placeholder.closest('.ep-reader-stagecol') as HTMLElement;
+    expect(stageArea).toBeInTheDocument();
+    expect(stageCol).toBeInTheDocument();
   });
 
   // Story update (2026-07-04, States bullet): the 2-page spread is now ENABLED for roman too

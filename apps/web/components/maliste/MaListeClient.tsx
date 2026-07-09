@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { ListItemDto, LikedWorkDto, LikedIllustrationDto } from '@encre-et-plume/shared';
+import { WORK_FORMAT_ILLUSTRATIONS } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
 import ListCard from './ListCard';
@@ -117,6 +118,29 @@ function EmptyState() {
     >
       <p style={{ color: 'var(--ink2)', fontSize: 15, margin: 0 }}>Votre liste est vide</p>
     </div>
+  );
+}
+
+// DR-12: a labelled sub-section — real landmark (<section aria-labelledby> + <h2 id>). Used for
+// the per-tab split into "Œuvres" / "Collections" / "Illustrations"; only rendered when non-empty.
+function ListSection({
+  id,
+  title,
+  spaced,
+  children,
+}: {
+  id: string;
+  title: string;
+  spaced: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={id} style={{ marginTop: spaced ? 28 : 0 }}>
+      <h2 id={id} style={{ fontSize: 18, textTransform: 'uppercase', margin: '0 0 12px' }}>
+        {title}
+      </h2>
+      <div className="ep-malist-grid">{children}</div>
+    </section>
   );
 }
 
@@ -359,6 +383,15 @@ export default function MaListeClient() {
   const visibleSavedIllustrations = savedIllustrations.filter((r) => !savedIllustrationsPending[r.id]);
   const visibleLikedIllustrations = likedIllustrations.filter((r) => !likedIllustrationsPending[r.id]);
 
+  // DR-12: split each tab's works into "Œuvres" and "Collections" (a collection is a Work with
+  // format 'Illustration(s)'). Both stay `ListItemDto`/`LikedWorkDto`, so the same optimistic
+  // remover + pending map + tab count cover them — only the section + card treatment differs.
+  const isCollectionWork = (r: { format: string }) => r.format === WORK_FORMAT_ILLUSTRATIONS;
+  const listWorks = list.filter((r) => !isCollectionWork(r));
+  const listCollections = list.filter(isCollectionWork);
+  const likeWorks = likes.filter((r) => !isCollectionWork(r));
+  const likeCollections = likes.filter(isCollectionWork);
+
   // A tab's readiness/loading/error combines its work-list fetch with its illustrations fetch —
   // one skeleton, one error+retry, one empty state per tab, not two independently-flickering ones.
   const listPanelLoading = listState === 'loading' || savedIllustrationsState === 'loading';
@@ -458,30 +491,42 @@ export default function MaListeClient() {
             <ErrorRetry message="Impossible de charger votre liste." onRetry={retryList} />
           )}
           {listPanelReady && list.length === 0 && savedIllustrations.length === 0 && <EmptyState />}
-          {listPanelReady && list.length > 0 && (
-            <div className="ep-malist-grid">
-              {list.map((item) =>
+          {listPanelReady && listWorks.length > 0 && (
+            <ListSection id="liste-oeuvres" title="Œuvres" spaced={false}>
+              {listWorks.map((item) =>
                 pending[item.slug] ? (
                   <UndoCell key={item.slug} onUndo={() => listRemover.undo(item.slug)} />
                 ) : (
                   <ListCard key={item.slug} item={item} onRemove={listRemover.request} />
                 ),
               )}
-            </div>
+            </ListSection>
+          )}
+          {listPanelReady && listCollections.length > 0 && (
+            <ListSection id="liste-collections" title="Collections" spaced={listWorks.length > 0}>
+              {listCollections.map((item) =>
+                pending[item.slug] ? (
+                  <UndoCell key={item.slug} onUndo={() => listRemover.undo(item.slug)} />
+                ) : (
+                  <ListCard key={item.slug} item={item} onRemove={listRemover.request} />
+                ),
+              )}
+            </ListSection>
           )}
           {listPanelReady && savedIllustrations.length > 0 && (
-            <div style={{ marginTop: list.length > 0 ? 28 : 0 }}>
-              <h2 style={{ fontSize: 18, textTransform: 'uppercase', margin: '0 0 12px' }}>Illustrations</h2>
-              <div className="ep-malist-grid">
-                {savedIllustrations.map((item) =>
-                  savedIllustrationsPending[item.id] ? (
-                    <UndoCell key={item.id} onUndo={() => savedIllustrationsRemover.undo(item.id)} />
-                  ) : (
-                    <IllustrationListCard key={item.id} item={item} onRemove={savedIllustrationsRemover.request} />
-                  ),
-                )}
-              </div>
-            </div>
+            <ListSection
+              id="liste-illustrations"
+              title="Illustrations"
+              spaced={listWorks.length > 0 || listCollections.length > 0}
+            >
+              {savedIllustrations.map((item) =>
+                savedIllustrationsPending[item.id] ? (
+                  <UndoCell key={item.id} onUndo={() => savedIllustrationsRemover.undo(item.id)} />
+                ) : (
+                  <IllustrationListCard key={item.id} item={item} onRemove={savedIllustrationsRemover.request} />
+                ),
+              )}
+            </ListSection>
           )}
         </div>
       )}
@@ -493,30 +538,42 @@ export default function MaListeClient() {
             <ErrorRetry message="Impossible de charger vos coups de cœur." onRetry={retryLikes} />
           )}
           {likesPanelReady && likes.length === 0 && likedIllustrations.length === 0 && <EmptyState />}
-          {likesPanelReady && likes.length > 0 && (
-            <div className="ep-malist-grid">
-              {likes.map((item) =>
+          {likesPanelReady && likeWorks.length > 0 && (
+            <ListSection id="likes-oeuvres" title="Œuvres" spaced={false}>
+              {likeWorks.map((item) =>
                 likesPending[item.slug] ? (
                   <UndoCell key={item.slug} onUndo={() => likesRemover.undo(item.slug)} />
                 ) : (
                   <LikeCard key={item.slug} item={item} onRemove={likesRemover.request} />
                 ),
               )}
-            </div>
+            </ListSection>
+          )}
+          {likesPanelReady && likeCollections.length > 0 && (
+            <ListSection id="likes-collections" title="Collections" spaced={likeWorks.length > 0}>
+              {likeCollections.map((item) =>
+                likesPending[item.slug] ? (
+                  <UndoCell key={item.slug} onUndo={() => likesRemover.undo(item.slug)} />
+                ) : (
+                  <LikeCard key={item.slug} item={item} onRemove={likesRemover.request} />
+                ),
+              )}
+            </ListSection>
           )}
           {likesPanelReady && likedIllustrations.length > 0 && (
-            <div style={{ marginTop: likes.length > 0 ? 28 : 0 }}>
-              <h2 style={{ fontSize: 18, textTransform: 'uppercase', margin: '0 0 12px' }}>Illustrations</h2>
-              <div className="ep-malist-grid">
-                {likedIllustrations.map((item) =>
-                  likedIllustrationsPending[item.id] ? (
-                    <UndoCell key={item.id} onUndo={() => likedIllustrationsRemover.undo(item.id)} />
-                  ) : (
-                    <IllustrationListCard key={item.id} item={item} onRemove={likedIllustrationsRemover.request} />
-                  ),
-                )}
-              </div>
-            </div>
+            <ListSection
+              id="likes-illustrations"
+              title="Illustrations"
+              spaced={likeWorks.length > 0 || likeCollections.length > 0}
+            >
+              {likedIllustrations.map((item) =>
+                likedIllustrationsPending[item.id] ? (
+                  <UndoCell key={item.id} onUndo={() => likedIllustrationsRemover.undo(item.id)} />
+                ) : (
+                  <IllustrationListCard key={item.id} item={item} onRemove={likedIllustrationsRemover.request} showLikes />
+                ),
+              )}
+            </ListSection>
           )}
         </div>
       )}

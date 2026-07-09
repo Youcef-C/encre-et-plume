@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ListItemDto, LikedWorkDto, LikedIllustrationDto, AccountSummary } from '@encre-et-plume/shared';
+import { WORK_FORMAT_ILLUSTRATIONS } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -49,6 +50,7 @@ const listItems: ListItemDto[] = [
     slug: 'lames-de-brume',
     title: 'Lames de Brume',
     cover: null,
+    format: 'Roman',
     savedAt: '2026-06-01T00:00:00.000Z',
     lastChapterNumber: 5,
     page: 3,
@@ -59,6 +61,7 @@ const listItems: ListItemDto[] = [
     slug: 'onibi',
     title: 'Onibi',
     cover: null,
+    format: 'Roman',
     savedAt: '2026-06-02T00:00:00.000Z',
     lastChapterNumber: null,
     page: null,
@@ -67,9 +70,31 @@ const listItems: ListItemDto[] = [
   },
 ];
 
+const savedCollection: ListItemDto = {
+  slug: 'atelier-encre',
+  title: 'Atelier Encre',
+  cover: null,
+  format: WORK_FORMAT_ILLUSTRATIONS,
+  savedAt: '2026-06-03T00:00:00.000Z',
+  lastChapterNumber: null,
+  page: null,
+  totalChapters: 0,
+  progressPercent: 0,
+};
+
 const likeItems: LikedWorkDto[] = [
-  { slug: 'neon-sutra', title: 'Néon Sutra', cover: null, genre: 'Shōnen', likeCount: 8100, likedAt: '2026-06-01T00:00:00.000Z' },
+  { slug: 'neon-sutra', title: 'Néon Sutra', cover: null, format: 'Roman', genre: 'Shōnen', likeCount: 8100, likedAt: '2026-06-01T00:00:00.000Z' },
 ];
+
+const likedCollection: LikedWorkDto = {
+  slug: 'galerie-fauve',
+  title: 'Galerie Fauve',
+  cover: null,
+  format: WORK_FORMAT_ILLUSTRATIONS,
+  genre: 'Illustration',
+  likeCount: 210,
+  likedAt: '2026-06-04T00:00:00.000Z',
+};
 
 const savedIllustrations: LikedIllustrationDto[] = [
   { id: 'i1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', category: 'process', categoryLabel: 'Process', image: null, likeCount: 3400 },
@@ -234,6 +259,9 @@ describe('MaListeClient (DR-8)', () => {
     const link = screen.getByRole('link', { name: /Pluie de Néons/ });
     expect(link).toHaveAttribute('href', '/illustration/i1');
     expect(screen.queryByText('Votre liste est vide')).not.toBeInTheDocument();
+    // Consistency: the saved tab shows reading-progress (not ♥) on works, so illustration cards
+    // here carry no ♥ like count either.
+    expect(screen.queryByLabelText(/j'aime/)).not.toBeInTheDocument();
   });
 
   it('liked illustrations render under "Coups de cœur" and count toward its tab count', async () => {
@@ -247,6 +275,8 @@ describe('MaListeClient (DR-8)', () => {
     await user.click(screen.getByRole('tab', { name: 'Coups de cœur · 1' }));
     const link = screen.getByRole('link', { name: /Étude d.encre/ });
     expect(link).toHaveAttribute('href', '/illustration/i2');
+    // Consistency with LikeCard: on the Likes tab, illustration cards show the ♥ like count too.
+    expect(screen.getByLabelText(/j'aime/)).toBeInTheDocument();
   });
 
   // ── Coordinator follow-up: illustration remove/unlike, mirroring the work cards ──
@@ -316,6 +346,62 @@ describe('MaListeClient (DR-8)', () => {
       expect(api.unlikeReaction).toHaveBeenCalledWith({ targetType: 'illustration', targetId: 'i2' }),
     );
     expect(screen.getByRole('tab', { name: 'Coups de cœur · 0' })).toBeInTheDocument();
+  });
+
+  // ── DR-12: Collections split (a Collection is a Work with format 'Illustration(s)') ──
+
+  it('Ma liste: saved works render under "Œuvres" and saved collections under "Collections", linking to /oeuvre/:slug with no chapter progress', async () => {
+    vi.mocked(api.getMyList).mockResolvedValue([listItems[0], savedCollection]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.getSavedIllustrations).mockResolvedValue([]);
+    vi.mocked(api.getLikedIllustrations).mockResolvedValue([]);
+    renderClient();
+    await waitFor(() => expect(screen.getByText('Atelier Encre')).toBeInTheDocument());
+
+    expect(screen.getByRole('heading', { name: 'Œuvres' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+
+    // The regular work still reads/links into the reader with its progress bar.
+    expect(screen.getByText('Reprendre · Ch. 5 / 12')).toBeInTheDocument();
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1);
+
+    // The collection links to the Œuvre page and shows no chapter-progress text.
+    const link = screen.getByRole('link', { name: /Atelier Encre/ });
+    expect(link).toHaveAttribute('href', '/oeuvre/atelier-encre');
+    expect(link).not.toHaveTextContent('Pas commencé');
+  });
+
+  it('Coups de cœur: liked collections render under a "Collections" heading and link to /oeuvre/:slug', async () => {
+    vi.mocked(api.getMyList).mockResolvedValue([]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([likeItems[0], likedCollection]);
+    const user = userEvent.setup();
+    renderClient();
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Coups de cœur · 2' })).toBeInTheDocument());
+    await user.click(screen.getByRole('tab', { name: 'Coups de cœur · 2' }));
+
+    expect(screen.getByRole('heading', { name: 'Œuvres' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Collections' })).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /Galerie Fauve/ });
+    expect(link).toHaveAttribute('href', '/oeuvre/galerie-fauve');
+  });
+
+  it('Ma liste: a saved collection can still be removed like a work (unsaveReaction with its slug)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(api.getMyList).mockResolvedValue([savedCollection]);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    vi.mocked(api.unsaveReaction).mockResolvedValue({ active: false, count: 0 });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderClient();
+    await waitFor(() => expect(screen.getByText('Atelier Encre')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Retirer de ma liste' }));
+    expect(screen.queryByText('Atelier Encre')).not.toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    await waitFor(() =>
+      expect(api.unsaveReaction).toHaveBeenCalledWith({ targetType: 'work', targetId: 'atelier-encre' }),
+    );
   });
 
   it('shows an error state with a working "Réessayer" retry', async () => {

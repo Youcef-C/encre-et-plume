@@ -79,6 +79,16 @@ describe('OeuvreClient (DR-3 FE-1)', () => {
     expect(screen.getByText('ÉQUIPE CRÉATIVE')).toBeInTheDocument();
   });
 
+  it('renders Partager/Signaler above the ÉQUIPE CRÉATIVE box (DR-3 2026-07-09)', async () => {
+    mockReady();
+    render(<OeuvreClient slug="lames-de-brume" />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeInTheDocument());
+    const partager = screen.getByRole('button', { name: /Partager/ });
+    expect(screen.getByRole('button', { name: /Signaler/ })).toBeInTheDocument();
+    const team = screen.getByText('ÉQUIPE CRÉATIVE');
+    expect(partager.compareDocumentPosition(team) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('shows a 404 view for an unknown slug', async () => {
     vi.mocked(api.getWork).mockRejectedValue({ statusCode: 404, message: 'Œuvre introuvable' });
     vi.mocked(api.getWorkChapters).mockResolvedValue(chapters);

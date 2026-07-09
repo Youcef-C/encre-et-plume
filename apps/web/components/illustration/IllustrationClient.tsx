@@ -142,18 +142,6 @@ export default function IllustrationClient({ id }: { id: string }) {
         <div>
           <IllustrationViewer detail={detail} account={account} />
           <IllustrationMeta detail={detail} />
-          {isOwner && (
-            <div style={{ marginBottom: 18 }}>
-              <button
-                type="button"
-                onClick={() => setEditOpen(true)}
-                aria-label="Modifier l'illustration"
-                style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 14px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)', boxShadow: '3px 3px 0 var(--shadow)' }}
-              >
-                Modifier
-              </button>
-            </div>
-          )}
           {isOwner && editOpen && (
             <EditIllustrationForm
               detail={detail}
@@ -164,11 +152,6 @@ export default function IllustrationClient({ id }: { id: string }) {
               }}
             />
           )}
-          <IllustrationCollections
-            detail={detail}
-            account={account}
-            onHashtagsChange={(hashtags) => setDetail((d) => (d ? { ...d, hashtags } : d))}
-          />
           <IllustrationComments account={account} />
         </div>
 
@@ -181,6 +164,27 @@ export default function IllustrationClient({ id }: { id: string }) {
           license={detail.license ?? '© Tous droits réservés'}
           more={more}
           account={account}
+          editAction={
+            isOwner ? (
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                aria-label="Modifier l'illustration"
+                style={{ display: 'block', width: '100%', fontSize: 14, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '3px solid var(--ink)', borderRadius: 6, padding: '10px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '4px 4px 0 var(--shadow)' }}
+              >
+                Modifier
+              </button>
+            ) : undefined
+          }
+          belowDetails={
+            <IllustrationCollections
+              detail={detail}
+              account={account}
+              onCollectionsChanged={(collections) =>
+                setDetail((d) => (d ? { ...d, collections } : d))
+              }
+            />
+          }
         />
       </div>
     </>

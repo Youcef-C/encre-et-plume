@@ -50,6 +50,7 @@ export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
 export function parseCollectionsListQuery(raw: RawQuery): CollectionsListQuery {
   return {
     q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined,
+    artist: typeof raw['artist'] === 'string' && raw['artist'] !== '' ? raw['artist'].slice(0, 100) : undefined,
     tags: [
       ...new Set(
         toArray(raw['tags'])

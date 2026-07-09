@@ -12,6 +12,7 @@ import { useSearchParams } from 'next/navigation';
 import { GENRES, type CreatorRole, type CallCard } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
+import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import CallBoardCard from './CallBoardCard';
 import PostCallModal from './PostCallModal';
@@ -131,6 +132,9 @@ export default function AppelsClient() {
     setPage(res.page);
     setTotal(res.total);
   }
+
+  const hasMore = status === 'ready' && items.length < total;
+  const sentinelRef = useInfiniteScroll(loadMore, hasMore);
 
   // Single-select "Je cherche" role filter — click the active chip again to clear (same as /trouver).
   function toggleRole(next: CreatorRole) {
@@ -332,6 +336,8 @@ export default function AppelsClient() {
           </div>
           {items.length < total && (
             <div style={{ textAlign: 'center', marginTop: 24 }}>
+              {/* Auto-load sentinel — fires loadMore on scroll; the button stays as a fallback. */}
+              <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
               <button
                 type="button"
                 onClick={loadMore}

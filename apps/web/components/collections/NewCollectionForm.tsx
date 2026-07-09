@@ -6,6 +6,7 @@
 // A collection is a Work — cover uses the CS-2/F-10 mechanism (UploadControl kind='cover'). Contest
 // and Soutien are thin stored config (D4/D5). Euro inputs are cents on the wire.
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   resolveGenreId,
   type ActiveContest,
@@ -186,13 +187,18 @@ export default function NewCollectionForm({
     }
   }
 
-  return (
+  // Portal to <body> so the overlay escapes any transformed/positioned ancestor stacking context
+  // (the illustration detail page, and — when nested — ManageCollectionsModal) and sits above the
+  // z-index:50 navbar. z-index 100 keeps a clear margin over it.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 80,
+        zIndex: 100,
         background: 'rgba(22,19,15,.55)',
         display: 'flex',
         alignItems: 'center',
@@ -441,6 +447,7 @@ export default function NewCollectionForm({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

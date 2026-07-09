@@ -10,6 +10,7 @@ import type { CatalogWorkCard, TrendingWork, ActiveContest, EditorPickItem, Cata
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { parseFilters, filtersToQuery, EMPTY_FILTERS } from '../../lib/catalog';
+import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import FilterSidebar from './FilterSidebar';
 import ActiveFilters from './ActiveFilters';
 import CatalogGrid, { type CatalogGridState } from './CatalogGrid';
@@ -107,6 +108,9 @@ export default function DecouvrirClient() {
     setTotalPages(res.totalPages);
   }, [facetKey, page]);
 
+  const hasMore = gridState === 'ready' && page < totalPages;
+  const sentinelRef = useInfiniteScroll(loadMore, hasMore);
+
   return (
     <div style={{ maxWidth: 1320, margin: '0 auto', padding: '28px 28px 80px', display: 'flex', gap: 24, alignItems: 'flex-start' }} className="ep-catalog-columns">
       <FilterSidebar filters={filters} onChange={navigate} onReset={() => navigate(EMPTY_FILTERS)} />
@@ -152,8 +156,11 @@ export default function DecouvrirClient() {
           onRetry={() => setRetryKey((k) => k + 1)}
         />
 
-        {gridState === 'ready' && page < totalPages && (
+        {hasMore && (
           <div style={{ textAlign: 'center', marginTop: 24 }}>
+            {/* Auto-load sentinel — the observer fires loadMore when it enters view; the button below
+                stays as an accessible / no-JS fallback. */}
+            <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
             <button
               type="button"
               onClick={loadMore}

@@ -782,6 +782,9 @@ export const updateIllustration = (
     body: JSON.stringify(body),
   });
 
+export const deleteIllustration = (id: string): Promise<void> =>
+  request<void>(`/illustrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

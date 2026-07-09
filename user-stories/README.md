@@ -97,6 +97,7 @@ Project creation, workspace, files, collaborative editor, nemu, arrangement, pub
 - [CS-9](03-creation-studio/CS-9-publish-scheduling-cadence.md) — Publish scheduling & cadence
 - [CS-10](03-creation-studio/CS-10-coauthor-permissions-revenue.md) — Co-author permissions & revenue split *(inferred)*
 - [CS-11](03-creation-studio/CS-11-collaboration-rights-licensing.md) — Collaboration rights & licensing agreement *(inferred)*
+- [CS-12](03-creation-studio/CS-12-projects-dashboard.md) — Projects dashboard "Mes projets" *(mixed)*
 
 ### [04 · Publishing & Engagement](04-publishing-engagement/_epic.md) — `PUB`
 Publish chapters, comments, reviews, follow, share, report, contests, news.

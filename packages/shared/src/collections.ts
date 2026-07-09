@@ -15,6 +15,11 @@ export interface CollectionRef {
   title: string;
 }
 
+/** Ref + cover, no membership count — DR-6 illustration-detail "Collections" sidebar box. */
+export interface CollectionChip extends CollectionRef {
+  cover: string | null; // Work.coverImage, null -> halftone fallback
+}
+
 export interface CollectionSummary extends CollectionRef {
   cover: string | null; // Work.coverImage, null -> halftone fallback
   count: number; // membership row count
@@ -95,12 +100,14 @@ export interface CollectionDetail extends CollectionSummary {
 // iteration 2 — Galerie "Collections" facet (mirrors the DR-5 gallery query shape).
 export interface CollectionsListQuery {
   q?: string; // free text, matches collection title OR artist displayName (insensitive contains)
+  artist?: string; // EXACT creator slug (Account.profileSlug) — a Work-by-creator filter (any work type)
   tags: string[]; // F-22 normalized hashtags, EXACT tokens AND-matched on Work.hashtags (hasEvery)
   genre: string[]; // F-20 vocabulary ids, OR-within (Work.genre OR themes)
   page: number; // 1-based, clamped >= 1
 }
 export interface CollectionCard extends CollectionSummary {
   artistName: string; // first creator's display name
+  likeCount: number; // = Work.likeCount — shown as the ♥ count on the Galerie "Collections" card
 }
 export interface CollectionsListResponse {
   items: CollectionCard[];

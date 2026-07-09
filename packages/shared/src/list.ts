@@ -5,6 +5,7 @@ export interface ListItemDto {
   slug: string;
   title: string;
   cover: string | null; // Work.coverImage; null → CSS halftone placeholder
+  format: string; // Work.format — 'Illustration(s)' marks a Collection (split into its own section)
   savedAt: string; // ISO — WatchlistItem.createdAt
   lastChapterNumber: number | null; // null → "Pas commencé"
   page: number | null; // resume page within lastChapter (deep-link ?page=)
@@ -16,6 +17,7 @@ export interface LikedWorkDto {
   slug: string;
   title: string;
   cover: string | null;
+  format: string; // Work.format — 'Illustration(s)' marks a Collection
   genre: string; // Work.genre fr label
   likeCount: number; // Work.likeCount (app-wide ♥ counter) → "♥ 8,1k" via formatLikes()
   likedAt: string; // ISO — Favorite.createdAt

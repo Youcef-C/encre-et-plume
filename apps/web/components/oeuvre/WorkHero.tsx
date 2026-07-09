@@ -17,7 +17,7 @@ import { usePersonalAction } from '../../lib/usePersonalAction';
 import { useResumePosition } from '../../lib/useResumePosition';
 import { useReaction } from '../../lib/useReaction';
 import * as api from '../../lib/api';
-import { CheckIcon, HeartIcon, StarIcon, PlusIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon, WarningIcon } from '../icons';
+import { CheckIcon, HeartIcon, StarIcon, PlusIcon, FlagIcon, ShieldIcon, BanIcon, WarningIcon } from '../icons';
 import ResumeProgress from './ResumeProgress';
 import InviteModal from '../collab/InviteModal';
 
@@ -238,12 +238,7 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
             >
               Proposer une collab
             </button>
-            <button type="button" onClick={trigger} style={{ ...actionBase, background: 'var(--card)', color: 'var(--ink)', padding: '12px 16px' }}>
-              <ShareIcon size={14} /> Partager
-            </button>
-            <button type="button" onClick={trigger} style={{ ...actionBase, background: 'var(--card)', color: 'var(--ink)', padding: '12px 16px' }}>
-              <FlagIcon size={14} /> Signaler
-            </button>
+            {/* "Partager" / "Signaler" moved to ShareReportBox above the "ÉQUIPE CRÉATIVE" sidebar (2026-07-09). */}
           </div>
 
           {resume && (

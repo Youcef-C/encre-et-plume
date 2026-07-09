@@ -16,6 +16,7 @@ import {
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
+import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import StatusBadge from './StatusBadge';
 
 type Screen = 'loading' | 'ready' | 'empty' | 'error';
@@ -258,6 +259,9 @@ export default function MesCandidaturesClient() {
     setTotalAll(res.totalAll);
   }
 
+  const hasMore = screen === 'ready' && total > items.length;
+  const sentinelRef = useInfiniteScroll(loadMore, hasMore);
+
   // Owner extension: after a successful withdraw, drop the row and adjust the counts locally.
   function handleWithdrawn(id: string) {
     setItems((prev) => {
@@ -393,6 +397,8 @@ export default function MesCandidaturesClient() {
           </ul>
           {total > items.length && (
             <div style={{ textAlign: 'center', marginTop: 24 }}>
+              {/* Auto-load sentinel — fires loadMore on scroll; the button stays as a fallback. */}
+              <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
               <button
                 type="button"
                 onClick={loadMore}

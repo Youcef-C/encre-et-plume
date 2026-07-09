@@ -10,6 +10,7 @@ import { catalogGenreLabel, galleryCategoryLabel } from '@encre-et-plume/shared'
 import type { CollectionCard, GalleryIllustrationCard, GalleryFeatureCard, GalleryPreview, GallerySummary } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS, TRI_LABELS, type GalerieFilters } from '../../lib/gallery';
+import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import GalerieHeader from './GalerieHeader';
 import CategoryChips from './CategoryChips';
 import SortSelect from './SortSelect';
@@ -87,6 +88,7 @@ export default function GalerieClient() {
     (pageNum: number) => {
       const p = new URLSearchParams();
       if (filters.q) p.set('q', filters.q);
+      if (filters.artist) p.set('artist', filters.artist);
       for (const t of filters.tags) p.append('tags', t);
       for (const g of filters.genre) p.append('genre', g);
       if (pageNum > 1) p.set('page', String(pageNum));
@@ -176,6 +178,12 @@ export default function GalerieClient() {
     setCollTotalPages(res.totalPages);
   }, [collectionsQuery, collPage]);
 
+  // Auto-load: one sentinel drives whichever view is active (illustrations grid or Collections view).
+  const hasMore = collectionsMode
+    ? collState === 'ready' && collPage < collTotalPages
+    : gridState === 'ready' && page < totalPages;
+  const sentinelRef = useInfiniteScroll(collectionsMode ? collLoadMore : loadMore, hasMore);
+
   const openQuickPreview = useCallback((id: string) => {
     triggerRef.current = document.activeElement as HTMLElement | null;
     setPreviewId(id);
@@ -247,10 +255,11 @@ export default function GalerieClient() {
         />
       )}
 
-      {(collectionsMode
-        ? collState === 'ready' && collPage < collTotalPages
-        : gridState === 'ready' && page < totalPages) && (
+      {hasMore && (
         <div style={{ textAlign: 'center', marginTop: 24 }}>
+          {/* Auto-load sentinel — the observer fires the load-more handler when it enters view; the
+              button below stays as an accessible / no-JS fallback. */}
+          <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
           <button
             type="button"
             onClick={collectionsMode ? collLoadMore : loadMore}

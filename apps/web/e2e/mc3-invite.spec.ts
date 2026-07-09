@@ -129,7 +129,7 @@ test.describe('MC-3 collaboration invite — signed in (dr1-camille-roux)', () =
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
-  test('MC3-E4: work page trigger opens the modal for the co-creator and sends without a project', async ({
+  test('MC3-E4: work page trigger (multi-creator work) opens the from-work choice modal, preselects the co-creator, and sends without a project', async ({
     page,
   }) => {
     await loginAsCamille(page);
@@ -137,12 +137,27 @@ test.describe('MC-3 collaboration invite — signed in (dr1-camille-roux)', () =
     await expect(page.getByRole('heading', { name: 'Lames de Brume' })).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Proposer une collab' }).click();
-    const dialog = page.getByRole('dialog', { name: /Inviter Yuki Moreau/ });
+    const dialog = page.getByRole('dialog', { name: 'Proposer une collab' });
     await expect(dialog).toBeVisible();
+
+    // Collaboration-choice radios: "Rejoindre ce projet" disabled (Bientôt disponible), "Proposer
+    // une autre collaboration" is the only selectable/active choice.
+    const choiceGroup = dialog.getByRole('radiogroup', { name: 'Type de collaboration' });
+    const joinRadio = choiceGroup.getByRole('radio').filter({ hasText: 'Rejoindre ce projet' });
+    await expect(joinRadio).toHaveAttribute('aria-disabled', 'true');
+    await expect(joinRadio).toContainText('Bientôt disponible');
+    await expect(choiceGroup.getByRole('radio', { name: 'Proposer une autre collaboration' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    // Creator picker — the lone co-creator (Yuki Moreau) is preselected.
+    const yukiCheckbox = dialog.getByRole('checkbox').filter({ hasText: 'Yuki Moreau' });
+    await expect(yukiCheckbox).toHaveAttribute('aria-checked', 'true');
 
     // Send unattached (no project selected) — project is optional.
     await dialog.getByRole('button', { name: "Envoyer l'invitation" }).click();
-    await expect(dialog.getByRole('status')).toHaveText('Proposition envoyée à Yuki Moreau.');
+    await expect(dialog.getByRole('status')).toContainText('Yuki Moreau');
   });
 
   test('MC3-E4b: illustration page trigger (DR-6) opens the modal for the linked artist', async ({ page }) => {

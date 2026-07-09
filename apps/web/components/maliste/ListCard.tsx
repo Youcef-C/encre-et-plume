@@ -4,8 +4,11 @@
 // bottom-edge accent progress overlay when started, "✕" remove badge. The remove button is a
 // sibling of the Link (not nested inside it) — same pattern as GalleryCard's eye button, since a
 // <button> inside an <a> is invalid HTML and breaks keyboard/AT behavior.
+// DR-12: a saved Collection is a Work with format 'Illustration(s)' — it has no chapters, so it
+// links to the Œuvre page (not the reader) and drops the chapter-progress UI (simpler cover+title).
 import Link from 'next/link';
 import type { ListItemDto } from '@encre-et-plume/shared';
+import { WORK_FORMAT_ILLUSTRATIONS } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
 import { XIcon } from '../icons';
 
@@ -16,10 +19,13 @@ export default function ListCard({
   item: ListItemDto;
   onRemove: (slug: string) => void;
 }) {
-  const started = item.lastChapterNumber != null;
-  const href = started
-    ? `/lecteur/${item.slug}?chapitre=${item.lastChapterNumber}${item.page != null ? `&page=${item.page}` : ''}`
-    : `/lecteur/${item.slug}`;
+  const isCollection = item.format === WORK_FORMAT_ILLUSTRATIONS;
+  const started = !isCollection && item.lastChapterNumber != null;
+  const href = isCollection
+    ? `/oeuvre/${item.slug}`
+    : started
+      ? `/lecteur/${item.slug}?chapitre=${item.lastChapterNumber}${item.page != null ? `&page=${item.page}` : ''}`
+      : `/lecteur/${item.slug}`;
 
   return (
     <div style={{ position: 'relative' }}>
@@ -58,9 +64,11 @@ export default function ListCard({
           )}
         </div>
         <div style={{ fontWeight: 700, marginTop: 9 }}>{item.title}</div>
-        <div style={{ fontSize: 12, color: 'var(--ink2)' }}>
-          {started ? `Reprendre · Ch. ${item.lastChapterNumber} / ${item.totalChapters}` : 'Pas commencé'}
-        </div>
+        {!isCollection && (
+          <div style={{ fontSize: 12, color: 'var(--ink2)' }}>
+            {started ? `Reprendre · Ch. ${item.lastChapterNumber} / ${item.totalChapters}` : 'Pas commencé'}
+          </div>
+        )}
       </Link>
       <button
         type="button"

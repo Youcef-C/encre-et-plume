@@ -36,6 +36,8 @@ type Props = {
   currentChapterNumber: number;
   onLoadChapter: (chapter: WorkChapterDto) => void;
   onOpenPaywall: (chapter: WorkChapterDto) => void;
+  /** Flip the reading direction (RTL⇄LTR) — same handler the Topbar's ⇄ switch uses. */
+  onToggleDirection: () => void;
   onExitFullscreen: () => void;
 };
 
@@ -69,6 +71,7 @@ export default function ImmersiveBar({
   currentChapterNumber,
   onLoadChapter,
   onOpenPaywall,
+  onToggleDirection,
   onExitFullscreen,
 }: Props) {
   const [favOpen, setFavOpen] = useState(false);
@@ -116,7 +119,9 @@ export default function ImmersiveBar({
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 2,
+        // Above the Stage page-turn click zones (zIndex 5) so every control in the bar — the exit
+        // button and the ReaderNav prev/next — stays clickable (the zones would otherwise overlay it).
+        zIndex: 12,
         display: 'flex',
         alignItems: 'center',
         gap: 10,
@@ -184,6 +189,19 @@ export default function ImmersiveBar({
       <div style={{ flex: '1 1 200px', minWidth: 160 }}>
         <ReaderNav direction={direction} page={page} totalPages={totalPages} step={step} onPrev={onPrev} onNext={onNext} onSetPage={onSetPage} />
       </div>
+
+      {/* Reading-direction ⇄ switch — the Topbar's switch is unmounted in fullscreen, so it lives
+          here too. Pressed = RTL (Droite→Gauche); the accessible name announces the current sense. */}
+      <button
+        type="button"
+        onClick={onToggleDirection}
+        aria-pressed={direction === 'rtl'}
+        aria-label={`Sens de lecture : ${direction === 'rtl' ? 'droite à gauche' : 'gauche à droite'}`}
+        title={`Sens de lecture : ${direction === 'rtl' ? 'droite à gauche' : 'gauche à droite'}`}
+        style={{ ...switchBtn, background: direction === 'rtl' ? 'var(--accent)' : switchBtn.background, fontSize: 16 }}
+      >
+        ⇄
+      </button>
 
       <button
         type="button"

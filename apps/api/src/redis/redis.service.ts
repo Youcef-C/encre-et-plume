@@ -50,6 +50,23 @@ export class RedisService implements OnModuleDestroy {
     await this.client.del(...keys).catch(() => {});
   }
 
+  /**
+   * Delete every key matching a glob pattern via non-blocking SCAN (fail-open). Used to invalidate a
+   * whole cache namespace (e.g. `gallery:list:*`) after a write, since those keys are query-hashed.
+   */
+  async delByPattern(pattern: string): Promise<void> {
+    try {
+      let cursor = '0';
+      do {
+        const [next, keys] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+        cursor = next;
+        if (keys.length) await this.client.del(...keys);
+      } while (cursor !== '0');
+    } catch {
+      /* fail-open — a stale list self-heals at the 60s TTL */
+    }
+  }
+
   // ── Hash commands (F-18 session index) ────────────────────────────────────
 
   /** Set a hash field. Fail-open. */

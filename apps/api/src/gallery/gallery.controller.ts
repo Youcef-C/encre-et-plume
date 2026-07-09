@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   GalleryFeatureCard,
   GalleryIllustrationCard,
@@ -102,6 +102,14 @@ export class GalleryController {
   @UseGuards(SessionGuard)
   update(@Param('id') id: string, @Req() req: AuthRequest, @Body() dto: UpdateIllustrationDto): Promise<IllustrationDetail> {
     return this.galleryService.updateIllustration(req.accountId, id, dto);
+  }
+
+  // 2026-07-09: owner-only delete (from the illustration "Modifier" form). Uniform 404 for non-owner.
+  @Delete('illustrations/:id')
+  @UseGuards(SessionGuard)
+  @HttpCode(204)
+  remove(@Param('id') id: string, @Req() req: AuthRequest): Promise<void> {
+    return this.galleryService.deleteIllustration(req.accountId, id);
   }
 
   @Get('illustrations/:id/more')

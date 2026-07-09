@@ -80,7 +80,7 @@ export interface GalleryPreview {
 
 // DR-6: illustration detail screen ("/illustration/:id"). Additive — nothing above changes.
 
-import type { CollectionRef } from './collections.js';
+import type { CollectionChip } from './collections.js';
 
 /** DR-12: minimal publish endpoint (POST /illustrations) — the interim CS-3 stand-in. */
 export interface PublishIllustrationRequest {
@@ -142,5 +142,5 @@ export interface IllustrationDetail {
   /** DR-10: true iff any genre is a plus18 entry — hard-gates the read via AgeGateService. */
   is18plus: boolean;
   /** DR-12: collections this illustration belongs to (chips -> /oeuvre/:slug). */
-  collections: CollectionRef[];
+  collections: CollectionChip[];
 }

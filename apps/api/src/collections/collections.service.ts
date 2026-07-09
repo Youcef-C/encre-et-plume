@@ -149,6 +149,7 @@ export class CollectionsService {
         cover: w.coverImage,
         count: w._count.collectionItems,
         artistName: w.creators[0]?.account?.displayName ?? '',
+        likeCount: w.likeCount, // Work.likeCount — parity with the Catalogue ♥ count
       })),
       total,
       page: query.page,
@@ -476,6 +477,8 @@ function buildCollectionsWhere(query: CollectionsListQuery): Record<string, any>
       ],
     });
   }
+  // EXACT creator-slug filter (Account.profileSlug) — the reusable "works by this creator" clause.
+  if (query.artist) and.push({ creators: { some: { account: { profileSlug: query.artist } } } });
   if (query.genre.length > 0) {
     const labels = query.genre.map((id) => catalogGenreLabel(id));
     // a collection's genres live in Work.genre (scalar) + Work.themes (array) — OR across both.

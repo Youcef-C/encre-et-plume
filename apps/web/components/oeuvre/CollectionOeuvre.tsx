@@ -5,11 +5,17 @@
 // the raw 'Illustration(s)' format), the meta is Work.meta ("N illustrations · collection"), the
 // primary CTA is "Voir la galerie" → the Galerie filtered to this collection, and the main section
 // is the member grid. Owner (∈ team) sees "Gérer la collection".
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { resolveGenreId, type WorkDetail, type AccountSummary } from '@encre-et-plume/shared';
+import { resolveGenreId, type WorkDetail, type AccountSummary, type ReactionViewerState } from '@encre-et-plume/shared';
 import { EMPTY_FILTERS, filtersToQuery } from '../../lib/catalog';
 import { coverStyle } from '../../lib/cover';
+import { formatLikeCount } from '../../lib/home';
+import { useReaction } from '../../lib/useReaction';
+import * as api from '../../lib/api';
+import { CheckIcon, HeartIcon, PlusIcon } from '../icons';
 import { TeamSidebar, FundingGoals } from './Sidebar';
+import ShareReportBox from './ShareReportBox';
 import CollectionGrid from './CollectionGrid';
 
 const badgeStyle: React.CSSProperties = {
@@ -48,6 +54,29 @@ export default function CollectionOeuvre({ work, account }: { work: WorkDetail; 
   const count = items.length;
   const isOwner = !!account && work.team.some((m) => m.id === account.id);
   const genreId = resolveGenreId(work.genre);
+
+  // DR-12: a collection IS a Work — its slug is a valid `work` reaction target, so it reuses the exact
+  // same like/save toggle grammar as WorkHero (DR-9), hydrating active state from GET /reactions/state.
+  const [reactionState, setReactionState] = useState<ReactionViewerState>({ liked: false, saved: false });
+  useEffect(() => {
+    if (!account) {
+      setReactionState({ liked: false, saved: false });
+      return;
+    }
+    let cancelled = false;
+    api
+      .getReactionState('work', [work.slug])
+      .then((state) => {
+        if (!cancelled) setReactionState(state[work.slug] ?? { liked: false, saved: false });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account, work.slug]);
+
+  const like = useReaction({ targetType: 'work', targetId: work.slug, kind: 'like', account, initialActive: reactionState.liked, initialCount: work.likeCount });
+  const save = useReaction({ targetType: 'work', targetId: work.slug, kind: 'save', account, initialActive: reactionState.saved, initialCount: work.favoriteCount });
 
   return (
     <div>
@@ -94,16 +123,58 @@ export default function CollectionOeuvre({ work, account }: { work: WorkDetail; 
             <p style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--ink)', margin: '0 0 16px', maxWidth: 640 }}>{work.synopsis}</p>
           )}
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <Link href={`/galerie?collection=${work.id}`} style={{ ...actionBase, background: 'var(--accent)', color: '#fff' }}>
               Voir la galerie
             </Link>
+            <button
+              type="button"
+              onClick={like.toggle}
+              aria-pressed={like.active}
+              aria-label={like.active ? "Retirer le j'aime" : "J'aime"}
+              className="ep-like-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                minHeight: 44,
+                padding: '10px 16px',
+                border: '3px solid var(--ink)',
+                borderRadius: 8,
+                boxShadow: '3px 3px 0 var(--shadow)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontWeight: 700,
+                background: like.active ? 'var(--accent)' : 'var(--card)',
+                color: like.active ? '#fff' : 'var(--ink)',
+              }}
+            >
+              <HeartIcon size={20} style={{ fill: like.active ? 'currentColor' : 'none' }} />
+              <b>{formatLikeCount(like.count)}</b>
+              <span style={{ fontWeight: 600 }}>j&apos;aime</span>
+            </button>
+            <button
+              type="button"
+              onClick={save.toggle}
+              aria-pressed={save.active}
+              aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
+              style={{ ...actionBase, cursor: 'pointer', background: save.active ? 'var(--accent)' : 'var(--card)', color: save.active ? '#fff' : 'var(--ink)' }}
+            >
+              {save.active ? <CheckIcon key="check" size={14} className="ep-icon-pop" /> : <PlusIcon key="plus" size={14} className="ep-icon-pop" />}{' '}
+              {save.active ? 'Dans ma liste' : 'Ma liste'}
+            </button>
             {isOwner && (
               <Link href={`/collection/${work.id}/gerer`} style={{ ...actionBase, background: 'var(--ink)', color: 'var(--paper)', boxShadow: '3px 3px 0 var(--accent)' }}>
                 Gérer la collection
               </Link>
             )}
           </div>
+
+          {(like.error || save.error) && (
+            <p role="alert" style={{ marginTop: 8, fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>
+              Une erreur est survenue, réessayez.
+            </p>
+          )}
         </div>
       </div>
 
@@ -119,6 +190,7 @@ export default function CollectionOeuvre({ work, account }: { work: WorkDetail; 
         </div>
 
         <aside className="ep-oeuvre-aside" style={{ width: 288, flex: 'none' }}>
+          <ShareReportBox account={account} />
           <TeamSidebar team={work.team} account={account} />
           <div style={{ ...sidebarCard, padding: 16, marginBottom: 18 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', color: 'var(--ink2)', marginBottom: 10 }}>DÉTAILS</div>
