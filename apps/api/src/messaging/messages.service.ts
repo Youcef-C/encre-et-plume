@@ -99,7 +99,8 @@ export class MessagesService {
     const limit = clampLimit(opts.limit, CONVERSATIONS_PAGE_SIZE, CONVERSATIONS_PAGE_MAX);
 
     const convs = (await this.prisma.conversation.findMany({
-      where: { participants: { some: { accountId } } },
+      // MC-11 drift guard: the global salon room is its own dock widget, never a list row here.
+      where: { type: { not: 'salon' }, participants: { some: { accountId } } },
       orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
       take: limit,
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
@@ -113,6 +114,8 @@ export class MessagesService {
       FROM "Message" m
       JOIN "ConversationParticipant" p
         ON p."conversationId" = m."conversationId" AND p."accountId" = ${accountId}
+      JOIN "Conversation" c
+        ON c."id" = m."conversationId" AND c."type" <> 'salon'
       WHERE m."senderId" <> ${accountId} AND m."createdAt" > p."lastReadAt"
       GROUP BY m."conversationId"
     `) as { conversationId: string; unread: bigint | number }[];

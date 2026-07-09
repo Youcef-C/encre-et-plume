@@ -344,6 +344,7 @@ model Connection {
 enum ConversationType {
   dm
   group
+  salon // MC-11: one global public room "Le Comptoir"
 }
 
 model Conversation {

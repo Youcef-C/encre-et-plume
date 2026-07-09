@@ -33,4 +33,5 @@ export * from './calls.js';
 export * from './applications.js';
 export * from './connections.js';
 export * from './messaging.js';
+export * from './salon.js';
 export * from './blocks.js';

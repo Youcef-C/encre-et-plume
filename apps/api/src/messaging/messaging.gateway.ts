@@ -11,7 +11,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { WS_EVENTS } from '@encre-et-plume/shared';
-import type { WsMessageNew, WsConversationRead, WsTypingClient } from '@encre-et-plume/shared';
+import type { WsMessageNew, WsConversationRead, WsTypingClient, WsSalonMessage } from '@encre-et-plume/shared';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionStore } from '../security/session-store.service';
@@ -19,6 +19,8 @@ import type { RealtimeNotifier } from '../notifications/notifications.service';
 import { verifySessionToken } from '../auth/session-token';
 
 const PRESENCE_TOUCH_INTERVAL_MS = 2 * 60 * 1000; // keep idle-but-connected widget users "en ligne" (MC-8)
+const SALON_ROOM = 'salon'; // MC-11: every authed socket joins this room (previewer + member)
+const SALON_PRESENCE_THROTTLE_MS = 2000; // trailing-edge throttle for the "N en ligne" broadcast
 
 /** Parse a single cookie value from a raw Cookie header (avoids a dep — 3-line manual parse). */
 function readCookie(header: string | undefined, name: string): string | undefined {
@@ -55,6 +57,8 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
   private readonly logger = new Logger(MessagingGateway.name);
   // socket.id → presence-touch interval; cleared on disconnect (no other in-process socket state).
   private readonly presenceTimers = new Map<string, ReturnType<typeof setInterval>>();
+  // MC-11: one pending salon-presence broadcast timer per instance (trailing-edge throttle).
+  private salonPresenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly jwt: JwtService,
@@ -80,6 +84,9 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     socket.data['accountId'] = accountId;
     socket.data['jti'] = verified.jti;
     await socket.join(`user:${accountId}`);
+    // MC-11: every authenticated socket is a salon previewer (broadcast + presence cover all clients).
+    await socket.join(SALON_ROOM);
+    this.scheduleSalonPresence();
 
     // Presence ("also backs MC-8"): touch the F-18 session index now + on an interval while connected.
     const ua = (socket.handshake.headers['user-agent'] as string | undefined) ?? null;
@@ -99,6 +106,51 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
       clearInterval(timer);
       this.presenceTimers.delete(socket.id);
     }
+    this.scheduleSalonPresence(); // MC-11: a leaver changes the "N en ligne" count
+  }
+
+  /** MC-11: broadcast a new salon message to all connected clients (members AND previewers). */
+  emitSalonMessage(payload: WsSalonMessage): void {
+    if (!this.server) return; // worker context — best-effort, never throws
+    this.server.to(SALON_ROOM).emit(WS_EVENTS.salonMessage, payload);
+  }
+
+  /**
+   * MC-11: distinct connected accountIds in the salon room. Cluster-wide via the Redis adapter
+   * (fetchSockets + socket.data travel across instances). Used for the summary onlineCount and the
+   * @-mention list. Returns [] when there's no server.
+   */
+  async getSalonOnlineAccountIds(): Promise<string[]> {
+    if (!this.server) return [];
+    const sockets = await this.server.in(SALON_ROOM).fetchSockets();
+    const ids = new Set<string>();
+    for (const s of sockets) {
+      const id = (s.data as { accountId?: string }).accountId;
+      if (id) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  /**
+   * MC-11: trailing-edge throttled presence broadcast. One pending timer per instance coalesces bursts
+   * of connect/disconnect into a single fan-out.
+   * ponytail: fetchSockets is O(sockets) per change, throttled 2s; move to a Redis counter if it ever
+   * shows up in metrics.
+   */
+  private scheduleSalonPresence(): void {
+    if (!this.server || this.salonPresenceTimer) return;
+    const timer = setTimeout(() => {
+      this.salonPresenceTimer = null;
+      void this.broadcastSalonPresence();
+    }, SALON_PRESENCE_THROTTLE_MS);
+    timer.unref?.();
+    this.salonPresenceTimer = timer;
+  }
+
+  private async broadcastSalonPresence(): Promise<void> {
+    if (!this.server) return;
+    const onlineCount = (await this.getSalonOnlineAccountIds()).length;
+    this.server.to(SALON_ROOM).emit(WS_EVENTS.salonPresence, { onlineCount });
   }
 
   @SubscribeMessage(WS_EVENTS.typing)

@@ -1,7 +1,7 @@
 // MC-9: floating messaging widget — shared contracts (FE + BE agree here).
 // Types + consts only (shared builds to CJS). WS event names live here so both sides use one source.
 
-export type ConversationType = 'dm' | 'group';
+export type ConversationType = 'dm' | 'group' | 'salon';
 
 export interface ConversationParticipantDto {
   userId: string;
@@ -76,6 +76,9 @@ export const WS_EVENTS = {
   // whenever ANY F-5 notification is created (chat, connection requests, applications, invitations…).
   // Payload-less — GET /notifications/unread-counts stays the count source of truth.
   unreadChanged: 'unread:changed',
+  // MC-11 salon: new message broadcast to all connected clients + live presence count.
+  salonMessage: 'salon:message',
+  salonPresence: 'salon:presence',
 } as const;
 
 export interface WsMessageNew {
@@ -97,6 +100,14 @@ export interface WsTypingServer {
   conversationId: string;
   userId: string;
   isTyping: boolean;
+}
+
+// MC-11 salon realtime payloads.
+export interface WsSalonMessage {
+  message: import('./salon.js').SalonMessageDto;
+}
+export interface WsSalonPresence {
+  onlineCount: number;
 }
 
 export const MESSAGE_MAX_LENGTH = 4000;

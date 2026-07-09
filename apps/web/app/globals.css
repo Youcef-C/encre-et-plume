@@ -236,6 +236,36 @@ h1, h2, h3, h4, h5, h6 {
   animation: ep-skeleton-appear 0s 0.15s both;
 }
 
+/* MC-11 salon "Le Comptoir" dock: Quitter hover (prototype style-hover) + narrow-width clearance
+   from the MC-9 launcher (bottom-right). At <=480px the prototype cap would overlap it; tighten it. */
+.ep-salon-leave:hover {
+  background: #c0392b !important;
+  color: #fff !important;
+}
+@media (max-width: 480px) {
+  .ep-salon-dock {
+    max-width: calc(100vw - 112px) !important;
+  }
+}
+/* MC-11 mention impact: an incoming @-mention of me flashes accent then settles to the
+   normal bubble. One-shot; animations override the bubble's inline background/border while
+   playing. Reduced motion → static accent border instead of the fade. */
+@keyframes ep-mention-flash {
+  from {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+.ep-mention-flash {
+  animation: ep-mention-flash 3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-mention-flash {
+    animation: none;
+    border-color: var(--accent) !important;
+  }
+}
+
 /* Issue 3 + prototype match: nav link active/hover = accent fill + white text */
 .ep-nav-link {
   color: var(--ink);

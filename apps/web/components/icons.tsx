@@ -362,3 +362,12 @@ export function FlameIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// MC-11 — salon "Le Comptoir" header tile (replaces the prototype's 💬 glyph — no-emoji rule).
+export function ChatIcon(p: IconProps) {
+  return (
+    <Svg {...p} filled>
+      <path d="M4 4.5h16a1 1 0 011 1V16a1 1 0 01-1 1H9l-4 3.5V17H4a1 1 0 01-1-1V5.5a1 1 0 011-1z" />
+    </Svg>
+  );
+}

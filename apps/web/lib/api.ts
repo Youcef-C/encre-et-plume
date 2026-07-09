@@ -649,6 +649,35 @@ export const createConversation = (body: CreateConversationRequest): Promise<Con
 export const markConversationRead = (conversationId: string): Promise<MarkReadResponse> =>
   request<MarkReadResponse>(`/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'POST' });
 
+// ─── Salon "Le Comptoir" (MC-11) ────────────────────────────────────────────────
+import type {
+  SalonSummary,
+  SalonMessagesPage,
+  SalonMessageDto,
+  SalonMembershipResponse,
+  SalonOnlineResponse,
+} from '@encre-et-plume/shared';
+
+export const getSalon = (): Promise<SalonSummary> => request<SalonSummary>('/salon');
+
+export const getSalonMessages = (cursor?: string): Promise<SalonMessagesPage> =>
+  request<SalonMessagesPage>(`/salon/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+
+export const getSalonOnline = (): Promise<SalonOnlineResponse> =>
+  request<SalonOnlineResponse>('/salon/online');
+
+export const joinSalon = (): Promise<SalonMembershipResponse> =>
+  request<SalonMembershipResponse>('/salon/join', { method: 'POST' });
+
+export const leaveSalon = (): Promise<SalonMembershipResponse> =>
+  request<SalonMembershipResponse>('/salon/leave', { method: 'POST' });
+
+export const sendSalonMessage = (body: string): Promise<SalonMessageDto> =>
+  request<SalonMessageDto>('/salon/messages', { method: 'POST', body: JSON.stringify({ body }) });
+
+export const markSalonRead = (): Promise<MarkReadResponse> =>
+  request<MarkReadResponse>('/salon/read', { method: 'POST' });
+
 // ─── Blocks & mute (MC-10) ─────────────────────────────────────────────────────
 import type { BlockKind, BlockDto, BlocksResponse, CreateBlockRequest } from '@encre-et-plume/shared';
 

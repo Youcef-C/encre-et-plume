@@ -75,6 +75,54 @@ describe('MessagingGateway.handleConnection (fail closed)', () => {
     expect(sessionStore.touch).toHaveBeenCalledWith('acc-1', 'tok-1', 'jest', expect.anything());
     gateway.handleDisconnect(socket as never); // clean up the presence interval
   });
+
+  it('joins the shared salon room (MC-11 — every authed socket is a previewer)', async () => {
+    const { gateway } = build();
+    const socket = makeSocket('ep_session=good');
+    await gateway.handleConnection(socket as never);
+    expect(socket.join).toHaveBeenCalledWith('salon');
+    gateway.handleDisconnect(socket as never);
+  });
+});
+
+describe('MessagingGateway salon (MC-11)', () => {
+  it('emitSalonMessage broadcasts salon:message to the salon room', () => {
+    const { gateway } = build();
+    const emit = jest.fn();
+    const to = jest.fn().mockReturnValue({ emit });
+    (gateway as unknown as { server: unknown }).server = { to };
+    const message = { id: 'm-1', senderId: 'acc-1', senderName: 'Me', body: 'hi', createdAt: 'x' };
+    gateway.emitSalonMessage({ message });
+    expect(to).toHaveBeenCalledWith('salon');
+    expect(emit).toHaveBeenCalledWith('salon:message', { message });
+  });
+
+  it('emitSalonMessage is a no-op when the socket server is absent (worker context)', () => {
+    const { gateway } = build();
+    (gateway as unknown as { server: unknown }).server = undefined;
+    expect(() =>
+      gateway.emitSalonMessage({ message: { id: 'm', senderId: 'a', senderName: 'A', body: 'b', createdAt: 'x' } }),
+    ).not.toThrow();
+  });
+
+  it('getSalonOnlineAccountIds dedupes accountIds across sockets', async () => {
+    const { gateway } = build();
+    const fetchSockets = jest.fn().mockResolvedValue([
+      { data: { accountId: 'acc-1' } },
+      { data: { accountId: 'acc-2' } },
+      { data: { accountId: 'acc-1' } }, // same user, second tab
+      { data: {} }, // unauthenticated (shouldn't happen, but guard it)
+    ]);
+    (gateway as unknown as { server: unknown }).server = { in: jest.fn().mockReturnValue({ fetchSockets }) };
+    const ids = await gateway.getSalonOnlineAccountIds();
+    expect(ids.sort()).toEqual(['acc-1', 'acc-2']);
+  });
+
+  it('getSalonOnlineAccountIds returns [] when there is no server', async () => {
+    const { gateway } = build();
+    (gateway as unknown as { server: unknown }).server = undefined;
+    await expect(gateway.getSalonOnlineAccountIds()).resolves.toEqual([]);
+  });
 });
 
 describe('MessagingGateway typing relay (participant-gated)', () => {

@@ -9,7 +9,7 @@
  * mechanics are F-18's e2e (security.spec.ts) and are NOT re-tested here.
  *
  * Tests:
- *   F19-E2E-1  Structure: one h1 "Paramètres", four h2s in order, nav with 4 links
+ *   F19-E2E-1  Structure: one h1 "Paramètres", six h2s in order, nav with 6 links
  *   F19-E2E-3  Cookies: consent summary reflects saved choice; "Gérer les cookies" reopens banner
  *   F19-E2E-4  Nav anchors: clicking a nav link scrolls to the matching section
  *   F19-E2E-5  Responsive: /parametres at 375/768/1280 — no horizontal overflow, nav wraps
@@ -72,7 +72,7 @@ async function signUpVerifyAndLogin(
 
 // ── F19-E2E-1: Page structure ──────────────────────────────────────────────────
 
-test('F19-E2E-1: /parametres has one h1, five h2s in order, and a section nav with 5 links', async ({
+test('F19-E2E-1: /parametres has one h1, six h2s in order, and a section nav with 6 links', async ({
   page,
 }) => {
   const email = freshEmail('f19-struct');
@@ -85,21 +85,22 @@ test('F19-E2E-1: /parametres has one h1, five h2s in order, and a section nav wi
   await expect(h1s).toHaveCount(1);
   await expect(h1s.first()).toHaveText('Paramètres');
 
-  // Five h2s in exact story order (Apparence removed — theme picker disabled, light forced;
-  // Contenu 18+ added by DR-10)
+  // Six h2s in exact story order (Apparence removed — theme picker disabled, light forced;
+  // Contenu 18+ added by DR-10; Comptes bloqués added by MC-10)
   const h2s = page.getByRole('heading', { level: 2 });
-  await expect(h2s).toHaveCount(5, { timeout: 10_000 });
+  await expect(h2s).toHaveCount(6, { timeout: 10_000 });
   await expect(h2s.nth(0)).toHaveText('Préférences de notification');
   await expect(h2s.nth(1)).toHaveText('Cookies');
   await expect(h2s.nth(2)).toHaveText('Sécurité');
   await expect(h2s.nth(3)).toHaveText('Contenu 18+');
-  await expect(h2s.nth(4)).toHaveText('Mes données');
+  await expect(h2s.nth(4)).toHaveText('Comptes bloqués');
+  await expect(h2s.nth(5)).toHaveText('Mes données');
 
-  // Section nav landmark with its 5 links, in order
+  // Section nav landmark with its 6 links, in order
   const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
   await expect(nav).toBeVisible();
   const links = nav.getByRole('link');
-  await expect(links).toHaveCount(5);
+  await expect(links).toHaveCount(6);
   await expect(links.nth(0)).toHaveText('Préférences de notification');
   await expect(links.nth(0)).toHaveAttribute('href', '#notifications');
   await expect(links.nth(1)).toHaveText('Cookies');
@@ -108,8 +109,10 @@ test('F19-E2E-1: /parametres has one h1, five h2s in order, and a section nav wi
   await expect(links.nth(2)).toHaveAttribute('href', '#securite');
   await expect(links.nth(3)).toHaveText('Contenu 18+');
   await expect(links.nth(3)).toHaveAttribute('href', '#contenu-adulte');
-  await expect(links.nth(4)).toHaveText('Mes données');
-  await expect(links.nth(4)).toHaveAttribute('href', '#mes-donnees');
+  await expect(links.nth(4)).toHaveText('Comptes bloqués');
+  await expect(links.nth(4)).toHaveAttribute('href', '#comptes-bloques');
+  await expect(links.nth(5)).toHaveText('Mes données');
+  await expect(links.nth(5)).toHaveAttribute('href', '#mes-donnees');
 });
 
 // ── DR-10: Contenu 18+ section — status + birthdate set + revoke clearance ─────
@@ -244,7 +247,7 @@ test('F19-E2E-4: clicking a section-nav link scrolls to the matching section', a
 
   // Accordion: the other sections collapsed when Sécurité was selected
   await expect(page.locator('details#securite')).toHaveAttribute('open', '');
-  for (const other of ['notifications', 'cookies', 'contenu-adulte', 'mes-donnees']) {
+  for (const other of ['notifications', 'cookies', 'contenu-adulte', 'comptes-bloques', 'mes-donnees']) {
     await expect(page.locator(`details#${other}`)).not.toHaveAttribute('open', '');
   }
 });
@@ -276,7 +279,7 @@ test('F19-E2E-6: sections collapse via their header and a nav click re-expands t
   await nav.getByRole('link', { name: 'Cookies' }).click();
   await expect(cookiesSection).toHaveAttribute('open', '');
   await expect(manageBtn).toBeVisible();
-  for (const other of ['notifications', 'securite', 'contenu-adulte', 'mes-donnees']) {
+  for (const other of ['notifications', 'securite', 'contenu-adulte', 'comptes-bloques', 'mes-donnees']) {
     await expect(page.locator(`details#${other}`)).not.toHaveAttribute('open', '');
   }
 });
@@ -308,10 +311,10 @@ for (const vp of VIEWPORTS) {
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 2);
 
-    // Nav is visible with all 5 links reachable (wraps at mobile widths, no overflow)
+    // Nav is visible with all 6 links reachable (wraps at mobile widths, no overflow)
     const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
     await expect(nav).toBeVisible();
-    await expect(nav.getByRole('link')).toHaveCount(5);
+    await expect(nav.getByRole('link')).toHaveCount(6);
 
     // Tap targets: nav links stay >= 40px tall (44px target, small tolerance) at mobile
     if (vp.width === 375) {
@@ -320,7 +323,7 @@ for (const vp of VIEWPORTS) {
     }
 
     // Sections are all reachable (present in the DOM)
-    for (const id of ['notifications', 'cookies', 'securite', 'contenu-adulte', 'mes-donnees']) {
+    for (const id of ['notifications', 'cookies', 'securite', 'contenu-adulte', 'comptes-bloques', 'mes-donnees']) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
 

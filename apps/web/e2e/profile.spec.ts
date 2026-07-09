@@ -88,8 +88,8 @@ test('F3-API-1: GET /profiles/e2e-utilisateur → 200 with correct composed shap
   expect(body.slug).toBe('e2e-utilisateur');
   expect(typeof body.displayName).toBe('string');
 
-  // roleLine composed from specialty + city (plan D2)
-  expect(body.roleLine).toBe('encre & screentone · Lyon, FR');
+  // roleLine = specialty only (MC-1: city dropped from roleLine, location now "Région, Pays")
+  expect(body.roleLine).toBe('encre & screentone');
   expect(body.specialty).toBe('encre & screentone');
   expect(body.city).toBe('Lyon, FR');
   expect(body.bio).toBe('Un mangaka passionné.');
@@ -212,8 +212,8 @@ test('F3-UI-1: /e2e-utilisateur renders name, roleLine, seeking banner, stats', 
   // Name heading renders
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
 
-  // roleLine: specialty · city
-  await expect(page.getByText('encre & screentone · Lyon, FR')).toBeVisible();
+  // roleLine: specialty only (MC-1: city dropped from roleLine)
+  await expect(page.getByText('encre & screentone', { exact: true })).toBeVisible();
 
   // Seeking banner (dashed-red) shows composed text
   await expect(page.getByText(/Cherche actuellement un·e scénariste/)).toBeVisible();
@@ -349,8 +349,8 @@ test('F3-UI-8: owner edit mode updates specialty → roleLine reflected on save'
   // After save, edit mode closes and edit button reappears
   await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
 
-  // roleLine updates: 'mangaka indépendant · Lyon, FR'
-  await expect(page.getByText('mangaka indépendant · Lyon, FR')).toBeVisible();
+  // roleLine updates to the new specialty alone (MC-1: city dropped from roleLine)
+  await expect(page.getByText('mangaka indépendant', { exact: true })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -723,12 +723,13 @@ test('MC1-PROFILE-2: "Région" appears only when Pays = France; picking a régio
 
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByText('Bretagne', { exact: true })).toBeVisible();
+  // formatLocationFr('FR', 'Bretagne') composes "Région, France"
+  await expect(page.getByText('Bretagne, France', { exact: true })).toBeVisible();
 
   // Persisted server-side — survives a reload.
   await page.reload();
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('Bretagne', { exact: true })).toBeVisible();
+  await expect(page.getByText('Bretagne, France', { exact: true })).toBeVisible();
 });
 
 test('MC1-PROFILE-3: switching Pays away from France hides "Région" and nulls it on save; location shows the country', async ({

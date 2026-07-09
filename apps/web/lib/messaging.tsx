@@ -41,6 +41,8 @@ type MessagesState = 'idle' | 'loading' | 'ready' | 'error';
 interface MessagingCtx {
   connected: boolean;
   connectionState: ConnectionState;
+  // MC-11: the shared socket.io connection, exposed so the salon dock reuses it (one socket per tab).
+  socket: Socket | null;
   conversations: ConversationItem[];
   totalUnread: number;
   conversationsState: 'loading' | 'ready' | 'error';
@@ -73,6 +75,7 @@ const noop = () => {};
 export const MessagingContext = createContext<MessagingCtx>({
   connected: false,
   connectionState: 'connected',
+  socket: null,
   conversations: [],
   totalUnread: 0,
   conversationsState: 'loading',
@@ -118,6 +121,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [connectionState, setConnectionState] = useState<ConnectionState>('connected');
+  // MC-11: reactive handle to the socket so the salon dock's subscribe effect re-runs on (re)connect.
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
@@ -157,6 +162,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!myId) {
       socketRef.current?.disconnect();
       socketRef.current = null;
+      setSocket(null);
       setConnected(false);
       setConversations([]);
       setTotalUnread(0);
@@ -167,6 +173,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
 
     const socket = io(API_ORIGIN, { withCredentials: true });
     socketRef.current = socket;
+    setSocket(socket);
 
     socket.on('connect', () => {
       setConnected(true);
@@ -258,6 +265,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       Object.values(timers).forEach(clearTimeout);
       socket.disconnect();
       socketRef.current = null;
+      setSocket(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
@@ -429,6 +437,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       value={{
         connected,
         connectionState,
+        socket,
         conversations,
         totalUnread,
         conversationsState,

@@ -4,6 +4,7 @@ import './globals.css';
 import { SessionProvider, RoleSimulationProvider, UnreadProvider, MessagingProvider, ThemeProvider, CookieConsentProvider } from './providers';
 import Header from '../components/Header';
 import MessagingWidget from '../components/messaging/MessagingWidget';
+import SalonDock from '../components/salon/SalonDock';
 import RoleBanner from '../components/RoleBanner';
 import LegalFooter from '../components/LegalFooter';
 import CookieBanner from '../components/CookieBanner';
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <CookieBanner />
                     <CguReconsentModal />
                     <MessagingWidget />
+                    <SalonDock />
                   </RoleSimulationProvider>
                 </MessagingProvider>
               </UnreadProvider>

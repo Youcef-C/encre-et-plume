@@ -330,7 +330,9 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
       await rowByName(pageB, 'E2E MSG_A').click();
       await panel(pageB).getByLabel('Écrire un message').fill('Toujours là ?');
       await panel(pageB).getByRole('button', { name: 'Envoyer' }).click();
-      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('Toujours là ?')).toBeVisible({ timeout: 10_000 });
+      // Fixture accounts persist across CI runs, so this exact copy can already appear earlier
+      // in the thread history from a prior run — assert the newest bubble specifically.
+      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('Toujours là ?').last()).toBeVisible({ timeout: 10_000 });
 
       // A never reloaded /decouvrir — the FAB badge must still bump live.
       await expect(async () => {

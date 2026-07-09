@@ -326,6 +326,24 @@ describe('MessagesService.listConversations', () => {
     expect(res.items[0].unreadCount).toBe(3);
     expect(res.items[0].name).toBe('Name acc-2'); // DM → the other participant's display name
   });
+
+  it("MC-11 drift guard: excludes the salon conversation from the widget list", async () => {
+    const { service, prisma } = build();
+    await service.listConversations('acc-1', {});
+    const where = prisma.conversation.findMany.mock.calls[0][0].where;
+    expect(where.type).toEqual({ not: 'salon' });
+  });
+
+  it("MC-11 drift guard: the unread query joins Conversation and excludes salon rows", async () => {
+    const { service, prisma } = build();
+    await service.listConversations('acc-1', {});
+    // Prisma tagged-template: strings[] carry the literal SQL; assert the salon exclusion is present.
+    const sqlParts = prisma.$queryRaw.mock.calls[0][0] as { raw?: string[] } | TemplateStringsArray;
+    const sql = Array.isArray((sqlParts as { raw?: string[] }).raw)
+      ? (sqlParts as { raw: string[] }).raw.join('?')
+      : (sqlParts as unknown as string[]).join('?');
+    expect(sql).toContain('salon');
+  });
 });
 
 describe('MessagesService — MC-10 block enforcement (DM only)', () => {
