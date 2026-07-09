@@ -140,7 +140,7 @@ Admin console: reports, editor verification, content/comment moderation, users, 
 - [AD-8](07-admin-moderation/AD-8-article-news-management.md) — Article / news management (rédaction editor)
 - [AD-9](07-admin-moderation/AD-9-contest-administration.md) — Contest administration *(inferred)*
 - [AD-10](07-admin-moderation/AD-10-user-action-log.md) — User action log "Journal d'activité" *(inferred)*
-- [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages & salon chat) *(inferred)*
+- [AD-11](07-admin-moderation/AD-11-message-oversight.md) — Message oversight (private messages, project chats & the "Le Comptoir" salon) *(inferred)*
 - [AD-12](07-admin-moderation/AD-12-financial-administration.md) — Financial administration "Finances" *(inferred)*
 - [AD-13](07-admin-moderation/AD-13-sanctions-appeals.md) — Graduated sanctions & appeals *(inferred)*
 - [AD-14](07-admin-moderation/AD-14-support-ticket-triage.md) — Support ticket triage "Assistance" *(inferred)*
