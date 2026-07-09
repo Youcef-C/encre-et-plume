@@ -69,19 +69,10 @@ jobs:
     if: needs.validate.outputs.has_app == 'true'
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: encre_et_plume_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      # NOTE: Postgres is NOT a service container — it's started via `docker run` below so we can pass
+      # `-c max_connections=300`. Service containers can't override the server command, and the default
+      # ceiling (100) was too low for the parallel e2e suite (API pool + workers + F-14 export jobs +
+      # many concurrent one-shot helper Prisma clients) → "FATAL: sorry, too many clients already".
       redis:
         image: redis:7
         ports:
@@ -94,10 +85,11 @@ jobs:
       # MinIO is NOT a service container: the official minio/minio image needs `server /data`
       # (a command), which GH service containers can't pass. It's started via `docker run` below.
     env:
-      # connection_limit caps the long-lived API + worker Prisma pools so the full e2e suite (parallel
+      # connection_limit caps the long-lived API + worker Prisma pools; combined with the raised
+      # Postgres max_connections=300 (see the docker-run step above), the full e2e suite (parallel
       # workers + F-14 data-export jobs + the many one-shot helper scripts, each capped separately via
-      # _e2e-prisma.js) stays under Postgres max_connections (100). Uncapped pools exhausted it →
-      # "too many clients", dropped sockets, and partially-applied seeds (wrong seeded state).
+      # _e2e-prisma.js) stays comfortably under the ceiling. Uncapped pools + the old default (100)
+      # exhausted it → "too many clients", dropped sockets, and partially-applied seeds.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public&connection_limit=10&pool_timeout=30
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-e2e-test-secret
@@ -131,6 +123,18 @@ jobs:
       - name: Install
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Start Postgres (max_connections=300)
+        if: steps.webcheck.outputs.ok == 'true'
+        run: |
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=encre_et_plume_test \
+            postgres:16 -c max_connections=300
+          # Wait until Postgres accepts connections before migrations/seed run.
+          for i in $(seq 1 30); do
+            if docker exec postgres pg_isready -U postgres >/dev/null 2>&1; then echo "Postgres ready"; break; fi
+            echo "waiting for Postgres… ($i)"; sleep 2
+          done
 
       - name: Start MinIO + create bucket
         if: steps.webcheck.outputs.ok == 'true'
