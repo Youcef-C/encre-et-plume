@@ -408,6 +408,42 @@ describe('MessagingWidget — realtime', () => {
     expect(refreshUnread).toHaveBeenCalled();
   });
 
+  it('reconciles the realtime echo of my own message with the optimistic bubble (no duplicate)', async () => {
+    let resolveSend!: (v: unknown) => void;
+    (api.sendMessage as ReturnType<typeof vi.fn>).mockReturnValue(new Promise((r) => { resolveSend = r; }));
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByText('Léa B.'));
+    await screen.findByText('Démarrez la conversation');
+
+    await userEvent.type(screen.getByLabelText('Écrire un message'), 'unique-echo-body');
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    await screen.findByText('unique-echo-body');
+
+    const real = {
+      id: 'srv-1',
+      conversationId: 'd1',
+      senderId: 'me-1',
+      body: 'unique-echo-body',
+      attachments: [],
+      createdAt: '2026-07-09T12:00:00.000Z',
+      readBy: [],
+    };
+    // The socket echo of my own message arrives BEFORE the POST response resolves — must not
+    // append a second bubble while the temp one is still pending.
+    await fire('message:new', {
+      conversationId: 'd1',
+      conversationName: 'Léa B.',
+      senderName: 'Camille R.',
+      message: real,
+    });
+    expect(screen.getAllByText('unique-echo-body')).toHaveLength(1);
+    await act(async () => {
+      resolveSend(real);
+    });
+    expect(screen.getAllByText('unique-echo-body')).toHaveLength(1);
+  });
+
   it('relays unread:changed (BE-RT1) into the F-5 unread refresh', async () => {
     renderWidget();
     await screen.findByRole('button', { name: 'Messages, 1 non lus' });

@@ -103,11 +103,19 @@ export const MessagingContext = createContext<MessagingCtx>({
 export const useMessaging = () => useContext(MessagingContext);
 
 // Newest-first API page → oldest-first display list, deduped by id (server echoes my own sends).
+// If the echo races the optimistic bubble (temp id ≠ real id), reconcile it against a pending
+// optimistic of the same sender + body instead of appending a second bubble.
 function mergeMessage(list: ThreadMessage[], msg: ThreadMessage): ThreadMessage[] {
   const idx = list.findIndex((m) => m.id === msg.id);
   if (idx >= 0) {
     const next = [...list];
     next[idx] = msg;
+    return next;
+  }
+  const pending = list.findIndex((m) => m.pending && m.senderId === msg.senderId && m.body === msg.body);
+  if (pending >= 0) {
+    const next = [...list];
+    next[pending] = msg;
     return next;
   }
   return [...list, msg];

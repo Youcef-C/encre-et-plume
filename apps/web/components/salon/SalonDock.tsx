@@ -21,12 +21,20 @@ import { ChatIcon } from '../icons';
 type FeedMessage = SalonMessageDto & { pending?: boolean; failed?: boolean; error?: string };
 type FeedState = 'idle' | 'loading' | 'ready' | 'error';
 
-// Dedupe by id — the server echoes my own send back over the socket.
+// Dedupe by id — the server echoes my own send back over the socket. If the echo races the
+// optimistic bubble's own id (temp id ≠ real id), reconcile it against a pending optimistic of the
+// same sender + body instead of appending a second bubble.
 function merge(list: FeedMessage[], m: FeedMessage): FeedMessage[] {
   const idx = list.findIndex((x) => x.id === m.id);
   if (idx >= 0) {
     const next = [...list];
     next[idx] = m;
+    return next;
+  }
+  const pending = list.findIndex((x) => x.pending && x.senderId === m.senderId && x.body === m.body);
+  if (pending >= 0) {
+    const next = [...list];
+    next[pending] = m;
     return next;
   }
   return [...list, m];

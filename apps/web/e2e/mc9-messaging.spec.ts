@@ -99,13 +99,21 @@ const rowByName = (page: Page, name: string) =>
     .locator('button')
     .filter({ has: page.locator('b', { hasText: new RegExp(`^${escapeRegExp(name)}$`) }) });
 
-test.describe.configure({ mode: 'serial' });
+// Serial mode is configured PER describe block below (not file-wide): each block's tests are
+// ordering-dependent on ONE ANOTHER (e.g. E3's mark-read is assumed by E6's unread math), but the
+// blocks themselves are independent fixture domains. Playwright replays a WHOLE serial group from
+// its start on any retry — a file-wide `test.describe.configure` would mean a flaky retry of, say,
+// MC9-E6 replays E1-E5 too, rerunning E1's "pristine badge" assertion against fixture state already
+// mutated by the first (failed) attempt's E2-E5/E6/E7. Scoping serial per block confines a retry to
+// only the group that actually failed, so a sibling group's already-seeded assertions can't drift.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core widget: anatomy, states, a11y, responsive (single MSG_A context)
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('MC9-E0: logged-out — no launcher bubble anywhere', async ({ page }) => {
     await page.goto('/');
     await expect(fab(page)).toHaveCount(0);
@@ -262,6 +270,8 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('MC9-E6: B sends a message via the UI → A (widget already open on the DM, no reload) receives the bubble + list/badge bump live; A marks read → B sees "Lu"', async ({
     browser,
   }) => {
@@ -292,12 +302,14 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
       await panel(pageB).getByLabel('Écrire un message').fill(''); // stop typing (blur/clear)
       await panel(pageB).getByLabel('Écrire un message').blur();
 
-      // B sends "Bonjour !" — A must receive it live, no reload.
-      await panel(pageB).getByLabel('Écrire un message').fill('Bonjour !');
+      // B sends a greeting — A must receive it live, no reload. Body is unique per run so it can't
+      // collide with seeded history AND so getByText only ever matches the reconciled bubble.
+      const greeting = `Bonjour, ceci est un test ! ${Date.now()}`;
+      await panel(pageB).getByLabel('Écrire un message').fill(greeting);
       await panel(pageB).getByRole('button', { name: 'Envoyer' }).click();
-      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // B's own optimistic→ack bubble
+      await expect(panel(pageB).getByRole('log', { name: 'Messages' }).getByText(greeting)).toBeVisible({ timeout: 10_000 }); // B's own optimistic→ack bubble
 
-      await expect(panel(pageA).getByRole('log', { name: 'Messages' }).getByText('Bonjour !')).toBeVisible({ timeout: 10_000 }); // realtime delivery, NO reload
+      await expect(panel(pageA).getByRole('log', { name: 'Messages' }).getByText(greeting)).toBeVisible({ timeout: 10_000 }); // realtime delivery, NO reload
       // A was actively reading the open thread → the message is auto-marked read; B should see "Lu" under it.
       await expect(panel(pageB).getByText('Lu', { exact: true })).toBeVisible({ timeout: 10_000 });
 
@@ -352,6 +364,8 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONTACT)', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeAll(async ({ playwright }) => {
     // Establish an accepted connection MSG_A ⇄ MSG_CONTACT so MSG_CONTACT appears as a selectable
     // contact in the "＋ Groupe" multi-select and as a Contacts row for the MC-8 seam test.
@@ -431,6 +445,8 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
 const ATTACHMENT_FIXTURE = path.join(__dirname, 'fixtures/avatar-50x50.jpg');
 
 test.describe('MC-9 composer attachments — Round 2 send path (MSG_A ⇄ MSG_B)', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('MC9-E10: A attaches an image and sends attachment-only → B\'s open thread receives it live (message:new) and renders an AttachmentTile via the signed URL', async ({
     browser,
   }) => {

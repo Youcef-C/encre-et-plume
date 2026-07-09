@@ -247,6 +247,26 @@ describe('SalonDock', () => {
     expect((input as HTMLInputElement).value).toContain('@Léa B.');
   });
 
+  it('reconciles the realtime echo of my own message with the optimistic bubble (no duplicate)', async () => {
+    vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
+    let resolveSend!: (v: SalonMessageDto) => void;
+    vi.mocked(api.sendSalonMessage).mockReturnValue(new Promise((r) => { resolveSend = r; }));
+    renderDock();
+    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    const input = await screen.findByPlaceholderText('Votre message…');
+    await userEvent.type(input, 'unique-echo-body{Enter}');
+    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('unique-echo-body'));
+    // The socket echo of my own message arrives BEFORE the POST response resolves — must not
+    // append a second bubble while the temp one is still pending.
+    const real = msg({ id: 'srv-1', senderId: 'me-1', senderName: 'Camille R.', body: 'unique-echo-body' });
+    await fire(WS_EVENTS.salonMessage, { message: real });
+    expect(screen.getAllByText('unique-echo-body')).toHaveLength(1);
+    await act(async () => {
+      resolveSend(real);
+    });
+    expect(screen.getAllByText('unique-echo-body')).toHaveLength(1);
+  });
+
   it('shows a retry action when sending fails', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     vi.mocked(api.sendSalonMessage).mockRejectedValueOnce({ message: 'Échec' });
