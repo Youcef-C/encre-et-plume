@@ -172,7 +172,7 @@ export default function EditIllustrationForm({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 18px', borderBottom: '3px solid var(--ink)' }}>
           <h2 id={titleId} style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
-            Modifier l'illustration
+            Modifier l’illustration
           </h2>
           <button
             type="button"
