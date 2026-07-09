@@ -216,3 +216,81 @@ describe('InviteModal — picker mode (no recipient)', () => {
     expect(within(status).getByText(/déjà une proposition en attente/i)).toBeInTheDocument();
   });
 });
+
+describe('InviteModal — from-work mode (multi-creator work)', () => {
+  const creators: InviteRecipient[] = [
+    { userId: 'u-cam', name: 'Camille R.', avatarUrl: null, subtitle: 'Scénariste · Paris' },
+    { userId: 'u-yuki', name: 'Yuki M.', avatarUrl: null, subtitle: 'Dessinateur · Lyon' },
+  ];
+  function renderFromWork(onClose = vi.fn(), c: InviteRecipient[] = creators) {
+    render(<InviteModal fromWork={{ title: 'Lames de Brume', creators: c }} onClose={onClose} />);
+    return { onClose };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getMyProjects).mockResolvedValue(projects);
+    vi.mocked(api.getContacts).mockResolvedValue(contacts);
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([]));
+  });
+
+  it('scopes the recipient picker to the work creators (not getContacts) as inline rows', async () => {
+    renderFromWork();
+    await screen.findByRole('dialog', { name: /proposer une collab/i });
+    // From-work never fetches contacts — the pool is the passed creators.
+    expect(api.getContacts).not.toHaveBeenCalled();
+    // The creators are inline selectable rows (no dropdown to open).
+    expect(await screen.findByRole('checkbox', { name: /camille r\./i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /yuki m\./i })).toBeInTheDocument();
+    // A contact who is NOT a creator of this work is absent.
+    expect(screen.queryByRole('checkbox', { name: /alma r\./i })).not.toBeInTheDocument();
+  });
+
+  it('toggles a creator row selection on click', async () => {
+    const user = userEvent.setup();
+    renderFromWork();
+    const row = await screen.findByRole('checkbox', { name: /camille r\./i });
+    expect(row).toHaveAttribute('aria-checked', 'false');
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-checked', 'true');
+    await user.click(row);
+    expect(row).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('offers the "Rejoindre ce projet" choice disabled with "Bientôt disponible"', async () => {
+    renderFromWork();
+    const join = await screen.findByRole('radio', { name: /rejoindre ce projet/i });
+    expect(join).toHaveAttribute('aria-disabled', 'true');
+    expect(join).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText(/bientôt disponible/i)).toBeInTheDocument();
+    // The active default choice is "Proposer une autre collaboration".
+    expect(
+      screen.getByRole('radio', { name: /proposer une autre collaboration/i }),
+    ).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('sends toUsers with the cherry-picked creators and names them in the results', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([sentResult('u-cam')]));
+    renderFromWork();
+    await user.click(await screen.findByRole('checkbox', { name: /camille r\./i }));
+    await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
+    await waitFor(() => {
+      expect(api.createInvitation).toHaveBeenCalledWith({ kind: 'direct', toUsers: ['u-cam'] });
+    });
+    const status = await screen.findByRole('status');
+    expect(within(status).getByText(/camille r\./i)).toBeInTheDocument();
+    expect(within(status).getByText(/envoyée/i)).toBeInTheDocument();
+  });
+
+  it('preselects the lone creator when the work has a single creator', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([sentResult('u-cam')]));
+    renderFromWork(vi.fn(), [creators[0]]);
+    // No manual selection — the sole creator is already selected, so send fires the API.
+    await user.click(await screen.findByRole('button', { name: /envoyer l'invitation/i }));
+    await waitFor(() => {
+      expect(api.createInvitation).toHaveBeenCalledWith({ kind: 'direct', toUsers: ['u-cam'] });
+    });
+  });
+});

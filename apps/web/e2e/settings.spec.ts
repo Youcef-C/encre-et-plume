@@ -72,7 +72,7 @@ async function signUpVerifyAndLogin(
 
 // ── F19-E2E-1: Page structure ──────────────────────────────────────────────────
 
-test('F19-E2E-1: /parametres has one h1, six h2s in order, and a section nav with 6 links', async ({
+test('F19-E2E-1: /parametres has one h1, seven h2s in order, and a section nav with 7 links', async ({
   page,
 }) => {
   const email = freshEmail('f19-struct');
@@ -85,34 +85,37 @@ test('F19-E2E-1: /parametres has one h1, six h2s in order, and a section nav wit
   await expect(h1s).toHaveCount(1);
   await expect(h1s.first()).toHaveText('Paramètres');
 
-  // Six h2s in exact story order (Apparence removed — theme picker disabled, light forced;
-  // Contenu 18+ added by DR-10; Comptes bloqués added by MC-10)
+  // Seven h2s in exact story order (Apparence removed — theme picker disabled, light forced;
+  // Confidentialité added by F-19/MC-9; Contenu 18+ added by DR-10; Comptes bloqués added by MC-10)
   const h2s = page.getByRole('heading', { level: 2 });
-  await expect(h2s).toHaveCount(6, { timeout: 10_000 });
+  await expect(h2s).toHaveCount(7, { timeout: 10_000 });
   await expect(h2s.nth(0)).toHaveText('Préférences de notification');
-  await expect(h2s.nth(1)).toHaveText('Cookies');
-  await expect(h2s.nth(2)).toHaveText('Sécurité');
-  await expect(h2s.nth(3)).toHaveText('Contenu 18+');
-  await expect(h2s.nth(4)).toHaveText('Comptes bloqués');
-  await expect(h2s.nth(5)).toHaveText('Mes données');
+  await expect(h2s.nth(1)).toHaveText('Confidentialité');
+  await expect(h2s.nth(2)).toHaveText('Cookies');
+  await expect(h2s.nth(3)).toHaveText('Sécurité');
+  await expect(h2s.nth(4)).toHaveText('Contenu 18+');
+  await expect(h2s.nth(5)).toHaveText('Comptes bloqués');
+  await expect(h2s.nth(6)).toHaveText('Mes données');
 
-  // Section nav landmark with its 6 links, in order
+  // Section nav landmark with its 7 links, in order
   const nav = page.getByRole('navigation', { name: 'Sections des paramètres' });
   await expect(nav).toBeVisible();
   const links = nav.getByRole('link');
-  await expect(links).toHaveCount(6);
+  await expect(links).toHaveCount(7);
   await expect(links.nth(0)).toHaveText('Préférences de notification');
   await expect(links.nth(0)).toHaveAttribute('href', '#notifications');
-  await expect(links.nth(1)).toHaveText('Cookies');
-  await expect(links.nth(1)).toHaveAttribute('href', '#cookies');
-  await expect(links.nth(2)).toHaveText('Sécurité');
-  await expect(links.nth(2)).toHaveAttribute('href', '#securite');
-  await expect(links.nth(3)).toHaveText('Contenu 18+');
-  await expect(links.nth(3)).toHaveAttribute('href', '#contenu-adulte');
-  await expect(links.nth(4)).toHaveText('Comptes bloqués');
-  await expect(links.nth(4)).toHaveAttribute('href', '#comptes-bloques');
-  await expect(links.nth(5)).toHaveText('Mes données');
-  await expect(links.nth(5)).toHaveAttribute('href', '#mes-donnees');
+  await expect(links.nth(1)).toHaveText('Confidentialité');
+  await expect(links.nth(1)).toHaveAttribute('href', '#confidentialite');
+  await expect(links.nth(2)).toHaveText('Cookies');
+  await expect(links.nth(2)).toHaveAttribute('href', '#cookies');
+  await expect(links.nth(3)).toHaveText('Sécurité');
+  await expect(links.nth(3)).toHaveAttribute('href', '#securite');
+  await expect(links.nth(4)).toHaveText('Contenu 18+');
+  await expect(links.nth(4)).toHaveAttribute('href', '#contenu-adulte');
+  await expect(links.nth(5)).toHaveText('Comptes bloqués');
+  await expect(links.nth(5)).toHaveAttribute('href', '#comptes-bloques');
+  await expect(links.nth(6)).toHaveText('Mes données');
+  await expect(links.nth(6)).toHaveAttribute('href', '#mes-donnees');
 });
 
 // ── DR-10: Contenu 18+ section — status + birthdate set + revoke clearance ─────

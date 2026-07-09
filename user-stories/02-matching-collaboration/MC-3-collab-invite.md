@@ -6,12 +6,16 @@
 
 ## Frontend
 - Modal "Proposer une collab" triggered by `openInvite` from: partner cards ([[MC-1]]), profiles ([[F-3]]), and work/illustration pages ([[DR-3]]).
-- **Two proposal modes** (user-specified 2026-07-09):
-  - **A · Direct proposal to a person** (from a partner card / profile / illustration): the recipient is a **specific user** — and you may **pick several** (multi-select) to invite to collaborate. This is the "let's work together" case.
-  - **B · Join an existing project/work** (from the work page [[DR-3]], where the œuvre already has a team): you can't cherry-pick one member — the proposal notifies the **whole team**, and the **decision belongs to the group leader** (see [[CS-10]] roles). If the group has **co-leaders (multiple leaders), ALL leaders must accept** before the collaboration is established.
+- **Two proposal modes** (user-specified 2026-07-09, refined):
+  - **A · Direct proposal to specific person(s)**: the recipient is a **specific user**, and you may **pick several** (multi-select). This is the "let's work together" case.
+  - **B · Join an existing project** (rejoindre l'équipe de l'œuvre): you ask to work **on that project as-is** — the proposal notifies the **whole team** and the **decision belongs to the group leader** (co-leaders: ALL must accept) — see [[CS-10]].
+- **Launching from a work that has multiple creators** ([[DR-3]]) — the modal must let the proposer **choose the collaboration**, not force one path (user-specified 2026-07-09):
+  - **"Rejoindre ce projet"** (work on the **selected** project) → **Mode B** (whole team notified, leader(s) decide).
+  - **"Proposer une autre collaboration"** (work on **another** project) → **Mode A**, where you **select which creator(s) of this work** you want to work with (multi-select **scoped to the work's team**) and optionally attach one of **your own** projects ([[CS-1]]). You are NOT limited to the whole team here — cherry-pick is exactly the point.
+  - A single-creator work skips the picker (that lone creator is preselected) but still offers the "rejoindre ce projet" vs "autre collaboration" choice.
 - Fields:
-  - Recipient — mode A: a **user picker** (specific user, or several via multi-select), prefilled + read-only when launched from a single card/profile. Mode B: fixed to the target work's **team** (shown as "toute l'équipe de « {œuvre} »"), not individually selectable.
-  - Optional project picker — mode A only: choose one of the sender's existing projects ([[CS-1]]) to attach, or leave unattached.
+  - Recipient — Mode A: a **user picker** (specific user, or several via multi-select); prefilled + read-only when launched from a single card/profile; **scoped to the work's creators** when launched as "autre collaboration" from a work. Mode B: fixed to the target work's **team** ("toute l'équipe de « {œuvre} »"), not individually selectable.
+  - Optional project picker — Mode A only: choose one of the sender's existing projects ([[CS-1]]) to attach, or leave unattached.
   - Message — free-text note to the recipient(s)/team.
   - Primary action to send (e.g. "Envoyer la proposition"); cancel/close dismisses.
 - States: default, sending (button disabled/spinner), success confirmation/toast, error (e.g. already invited, recipient unavailable). Empty project list shows a hint that attaching a project is optional.

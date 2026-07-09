@@ -19,7 +19,7 @@ import { useReaction } from '../../lib/useReaction';
 import * as api from '../../lib/api';
 import { CheckIcon, HeartIcon, StarIcon, PlusIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon, WarningIcon } from '../icons';
 import ResumeProgress from './ResumeProgress';
-import InviteModal, { type InviteRecipient } from '../collab/InviteModal';
+import InviteModal from '../collab/InviteModal';
 
 // Same French labels the team sidebar uses; fall back to the raw role string.
 const ROLE_LABEL: Record<string, string> = { scenariste: 'Scénariste', dessinateur: 'Dessinateur' };
@@ -52,23 +52,17 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
   const { trigger, notice } = usePersonalAction(account);
   const resume = useResumePosition(work.slug, account);
 
-  // MC-3 — "Proposer une collab" targets the work's first creator who isn't the viewer.
-  // No such creator (own work / only creator) → keep the deferred stub. MC-5 adds the choice modal.
-  const [inviteTarget, setInviteTarget] = useState<InviteRecipient | null>(null);
-  const collabTarget = work.team.find((c) => c.id !== account?.id) ?? null;
+  // MC-3 — "Proposer une collab" from a work: open the invite modal in from-work mode so the
+  // proposer can CHOOSE the collaboration (cherry-pick which creator(s) of this work). No other
+  // creator (own work / solo) → keep the deferred stub.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const otherCreators = account ? work.team.filter((c) => c.id !== account.id) : [];
   const handleProposer = () => {
-    if (!account || !collabTarget) {
+    if (!account || otherCreators.length === 0) {
       trigger();
       return;
     }
-    setInviteTarget({
-      userId: collabTarget.id,
-      name: collabTarget.name,
-      avatarUrl: collabTarget.avatar,
-      subtitle: [ROLE_LABEL[collabTarget.role] ?? collabTarget.role, collabTarget.city]
-        .filter(Boolean)
-        .join(' · '),
-    });
+    setInviteOpen(true);
   };
   // F-22: genre badge links to the Découvrir genre facet when the label resolves to a vocabulary id.
   const genreId = resolveGenreId(work.genre);
@@ -366,8 +360,19 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
         </div>
       </div>
 
-      {inviteTarget && (
-        <InviteModal recipient={inviteTarget} onClose={() => setInviteTarget(null)} />
+      {inviteOpen && (
+        <InviteModal
+          fromWork={{
+            title: work.title,
+            creators: otherCreators.map((c) => ({
+              userId: c.id,
+              name: c.name,
+              avatarUrl: c.avatar,
+              subtitle: [ROLE_LABEL[c.role] ?? c.role, c.city].filter(Boolean).join(' · '),
+            })),
+          }}
+          onClose={() => setInviteOpen(false)}
+        />
       )}
     </div>
   );

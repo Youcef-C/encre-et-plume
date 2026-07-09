@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 
 const SECTIONS: { id: string; label: string }[] = [
   { id: 'notifications', label: 'Préférences de notification' },
+  { id: 'confidentialite', label: 'Confidentialité' },
   { id: 'cookies', label: 'Cookies' },
   { id: 'securite', label: 'Sécurité' },
   { id: 'contenu-adulte', label: 'Contenu 18+' },

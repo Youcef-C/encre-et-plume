@@ -508,12 +508,15 @@ describe('Reader (DR-4 FE-1)', () => {
 
   // ── DR-4 delta: reading direction ("Sens de lecture") ──────────────────────────
   describe('Reading direction', () => {
-    it('AC6: a Manga-format work reads right-to-left by default ("Droite→Gauche" pressed, slider dir="rtl")', async () => {
+    // Single "⇄" switch (user 2026-07-09): pressed = RTL; accessible name announces the current direction.
+    const dirSwitch = () => screen.getByRole('button', { name: /Sens de lecture/ });
+
+    it('AC6: a Manga-format work reads right-to-left by default (⇄ switch pressed, slider dir="rtl")', async () => {
       mockReady();
       render(<Reader slug="lames-de-brume" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
-      expect(screen.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'false');
+      expect(dirSwitch()).toHaveAttribute('aria-pressed', 'true');
+      expect(dirSwitch()).toHaveAccessibleName(/droite à gauche/);
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
     });
 
@@ -524,7 +527,7 @@ describe('Reader (DR-4 FE-1)', () => {
       vi.mocked(api.getMyFavorites).mockResolvedValue([]);
       render(<Reader slug="lames-de-brume" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
-      expect(screen.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
+      expect(dirSwitch()).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
     });
 
@@ -535,32 +538,31 @@ describe('Reader (DR-4 FE-1)', () => {
       vi.mocked(api.getMyFavorites).mockResolvedValue([]);
       render(<Reader slug="dr2-le-murmure-des-cendres" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
-      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+      expect(dirSwitch()).toHaveAttribute('aria-pressed', 'false');
+      expect(dirSwitch()).toHaveAccessibleName(/gauche à droite/);
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
     });
 
-    it('AC9: the toggle is a labelled group with exactly one active (aria-pressed) segment', async () => {
+    it('AC9: the direction control is a single labelled switch announcing the active direction', async () => {
       mockReady();
       render(<Reader slug="lames-de-brume" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
-      const group = screen.getByRole('group', { name: 'Sens de lecture' });
-      const pressed = within(group)
-        .getAllByRole('button')
-        .filter((b) => b.getAttribute('aria-pressed') === 'true');
-      expect(pressed).toHaveLength(1);
-      expect(pressed[0]).toHaveAccessibleName('Droite→Gauche');
+      const buttons = screen.getAllByRole('button', { name: /Sens de lecture/ });
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('AC7/AC8: flipping to "Gauche→Droite" on a manga work applies LTR and persists the choice', async () => {
+    it('AC7/AC8: the ⇄ switch flips a manga work to LTR and persists the choice', async () => {
       mockReady();
       const user = userEvent.setup();
       render(<Reader slug="lames-de-brume" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
 
-      await user.click(screen.getByRole('button', { name: 'Gauche→Droite' }));
+      await user.click(dirSwitch());
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+      expect(dirSwitch()).toHaveAttribute('aria-pressed', 'false');
+      expect(dirSwitch()).toHaveAccessibleName(/gauche à droite/);
       expect(localStorage.getItem('ep:reading-direction:lames-de-brume')).toBe('ltr');
     });
 
@@ -570,7 +572,7 @@ describe('Reader (DR-4 FE-1)', () => {
       render(<Reader slug="lames-de-brume" />);
       await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
       expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
-      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+      expect(dirSwitch()).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('AC2: a manga 2-page spread in RTL orders the pages right-then-left (row-reverse)', async () => {

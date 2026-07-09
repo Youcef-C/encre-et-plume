@@ -27,6 +27,13 @@ export interface InviteRecipient {
   subtitle: string | null; // role · location line, composed by each trigger
 }
 
+// From-work launch (DR-3): the work's title + its creators (viewer excluded), so the proposer can
+// choose the collaboration instead of being forced onto the first creator.
+export interface InviteFromWork {
+  title: string;
+  creators: InviteRecipient[];
+}
+
 type ProjectsState =
   | { status: 'loading' }
   | { status: 'ready'; items: ProjectSummary[] }
@@ -89,6 +96,17 @@ const sectionLabel: React.CSSProperties = {
   letterSpacing: '.02em',
 };
 
+// Shared row shell for the from-work collaboration-choice radios (mirrors the project rows).
+const choiceRow: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 11,
+  border: '2px solid var(--ink)',
+  borderRadius: 8,
+  padding: '10px 12px',
+  marginBottom: 9,
+};
+
 const footerBtn: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
@@ -110,12 +128,18 @@ const RESULT_LABEL: Record<InvitationSendStatus, string> = {
 
 export default function InviteModal({
   recipient,
+  fromWork,
   onClose,
 }: {
   recipient?: InviteRecipient;
+  fromWork?: InviteFromWork;
   onClose: () => void;
 }) {
-  const picker = !recipient;
+  const isFromWork = !!fromWork;
+  // "Picker" = the /contacts launch (pool fetched via getContacts). From-work is its own multi-mode
+  // whose pool is the passed work creators. Both share the multi-select / results plumbing below.
+  const picker = !recipient && !isFromWork;
+  const multiMode = picker || isFromWork;
 
   const [projects, setProjects] = useState<ProjectsState>({ status: 'loading' });
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -126,11 +150,23 @@ export default function InviteModal({
   // A duplicate result is terminal for this recipient — lock the send button (prefilled mode).
   const [locked, setLocked] = useState(false);
 
-  // Picker mode only: contacts pool + selection + per-recipient send results.
+  // Multi-mode (picker over contacts, or from-work over creators): recipient pool + selection +
+  // per-recipient send results. A single-creator work preselects that lone creator.
   const [contactsLoaded, setContactsLoaded] = useState(false);
   const [contacts, setContacts] = useState<ContactItem[]>([]);
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(
+    fromWork && fromWork.creators.length === 1 ? [fromWork.creators[0].userId] : [],
+  );
   const [results, setResults] = useState<CreateInvitationsResponse['results'] | null>(null);
+
+  // The recipient pool feeding the multi-select and results naming: contacts (picker) or the
+  // work's creators (from-work). Prefilled mode has no pool.
+  const pool: { userId: string; name: string }[] = isFromWork
+    ? fromWork.creators.map((c) => ({ userId: c.userId, name: c.name }))
+    : contacts.map((c) => ({ userId: c.userId, name: c.name }));
+
+  const toggleRecipient = (id: string) =>
+    setSelected((cur) => (cur.includes(id) ? cur.filter((v) => v !== id) : [...cur, id]));
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'invite-modal-title';
@@ -175,11 +211,11 @@ export default function InviteModal({
     focusTrap(e, dialogRef);
   };
 
-  const toUsers = picker ? selectedContacts : [recipient!.userId];
+  const toUsers = multiMode ? selected : [recipient!.userId];
 
   async function handleSend() {
     if (sending || locked) return;
-    if (picker && selectedContacts.length === 0) {
+    if (multiMode && selected.length === 0) {
       setError('Sélectionnez au moins un·e destinataire.');
       return;
     }
@@ -192,7 +228,7 @@ export default function InviteModal({
         ...(projectId ? { projectId } : {}),
         ...(message.trim() ? { message: message.trim() } : {}),
       });
-      if (picker) {
+      if (multiMode) {
         setResults(res.results);
         return;
       }
@@ -213,8 +249,8 @@ export default function InviteModal({
     }
   }
 
-  // Map recipient id → display name for the picker result list (contacts never include self).
-  const nameById = new Map(contacts.map((c) => [c.userId, c.name]));
+  // Map recipient id → display name for the multi-mode result list.
+  const nameById = new Map(pool.map((p) => [p.userId, p.name]));
   const sendLabel = toUsers.length >= 2 ? 'Envoyer les invitations' : "Envoyer l'invitation";
 
   return (
@@ -328,13 +364,97 @@ export default function InviteModal({
           </div>
         ) : (
           <div style={{ padding: '16px 18px' }}>
-            {picker && (
-              // Recipient picker (Mode A multi-select) — only when not launched from one person.
+            {isFromWork && (
+              // From-work: let the proposer choose the collaboration instead of forcing one path.
+              // Mode B ("Rejoindre ce projet") depends on the CS-10 leader-roles model → disabled.
+              <>
+                <div style={sectionLabel}>TYPE DE COLLABORATION</div>
+                <div role="radiogroup" aria-label="Type de collaboration" style={{ marginBottom: 14 }}>
+                  <div
+                    role="radio"
+                    aria-checked={false}
+                    aria-disabled="true"
+                    style={{ ...choiceRow, opacity: 0.55, cursor: 'not-allowed' }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <b style={{ fontSize: 14 }}>Rejoindre ce projet — «&nbsp;{fromWork.title}&nbsp;»</b>
+                      <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>Bientôt disponible</div>
+                    </div>
+                  </div>
+                  <div
+                    role="radio"
+                    aria-checked
+                    tabIndex={0}
+                    style={{ ...choiceRow, border: '2px solid var(--accent)', background: 'var(--accent-soft)' }}
+                  >
+                    <b style={{ fontSize: 14 }}>Proposer une autre collaboration</b>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {multiMode && (
+              // Recipient picker (Mode A multi-select). From-work: the small, scoped creator pool is
+              // shown as inline selectable rows (cherry-pick one or several). Picker (/contacts):
+              // the potentially-large pool keeps the OnBrandMultiSelect dropdown.
               <>
                 <div style={sectionLabel} id="invite-recipients-label">
                   DESTINATAIRES
                 </div>
-                {contactsLoaded && contacts.length === 0 ? (
+                {isFromWork ? (
+                  <div role="group" aria-labelledby="invite-recipients-label" style={{ marginBottom: 16 }}>
+                    {fromWork.creators.map((c) => {
+                      const sel = selected.includes(c.userId);
+                      return (
+                        <div
+                          key={c.userId}
+                          role="checkbox"
+                          aria-checked={sel}
+                          tabIndex={0}
+                          onClick={() => toggleRecipient(c.userId)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleRecipient(c.userId);
+                            }
+                          }}
+                          style={{
+                            ...choiceRow,
+                            cursor: 'pointer',
+                            border: `2px solid ${sel ? 'var(--accent)' : 'var(--ink)'}`,
+                            background: sel ? 'var(--accent-soft)' : 'var(--card)',
+                          }}
+                        >
+                          <span aria-hidden="true" style={avatarDisc(c.avatarUrl)} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <b style={{ fontSize: 14 }}>{c.name}</b>
+                            {c.subtitle && (
+                              <div style={{ fontSize: 12, color: 'var(--ink2)' }}>{c.subtitle}</div>
+                            )}
+                          </div>
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 5,
+                              border: '2px solid var(--ink)',
+                              flex: 'none',
+                              background: sel ? 'var(--accent)' : 'var(--card)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              fontSize: 12,
+                            }}
+                          >
+                            {sel ? '✓' : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : picker && contactsLoaded && contacts.length === 0 ? (
                   <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 16px', lineHeight: 1.5 }}>
                     Aucun contact pour l&apos;instant — connectez-vous d&apos;abord avec des créateurs.
                   </p>
@@ -342,9 +462,9 @@ export default function InviteModal({
                   <div style={{ marginBottom: 16 }}>
                     <OnBrandMultiSelect
                       label="Contacts"
-                      options={contacts.map((c) => ({ value: c.userId, label: c.name }))}
-                      values={selectedContacts}
-                      onChange={setSelectedContacts}
+                      options={pool.map((p) => ({ value: p.userId, label: p.name }))}
+                      values={selected}
+                      onChange={setSelected}
                       searchable
                     />
                   </div>
@@ -444,7 +564,7 @@ export default function InviteModal({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={INVITATION_MESSAGE_MAX}
-              placeholder={picker ? 'Écrivez un mot aux destinataires…' : 'Écrivez un mot à ce créateur…'}
+              placeholder={multiMode ? 'Écrivez un mot aux destinataires…' : 'Écrivez un mot à ce créateur…'}
               rows={3}
               style={{
                 width: '100%',

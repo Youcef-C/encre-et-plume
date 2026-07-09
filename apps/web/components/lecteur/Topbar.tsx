@@ -123,20 +123,19 @@ export default function Topbar({
           </button>
         </div>
         {/* DR-4 delta (induced addition — the prototype's LECTEUR topbar doesn't draw this; the
-            reading-direction bullet is user-specified 2026-07-09). Same segment style as the "1 page
-            / 2 pages" control so it reads native to the replica. The active direction is announced
-            via aria-pressed on the explicitly named segment inside a labelled group. */}
-        <div role="group" aria-label="Sens de lecture" style={{ display: 'flex', alignItems: 'center', border: '2px solid #4a4239', borderRadius: 6, overflow: 'hidden' }}>
-          <span aria-hidden="true" style={{ padding: '6px 8px 6px 12px', color: '#cabfb2', fontSize: 14, fontWeight: 700 }}>
-            ⇄
-          </span>
-          <button type="button" onClick={() => onDirectionChange('ltr')} aria-pressed={readingDirection === 'ltr'} style={segmentBtn(readingDirection === 'ltr')}>
-            Gauche→Droite
-          </button>
-          <button type="button" onClick={() => onDirectionChange('rtl')} aria-pressed={readingDirection === 'rtl'} style={segmentBtn(readingDirection === 'rtl')}>
-            Droite→Gauche
-          </button>
-        </div>
+            reading-direction bullet is user-specified 2026-07-09). A SINGLE "⇄" switch that flips the
+            reading direction (user 2026-07-09: the two labelled segments are unnecessary). Pressed =
+            RTL (Droite→Gauche). The accessible name announces the current direction. */}
+        <button
+          type="button"
+          onClick={() => onDirectionChange(readingDirection === 'rtl' ? 'ltr' : 'rtl')}
+          aria-pressed={readingDirection === 'rtl'}
+          aria-label={`Sens de lecture : ${readingDirection === 'rtl' ? 'droite à gauche' : 'gauche à droite'}`}
+          title={`Sens de lecture : ${readingDirection === 'rtl' ? 'droite à gauche' : 'gauche à droite'}`}
+          style={{ ...segmentBtn(readingDirection === 'rtl'), display: 'flex', alignItems: 'center', gap: 4, border: '2px solid #4a4239', borderRadius: 6, fontSize: 15 }}
+        >
+          ⇄
+        </button>
         {/* Story update: "◳ Studio" repurposed into a "clear view" toggle - collapses both side
             asides (Chapitres + Réactions) for a bigger, distraction-free reading panel, distinct
             from full immersive fullscreen (the topbar itself stays visible either way). */}

@@ -23,6 +23,8 @@ vi.mock('../lib/api', async (importOriginal) => {
     unlikeReaction: vi.fn(),
     saveReaction: vi.fn(),
     unsaveReaction: vi.fn(),
+    getMyProjects: vi.fn(),
+    createInvitation: vi.fn(),
   };
 });
 
@@ -81,6 +83,7 @@ describe('WorkHero (DR-3 FE-2)', () => {
     vi.clearAllMocks();
     vi.mocked(api.getReadingHistoryForWork).mockRejectedValue({ statusCode: 404, message: 'Aucune progression' });
     vi.mocked(api.getReactionState).mockResolvedValue({});
+    vi.mocked(api.getMyProjects).mockResolvedValue({ items: [] });
   });
 
   it('renders the back link, badges with text equivalents, and title', () => {
@@ -261,5 +264,38 @@ describe('WorkHero (DR-3 FE-2)', () => {
   it('shows a "Contenu mature" warning tag when the genre/hashtags are mature (never blurred)', () => {
     render(<WorkHero work={{ ...work, genre: 'Gore' }} account={null} />);
     expect(screen.getByText('Contenu mature')).toBeInTheDocument();
+  });
+
+  // ── MC-3: "Proposer une collab" from a multi-creator work opens the choice modal ──
+
+  const multiCreatorWork: WorkDetail = {
+    ...work,
+    team: [
+      { id: 'a1', name: 'Admin', slug: 'admin', role: 'scenariste', city: 'Paris', avatar: null }, // the viewer
+      { id: 'u-yuki', name: 'Yuki M.', slug: 'yuki', role: 'dessinateur', city: 'Lyon', avatar: null },
+      { id: 'u-cam', name: 'Camille R.', slug: 'cam', role: 'scenariste', city: 'Nantes', avatar: null },
+    ],
+  };
+
+  it('MC-3: "Proposer une collab" opens the from-work modal scoped to the other creators', async () => {
+    const user = userEvent.setup();
+    render(<WorkHero work={multiCreatorWork} account={admin} />);
+    await user.click(screen.getByRole('button', { name: /proposer une collab/i }));
+    // From-work modal: the collaboration choice + a creator-scoped picker.
+    expect(
+      await screen.findByRole('radio', { name: /proposer une autre collaboration/i }),
+    ).toBeInTheDocument();
+    // The viewer (Admin, id a1) is excluded; the two other creators are inline selectable rows.
+    expect(await screen.findByRole('checkbox', { name: /yuki m\./i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /camille r\./i })).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /^admin$/i })).not.toBeInTheDocument();
+  });
+
+  it('MC-3: "Proposer une collab" on a work with no other creators shows the deferred affordance', async () => {
+    const user = userEvent.setup();
+    render(<WorkHero work={{ ...work, team: [{ id: 'a1', name: 'Admin', slug: 'admin', role: 'scenariste', city: null, avatar: null }] }} account={admin} />);
+    await user.click(screen.getByRole('button', { name: /proposer une collab/i }));
+    expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

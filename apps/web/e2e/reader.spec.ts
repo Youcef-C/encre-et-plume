@@ -614,13 +614,13 @@ test.describe('DR-4 sens de lecture (reading direction)', () => {
     await expect(buttons.last()).toBeDisabled();
   });
 
-  test('the "Sens de lecture" group is labelled and announces the active direction (AC9)', async ({ page }) => {
+  test('the "Sens de lecture" switch is labelled and announces the active direction (AC9)', async ({ page }) => {
     await mockMangaFeeds(page);
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
-    const group = page.getByRole('group', { name: 'Sens de lecture' });
-    await expect(group).toBeVisible();
-    await expect(group.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'false');
+    const dirSwitch = page.getByRole('button', { name: /Sens de lecture/ });
+    await expect(dirSwitch).toBeVisible();
+    await expect(dirSwitch).toHaveAttribute('aria-pressed', 'true');
+    await expect(dirSwitch).toHaveAccessibleName(/droite à gauche/);
   });
 
   test('a 2-page manga spread orders pages right-then-left in RTL (AC2)', async ({ page }) => {
@@ -638,13 +638,14 @@ test.describe('DR-4 sens de lecture (reading direction)', () => {
     expect(box1!.x).toBeGreaterThan(box2!.x);
   });
 
-  test('clicking "Gauche→Droite" flips to LTR and the choice persists on reload (AC7/AC8)', async ({ page }) => {
+  test('the ⇄ switch flips to LTR and the choice persists on reload (AC7/AC8)', async ({ page }) => {
     await mockMangaFeeds(page);
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
-    const group = page.getByRole('group', { name: 'Sens de lecture' });
+    const dirSwitch = page.getByRole('button', { name: /Sens de lecture/ });
 
-    await group.getByRole('button', { name: 'Gauche→Droite' }).click();
-    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+    await dirSwitch.click();
+    await expect(dirSwitch).toHaveAttribute('aria-pressed', 'false');
+    await expect(dirSwitch).toHaveAccessibleName(/gauche à droite/);
     const slider = page.getByRole('slider');
     await expect(slider).toHaveAttribute('dir', 'ltr');
 
@@ -653,10 +654,7 @@ test.describe('DR-4 sens de lecture (reading direction)', () => {
     await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 6');
 
     await page.reload();
-    await expect(page.getByRole('group', { name: 'Sens de lecture' }).getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(page.getByRole('button', { name: /Sens de lecture/ })).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByRole('slider')).toHaveAttribute('dir', 'ltr');
     // QA finding (flaky, ~1/5 runs): a key press sent immediately after page.reload() can race the
     // document keydown listener's post-reload (re-)attachment and get dropped — retry the press
