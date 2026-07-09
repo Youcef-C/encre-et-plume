@@ -324,6 +324,8 @@ export default function SalonDock() {
   const visible = messages.filter((m) => !blockedIds.has(m.senderId));
   const hasUnread = unread > 0;
   const connected = connectionState === 'connected';
+  // "Connecté" = joined the Comptoir channel AND the realtime link is live — not merely logged in.
+  const atComptoir = isMember && connected;
   const ink = '#16130f';
   const paper = '#f1ece1';
 
@@ -412,11 +414,11 @@ export default function SalonDock() {
           <b style={{ fontSize: 14, display: 'block' }}>{SALON_NAME}</b>
           <span style={{ fontSize: 11, color: '#cabfb2', display: 'block' }}>
             {/* Green presence dot lights up when connected to the salon realtime; muted while reconnecting. */}
-            <span style={{ color: connected ? '#3ecf8e' : '#8a8178' }} aria-hidden="true">
+            <span style={{ color: atComptoir ? '#3ecf8e' : '#8a8178' }} aria-hidden="true">
               ●
             </span>{' '}
             {onlineCount} en ligne
-            {connected && ' · Connecté'}
+            {atComptoir && ' · Connecté'}
           </span>
         </span>
         {mentionCollapsed && (

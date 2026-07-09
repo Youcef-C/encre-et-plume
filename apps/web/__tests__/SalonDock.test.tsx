@@ -115,10 +115,17 @@ describe('SalonDock', () => {
     expect(screen.queryByText('＋ Rejoindre le salon')).not.toBeInTheDocument();
   });
 
-  it('shows the "· Connecté" indicator in the collapsed bar when connected', async () => {
+  it('shows the "· Connecté" indicator in the collapsed bar only once the salon is joined', async () => {
+    vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    // Always-visible header (dock still folded) surfaces the connected state.
+    // Always-visible header (dock still folded) surfaces the joined+connected state.
     expect(await screen.findByText(/en ligne · Connecté/)).toBeInTheDocument();
+  });
+
+  it('does NOT show "· Connecté" for a logged-in non-member', async () => {
+    renderDock(); // default summary → isMember: false
+    await screen.findByText(/144 en ligne/);
+    expect(screen.queryByText(/· Connecté/)).not.toBeInTheDocument();
   });
 
   it('header is a button whose accessible name includes the unread count and toggles aria-expanded', async () => {
@@ -339,8 +346,9 @@ describe('SalonDock', () => {
 
   it('shows a reconnecting banner when the socket drops', async () => {
     messagingValue.connectionState = 'reconnecting';
+    vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    // "· Connecté" drops out of the collapsed bar while reconnecting.
+    // Even a joined member loses "· Connecté" while the realtime link is down.
     await screen.findByText(/144 en ligne/);
     expect(screen.queryByText(/· Connecté/)).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
