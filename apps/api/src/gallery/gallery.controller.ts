@@ -1,22 +1,26 @@
-import { Controller, Get, NotFoundException, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   GalleryFeatureCard,
   GalleryIllustrationCard,
   GalleryListResponse,
   GalleryPreview,
   IllustrationDetail,
+  PublishIllustrationResponse,
 } from '@encre-et-plume/shared';
 import { GalleryService } from './gallery.service';
 import { parseGalleryQuery } from './parse-gallery-query';
+import { PublishIllustrationDto } from './dto/publish-illustration.dto';
+import { UpdateIllustrationDto } from './dto/update-illustration.dto';
 import { AgeGateService } from '../age-gate/age-gate.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
-import type { AuthRequest } from '../auth/guards/session.guard';
+import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 
 /**
  * DR-5 illustration gallery "Galerie" — public, read-only (no auth/guard: anonymous visitors
  * browse freely). Bare `@Controller()` (no class-level prefix), same pattern as `CatalogController`.
- * `POST /illustrations` (publish) is intentionally NOT built here — deferred to CS-3 per the plan.
+ * DR-12 (BE-4): `POST /illustrations` (minimal publish) + `GET /illustrations/mine` add the two
+ * authenticated creator routes — the interim CS-3 stand-in.
  *
  * MC-10 round 2 (B13): a signed-in member of a blocked pair loses the other party's illustrations —
  * lists filter post-cache (summary counts stay global, D10); detail + preview 404 uniformly.
@@ -37,6 +41,21 @@ export class GalleryController {
     if (!hc) return res;
     // summary counts stay global (D10).
     return { ...res, items: res.items.filter((c) => !hc.illustrationIds.has(c.id)) };
+  }
+
+  // DR-12 (BE-4): minimal publish. Creator role + collection ownership enforced in the service.
+  @Post('illustrations')
+  @UseGuards(SessionGuard)
+  publish(@Req() req: AuthRequest, @Body() dto: PublishIllustrationDto): Promise<PublishIllustrationResponse> {
+    return this.galleryService.publishIllustration(req.accountId, dto);
+  }
+
+  // DR-12: the caller's own published illustrations (manage-view add picker). Declared BEFORE the
+  // `:id` route so the static `mine` segment isn't shadowed (same trap as `trending`).
+  @Get('illustrations/mine')
+  @UseGuards(SessionGuard)
+  mine(@Req() req: AuthRequest): Promise<GalleryIllustrationCard[]> {
+    return this.galleryService.getMineIllustrations(req.accountId);
   }
 
   @Get('illustrations/trending')
@@ -68,12 +87,21 @@ export class GalleryController {
   @UseGuards(OptionalSessionGuard)
   async illustration(@Param('id') id: string, @Req() req: AuthRequest): Promise<IllustrationDetail> {
     await this.assertNotBlocked(id, req.accountId); // B13
-    const detail = await this.galleryService.getIllustration(id);
+    // BE-9: pass the viewer so a private piece stays visible to its owner but 404s for everyone else.
+    const detail = await this.galleryService.getIllustration(id, req.accountId);
     if (!detail) throw new NotFoundException('Illustration introuvable');
     if (detail.is18plus) {
       await this.ageGate.assertMayView18Plus(req.accountId);
     }
     return detail;
+  }
+
+  // BE-9: owner-only partial edit of the illustration itself. PATCH verb → no shadow with the
+  // `:id` GET routes. Returns the full IllustrationDetail (the FE commits it directly).
+  @Patch('illustrations/:id')
+  @UseGuards(SessionGuard)
+  update(@Param('id') id: string, @Req() req: AuthRequest, @Body() dto: UpdateIllustrationDto): Promise<IllustrationDetail> {
+    return this.galleryService.updateIllustration(req.accountId, id, dto);
   }
 
   @Get('illustrations/:id/more')

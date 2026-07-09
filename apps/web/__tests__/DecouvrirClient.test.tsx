@@ -11,6 +11,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     getCatalogTrending: vi.fn(),
     getActiveContest: vi.fn(),
     getCatalogEditorPick: vi.fn(),
+    getProfile: vi.fn(),
   };
 });
 
@@ -27,7 +28,23 @@ vi.mock('next/link', () => ({
 
 import * as api from '../lib/api';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { AccountSummary, ProfileResponse } from '@encre-et-plume/shared';
+import { SessionContext } from '../lib/session';
 import DecouvrirClient from '../components/catalog/DecouvrirClient';
+
+const creatorAccount: AccountSummary = {
+  id: 'acc-yuki', displayName: 'Yuki', email: 'y@x.fr', role: 'utilisateur', verified: false, slug: 'yuki-moreau',
+  avatar: null, createdAt: '2026-01-01T00:00:00.000Z', preferences: { theme: 'system', dmPolicy: 'requests' }, emailVerified: true,
+  needsCguReconsent: false, onboarded: true, isAdult: true,
+};
+
+function renderWithSession(account: AccountSummary | null) {
+  return render(
+    <SessionContext.Provider value={{ account, loading: false, refresh: vi.fn(), logout: vi.fn() }}>
+      <DecouvrirClient />
+    </SessionContext.Provider>,
+  );
+}
 
 const catalogPage1: CatalogResponse = {
   items: [
@@ -137,5 +154,71 @@ describe('DecouvrirClient (DR-2 FE-8)', () => {
     await user.click(screen.getByRole('button', { name: 'Afficher plus de résultats' }));
     await waitFor(() => expect(screen.getByText('Onibi')).toBeInTheDocument());
     expect(screen.getByText('Lames de Brume')).toBeInTheDocument();
+  });
+});
+
+// DR-12 iter3 (FE-12 · V11) — "＋ Poster une œuvre" on the Catalogue heading row, creators only,
+// opening the "Nouveau projet" fork.
+describe('DecouvrirClient — "＋ Poster une œuvre" (DR-12 FE-12)', () => {
+  const creatorProfile = { creatorRoles: ['dessinateur'] } as unknown as ProfileResponse;
+  const readerProfile = { creatorRoles: [] } as unknown as ProfileResponse;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSearchParams).mockReturnValue(new URLSearchParams('') as unknown as ReturnType<typeof useSearchParams>);
+    vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
+    mockApi(catalogPage1);
+  });
+
+  it('does NOT render the button for an anonymous visitor', async () => {
+    renderWithSession(null);
+    await waitFor(() => expect(screen.getByText('47 résultats')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '＋ Poster une œuvre' })).not.toBeInTheDocument();
+  });
+
+  it('does NOT render the button for a non-creator account', async () => {
+    vi.mocked(api.getProfile).mockResolvedValue(readerProfile);
+    renderWithSession(creatorAccount);
+    await waitFor(() => expect(screen.getByText('47 résultats')).toBeInTheDocument());
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalledWith('yuki-moreau'));
+    expect(screen.queryByRole('button', { name: '＋ Poster une œuvre' })).not.toBeInTheDocument();
+  });
+
+  it('renders the button for a creator and opens the "Nouveau projet" fork', async () => {
+    vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
+    const user = userEvent.setup();
+    renderWithSession(creatorAccount);
+
+    const btn = await screen.findByRole('button', { name: '＋ Poster une œuvre' });
+    await user.click(btn);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Nouveau projet' })).toBeInTheDocument();
+    // Manga / Roman is disabled with "Bientôt disponible".
+    expect(screen.getByRole('button', { name: /Manga \/ Roman/ })).toBeDisabled();
+    expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
+  });
+
+  it('routes "Publier une illustration" to /creer/illustration and closes on Escape', async () => {
+    vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
+    const user = userEvent.setup();
+    renderWithSession(creatorAccount);
+
+    await user.click(await screen.findByRole('button', { name: '＋ Poster une œuvre' }));
+    await user.click(await screen.findByRole('button', { name: /Publier une illustration/ }));
+    expect(push).toHaveBeenCalledWith('/creer/illustration');
+  });
+
+  it('closes the fork on Escape', async () => {
+    vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
+    const user = userEvent.setup();
+    renderWithSession(creatorAccount);
+    await user.click(await screen.findByRole('button', { name: '＋ Poster une œuvre' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

@@ -25,6 +25,7 @@ import * as api from '../../lib/api';
 import { relativeTime } from '../../lib/notifications';
 import CountBadge from '../CountBadge';
 import BlockConfirmModal from '../blocks/BlockConfirmModal';
+import InviteModal from '../collab/InviteModal';
 
 type PanelState = 'loading' | 'ready' | 'error';
 type TabKey = 'contacts' | 'demandes' | 'envoyees' | 'suggestions';
@@ -545,6 +546,9 @@ export default function ContactsClient() {
   const [actionError, setActionError] = useState('');
   const [announce, setAnnounce] = useState('');
 
+  // MC-3 Mode A — recipient-less "Proposer une collab" launches InviteModal in picker mode.
+  const [inviteOpen, setInviteOpen] = useState(false);
+
   // Scoped people search (debounced, auto-applied — repo filter convention).
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -809,6 +813,13 @@ export default function ContactsClient() {
         >
           ＋ Ajouter un contact
         </button>
+        <button
+          type="button"
+          onClick={() => setInviteOpen(true)}
+          style={{ ...actionBtn, whiteSpace: 'nowrap' }}
+        >
+          Proposer une collab
+        </button>
         <input
           ref={searchInputRef}
           type="search"
@@ -995,6 +1006,8 @@ export default function ContactsClient() {
           </div>
         </>
       )}
+
+      {inviteOpen && <InviteModal onClose={() => setInviteOpen(false)} />}
     </div>
   );
 }

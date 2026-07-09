@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 vi.mock('../lib/api', () => ({
   getProfile: vi.fn(),
   getProfilePortfolio: vi.fn().mockResolvedValue([]),
+  // DR-12: the "Œuvres publiées" tab now renders ProfileWorks which fetches this.
+  getProfileCollections: vi.fn().mockResolvedValue({ collections: [], illustrations: [] }),
   updateMyProfile: vi.fn(),
   signup: vi.fn(),
   login: vi.fn(),
@@ -79,10 +81,10 @@ describe('ProfileTabs', () => {
     expect(screen.getByText('Ma biographie de test.')).toBeInTheDocument();
   });
 
-  it('renders "Œuvres publiées" tab as placeholder "À venir"', async () => {
+  it('renders "Œuvres publiées" tab with the DR-12 grouping (empty copy when nothing published)', async () => {
     const user = userEvent.setup();
     render(<ProfileTabs slug="yuki" bio={null} />);
     await user.click(screen.getByRole('tab', { name: /œuvres publiées/i }));
-    expect(screen.getByText('À venir')).toBeInTheDocument();
+    expect(await screen.findByText("Aucune œuvre publiée pour l'instant.")).toBeInTheDocument();
   });
 });

@@ -14,6 +14,7 @@
   - DM row — "Léa B." with last-message preview.
 - Opening a conversation shows message history, a composer with attachment support, and read/typing/presence indicators.
 - Per-recipient message modal (`openMsg`) launched from supporter rows / contacts ([[MC-8]]) opens or starts a DM directly.
+- **DMs without a connection + message requests** (user-specified 2026-07-09): you can start a DM with a member you're **not connected to**. Whether it opens a thread or a request depends on the recipient's privacy setting ([[F-19]]): **Tout le monde** → opens a normal thread; **Demandes de message** (default) → lands in the recipient's **"Demandes"** section (a tab/filter in the widget with its own count) where they **Accepter** (opens the thread, and the two become messageable) or **Refuser / Fermer** (closes it, no thread; optionally block via [[MC-10]]); **Contacts uniquement** → the send is refused unless already connected ([[MC-8]]). The sender sees "Demande envoyée" until accepted. Blocked/muted users are excluded either way ([[MC-10]]).
 - Project group chat is the same conversation embedded in the project workspace ([[CS-8]]).
 - States: launcher with/without unread badge; panel minimized vs open; per-conversation loading history, empty ("Démarrez la conversation"), sending, send-failed/retry; reconnecting banner when the realtime connection drops.
 - Accessibility: launcher labelled with unread count; typing indicator announced politely; messages list navigable; controls "＋ Groupe"/minimize/close have accessible names; widget reachable by keyboard and dismissible.
@@ -22,11 +23,13 @@
 - `GET /conversations` — list conversations with `unreadCount`, last message, type (dm|group), participants. Plus a total unread count for the launcher badge.
 - `GET /conversations/{id}/messages` — paginated message history.
 - `POST /conversations/{id}/messages` — send `{ body, attachments? }`.
-- `POST /conversations` — create a group `{ name, participantIds[] }` (or DM by participant).
+- `POST /conversations` — create a group `{ name, participantIds[] }` (or DM by participant). For a DM to a **non-contact**, the server applies the recipient's DM-privacy setting ([[F-19]]): open thread, a **pending request** (`status='requested'`, surfaced in the recipient's "Demandes"), or refuse (contacts-only).
+- `PATCH /conversations/{id}/request` — recipient responds to a DM request `{ action: 'accept' | 'decline' }` (accept opens the thread; decline closes it). Only the requested recipient may call it.
+- `GET /conversations?filter=requests` — the recipient's pending DM requests (count backs the "Demandes" badge).
 - `POST /conversations/{id}/read` — mark read (clears unread).
 - Realtime channel (WebSocket): deliver new messages, typing events ("en train d'écrire…"), and presence/online status; also backs presence in [[MC-8]].
 - Entities: `Conversation` (`id`, `type`, `name?`, `participants[]`, `projectId?`); `Message` (`id`, `conversationId`, `senderId`, `body`, `attachments[]`, `createdAt`, `readBy[]`).
-- Business rules: a project group chat is linked to its project ([[CS-8]]) and shares messages with the embedded workspace chat; unread counts per user; only participants may read/post.
+- Business rules: a project group chat is linked to its project ([[CS-8]]) and shares messages with the embedded workspace chat; unread counts per user; only participants may read/post. **A `requested` DM is not a full thread yet** — the requester can send the opening message(s) but the conversation stays in the recipient's "Demandes" until accepted; declining hides/closes it. The recipient's DM-privacy preference (**Tout le monde / Demandes de message (défaut) / Contacts uniquement**) lives in settings ([[F-19]]) and governs which path a new DM takes.
 - Validation: body or attachment required; attachment type/size limits; group needs a name and ≥2 participants.
 - Authorization: participants only (read + post); banned users ([[AD-6]]) cannot send. Exception: admins/maintainers may READ any conversation for trust-&-safety oversight ([[AD-11]]) — a role-gated, logged exception to participant-only access.
 - Side effects: new messages bump unread counts / launcher badge and may notify offline recipients ([[F-5]]); typing and presence broadcast to participants.
@@ -39,6 +42,8 @@
 - [[CS-8]] — project group chat embedded in the workspace shares messages.
 - [[F-5]] — unread/notification counts for offline recipients.
 - [[F-10]] — message attachments stored/served via the media system (private attachments via signed URLs).
+- [[F-19]] — DM-privacy setting (who can message me) governs request vs open-thread vs refuse.
+- [[MC-10]] — blocked/muted users excluded from DMs and requests.
 
 ## Notes
 - Explicit: launcher bubble (red ✉, unread "3"), header "Messages [3] · ＋ Groupe · minimize ▁ · close ✕", conversation search, the three sample rows (group + two DMs with typing/preview), the `openMsg` per-recipient modal, the shared project group chat ([[CS-8]]), realtime messaging/typing/presence + group creation + history + attachments, and that it renders on every page (depends [[F-1]], [[F-4]]).

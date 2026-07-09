@@ -6,12 +6,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { isWork18Plus, type ApiError, type WorkDetail, type WorkChaptersResponse, type PlancheDto } from '@encre-et-plume/shared';
+import { isWork18Plus, WORK_FORMAT_ILLUSTRATIONS, type ApiError, type WorkDetail, type WorkChaptersResponse, type PlancheDto } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { useAgeCleared } from '../../lib/ageGate';
 import AgeGate from '../age/AgeGate';
 import WorkHero from './WorkHero';
+import CollectionOeuvre from './CollectionOeuvre';
 import SynopsisBlock from './SynopsisBlock';
 import ChapterList from './ChapterList';
 import PlancheGrid from './PlancheGrid';
@@ -51,10 +52,13 @@ export default function OeuvreClient({ slug }: { slug: string }) {
     };
   }, [slug, retryKey]);
 
+  // DR-12: a collection (format 'Illustration(s)') has no chapters/planches — skip those fetches once
+  // the format is known. `work` is null on the first render (guard returns), so nothing fires early.
   useEffect(() => {
+    if (!work || work.format === WORK_FORMAT_ILLUSTRATIONS) return;
     api.getWorkChapters(slug, 1).then(setChapters).catch(() => setChapters(null));
     api.getWorkPlanches(slug).then(setPlanches).catch(() => setPlanches([]));
-  }, [slug]);
+  }, [slug, work]);
 
   if (state === 'loading') {
     return (
@@ -130,6 +134,25 @@ export default function OeuvreClient({ slug }: { slug: string }) {
   }
 
   if (!work) return null;
+
+  // DR-12: collection Œuvre variant — reuses the ŒUVRE shell but the member grid replaces the
+  // chapters/planches branch (no reader flow). The 18+ gate below still applies uniformly.
+  if (work.format === WORK_FORMAT_ILLUSTRATIONS) {
+    const gatedCollection = isWork18Plus(work.audienceRating) && !cleared;
+    const collectionContent = <CollectionOeuvre work={work} account={account} />;
+    return (
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 28px 80px' }}>
+        {gatedCollection && <AgeGate onBack={() => router.back()} />}
+        {gatedCollection ? (
+          <div aria-hidden="true" style={{ filter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' }}>
+            {collectionContent}
+          </div>
+        ) : (
+          collectionContent
+        )}
+      </div>
+    );
+  }
 
   // DR-10 (user-specified 2026-07-05): the gate now shows the page BLURRED behind it rather than
   // suppressing the content outright — real content only exists here once the server actually

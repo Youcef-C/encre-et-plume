@@ -8,6 +8,7 @@ import Link from 'next/link';
 import type { FavoriteWorkDto } from '@encre-et-plume/shared';
 import { CaretDownIcon, StudioIcon, FullscreenIcon } from '../icons';
 import FavoritesMenu from './FavoritesMenu';
+import type { ReadingDirection } from './readingDirection';
 
 type Props = {
   workTitle: string;
@@ -17,6 +18,8 @@ type Props = {
   signedIn: boolean;
   spreadMode: 'single' | 'double';
   onSpreadChange: (mode: 'single' | 'double') => void;
+  readingDirection: ReadingDirection;
+  onDirectionChange: (direction: ReadingDirection) => void;
   isFullscreen: boolean;
   onFullscreenToggle: () => void;
   clearViewActive: boolean;
@@ -57,6 +60,8 @@ export default function Topbar({
   signedIn,
   spreadMode,
   onSpreadChange,
+  readingDirection,
+  onDirectionChange,
   isFullscreen,
   onFullscreenToggle,
   clearViewActive,
@@ -115,6 +120,21 @@ export default function Topbar({
           </button>
           <button type="button" onClick={() => onSpreadChange('double')} aria-pressed={spreadMode === 'double'} style={segmentBtn(spreadMode === 'double')}>
             2 pages
+          </button>
+        </div>
+        {/* DR-4 delta (induced addition — the prototype's LECTEUR topbar doesn't draw this; the
+            reading-direction bullet is user-specified 2026-07-09). Same segment style as the "1 page
+            / 2 pages" control so it reads native to the replica. The active direction is announced
+            via aria-pressed on the explicitly named segment inside a labelled group. */}
+        <div role="group" aria-label="Sens de lecture" style={{ display: 'flex', alignItems: 'center', border: '2px solid #4a4239', borderRadius: 6, overflow: 'hidden' }}>
+          <span aria-hidden="true" style={{ padding: '6px 8px 6px 12px', color: '#cabfb2', fontSize: 14, fontWeight: 700 }}>
+            ⇄
+          </span>
+          <button type="button" onClick={() => onDirectionChange('ltr')} aria-pressed={readingDirection === 'ltr'} style={segmentBtn(readingDirection === 'ltr')}>
+            Gauche→Droite
+          </button>
+          <button type="button" onClick={() => onDirectionChange('rtl')} aria-pressed={readingDirection === 'rtl'} style={segmentBtn(readingDirection === 'rtl')}>
+            Droite→Gauche
           </button>
         </div>
         {/* Story update: "◳ Studio" repurposed into a "clear view" toggle - collapses both side

@@ -8,6 +8,7 @@
 - `/parametres` becomes a **sectioned settings page** with an in-page section nav (anchor links or tabs; stacked accordion on mobile). Sections, in order, with French headings:
   - **"Apparence"** — the theme preference (Clair / Sombre / Système) as a labelled control persisting via the existing [[F-6]] preference (same mechanism as the header toggle; both stay in sync).
   - **"Préférences de notification"** — the existing [[F-15]] matrix (moved into this section, unchanged).
+  - **"Confidentialité"** (user-specified 2026-07-09) — **"Qui peut m'envoyer des messages"** as an on-brand single-select (`OnBrandSelect`): **Tout le monde / Demandes de message** (default) **/ Contacts uniquement** — governs how a new DM from a non-contact is handled ([[MC-9]]). (Room for other privacy toggles later; DM policy is the first.)
   - **"Cookies"** — current consent summary per category + a "Gérer les cookies" button reopening the [[F-13]] banner/panel.
   - **"Sécurité"** — hosts [[F-18]]: "Modifier l'adresse e-mail", "Modifier le mot de passe", "Sessions actives", and the **optional** "Double authentification (2FA)" activation block (état "Désactivée" by default, "Activer" starts the [[F-18]] TOTP flow; "Désactiver" per F-18 rules). Until F-18 is implemented, the section renders the placeholders the F-18 build replaces.
   - **"Mes données"** — the existing [[F-14]] export + deletion blocks (moved into this section, unchanged).
@@ -20,6 +21,7 @@
 - No new entities. This story is a **surface reorganization**: it consumes existing endpoints —
   - theme: `PATCH /accounts/me/preferences` ([[F-6]]),
   - notifications: `GET/PATCH /me/notification-preferences` ([[F-15]]),
+  - privacy: the DM-privacy preference (`dmPolicy: 'anyone'|'requests'|'contacts'`, default `'requests'`) persisted on the account/preferences and read by [[MC-9]] when routing a new DM (this story adds that one preference field + control),
   - cookies: client-side consent state ([[F-13]]),
   - data: `GET/POST /me/data-export`, `DELETE /me/account` ([[F-14]]),
   - security: the [[F-18]] endpoints when that story lands.

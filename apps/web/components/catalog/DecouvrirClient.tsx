@@ -8,11 +8,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { CatalogWorkCard, TrendingWork, ActiveContest, EditorPickItem, CatalogQuery } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { useSession } from '../../lib/session';
 import { parseFilters, filtersToQuery, EMPTY_FILTERS } from '../../lib/catalog';
 import FilterSidebar from './FilterSidebar';
 import ActiveFilters from './ActiveFilters';
 import CatalogGrid, { type CatalogGridState } from './CatalogGrid';
 import CatalogRail from './CatalogRail';
+import NewProjectDialog from './NewProjectDialog';
 
 function useCatalogRail() {
   const [trending, setTrending] = useState<TrendingWork[]>([]);
@@ -43,6 +45,28 @@ export default function DecouvrirClient() {
   const [retryKey, setRetryKey] = useState(0);
 
   const rail = useCatalogRail();
+
+  // FE-12: "＋ Poster une œuvre" is creator-only. Reuse the D-FE1 gate — the account's profile carries
+  // creatorRoles; the button renders nothing for anonymous/loading/non-creator visitors (D25). The
+  // publish flow re-enforces the gate server-side, so this is presentation only.
+  const { account } = useSession();
+  const [isCreator, setIsCreator] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
+
+  useEffect(() => {
+    if (!account?.slug) {
+      setIsCreator(false);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getProfile(account.slug)
+      .then((p) => !cancelled && setIsCreator((p.creatorRoles ?? []).length > 0))
+      .catch(() => !cancelled && setIsCreator(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +117,31 @@ export default function DecouvrirClient() {
           <span aria-live="polite" style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500 }}>
             {total} résultats
           </span>
+          {isCreator && (
+            <button
+              type="button"
+              onClick={() => setProjectOpen(true)}
+              style={{
+                marginLeft: 'auto',
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'var(--accent)',
+                color: '#fff',
+                border: '3px solid var(--ink)',
+                borderRadius: 8,
+                padding: '10px 18px',
+                minHeight: 44,
+                cursor: 'pointer',
+                boxShadow: '4px 4px 0 var(--shadow)',
+                fontFamily: 'inherit',
+              }}
+            >
+              ＋ Poster une œuvre
+            </button>
+          )}
         </div>
+
+        {projectOpen && <NewProjectDialog onClose={() => setProjectOpen(false)} />}
 
         <ActiveFilters filters={filters} onChange={navigate} />
 

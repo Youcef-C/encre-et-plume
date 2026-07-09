@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
+  CollectionRef,
   GalleryCategoryKey,
   GalleryFeatureCard,
   GalleryIllustrationCard,
@@ -9,10 +10,22 @@ import type {
   GallerySummary,
   IllustrationArtist,
   IllustrationDetail,
+  PublishIllustrationRequest,
+  PublishIllustrationResponse,
+  UpdateIllustrationRequest,
 } from '@encre-et-plume/shared';
-import { GALLERY_PAGE_SIZE, catalogGenreLabel, galleryCategoryLabel, hasPlus18Genre } from '@encre-et-plume/shared';
+import {
+  GALLERY_CATEGORY_KEYS,
+  GALLERY_PAGE_SIZE,
+  catalogGenreLabel,
+  galleryCategoryLabel,
+  hasPlus18Genre,
+  normalizeHashtags,
+} from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { CollectionsService } from '../collections/collections.service';
+import { MediaService } from '../media/media.service';
 
 const CACHE_TTL_S = 60; // ponytail: fail-open Redis cache, same TTL/pattern as CatalogService.
 const DEFAULT_LICENSE = '© Tous droits réservés';
@@ -31,6 +44,8 @@ export class GalleryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly collections: CollectionsService,
+    private readonly media: MediaService,
   ) {}
 
   async findIllustrations(query: GalleryQuery): Promise<GalleryListResponse> {
@@ -98,14 +113,126 @@ export class GalleryService {
     };
   }
 
-  /** GET /illustrations/:id — full detail. `null` when missing/unpublished (controller maps to 404). */
-  async getIllustration(id: string): Promise<IllustrationDetail | null> {
+  /**
+   * GET /illustrations/:id — full detail. `null` when missing (controller maps to 404).
+   * BE-9: a private illustration (`publishedAt === null`) is hidden from everyone but its artist —
+   * the owner keeps viewing/editing it; a non-owner or anonymous viewer gets `null` (→ 404).
+   */
+  async getIllustration(id: string, viewerId?: string): Promise<IllustrationDetail | null> {
     const row = await this.prisma.illustration.findFirst({
-      where: { id, publishedAt: { not: null } },
-      include: { artist: { include: { profile: true } } },
+      where: { id },
+      include: {
+        artist: { include: { profile: true } },
+        // DR-12: collection chips on the detail page (-> /oeuvre/:slug).
+        collections: { include: { work: { select: { id: true, slug: true, title: true } } } },
+      },
     });
     if (!row) return null;
+    if (row.publishedAt === null && row.artistId !== viewerId) return null;
     return mapToDetail(row);
+  }
+
+  /**
+   * DR-12 (BE-4): minimal publish endpoint — the interim CS-3 stand-in. Requires the creator role
+   * (delegated to CollectionsService.assertCreator). `collectionIds[]` must be collections owned by
+   * the caller (403 if not — never silently dropped). `mediaId` (kind 'illustration', ready) → image.
+   */
+  async publishIllustration(accountId: string, dto: PublishIllustrationRequest): Promise<PublishIllustrationResponse> {
+    await this.collections.assertCreator(accountId);
+    const title = (dto.title ?? '').trim();
+    if (!title) throw new BadRequestException('Un titre est requis');
+    if (!(GALLERY_CATEGORY_KEYS as readonly string[]).includes(dto.category)) throw new BadRequestException('Catégorie invalide');
+
+    const collectionIds = dto.collectionIds ?? [];
+    if (collectionIds.length) await this.collections.assertOwnsCollections(accountId, collectionIds);
+
+    let image: string | null = null;
+    let width: number | null = null;
+    let height: number | null = null;
+    if (dto.mediaId) {
+      const m = await this.media.getForOwner(accountId, dto.mediaId); // enforces ownership (403)
+      if (m.kind !== 'illustration') throw new BadRequestException('Le média doit être une illustration');
+      if (m.status !== 'ready') throw new BadRequestException("L'illustration n'est pas encore prête");
+      image = (m.variants as { web?: string }).web ?? null;
+      width = m.width ?? null;
+      height = m.height ?? null;
+    }
+
+    const account = await this.prisma.account.findUnique({ where: { id: accountId }, select: { displayName: true } });
+    const created = await this.prisma.illustration.create({
+      data: {
+        title,
+        artistId: accountId,
+        artistName: account?.displayName ?? '',
+        category: dto.category,
+        genres: (dto.genres ?? []).map((gid) => catalogGenreLabel(gid)),
+        hashtags: normalizeHashtags(dto.hashtags ?? []), // BE-7: F-22 chips — searchable via the existing `tags` filter
+        image,
+        width,
+        height,
+        description: dto.description ?? null,
+        publishedAt: new Date(),
+      },
+    });
+    for (const workId of collectionIds) await this.collections.appendMembership(workId, created.id);
+    return { id: created.id };
+  }
+
+  /**
+   * BE-9: PATCH /illustrations/:id — owner-only partial edit of the illustration itself. Every key is
+   * optional; an absent key leaves that field untouched. A non-owner/missing illustration gets a
+   * uniform 404 (no ownership leak, same convention as collections). Returns the full IllustrationDetail.
+   * `visibility` maps to the existing `publishedAt` convention (D21): 'private' → null; 'public' →
+   * keep the current publish date if set, else stamp now.
+   */
+  async updateIllustration(accountId: string, id: string, dto: UpdateIllustrationRequest): Promise<IllustrationDetail> {
+    const illu = await this.prisma.illustration.findUnique({ where: { id }, select: { artistId: true, publishedAt: true } });
+    if (!illu || illu.artistId !== accountId) throw new NotFoundException('Illustration introuvable');
+
+    const data: Record<string, unknown> = {};
+    if (dto.title !== undefined) {
+      const t = dto.title.trim();
+      if (!t) throw new BadRequestException('Un titre est requis');
+      data['title'] = t;
+    }
+    if (dto.category !== undefined) {
+      if (!(GALLERY_CATEGORY_KEYS as readonly string[]).includes(dto.category)) throw new BadRequestException('Catégorie invalide');
+      data['category'] = dto.category;
+    }
+    if (dto.description !== undefined) data['description'] = dto.description?.trim() || null;
+    if (dto.hashtags !== undefined) data['hashtags'] = normalizeHashtags(dto.hashtags);
+    if (dto.tools !== undefined) data['tools'] = dto.tools?.trim() || null;
+    if (dto.license !== undefined) data['license'] = dto.license?.trim() || null;
+    if (dto.visibility !== undefined) {
+      data['publishedAt'] = dto.visibility === 'private' ? null : (illu.publishedAt ?? new Date());
+    }
+
+    await this.prisma.illustration.update({ where: { id }, data });
+    await this.invalidateCollectionCaches(id); // title/visibility edits reflect on the collection œuvre pages
+    return (await this.getIllustration(id, accountId))!;
+  }
+
+  /** Invalidate the `work:{slug}` œuvre cache of every collection the illustration belongs to. */
+  private async invalidateCollectionCaches(illustrationId: string): Promise<void> {
+    const memberships = await this.prisma.illustrationCollection.findMany({
+      where: { illustrationId },
+      select: { work: { select: { slug: true } } },
+    });
+    for (const m of memberships) await this.redis.del(`work:${m.work.slug}`).catch(() => {});
+  }
+
+  /** GET /illustrations/mine — the caller's own published illustrations (manage-view add picker). */
+  // ponytail: unpaginated, bounded by one artist's own uploads; paginate past ~200.
+  async getMineIllustrations(accountId: string): Promise<GalleryIllustrationCard[]> {
+    await this.collections.assertCreator(accountId); // auth + creator (D7)
+    // BE-9: the owner's own list — include hidden (private) pieces so they stay reachable to
+    // edit/republish and to add via the manage-view picker (public surfaces still filter published).
+    const rows = await this.prisma.illustration.findMany({
+      where: { artistId: accountId },
+      orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+      include: { artist: true },
+    });
+    return rows.map(mapToCard);
   }
 
   /** GET /illustrations/:id/more — "Plus de cet·te artiste", grouped by the stable `artistName`. */
@@ -147,6 +274,8 @@ function buildWhere(query: GalleryQuery): Record<string, any> {
   // carrying ALL of them). Prisma String[] supports has/hasEvery only, no partial contains.
   // `query.tags` are already normalized by parseGalleryQuery.
   if (query.tags.length > 0) where['hashtags'] = { hasEvery: query.tags };
+  // DR-12: filter to a collection's members (opaque Work id, validated by the join not the query).
+  if (query.collection) where['collections'] = { some: { workId: query.collection } };
   // Round 2: q facet, same OR-on-title-and-secondary-text convention as the catalog's `q`.
   if (query.q) {
     where['OR'] = [
@@ -203,6 +332,7 @@ interface IllustrationDetailRow extends IllustrationRow {
   license: string | null;
   publishedAt: Date | null;
   artist?: { id: string; profileSlug: string; avatar: string | null; profile?: { creatorRoles: string[]; city: string | null } | null } | null;
+  collections?: { work: { id: string; slug: string; title: string } }[];
 }
 
 function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
@@ -222,6 +352,8 @@ function mapToDetail(row: IllustrationDetailRow): IllustrationDetail {
     publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
     artist: mapArtist(row),
     is18plus: hasPlus18Genre(row.genres),
+    // DR-12: collection chips (-> /oeuvre/:slug).
+    collections: (row.collections ?? []).map((c): CollectionRef => ({ id: c.work.id, slug: c.work.slug, title: c.work.title })),
   };
 }
 

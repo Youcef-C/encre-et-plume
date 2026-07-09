@@ -30,7 +30,8 @@ export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
         <span style={{ background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 5 }}>
           cette semaine
         </span>
-        <Link href="/classement" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>
+        {/* "Populaires à chaud" → catalogue (default sort is 'populaires'), not the all-time ranking. */}
+        <Link href="/decouvrir" style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>
           Tout voir →
         </Link>
       </div>

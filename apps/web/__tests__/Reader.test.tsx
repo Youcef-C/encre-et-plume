@@ -66,6 +66,7 @@ const work: WorkDetail = {
   team: [],
   fundingGoals: [],
   reviews: [],
+  collectionItems: null,
 };
 
 const chaptersResponse: WorkChaptersResponse = {
@@ -113,6 +114,7 @@ describe('Reader (DR-4 FE-1)', () => {
     vi.clearAllMocks();
     sessionAccount = null;
     searchParams = new URLSearchParams('');
+    localStorage.clear();
     window.matchMedia = vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() });
   });
   afterEach(() => {
@@ -501,6 +503,86 @@ describe('Reader (DR-4 FE-1)', () => {
 
       await user.click(screen.getByText('2 · Le silence'));
       await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6'));
+    });
+  });
+
+  // ── DR-4 delta: reading direction ("Sens de lecture") ──────────────────────────
+  describe('Reading direction', () => {
+    it('AC6: a Manga-format work reads right-to-left by default ("Droite→Gauche" pressed, slider dir="rtl")', async () => {
+      mockReady();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
+    });
+
+    it('AC6: a One-shot work (manga-style) also reads right-to-left by default', async () => {
+      vi.mocked(api.getWork).mockResolvedValue({ ...work, format: 'One-shot' });
+      vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+      vi.mocked(api.getChapterPages).mockResolvedValue(mangaPages);
+      vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
+    });
+
+    it('AC5: a Roman (prose) work stays left-to-right by default', async () => {
+      vi.mocked(api.getWork).mockResolvedValue({ ...work, format: 'Roman' });
+      vi.mocked(api.getWorkChapters).mockResolvedValue(chaptersResponse);
+      vi.mocked(api.getChapterPages).mockResolvedValue(romanPages);
+      vi.mocked(api.getMyFavorites).mockResolvedValue([]);
+      render(<Reader slug="dr2-le-murmure-des-cendres" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
+    });
+
+    it('AC9: the toggle is a labelled group with exactly one active (aria-pressed) segment', async () => {
+      mockReady();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      const group = screen.getByRole('group', { name: 'Sens de lecture' });
+      const pressed = within(group)
+        .getAllByRole('button')
+        .filter((b) => b.getAttribute('aria-pressed') === 'true');
+      expect(pressed).toHaveLength(1);
+      expect(pressed[0]).toHaveAccessibleName('Droite→Gauche');
+    });
+
+    it('AC7/AC8: flipping to "Gauche→Droite" on a manga work applies LTR and persists the choice', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'rtl');
+
+      await user.click(screen.getByRole('button', { name: 'Gauche→Droite' }));
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+      expect(localStorage.getItem('ep:reading-direction:lames-de-brume')).toBe('ltr');
+    });
+
+    it('AC8: a persisted choice is re-applied on the next open (pre-seeded LTR overrides the manga RTL default)', async () => {
+      localStorage.setItem('ep:reading-direction:lames-de-brume', 'ltr');
+      mockReady();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      expect(screen.getByRole('slider')).toHaveAttribute('dir', 'ltr');
+      expect(screen.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('AC2: a manga 2-page spread in RTL orders the pages right-then-left (row-reverse)', async () => {
+      mockReady();
+      const user = userEvent.setup();
+      render(<Reader slug="lames-de-brume" />);
+      await waitFor(() => expect(screen.getByRole('slider')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: '2 pages' }));
+
+      const placeholder = screen.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' });
+      const wrapper = placeholder.parentElement!.parentElement as HTMLElement;
+      expect(wrapper.style.flexDirection).toBe('row-reverse');
     });
   });
 

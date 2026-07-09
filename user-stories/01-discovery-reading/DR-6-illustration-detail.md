@@ -6,9 +6,10 @@
 
 ## Frontend
 - **Header**: back "‹ Galerie" (→ [[DR-5]]).
-- **Artwork viewer**: image slot + "⛶ Plein écran".
+- **Artwork viewer**: image slot + "⛶ Plein écran". **Image fit (user-specified 2026-07-09)**: the **fullscreen** view must show the **whole image** — `object-fit: contain` (letterboxed, never a zoomed/cropped `cover`); the inline **preview** shows the image **centered** (centered focal point, `object-position: center`), not clipped to an off-center crop.
 - **Action bar**: like, save ([[DR-9]]), "↗ Partager" ([[PUB-5]]), "⚑ Signaler" ([[PUB-6]]).
 - **Meta block**: title, byline (artist, category, ♥), description, hashtag chips.
+- **Owner edit** (induced addition 2026-07-09): when the viewer owns the illustration, a **"Modifier"** affordance on the page opens an inline/edit form for the illustration itself — title, category, description, **hashtags**, tools, licence, visibility — wired to `PATCH /illustrations/:id` ([[DR-12]] extends this beyond the minimal hashtag patch). This is distinct from the collection-membership "Modifier" ([[DR-12]]); both are owner-only.
 - **Comments section** ([[PUB-2]]): list + composer + "Publier".
 - **Sidebar artist card**: avatar, "🖌 Dessinateur·rice · Lyon", "＋ Suivre" ([[PUB-4]]), "★ Soutenir" ([[MR-1]]), "✉ Proposer une collab" ([[MC-3]]).
 - **Sidebar "Détails"**: Catégorie, Publié, Dimensions (e.g. "2480×3508"), Outils, Licence.

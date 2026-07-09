@@ -119,7 +119,7 @@ test.describe('Illustration detail', () => {
         json: {
           id: 'mock-reader-1', slug: 'camille', displayName: 'Camille', role: 'utilisateur',
           verified: true, emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
-          preferences: { theme: 'system' },
+          preferences: { theme: 'system', dmPolicy: 'requests' },
         },
       }),
     );
@@ -201,7 +201,7 @@ test.describe('Illustration detail — 18+ age gate (DR-10)', () => {
         json: {
           id: 'minor-1', slug: 'minor', displayName: 'Minor', role: 'utilisateur', verified: false,
           emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
-          preferences: { theme: 'system' }, needsCguReconsent: false, onboarded: true, isAdult: false,
+          preferences: { theme: 'system', dmPolicy: 'requests' }, needsCguReconsent: false, onboarded: true, isAdult: false,
         },
       }),
     );

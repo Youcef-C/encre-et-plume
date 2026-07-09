@@ -1,9 +1,11 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { GalleryQuery } from '@encre-et-plume/shared';
 import { GALLERY_PAGE_SIZE } from '@encre-et-plume/shared';
 import { GalleryService } from './gallery.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { CollectionsService } from '../collections/collections.service';
+import { MediaService } from '../media/media.service';
 
 const ILLUSTRATION_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'i1',
@@ -31,8 +33,14 @@ const EMPTY_QUERY: GalleryQuery = { q: undefined, tags: [], genre: [], category:
 
 describe('GalleryService', () => {
   let service: GalleryService;
-  let prisma: { illustration: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock } };
-  let redis: { get: jest.Mock; set: jest.Mock };
+  let prisma: {
+    illustration: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    illustrationCollection: { findMany: jest.Mock };
+    account: { findUnique: jest.Mock };
+  };
+  let redis: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
+  let collections: { assertCreator: jest.Mock; assertOwnsCollections: jest.Mock; appendMembership: jest.Mock };
+  let media: { getForOwner: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -40,10 +48,26 @@ describe('GalleryService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue({ artistId: 'acc1' }),
+        create: jest.fn().mockResolvedValue({ id: 'newIllu1' }),
+        update: jest.fn().mockResolvedValue({}),
       },
+      illustrationCollection: { findMany: jest.fn().mockResolvedValue([]) },
+      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Yuki Moreau' }) },
     };
-    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
-    service = new GalleryService(prisma as unknown as PrismaService, redis as unknown as RedisService);
+    redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined), del: jest.fn().mockResolvedValue(undefined) };
+    collections = {
+      assertCreator: jest.fn().mockResolvedValue(undefined),
+      assertOwnsCollections: jest.fn().mockResolvedValue(undefined),
+      appendMembership: jest.fn().mockResolvedValue(undefined),
+    };
+    media = { getForOwner: jest.fn() };
+    service = new GalleryService(
+      prisma as unknown as PrismaService,
+      redis as unknown as RedisService,
+      collections as unknown as CollectionsService,
+      media as unknown as MediaService,
+    );
   });
 
   it('only returns published illustrations (publishedAt not null), no category clause for "Tout"', async () => {
@@ -377,21 +401,37 @@ describe('GalleryService', () => {
       expect(result?.publishedAt).toBe('2026-06-01T00:00:00.000Z');
     });
 
-    it('queries only the published illustration matching the id', async () => {
+    it('fetches by id only (BE-9: the publishedAt filter moved to a viewer-aware check)', async () => {
       prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW());
 
       await service.getIllustration('i1');
 
       const args = prisma.illustration.findFirst.mock.calls[0][0];
-      expect(args.where).toEqual({ id: 'i1', publishedAt: { not: null } });
+      expect(args.where).toEqual({ id: 'i1' });
     });
 
-    it('returns null for an unknown or unpublished id', async () => {
+    it('returns null for an unknown id', async () => {
       prisma.illustration.findFirst.mockResolvedValue(null);
 
       const result = await service.getIllustration('nope');
 
       expect(result).toBeNull();
+    });
+
+    // BE-9 (J9): visibility hiding — a private piece (publishedAt null) is owner-only.
+    it('returns null for a private piece viewed by a non-owner or anonymous', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ publishedAt: null, artistId: 'acc1' }));
+
+      expect(await service.getIllustration('i1', 'someone-else')).toBeNull();
+      expect(await service.getIllustration('i1')).toBeNull();
+    });
+
+    it('returns the detail for a private piece viewed by its owner', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ publishedAt: null, artistId: 'acc1' }));
+
+      const result = await service.getIllustration('i1', 'acc1');
+
+      expect(result?.id).toBe('i1');
     });
 
     it('DR-10: is18plus true when genres include a plus18 vocabulary entry', async () => {
@@ -436,6 +476,192 @@ describe('GalleryService', () => {
 
       expect(result).toEqual([]);
       expect(prisma.illustration.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── DR-12 ───────────────────────────────────────────────────────────────────
+  describe('collection filter', () => {
+    it('filters the list to a collection via collections.some.workId', async () => {
+      await service.findIllustrations({ ...EMPTY_QUERY, collection: 'w42' });
+      const where = prisma.illustration.findMany.mock.calls[0][0].where;
+      expect(where.collections).toEqual({ some: { workId: 'w42' } });
+    });
+
+    it('no collection clause when the facet is absent', async () => {
+      await service.findIllustrations(EMPTY_QUERY);
+      expect(prisma.illustration.findMany.mock.calls[0][0].where.collections).toBeUndefined();
+    });
+  });
+
+  describe('getIllustration collections (DR-12)', () => {
+    it('maps membership rows to CollectionRef chips', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(
+        ILLUSTRATION_ROW({ collections: [{ work: { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre" } }] }),
+      );
+      const result = await service.getIllustration('i1');
+      expect(result?.collections).toEqual([{ id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre" }]);
+    });
+
+    it('defaults collections to an empty array', async () => {
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW());
+      const result = await service.getIllustration('i1');
+      expect(result?.collections).toEqual([]);
+    });
+  });
+
+  describe('publishIllustration (DR-12 / BE-4)', () => {
+    const REQ = { title: 'Ma pièce', category: 'personnages' as const };
+
+    it('creates a published Illustration owned by the caller with fr genre labels', async () => {
+      await service.publishIllustration('acc1', { ...REQ, genres: ['action'], description: 'desc' });
+      expect(collections.assertCreator).toHaveBeenCalledWith('acc1');
+      const data = prisma.illustration.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ title: 'Ma pièce', artistId: 'acc1', artistName: 'Yuki Moreau', category: 'personnages', genres: ['Action'], description: 'desc' });
+      expect(data.publishedAt).toBeInstanceOf(Date);
+    });
+
+    it('resolves a ready illustration media into image + dimensions', async () => {
+      media.getForOwner.mockResolvedValue({ kind: 'illustration', status: 'ready', width: 2000, height: 3000, variants: { web: 'http://cdn/x.webp' } });
+      await service.publishIllustration('acc1', { ...REQ, mediaId: 'm1' });
+      const data = prisma.illustration.create.mock.calls[0][0].data;
+      expect(data.image).toBe('http://cdn/x.webp');
+      expect(data.width).toBe(2000);
+      expect(data.height).toBe(3000);
+    });
+
+    it('assigns owned collections at publish (membership rows appended)', async () => {
+      await service.publishIllustration('acc1', { ...REQ, collectionIds: ['w1', 'w2'] });
+      expect(collections.assertOwnsCollections).toHaveBeenCalledWith('acc1', ['w1', 'w2']);
+      expect(collections.appendMembership).toHaveBeenCalledWith('w1', 'newIllu1');
+      expect(collections.appendMembership).toHaveBeenCalledWith('w2', 'newIllu1');
+    });
+
+    it('propagates 403 when a collectionId is not owned (never silently dropped)', async () => {
+      collections.assertOwnsCollections.mockRejectedValue(new ForbiddenException());
+      await expect(service.publishIllustration('acc1', { ...REQ, collectionIds: ['x'] })).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.illustration.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty title / bad category with 400', async () => {
+      await expect(service.publishIllustration('acc1', { ...REQ, title: '  ' })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.publishIllustration('acc1', { ...REQ, category: 'nope' as never })).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('propagates the non-creator 403 from assertCreator', async () => {
+      collections.assertCreator.mockRejectedValue(new ForbiddenException());
+      await expect(service.publishIllustration('acc1', REQ)).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    // BE-7 (J7): hashtags on publish.
+    it('persists normalized Illustration.hashtags (lowercased, #-stripped, deduped)', async () => {
+      await service.publishIllustration('acc1', { ...REQ, hashtags: ['#Encre', 'encre', '  Noir '] });
+      expect(prisma.illustration.create.mock.calls[0][0].data.hashtags).toEqual(['encre', 'noir']);
+    });
+
+    it('defaults hashtags to [] when absent', async () => {
+      await service.publishIllustration('acc1', REQ);
+      expect(prisma.illustration.create.mock.calls[0][0].data.hashtags).toEqual([]);
+    });
+  });
+
+  // BE-9 (J9): PATCH /illustrations/:id — owner-only partial edit of the illustration itself.
+  describe('updateIllustration (DR-6/DR-12 · BE-9)', () => {
+    beforeEach(() => {
+      prisma.illustration.findUnique.mockResolvedValue({ artistId: 'acc1', publishedAt: new Date('2026-06-01') });
+      prisma.illustration.findFirst.mockResolvedValue(ILLUSTRATION_ROW({ artistId: 'acc1' }));
+    });
+
+    it('title: trims and patches only the title', async () => {
+      await service.updateIllustration('acc1', 'i1', { title: '  Nouveau  ' });
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ title: 'Nouveau' });
+    });
+
+    it('title: empty after trim -> 400 "Un titre est requis" (no update)', async () => {
+      await expect(service.updateIllustration('acc1', 'i1', { title: '   ' })).rejects.toThrow('Un titre est requis');
+      expect(prisma.illustration.update).not.toHaveBeenCalled();
+    });
+
+    it('category: valid key patches it', async () => {
+      await service.updateIllustration('acc1', 'i1', { category: 'personnages' });
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ category: 'personnages' });
+    });
+
+    it('category: unknown key -> 400 "Catégorie invalide"', async () => {
+      await expect(service.updateIllustration('acc1', 'i1', { category: 'nope' as never })).rejects.toThrow('Catégorie invalide');
+    });
+
+    it('description/tools/license: empty or whitespace stored as null', async () => {
+      await service.updateIllustration('acc1', 'i1', { description: '', tools: '  ', license: '' });
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ description: null, tools: null, license: null });
+    });
+
+    it('description/tools/license: trimmed non-empty stored as-is', async () => {
+      await service.updateIllustration('acc1', 'i1', { description: ' d ', tools: 'Encre', license: 'CC BY' });
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ description: 'd', tools: 'Encre', license: 'CC BY' });
+    });
+
+    it('hashtags: normalized replace-all (iteration-2 semantics)', async () => {
+      await service.updateIllustration('acc1', 'i1', { hashtags: ['#Néon', 'néon', 'noir'] });
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ hashtags: ['néon', 'noir'] });
+    });
+
+    it('absent keys leave every field untouched (empty data patch)', async () => {
+      await service.updateIllustration('acc1', 'i1', {});
+      expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({});
+    });
+
+    it('returns the full mapped IllustrationDetail (not just { hashtags })', async () => {
+      const res = await service.updateIllustration('acc1', 'i1', { title: 'X' });
+      expect(res).toMatchObject({ id: 'i1', title: 'Pluie de Néons', category: 'couvertures', artist: expect.any(Object) });
+    });
+
+    it('rejects a non-owner with a uniform 404 (no ownership leak, no update)', async () => {
+      prisma.illustration.findUnique.mockResolvedValue({ artistId: 'other', publishedAt: null });
+      await expect(service.updateIllustration('acc1', 'i1', { title: 'X' })).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.illustration.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing illustration with 404', async () => {
+      prisma.illustration.findUnique.mockResolvedValue(null);
+      await expect(service.updateIllustration('acc1', 'gone', { title: 'X' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    describe('visibility -> publishedAt (D21)', () => {
+      it("'private' sets publishedAt to null", async () => {
+        await service.updateIllustration('acc1', 'i1', { visibility: 'private' });
+        expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ publishedAt: null });
+      });
+
+      it("'public' on a private piece stamps a fresh publishedAt", async () => {
+        prisma.illustration.findUnique.mockResolvedValue({ artistId: 'acc1', publishedAt: null });
+        await service.updateIllustration('acc1', 'i1', { visibility: 'public' });
+        expect(prisma.illustration.update.mock.calls[0][0].data.publishedAt).toBeInstanceOf(Date);
+      });
+
+      it("'public' on an already-public piece keeps the original publishedAt", async () => {
+        const original = new Date('2026-06-01');
+        prisma.illustration.findUnique.mockResolvedValue({ artistId: 'acc1', publishedAt: original });
+        await service.updateIllustration('acc1', 'i1', { visibility: 'public' });
+        expect(prisma.illustration.update.mock.calls[0][0].data.publishedAt).toBe(original);
+      });
+    });
+
+    it("invalidates the work:{slug} cache of every collection the illustration belongs to", async () => {
+      prisma.illustrationCollection.findMany.mockResolvedValue([{ work: { slug: 'carnet-d-encre' } }, { work: { slug: 'autre' } }]);
+      await service.updateIllustration('acc1', 'i1', { title: 'X' });
+      expect(redis.del).toHaveBeenCalledWith('work:carnet-d-encre');
+      expect(redis.del).toHaveBeenCalledWith('work:autre');
+    });
+  });
+
+  describe('getMineIllustrations (DR-12)', () => {
+    it("returns the caller's illustrations incl. hidden ones (BE-9: publishedAt filter dropped), newest first", async () => {
+      prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW({ id: 'i2' })]);
+      const result = await service.getMineIllustrations('acc1');
+      const args = prisma.illustration.findMany.mock.calls[0][0];
+      expect(args.where).toEqual({ artistId: 'acc1' });
+      expect(args.orderBy).toEqual([{ publishedAt: 'desc' }, { id: 'asc' }]);
+      expect(result.map((c) => c.id)).toEqual(['i2']);
     });
   });
 });

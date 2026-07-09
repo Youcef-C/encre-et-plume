@@ -31,6 +31,7 @@ import { ConnectionsModule } from './connections/connections.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { SalonModule } from './salon/salon.module';
 import { BlocksModule } from './blocks/blocks.module';
+import { CollectionsModule } from './collections/collections.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -61,6 +62,7 @@ import { BlocksModule } from './blocks/blocks.module';
   // MessagingModule (MC-9): authenticated /conversations* REST + the socket.io WS gateway (Redis adapter).
   // SalonModule (MC-11): authenticated /salon* — public community room "Le Comptoir" reusing MC-9's backend.
   // BlocksModule (MC-10): self-service /me/blocks; exports BlocksService for enforcement consumers.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule],
+  // CollectionsModule (DR-12): /collections* — illustration collections "Collection"; exports CollectionsService to GalleryModule.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule, CollectionsModule],
 })
 export class AppModule {}

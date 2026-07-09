@@ -14,6 +14,7 @@ import SecurityIdentifiants from '../../components/security/SecurityIdentifiants
 import SecuritySessions from '../../components/security/SecuritySessions';
 import SecurityTwoFactor from '../../components/security/SecurityTwoFactor';
 import CookiesSettings from '../../components/settings/CookiesSettings';
+import ConfidentialiteSettings from '../../components/settings/ConfidentialiteSettings';
 import SettingsNav from '../../components/settings/SettingsNav';
 import AdultContentSettings from '../../components/settings/AdultContentSettings';
 import BlockedAccounts from '../../components/settings/BlockedAccounts';
@@ -108,6 +109,21 @@ export default function ParametresPage() {
           </h2>
         </summary>
         <PreferencesNotifications />
+      </details>
+
+      {/* Confidentialité section (F-19 — DM-privacy control, governs MC-9 request routing) */}
+      <details
+        id="confidentialite"
+        className="ep-card ep-settings-section"
+        open
+        style={{ padding: '24px 28px', marginBottom: 24 }}
+      >
+        <summary className="ep-settings-summary">
+          <h2 id="confidentialite-heading" style={sectionHeadingStyle}>
+            Confidentialité
+          </h2>
+        </summary>
+        <ConfidentialiteSettings />
       </details>
 
       {/* Cookies section (F-19, net-new; consent summary reuses F-13 useCookieConsent) */}

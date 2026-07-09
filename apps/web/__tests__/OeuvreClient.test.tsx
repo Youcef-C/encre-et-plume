@@ -49,6 +49,7 @@ const work: WorkDetail = {
   team: [{ id: 'c1', name: 'Camille Roux', slug: 'camille-roux', role: 'scenariste', city: 'Lyon', avatar: null }],
   fundingGoals: [],
   reviews: [],
+  collectionItems: null,
 };
 
 const chapters: WorkChaptersResponse = {

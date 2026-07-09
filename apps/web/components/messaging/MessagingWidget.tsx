@@ -213,10 +213,18 @@ function ChatThread({
     loadOlderMessages,
     closeThread,
     reloadConversations,
+    respondToRequest,
     sendMessage,
     retryMessage,
     emitTyping,
   } = useMessaging();
+
+  // MC-9 delta: DM request lifecycle. A `requested` DM shows the sender its "Demande envoyée" pill
+  // (composer stays open — opening messages allowed) and the recipient an Accepter/Refuser bar
+  // instead of the composer.
+  const isRequest = conv.status === 'requested';
+  const amRequester = conv.requestedBy === myId;
+  const showRequestBar = isRequest && !amRequester;
 
   const others = otherParticipants(conv, myId);
   const [presenceOnline, setPresenceOnline] = useState(false);
@@ -391,7 +399,114 @@ function ChatThread({
         )}
       </div>
 
-      <Composer conversationId={conv.id} onSend={sendMessage} onTyping={emitTyping} />
+      {showRequestBar ? (
+        <RequestActionBar
+          onRespond={(action) => respondToRequest(conv.id, action)}
+          onDeclined={closeThread}
+        />
+      ) : (
+        <>
+          {isRequest && amRequester && (
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--ink2)',
+                background: 'var(--paper)',
+                borderTop: '2px solid var(--border)',
+                padding: '8px 13px',
+                textAlign: 'center',
+              }}
+            >
+              Demande envoyée
+            </div>
+          )}
+          <Composer conversationId={conv.id} onSend={sendMessage} onTyping={emitTyping} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── DM request action bar (recipient) ───────────────────────────────────────────
+
+function RequestActionBar({
+  onRespond,
+  onDeclined,
+}: {
+  onRespond: (action: 'accept' | 'decline') => Promise<void>;
+  onDeclined: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function respond(action: 'accept' | 'decline') {
+    setBusy(true);
+    setError(false);
+    try {
+      await onRespond(action);
+      // accept → this thread's conv flips to 'open' and the composer replaces the bar (the
+      // parent re-renders from the moved conversation). decline → back to the list.
+      if (action === 'decline') onDeclined();
+    } catch {
+      setError(true);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: '2px solid var(--border)', padding: '10px 13px', background: 'var(--paper)' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 8 }}>
+        Demande de message
+      </div>
+      {error && (
+        <p role="alert" style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', margin: '0 0 8px' }}>
+          Action impossible. Réessayez.
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => void respond('accept')}
+          disabled={busy}
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            background: 'var(--accent)',
+            color: '#fff',
+            border: '2px solid var(--ink)',
+            borderRadius: 8,
+            padding: '8px 14px',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.55 : 1,
+            boxShadow: '2px 2px 0 var(--shadow)',
+            fontFamily: 'inherit',
+            minHeight: 44,
+          }}
+        >
+          Accepter
+        </button>
+        <button
+          type="button"
+          onClick={() => void respond('decline')}
+          disabled={busy}
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            background: 'var(--card)',
+            color: 'var(--ink)',
+            border: '2px solid var(--ink)',
+            borderRadius: 8,
+            padding: '8px 14px',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.55 : 1,
+            fontFamily: 'inherit',
+            minHeight: 44,
+          }}
+        >
+          Refuser
+        </button>
+      </div>
     </div>
   );
 }
@@ -622,6 +737,8 @@ export default function MessagingWidget() {
     conversations,
     conversationsState,
     connectionState,
+    requests,
+    requestsCount,
     panelState,
     activeConversationId,
     typing,
@@ -634,6 +751,9 @@ export default function MessagingWidget() {
   } = useMessaging();
 
   const [query, setQuery] = useState('');
+  // MC-9 delta: two-tab filter — "Conversations" (open threads + own outgoing requests) and
+  // "Demandes" (incoming pending DM requests, with its own count badge).
+  const [tab, setTab] = useState<'conversations' | 'requests'>('conversations');
   const [groupOpen, setGroupOpen] = useState(false);
   // MC-10 round 2 (F10) — the viewer's block set (kind='block'), for DM-header reflection.
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
@@ -664,20 +784,25 @@ export default function MessagingWidget() {
     if (open) panelRef.current?.focus();
   }, [open, activeConversationId]);
 
+  // A request opened from the Demandes tab lives in `requests`, not `conversations`, until accepted.
   const activeConv = useMemo(
-    () => conversations.find((c) => c.id === activeConversationId) ?? null,
-    [conversations, activeConversationId],
+    () =>
+      conversations.find((c) => c.id === activeConversationId) ??
+      requests.find((c) => c.id === activeConversationId) ??
+      null,
+    [conversations, requests, activeConversationId],
   );
 
   const filtered = useMemo(() => {
+    const source = tab === 'requests' ? requests : conversations;
     const q = query.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter(
+    if (!q) return source;
+    return source.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.participants.some((p) => p.name.toLowerCase().includes(q)),
     );
-  }, [conversations, query]);
+  }, [conversations, requests, tab, query]);
 
   // Widget is session-gated (renders on every page for authenticated users only).
   if (!account) return null;
@@ -783,6 +908,52 @@ export default function MessagingWidget() {
                 />
               </div>
 
+              {/* Two-tab filter: Conversations / Demandes (n) */}
+              <div
+                role="tablist"
+                aria-label="Filtrer les messages"
+                style={{ display: 'flex', gap: 6, padding: '8px 11px', borderBottom: '2px solid var(--border)' }}
+              >
+                {(['conversations', 'requests'] as const).map((t) => {
+                  const active = tab === t;
+                  const isReq = t === 'requests';
+                  const label = isReq
+                    ? requestsCount > 0
+                      ? `Demandes (${requestsCount})`
+                      : 'Demandes'
+                    : 'Conversations';
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={
+                        isReq && requestsCount > 0
+                          ? `Demandes, ${requestsCount} en attente`
+                          : undefined
+                      }
+                      onClick={() => setTab(t)}
+                      style={{
+                        flex: 1,
+                        minHeight: 36,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                        borderRadius: 8,
+                        border: '2px solid var(--ink)',
+                        background: active ? 'var(--ink)' : 'var(--card)',
+                        color: active ? 'var(--paper)' : 'var(--ink)',
+                        boxShadow: active ? '2px 2px 0 var(--shadow)' : 'none',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
               <div style={{ maxHeight: 'min(420px, 55dvh)', overflow: 'auto' }}>
                 {conversationsState === 'loading' &&
                   [0, 1, 2].map((i) => (
@@ -800,7 +971,11 @@ export default function MessagingWidget() {
 
                 {conversationsState === 'ready' && filtered.length === 0 && (
                   <p style={{ padding: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink2)' }}>
-                    {query.trim() ? 'Aucune conversation trouvée.' : 'Aucune conversation pour l’instant.'}
+                    {tab === 'requests'
+                      ? 'Aucune demande'
+                      : query.trim()
+                        ? 'Aucune conversation trouvée.'
+                        : 'Aucune conversation pour l’instant.'}
                   </p>
                 )}
 

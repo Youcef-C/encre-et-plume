@@ -149,7 +149,7 @@ describe('LoginForm', () => {
         id: 'c1', displayName: 'Yuki', email: 'yuki@example.com',
         role: 'utilisateur', verified: false, emailVerified: true,
         slug: 'yuki', avatar: null, createdAt: new Date().toISOString(),
-        preferences: { theme: 'system' as const }, needsCguReconsent: false, onboarded: true,
+        preferences: { theme: 'system' as const, dmPolicy: 'requests' as const }, needsCguReconsent: false, onboarded: true,
         isAdult: true,
       },
     });
@@ -250,7 +250,7 @@ describe('LoginForm', () => {
         id: 'c1', displayName: 'Yuki', email: 'yuki@example.com',
         role: 'utilisateur', verified: false, emailVerified: true,
         slug: 'yuki', avatar: null, createdAt: new Date().toISOString(),
-        preferences: { theme: 'system' as const }, needsCguReconsent: false, onboarded: true,
+        preferences: { theme: 'system' as const, dmPolicy: 'requests' as const }, needsCguReconsent: false, onboarded: true,
         isAdult: true,
       },
     });
@@ -279,7 +279,7 @@ describe('LoginForm', () => {
         slug: 'yuki',
         avatar: null,
         createdAt: new Date().toISOString(),
-        preferences: { theme: 'system' as const },
+        preferences: { theme: 'system' as const, dmPolicy: 'requests' as const },
         needsCguReconsent: false,
   onboarded: false,
         isAdult: true,

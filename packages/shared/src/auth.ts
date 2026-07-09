@@ -19,14 +19,21 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system'] as const;
 
+/** F-19 "Confidentialité": who may DM me (MC-9 routes new non-contact DMs on it). */
+export type DmPolicy = 'anyone' | 'requests' | 'contacts';
+export const DM_POLICIES: readonly DmPolicy[] = ['anyone', 'requests', 'contacts'] as const;
+export const DM_POLICY_DEFAULT: DmPolicy = 'requests';
+
 /** Per-account UI preferences (extensible JSON column). */
 export interface AccountPreferences {
   theme: ThemePreference;
+  dmPolicy: DmPolicy; // server always fills (default 'requests') via readPreferences
 }
 
-/** PATCH /accounts/me/preferences body (F-6). */
+/** PATCH /accounts/me/preferences body (F-6 + F-19) — at least one field required. */
 export interface UpdatePreferencesRequest {
-  theme: ThemePreference;
+  theme?: ThemePreference;
+  dmPolicy?: DmPolicy;
 }
 
 /** Public shape of the current account, returned by GET /auth/me, signup, and login. */

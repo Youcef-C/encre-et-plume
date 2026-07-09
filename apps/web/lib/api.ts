@@ -530,6 +530,7 @@ export const getMatchSuggestions = (limit?: number): Promise<MatchSuggestionsRes
 import type {
   MyProjectsResponse,
   CreateInvitationRequest,
+  CreateInvitationsResponse,
   InvitationDto,
   InvitationsResponse,
   InvitationDirection,
@@ -539,8 +540,10 @@ import type {
 export const getMyProjects = (): Promise<MyProjectsResponse> =>
   request<MyProjectsResponse>('/projects/mine');
 
-export const createInvitation = (body: CreateInvitationRequest): Promise<InvitationDto> =>
-  request<InvitationDto>('/invitations', { method: 'POST', body: JSON.stringify(body) });
+export const createInvitation = (
+  body: CreateInvitationRequest,
+): Promise<CreateInvitationsResponse> =>
+  request<CreateInvitationsResponse>('/invitations', { method: 'POST', body: JSON.stringify(body) });
 
 export const listInvitations = (
   direction: InvitationDirection,
@@ -626,11 +629,30 @@ import type {
   SendMessageRequest,
   CreateConversationRequest,
   ConversationItem,
+  ConversationRequestAction,
   MarkReadResponse,
 } from '@encre-et-plume/shared';
 
-export const getConversations = (cursor?: string): Promise<ConversationsResponse> =>
-  request<ConversationsResponse>(`/conversations${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+// MC-9 delta: `filter=requests` returns the viewer's incoming pending DM requests (Demandes tab).
+export const getConversations = (
+  cursor?: string,
+  filter?: 'requests',
+): Promise<ConversationsResponse> => {
+  const q = new URLSearchParams();
+  if (cursor) q.set('cursor', cursor);
+  if (filter) q.set('filter', filter);
+  return request<ConversationsResponse>(`/conversations${q.toString() ? `?${q}` : ''}`);
+};
+
+// MC-9 delta: recipient accepts/declines a DM request → PATCH /conversations/:id/request.
+export const respondConversationRequest = (
+  conversationId: string,
+  action: ConversationRequestAction,
+): Promise<ConversationItem> =>
+  request<ConversationItem>(`/conversations/${encodeURIComponent(conversationId)}/request`, {
+    method: 'PATCH',
+    body: JSON.stringify({ action }),
+  });
 
 export const getMessages = (conversationId: string, cursor?: string): Promise<MessagesPage> =>
   request<MessagesPage>(
@@ -688,6 +710,77 @@ export const createBlock = (body: CreateBlockRequest): Promise<BlockDto> =>
 
 export const deleteBlock = (userId: string, kind: BlockKind): Promise<void> =>
   request<void>(`/me/blocks/${encodeURIComponent(userId)}?kind=${kind}`, { method: 'DELETE' });
+
+// ─── Illustration collections "Collection" (DR-12) ────────────────────────────
+import type {
+  CollectionSummary,
+  CollectionDetail,
+  CollectionsListResponse,
+  CreateCollectionRequest,
+  UpdateCollectionRequest,
+  ReorderCollectionRequest,
+  AddCollectionIllustrationRequest,
+  ProfileCollectionsResponse,
+  PublishIllustrationRequest,
+  PublishIllustrationResponse,
+  UpdateIllustrationRequest,
+} from '@encre-et-plume/shared';
+
+export const createCollection = (body: CreateCollectionRequest): Promise<CollectionSummary> =>
+  request<CollectionSummary>('/collections', { method: 'POST', body: JSON.stringify(body) });
+
+export const getMyCollections = (): Promise<CollectionSummary[]> =>
+  request<CollectionSummary[]>('/collections/mine');
+
+export const getCollection = (idOrSlug: string): Promise<CollectionDetail> =>
+  request<CollectionDetail>(`/collections/${encodeURIComponent(idOrSlug)}`);
+
+export const updateCollection = (id: string, body: UpdateCollectionRequest): Promise<CollectionDetail> =>
+  request<CollectionDetail>(`/collections/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) });
+
+export const deleteCollection = (id: string): Promise<void> =>
+  request<void>(`/collections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const addCollectionIllustration = (id: string, illustrationId: string): Promise<CollectionDetail> =>
+  request<CollectionDetail>(`/collections/${encodeURIComponent(id)}/illustrations`, {
+    method: 'POST',
+    body: JSON.stringify({ illustrationId } satisfies AddCollectionIllustrationRequest),
+  });
+
+export const removeCollectionIllustration = (id: string, illustrationId: string): Promise<void> =>
+  request<void>(`/collections/${encodeURIComponent(id)}/illustrations/${encodeURIComponent(illustrationId)}`, {
+    method: 'DELETE',
+  });
+
+export const reorderCollection = (id: string, illustrationIds: string[]): Promise<CollectionDetail> =>
+  request<CollectionDetail>(`/collections/${encodeURIComponent(id)}/order`, {
+    method: 'PATCH',
+    body: JSON.stringify({ illustrationIds } satisfies ReorderCollectionRequest),
+  });
+
+export const publishIllustration = (body: PublishIllustrationRequest): Promise<PublishIllustrationResponse> =>
+  request<PublishIllustrationResponse>('/illustrations', { method: 'POST', body: JSON.stringify(body) });
+
+export const getMyIllustrations = (): Promise<GalleryIllustrationCard[]> =>
+  request<GalleryIllustrationCard[]>('/illustrations/mine');
+
+export const getProfileCollections = (slug: string): Promise<ProfileCollectionsResponse> =>
+  request<ProfileCollectionsResponse>(`/profiles/${encodeURIComponent(slug)}/collections`);
+
+// DR-12 iter2 FE-8 — public "Collections" facet of the Galerie (q/tags/genre/page → collection cards).
+export const getCollectionsList = (params: URLSearchParams): Promise<CollectionsListResponse> =>
+  request<CollectionsListResponse>(`/collections?${params.toString()}`);
+
+// DR-12 iter3 FE-13 — owner-only illustration edit (partial: title/category/description/hashtags/
+// tools/license/visibility). Returns the full updated IllustrationDetail (D20).
+export const updateIllustration = (
+  id: string,
+  body: UpdateIllustrationRequest,
+): Promise<IllustrationDetail> =>
+  request<IllustrationDetail>(`/illustrations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';

@@ -31,7 +31,11 @@ export interface UploadControlProps {
   label: string;
   /** Override the accept attribute; defaults to all allowed raster types */
   accept?: string;
-  /** Existing image URL shown as initial context (not displayed in idle state) */
+  /**
+   * DR-12 FE-15: existing image URL shown as the initial side-preview thumbnail beside the drop box
+   * (e.g. the current avatar / collection cover). Replaced by the newly-uploaded image once a fresh
+   * upload reaches ready; null → no thumbnail (the box stands alone).
+   */
   currentUrl?: string | null;
   /**
    * MC-4X: ONE combined box for both families — when set, images upload as `kind` and PDF/text files
@@ -45,6 +49,18 @@ export interface UploadControlProps {
   onBusyChange?: (busy: boolean) => void;
   /** MC-4X: parent cap gate — return a French message to reject a picked file (e.g. its family is full). */
   extraValidate?: (file: File) => string | null;
+  /**
+   * DR-12 FE-10: when set, the drop-zone box and the ready-state preview both occupy a fixed frame
+   * (drop box `minHeight`, ready preview 120×frameHeight) so the control reads as one consistent
+   * cover frame next to a preview-cover box. Omit → default 80px box / 64×64 preview.
+   */
+  frameHeight?: number;
+  /**
+   * DR-12 FE-10: render the visible label as screen-reader-only (kept in the DOM for
+   * `aria-labelledby`). Use when a sibling heading already names the control so the label doesn't
+   * push the drop box down and break top-alignment with an adjacent preview box.
+   */
+  hideLabel?: boolean;
 }
 
 const POLL_MAX_ATTEMPTS = 60; // 60s timeout for image processing
@@ -53,10 +69,13 @@ export default function UploadControl({
   kind,
   label,
   accept,
+  currentUrl,
   documentKind,
   onUploaded,
   onBusyChange,
   extraValidate,
+  frameHeight,
+  hideLabel,
 }: UploadControlProps) {
   const uid = useId();
   const labelId = `uc-label-${uid}`;
@@ -266,11 +285,17 @@ export default function UploadControl({
   const reset = () => setPhase({ kind: 'idle' });
 
   const isWorking = phase.kind === 'uploading' || phase.kind === 'processing';
-  const variants = phase.kind === 'ready' ? (phase.media.variants as MediaVariants) : null;
   // The ready item shows as a document when the box is single-doc, or (combined) when the uploaded
   // media landed as a document kind.
   const readyIsDocument =
     phase.kind === 'ready' && (isDocument || DOCUMENT_KINDS.has(phase.media.kind));
+  // FE-15: image variants from a completed (non-document) upload — the side preview shows these,
+  // else falls back to the `currentUrl` prop (initial context). The drop box itself never becomes
+  // the preview; it stays the persistent droppable control in every phase.
+  const readyVariants =
+    phase.kind === 'ready' && !readyIsDocument ? (phase.media.variants as MediaVariants) : null;
+  const previewUrl = readyVariants?.web ?? currentUrl ?? null;
+  const previewSize = frameHeight ? 120 : 64;
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -284,8 +309,17 @@ export default function UploadControl({
         />
       )}
 
-      {/* Visible label */}
-      <div id={labelId} className="ep-label" style={{ marginBottom: 6 }}>
+      {/* Label — visible by default; sr-only when a sibling heading already names the control so it
+          doesn't offset the drop box out of top-alignment with an adjacent preview (FE-10). */}
+      <div
+        id={labelId}
+        className="ep-label"
+        style={
+          hideLabel
+            ? { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }
+            : { marginBottom: 6 }
+        }
+      >
         {label}
       </div>
 
@@ -300,8 +334,11 @@ export default function UploadControl({
         tabIndex={-1}
       />
 
-      {/* Drop zone / interactive area */}
-      {phase.kind !== 'ready' ? (
+      {/* FE-15: the drop box persists in EVERY phase (incl. ready) — it is the replace control (D24,
+          "Changer" removed). The preview is a separate side thumbnail that updates on each upload and
+          never replaces the box; box + preview are a top-aligned, wrapping row (keeps the FE-10
+          one-frame criterion — D23). */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <button
           type="button"
           onClick={() => !isWorking && inputRef.current?.click()}
@@ -312,7 +349,8 @@ export default function UploadControl({
           aria-labelledby={labelId}
           aria-describedby={statusId}
           style={{
-            width: '100%',
+            flex: '1 1 200px',
+            minWidth: 0,
             border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--ink)'}`,
             borderRadius: 8,
             padding: '20px 16px',
@@ -323,11 +361,11 @@ export default function UploadControl({
             fontSize: 14,
             fontFamily: 'inherit',
             transition: 'border-color 0.1s, background 0.1s',
-            display: 'block',
-            minHeight: 80,
+            minHeight: frameHeight ?? 80,
           }}
         >
-          {phase.kind === 'idle' && (
+          {/* Ready shows the idle copy again — dropping/picking a new file simply replaces it. */}
+          {(phase.kind === 'idle' || phase.kind === 'ready') && (
             <span>
               {combined
                 ? 'Glissez une image, un PDF ou un fichier texte, ou cliquez pour choisir'
@@ -378,54 +416,36 @@ export default function UploadControl({
             <span style={{ color: 'var(--accent)' }}>{phase.message}</span>
           )}
         </button>
-      ) : readyIsDocument ? (
-        /* Ready (document): no image variants — confirm the filename. */
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+        {/* Side preview — document ready shows "✓ {filename}"; otherwise an image thumbnail from the
+            just-uploaded variants, else the currentUrl context. No source → no thumbnail. */}
+        {readyIsDocument ? (
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 'none' }}>
             ✓ {fileNameRef.current ?? 'Document'}
           </span>
-          <button
-            type="button"
-            onClick={reset}
-            className="ep-btn-secondary"
-            style={{ fontSize: 13, padding: '6px 12px', flexShrink: 0 }}
-          >
-            Changer
-          </button>
-        </div>
-      ) : (
-        /* Ready: show thumbnail preview */
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+        ) : previewUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={variants!.web}
+            src={previewUrl}
             srcSet={
-              variants!.thumb
-                ? `${variants!.thumb} 320w, ${variants!.web} 1280w`
+              readyVariants?.thumb
+                ? `${readyVariants.thumb} 320w, ${readyVariants.web} 1280w`
                 : undefined
             }
-            sizes="64px"
+            sizes={`${previewSize}px`}
             alt={label}
-            width={64}
-            height={64}
+            width={previewSize}
+            height={frameHeight ?? 64}
             style={{
               // Circle is an avatar affordance; every other kind previews as a rounded rectangle.
               borderRadius: kind === 'avatar' ? '50%' : 6,
               border: '2px solid var(--ink)',
               objectFit: 'cover',
-              flexShrink: 0,
+              flex: 'none',
             }}
           />
-          <button
-            type="button"
-            onClick={reset}
-            className="ep-btn-secondary"
-            style={{ fontSize: 13, padding: '6px 12px' }}
-          >
-            Changer
-          </button>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Annuler — visible during uploading and processing; aborts and returns to idle */}
       {isWorking && (

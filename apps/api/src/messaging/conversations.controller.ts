@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   ConversationItem,
   ConversationsResponse,
@@ -11,6 +11,7 @@ import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { RespondRequestDto } from './dto/respond-request.dto';
 
 function parseLimit(raw: unknown): number | undefined {
   const n = Number(raw);
@@ -34,8 +35,13 @@ export class ConversationsController {
     @Req() req: AuthRequest,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('filter') filter?: string,
   ): Promise<ConversationsResponse> {
-    return this.service.listConversations(req.accountId, { cursor, limit: parseLimit(limit) });
+    return this.service.listConversations(req.accountId, {
+      cursor,
+      limit: parseLimit(limit),
+      filter: filter === 'requests' ? 'requests' : undefined,
+    });
   }
 
   @Get(':id/messages')
@@ -56,6 +62,17 @@ export class ConversationsController {
   @Post()
   create(@Req() req: AuthRequest, @Body() dto: CreateConversationDto): Promise<ConversationItem> {
     return this.service.createConversation(req.accountId, dto as CreateConversationRequest);
+  }
+
+  // MC-9 delta: recipient accepts/declines a DM request. Recipient-only authz lives in the service
+  // (a non-recipient caller gets the same no-existence-leak 404).
+  @Patch(':id/request')
+  respondToRequest(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: RespondRequestDto,
+  ): Promise<ConversationItem> {
+    return this.service.respondToRequest(req.accountId, id, dto.action);
   }
 
   @Post(':id/read')

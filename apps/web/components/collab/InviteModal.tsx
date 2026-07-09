@@ -4,10 +4,20 @@
 // (.dc.html lines 2802–2815): 460px ink-bordered card, hard offset shadow, recipient header,
 // "CHOISIR UN PROJET" selectable rows, footer Annuler / Envoyer l'invitation — plus the story's
 // inferred MESSAGE field. No emojis: the prototype's ✉/✕ glyphs map to icons.tsx.
-// Reused by all five triggers (MC-1 cards, MC-2 aside, F-3 profile, DR-3 work, DR-6 illustration).
+// Reused by all four prefilled triggers (MC-1 cards, F-3 profile, DR-3 work, DR-6 illustration).
+// Round 2 (Mode A multi-recipient): when launched WITHOUT a recipient (from /contacts) the modal
+// enters picker mode — an OnBrandMultiSelect over the sender's contacts (Inferred body, plan §7.4).
 import { useEffect, useRef, useState } from 'react';
-import { INVITATION_MESSAGE_MAX, type ApiError, type ProjectSummary } from '@encre-et-plume/shared';
-import { getMyProjects, createInvitation } from '../../lib/api';
+import {
+  INVITATION_MESSAGE_MAX,
+  type ApiError,
+  type ContactItem,
+  type CreateInvitationsResponse,
+  type InvitationSendStatus,
+  type ProjectSummary,
+} from '@encre-et-plume/shared';
+import { getMyProjects, getContacts, createInvitation } from '../../lib/api';
+import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import { XIcon } from '../icons';
 
 export interface InviteRecipient {
@@ -90,21 +100,37 @@ const footerBtn: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 
+// Per-recipient result labels for the picker success view (plan §F1).
+const RESULT_LABEL: Record<InvitationSendStatus, string> = {
+  sent: 'Envoyée',
+  duplicate: 'Déjà une proposition en attente',
+  unavailable: 'Indisponible',
+  self: 'Indisponible',
+};
+
 export default function InviteModal({
   recipient,
   onClose,
 }: {
-  recipient: InviteRecipient;
+  recipient?: InviteRecipient;
   onClose: () => void;
 }) {
+  const picker = !recipient;
+
   const [projects, setProjects] = useState<ProjectsState>({ status: 'loading' });
   const [projectId, setProjectId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A 409 (duplicate pending) is terminal for this recipient — lock the send button.
+  // A duplicate result is terminal for this recipient — lock the send button (prefilled mode).
   const [locked, setLocked] = useState(false);
+
+  // Picker mode only: contacts pool + selection + per-recipient send results.
+  const [contactsLoaded, setContactsLoaded] = useState(false);
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [results, setResults] = useState<CreateInvitationsResponse['results'] | null>(null);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'invite-modal-title';
@@ -120,6 +146,22 @@ export default function InviteModal({
     };
   }, []);
 
+  useEffect(() => {
+    if (!picker) return;
+    let cancelled = false;
+    getContacts()
+      .then((res) => {
+        if (cancelled) return;
+        setContacts(res.items);
+        setContactsLoaded(true);
+      })
+      // Load error → treat as empty, the muted hint covers both cases.
+      .catch(() => !cancelled && setContactsLoaded(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [picker]);
+
   // Move focus into the dialog on open.
   useEffect(() => {
     dialogRef.current?.focus();
@@ -133,25 +175,47 @@ export default function InviteModal({
     focusTrap(e, dialogRef);
   };
 
+  const toUsers = picker ? selectedContacts : [recipient!.userId];
+
   async function handleSend() {
     if (sending || locked) return;
+    if (picker && selectedContacts.length === 0) {
+      setError('Sélectionnez au moins un·e destinataire.');
+      return;
+    }
     setSending(true);
     setError(null);
     try {
-      await createInvitation({
-        toUser: recipient.userId,
+      const res = await createInvitation({
+        kind: 'direct',
+        toUsers,
         ...(projectId ? { projectId } : {}),
         ...(message.trim() ? { message: message.trim() } : {}),
       });
-      setSent(true);
+      if (picker) {
+        setResults(res.results);
+        return;
+      }
+      // Prefilled single recipient — one result in the envelope.
+      const status = res.results[0]?.status;
+      if (status === 'sent') {
+        setSent(true);
+      } else if (status === 'duplicate') {
+        setError('Une proposition est déjà en attente pour ce créateur.');
+        setLocked(true);
+      } else {
+        setError('Ce créateur ne peut pas recevoir de proposition pour le moment.');
+      }
     } catch (err) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message ?? 'Une erreur est survenue. Veuillez réessayer.');
-      if (apiErr.statusCode === 409) setLocked(true);
+      setError((err as ApiError).message ?? 'Une erreur est survenue. Veuillez réessayer.');
     } finally {
       setSending(false);
     }
   }
+
+  // Map recipient id → display name for the picker result list (contacts never include self).
+  const nameById = new Map(contacts.map((c) => [c.userId, c.name]));
+  const sendLabel = toUsers.length >= 2 ? 'Envoyer les invitations' : "Envoyer l'invitation";
 
   return (
     <div
@@ -187,7 +251,7 @@ export default function InviteModal({
           boxShadow: '7px 7px 0 var(--shadow)',
         }}
       >
-        {/* Header — this IS the read-only recipient field. */}
+        {/* Header — in prefilled mode this IS the read-only recipient field. */}
         <div
           style={{
             display: 'flex',
@@ -197,7 +261,7 @@ export default function InviteModal({
             borderBottom: '3px solid var(--ink)',
           }}
         >
-          <span aria-hidden="true" style={avatarDisc(recipient.avatarUrl)} />
+          {recipient && <span aria-hidden="true" style={avatarDisc(recipient.avatarUrl)} />}
           <div style={{ minWidth: 0 }}>
             <div
               id={titleId}
@@ -208,9 +272,9 @@ export default function InviteModal({
                 lineHeight: 1,
               }}
             >
-              Inviter {recipient.name}
+              {recipient ? `Inviter ${recipient.name}` : 'Proposer une collab'}
             </div>
-            {recipient.subtitle && (
+            {recipient?.subtitle && (
               <div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 2 }}>{recipient.subtitle}</div>
             )}
           </div>
@@ -232,15 +296,62 @@ export default function InviteModal({
           </button>
         </div>
 
-        {sent ? (
-          // Success state — body replaced by confirmation.
+        {results ? (
+          // Picker success — one line per recipient with its send result (plan §F1).
+          <div style={{ padding: '22px 18px' }}>
+            <ul role="status" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {results.map((r) => (
+                <li key={r.toUser} style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <b style={{ fontSize: 14 }}>{nameById.get(r.toUser) ?? r.toUser}</b>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      border: `2px solid ${r.status === 'sent' ? '#1f8a5b' : 'var(--ink2)'}`,
+                      color: r.status === 'sent' ? '#1f8a5b' : 'var(--ink2)',
+                      borderRadius: 5,
+                      padding: '2px 9px',
+                    }}
+                  >
+                    {RESULT_LABEL[r.status]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : sent ? (
+          // Prefilled success state — body replaced by confirmation.
           <div style={{ padding: '28px 18px' }}>
             <p role="status" style={{ fontSize: 15, fontWeight: 700, margin: 0, lineHeight: 1.5 }}>
-              Proposition envoyée à {recipient.name}.
+              Proposition envoyée à {recipient!.name}.
             </p>
           </div>
         ) : (
           <div style={{ padding: '16px 18px' }}>
+            {picker && (
+              // Recipient picker (Mode A multi-select) — only when not launched from one person.
+              <>
+                <div style={sectionLabel} id="invite-recipients-label">
+                  DESTINATAIRES
+                </div>
+                {contactsLoaded && contacts.length === 0 ? (
+                  <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                    Aucun contact pour l&apos;instant — connectez-vous d&apos;abord avec des créateurs.
+                  </p>
+                ) : (
+                  <div style={{ marginBottom: 16 }}>
+                    <OnBrandMultiSelect
+                      label="Contacts"
+                      options={contacts.map((c) => ({ value: c.userId, label: c.name }))}
+                      values={selectedContacts}
+                      onChange={setSelectedContacts}
+                      searchable
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Project picker (CHOISIR UN PROJET). ＋ Créer un nouveau projet omitted — CS-1 seam. */}
             <div style={sectionLabel} id="invite-project-label">
               CHOISIR UN PROJET
@@ -333,7 +444,7 @@ export default function InviteModal({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={INVITATION_MESSAGE_MAX}
-              placeholder="Écrivez un mot à ce créateur…"
+              placeholder={picker ? 'Écrivez un mot aux destinataires…' : 'Écrivez un mot à ce créateur…'}
               rows={3}
               style={{
                 width: '100%',
@@ -373,7 +484,7 @@ export default function InviteModal({
             background: 'var(--paper)',
           }}
         >
-          {sent ? (
+          {sent || results ? (
             <button
               type="button"
               onClick={onClose}
@@ -398,7 +509,7 @@ export default function InviteModal({
                   opacity: sending || locked ? 0.6 : 1,
                 }}
               >
-                {sending ? 'Envoi…' : "Envoyer l'invitation"}
+                {sending ? 'Envoi…' : sendLabel}
               </button>
             </>
           )}

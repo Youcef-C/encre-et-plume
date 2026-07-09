@@ -11,7 +11,7 @@ import {
 import type { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { WS_EVENTS } from '@encre-et-plume/shared';
-import type { WsMessageNew, WsConversationRead, WsTypingClient, WsSalonMessage } from '@encre-et-plume/shared';
+import type { WsMessageNew, WsConversationRead, WsConversationUpdated, WsTypingClient, WsSalonMessage } from '@encre-et-plume/shared';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionStore } from '../security/session-store.service';
@@ -188,6 +188,12 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
   emitConversationRead(recipientIds: string[], payload: WsConversationRead): void {
     if (recipientIds.length === 0) return;
     this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.conversationRead, payload);
+  }
+
+  /** MC-9 delta: a DM request was accepted/declined → both participants refetch their conversation lists. */
+  emitConversationUpdated(recipientIds: string[], payload: WsConversationUpdated): void {
+    if (recipientIds.length === 0) return;
+    this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.conversationUpdated, payload);
   }
 
   /**

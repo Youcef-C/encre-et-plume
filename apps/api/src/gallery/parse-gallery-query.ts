@@ -1,4 +1,11 @@
-import { GALLERY_CATEGORY_KEYS, GALLERY_TRIS, GENRES, normalizeHashtag, type GalleryQuery } from '@encre-et-plume/shared';
+import {
+  GALLERY_CATEGORY_KEYS,
+  GALLERY_TRIS,
+  GENRES,
+  normalizeHashtag,
+  type CollectionsListQuery,
+  type GalleryQuery,
+} from '@encre-et-plume/shared';
 
 /** Raw Express/Nest query object — every value may be a string, a string[], or undefined. */
 type RawQuery = Record<string, unknown>;
@@ -29,6 +36,29 @@ export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
     genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     category: allowlistScalar(raw['category'], GALLERY_CATEGORY_KEYS),
     tri: allowlistScalar(raw['tri'], GALLERY_TRIS) ?? 'tendance',
+    page: clampPage(raw['page']),
+    // DR-12: opaque collection Work id (no vocabulary check — validated by the DB join, not here).
+    collection: typeof raw['collection'] === 'string' && raw['collection'] !== '' ? raw['collection'] : undefined,
+  };
+}
+
+/**
+ * BE-6: the DR-5 gallery query subset for the Galerie "Collections" facet — `q`/`tags`/`genre`/`page`
+ * only (no `category`/`tri`/`collection`). Reuses the same in-file helpers as `parseGalleryQuery` so
+ * the two parsers stay in lockstep (zero duplication).
+ */
+export function parseCollectionsListQuery(raw: RawQuery): CollectionsListQuery {
+  return {
+    q: typeof raw['q'] === 'string' && raw['q'] !== '' ? raw['q'].slice(0, 100) : undefined,
+    tags: [
+      ...new Set(
+        toArray(raw['tags'])
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => normalizeHashtag(v))
+          .filter((v) => v !== ''),
+      ),
+    ],
+    genre: toArray(raw['genre']).filter((v): v is string => typeof v === 'string' && GENRE_IDS.has(v)),
     page: clampPage(raw['page']),
   };
 }

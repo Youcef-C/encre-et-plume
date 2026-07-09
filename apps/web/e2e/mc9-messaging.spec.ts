@@ -603,3 +603,196 @@ test.describe('BE-RT1 — realtime F-5 notifications (connection requests → li
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MC-9 delta (2026-07-09) — DM requests ("Demandes" tab) + F-19 "Confidentialité" dmPolicy.
+//
+// MSG_C ⇄ MSG_FRESH is a genuinely never-messaged, unconnected pair (grep-confirmed against
+// e2e-seed.js: no fixture conversation or MC-8 connection links them — MSG_C only appears as the
+// silent third participant of the MSG_A/MSG_B group, and MSG_FRESH is otherwise untouched by the
+// messaging fixtures). e2e-seed.js wipes every seeded account's conversations on every run, so this
+// block's mutations are naturally hermetic across re-runs.
+//
+// Honest simulation note: this delta ships the widget's "Demandes" tab, the request action bar, the
+// "Demande envoyée" pill, and the Confidentialité settings section (FE-1..FE-3) — it does NOT add a
+// new "message this stranger" entry point anywhere in the app (the only two existing seams,
+// Contacts and Mes candidatures, both presuppose an existing connection/accepted application). QA
+// therefore opens the initial request via the real `POST /conversations` call (the same call any
+// future "message a stranger" trigger would make) and drives every subsequent step — Demandes tab,
+// Accepter/Refuser, "Demande envoyée", the settings control, and the contacts-only refusal — through
+// the real UI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('MC-9 delta — DM requests + dmPolicy (MSG_C ⇄ MSG_FRESH)', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test('MC9-D1: a non-contact DM lands only in "Demandes"; recipient Accepter opens the thread; sender\'s "Demande envoyée" pill clears live', async ({
+    browser,
+  }) => {
+    test.setTimeout(60_000);
+    const ctxSender = await browser.newContext();
+    const ctxRecipient = await browser.newContext();
+    try {
+      const senderPage = await ctxSender.newPage();
+      const recipientPage = await ctxRecipient.newPage();
+      await login(senderPage, ACCOUNTS.MSG_C.email, /menu de e2e msg_c/i);
+      await login(recipientPage, ACCOUNTS.MSG_FRESH.email, /menu de e2e msg_fresh/i);
+
+      // Opening request — MSG_FRESH is on the default 'requests' policy at this point in the run.
+      const createRes = await senderPage.request.post(`${API}/conversations`, {
+        data: { participantId: ACCOUNTS.MSG_FRESH.id },
+      });
+      expect(createRes.ok()).toBe(true);
+      const created = (await createRes.json()) as { id: string; status: string };
+      expect(created.status).toBe('requested');
+
+      // MessagingProvider fetches the conversation list once at mount (login happened BEFORE this
+      // conversation existed) and a bare `POST /conversations` made outside the page's own JS emits
+      // no WS event to refresh it — reload both pages so their widgets pick up the fresh state.
+      await senderPage.reload();
+      await recipientPage.reload();
+
+      // Sender: the outgoing request shows in the MAIN list (not a separate tab) with "Demande
+      // envoyée" above an ENABLED composer — opening message(s) are allowed (D7, no cap).
+      await fab(senderPage).click();
+      await rowByName(senderPage, 'E2E MSG_FRESH').click();
+      await expect(panel(senderPage).getByText('Demande envoyée')).toBeVisible({ timeout: 10_000 });
+      const composer = panel(senderPage).getByLabel('Écrire un message');
+      await expect(composer).toBeEnabled();
+      const opening = `Salut, ravi de te contacter ! ${Date.now()}`;
+      await composer.fill(opening);
+      await panel(senderPage).getByRole('button', { name: 'Envoyer' }).click();
+      await expect(panel(senderPage).getByText(opening)).toBeVisible({ timeout: 10_000 });
+
+      // Recipient — the request lands ONLY in "Demandes" (own count), never the main list.
+      await fab(recipientPage).click();
+      await expect(rowByName(recipientPage, 'E2E MSG_C')).toHaveCount(0);
+      const demandesTab = panel(recipientPage).getByRole('tab', { name: /Demandes/ });
+      await expect(demandesTab).toBeVisible();
+      await demandesTab.click();
+      await expect(rowByName(recipientPage, 'E2E MSG_C')).toBeVisible({ timeout: 10_000 });
+      await rowByName(recipientPage, 'E2E MSG_C').click();
+
+      // Recipient sees the opening message, a "Demande de message" bar INSTEAD of the composer.
+      await expect(panel(recipientPage).getByText(opening)).toBeVisible({ timeout: 10_000 });
+      await expect(panel(recipientPage).getByText('Demande de message')).toBeVisible();
+      await expect(panel(recipientPage).getByLabel('Écrire un message')).toHaveCount(0);
+
+      await panel(recipientPage).getByRole('button', { name: 'Accepter' }).click();
+      // The bar is replaced by a real composer — the thread is now a normal open thread.
+      const recipientComposer = panel(recipientPage).getByLabel('Écrire un message');
+      await expect(recipientComposer).toBeVisible({ timeout: 10_000 });
+      const reply = `Avec plaisir ! ${Date.now()}`;
+      await recipientComposer.fill(reply);
+      await panel(recipientPage).getByRole('button', { name: 'Envoyer' }).click();
+      await expect(panel(recipientPage).getByText(reply)).toBeVisible({ timeout: 10_000 });
+
+      // Sender: the reply arrives live (no reload) and the "Demande envoyée" pill is gone.
+      await expect(panel(senderPage).getByText(reply)).toBeVisible({ timeout: 10_000 });
+      await expect(panel(senderPage).getByText('Demande envoyée')).toHaveCount(0);
+    } finally {
+      await ctxSender.close();
+      await ctxRecipient.close();
+    }
+  });
+
+  test('MC9-D2: recipient declines a request — the row disappears and further sends are refused', async ({
+    browser,
+  }) => {
+    const ctxSender = await browser.newContext();
+    const ctxRecipient = await browser.newContext();
+    try {
+      const senderPage = await ctxSender.newPage();
+      const recipientPage = await ctxRecipient.newPage();
+      await login(senderPage, ACCOUNTS.MSG_B.email, /menu de e2e msg_b/i);
+      await login(recipientPage, ACCOUNTS.MSG_FRESH.email, /menu de e2e msg_fresh/i);
+
+      // MSG_B ⇄ MSG_FRESH: another never-messaged pair (MSG_B's only fixture conversation is with
+      // MSG_A/MSG_C, per e2e-seed.js) — MSG_C ⇄ MSG_FRESH is already 'open' from MC9-D1.
+      const createRes = await senderPage.request.post(`${API}/conversations`, {
+        data: { participantId: ACCOUNTS.MSG_FRESH.id },
+      });
+      expect(createRes.ok()).toBe(true);
+      const created = (await createRes.json()) as { id: string; status: string };
+      expect(created.status).toBe('requested');
+
+      // Same mount-time-fetch staleness as MC9-D1 — refresh before touching the widget.
+      await recipientPage.reload();
+
+      await fab(recipientPage).click();
+      await panel(recipientPage).getByRole('tab', { name: /Demandes/ }).click();
+      await rowByName(recipientPage, 'E2E MSG_B').click();
+      await panel(recipientPage).getByRole('button', { name: 'Refuser' }).click();
+
+      // Back to the list, row gone.
+      await expect(panel(recipientPage).getByText('Demande de message')).toHaveCount(0);
+      await panel(recipientPage).getByRole('tab', { name: /Demandes/ }).click();
+      await expect(rowByName(recipientPage, 'E2E MSG_B')).toHaveCount(0);
+
+      // Further sends on the declined conversation are refused with the neutral (block-indistinct)
+      // copy — for BOTH parties (D2). Checked at the API level (server backstop; the UI never
+      // exposes a composer for a row it no longer lists).
+      const senderSendRes = await senderPage.request.post(`${API}/conversations/${created.id}/messages`, {
+        data: { body: 'Encore là ?' },
+      });
+      expect(senderSendRes.status()).toBe(400);
+      expect(((await senderSendRes.json()) as { message: string }).message).toBe("Impossible d'envoyer le message.");
+
+      const recipientSendRes = await recipientPage.request.post(`${API}/conversations/${created.id}/messages`, {
+        data: { body: 'Toujours pas.' },
+      });
+      expect(recipientSendRes.status()).toBe(400);
+    } finally {
+      await ctxSender.close();
+      await ctxRecipient.close();
+    }
+  });
+
+  test('MC9-D3: "Confidentialité" → "Contacts uniquement" refuses a stranger, but the already-open MSG_C thread stays usable', async ({
+    page,
+    browser,
+  }) => {
+    await login(page, ACCOUNTS.MSG_FRESH.email, /menu de e2e msg_fresh/i);
+    await page.goto('/parametres');
+    const combobox = page.getByRole('combobox', { name: "Qui peut m'envoyer des messages" });
+    await combobox.click();
+    await page.getByRole('option', { name: 'Contacts uniquement' }).click();
+    await expect(page.getByText('Préférence enregistrée.')).toBeVisible({ timeout: 10_000 });
+
+    // A stranger (MSG_A — never connected to, nor previously messaged, MSG_FRESH) is refused.
+    const strangerCtx = await browser.newContext();
+    try {
+      const strangerPage = await strangerCtx.newPage();
+      await login(strangerPage, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+      const refusedRes = await strangerPage.request.post(`${API}/conversations`, {
+        data: { participantId: ACCOUNTS.MSG_FRESH.id },
+      });
+      expect(refusedRes.status()).toBe(400);
+      const body = (await refusedRes.json()) as { message: string };
+      expect(body.message).toBe("Ce membre n'accepte que les messages de ses contacts.");
+    } finally {
+      await strangerCtx.close();
+    }
+
+    // The already-open MSG_C ⇄ MSG_FRESH thread (accepted in MC9-D1) is unaffected — a policy
+    // change never retro-closes an existing open thread (D5).
+    const senderCtx = await browser.newContext();
+    try {
+      const senderPage = await senderCtx.newPage();
+      await login(senderPage, ACCOUNTS.MSG_C.email, /menu de e2e msg_c/i);
+      await fab(senderPage).click();
+      await rowByName(senderPage, 'E2E MSG_FRESH').click();
+      const composer = panel(senderPage).getByLabel('Écrire un message');
+      await expect(composer).toBeEnabled({ timeout: 10_000 });
+      const marker = `Toujours là malgré le changement de politique ${Date.now()}`;
+      await composer.fill(marker);
+      await panel(senderPage).getByRole('button', { name: 'Envoyer' }).click();
+      await expect(panel(senderPage).getByText(marker)).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await senderCtx.close();
+    }
+
+    // Restore the default so a re-run / any later test reading MSG_FRESH isn't affected.
+    await page.request.patch(`${API}/accounts/me/preferences`, { data: { dmPolicy: 'requests' } });
+  });
+});

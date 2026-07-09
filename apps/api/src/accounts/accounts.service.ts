@@ -1,16 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, MediaVariants, BirthdateResponse } from '@encre-et-plume/shared';
-import { deriveIsAdult } from '@encre-et-plume/shared';
+import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, DmPolicy, UpdatePreferencesRequest, MediaVariants, BirthdateResponse } from '@encre-et-plume/shared';
+import { deriveIsAdult, DM_POLICIES, DM_POLICY_DEFAULT } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
 import type { Account } from '@prisma/client';
 
 const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
-// ponytail: duplicated in auth.service.ts — a 3-line coercion is cheaper than a shared util that ties auth↔accounts
+// ponytail: duplicated in auth.service.ts / onboarding.service.ts — a small coercion is cheaper than a shared util that ties auth↔accounts↔onboarding
 function readPreferences(raw: unknown): AccountPreferences {
-  const theme = (raw as Record<string, unknown> | null | undefined)?.['theme'];
-  return { theme: VALID_THEMES.includes(theme as ThemePreference) ? (theme as ThemePreference) : 'system' };
+  const obj = raw as Record<string, unknown> | null | undefined;
+  const theme = obj?.['theme'];
+  const dmPolicy = obj?.['dmPolicy'];
+  return {
+    theme: VALID_THEMES.includes(theme as ThemePreference) ? (theme as ThemePreference) : 'system',
+    dmPolicy: DM_POLICIES.includes(dmPolicy as DmPolicy) ? (dmPolicy as DmPolicy) : DM_POLICY_DEFAULT,
+  };
 }
 
 function toSummary(account: Account): AccountSummary {
@@ -46,10 +51,23 @@ export class AccountsService {
     return toSummary(account);
   }
 
-  async updatePreferences(accountId: string, theme: ThemePreference): Promise<AccountSummary> {
+  /**
+   * F-6 + F-19: merge the patch into the stored preferences JSON (never overwrite the whole column —
+   * a theme-only body must not drop dmPolicy and vice-versa). At least one field is required.
+   */
+  async updatePreferences(accountId: string, patch: UpdatePreferencesRequest): Promise<AccountSummary> {
+    if (patch.theme === undefined && patch.dmPolicy === undefined) {
+      throw new BadRequestException('Requête invalide.');
+    }
+    const current = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { preferences: true },
+    });
+    if (!current) throw new NotFoundException();
+    const merged = { ...((current.preferences as Record<string, unknown> | null) ?? {}), ...patch };
     const account = await this.prisma.account.update({
       where: { id: accountId },
-      data: { preferences: { theme } },
+      data: { preferences: merged },
     });
     return toSummary(account);
   }

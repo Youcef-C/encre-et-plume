@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import PortfolioGrid from './PortfolioGrid';
+import ProfileWorks from './ProfileWorks';
 
 // F-4 — Accessible tablist with keyboard navigation and 4 profile sections.
 const TABS = ['Portfolio', 'Œuvres publiées', 'À propos', 'Avis'] as const;
@@ -92,9 +93,9 @@ export default function ProfileTabs({ slug, bio }: Props) {
           id="tabpanel-1"
           role="tabpanel"
           aria-labelledby="tab-1"
-          style={{ marginTop: 16, color: 'var(--ink2)', fontSize: 14 }}
+          style={{ marginTop: 16 }}
         >
-          À venir
+          <ProfileWorks slug={slug} />
         </div>
       )}
       {activeTab === 'À propos' && (

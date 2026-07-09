@@ -1,5 +1,10 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import type { InvitationDirection, InvitationDto, InvitationsResponse } from '@encre-et-plume/shared';
+import type {
+  CreateInvitationsResponse,
+  InvitationDirection,
+  InvitationDto,
+  InvitationsResponse,
+} from '@encre-et-plume/shared';
 import { INVITATIONS_MAX_PAGE_SIZE, INVITATIONS_PAGE_SIZE } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { InvitationsService } from './invitations.service';
@@ -35,7 +40,7 @@ export class InvitationsController {
   constructor(private readonly service: InvitationsService) {}
 
   @Post()
-  create(@Req() req: AuthRequest, @Body() dto: CreateInvitationDto): Promise<InvitationDto> {
+  create(@Req() req: AuthRequest, @Body() dto: CreateInvitationDto): Promise<CreateInvitationsResponse> {
     return this.service.create(req.accountId, dto);
   }
 

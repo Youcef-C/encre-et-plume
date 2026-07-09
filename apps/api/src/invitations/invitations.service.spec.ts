@@ -3,7 +3,6 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -55,12 +54,26 @@ describe('InvitationsService', () => {
 
   beforeEach(() => {
     prisma = {
-      account: { findFirst: jest.fn().mockResolvedValue(userRow('acc-to')) },
+      // recipient lookup echoes the queried id so fan-out over several ids resolves each recipient.
+      account: {
+        findFirst: jest.fn().mockImplementation(({ where }) => Promise.resolve(userRow(where.id))),
+      },
       project: { findFirst: jest.fn().mockResolvedValue({ id: 'proj-1', ownerId: 'acc-from' }) },
       invitation: {
         findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn().mockResolvedValue(INV()),
-        create: jest.fn().mockResolvedValue(INV()),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve(
+              INV({
+                toUserId: data.toUserId,
+                toUser: userRow(data.toUserId),
+                projectId: data.projectId,
+                message: data.message,
+              }),
+            ),
+          ),
         findMany: jest.fn().mockResolvedValue([INV()]),
         count: jest.fn().mockResolvedValue(1),
         update: jest.fn().mockResolvedValue(INV({ status: 'accepted', respondedAt: new Date() })),
@@ -77,25 +90,25 @@ describe('InvitationsService', () => {
     );
   });
 
-  describe('create', () => {
-    it('persists the invitation and returns a mapped DTO with defaults', async () => {
-      const dto = await service.create('acc-from', { toUser: 'acc-to' });
+  describe('create — envelope + fan-out', () => {
+    it('legacy sugar { toUser } → envelope with one sent result + mapped DTO', async () => {
+      const res = await service.create('acc-from', { toUser: 'acc-to' });
+      expect(res.results).toHaveLength(1);
+      expect(res.results[0]).toMatchObject({ toUser: 'acc-to', status: 'sent' });
+      expect(res.results[0].invitation).toMatchObject({
+        id: 'inv-1',
+        status: 'pending',
+        from: { userId: 'acc-from', role: 'scenariste' },
+        to: { userId: 'acc-to' },
+      });
       expect(prisma.invitation.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { fromUserId: 'acc-from', toUserId: 'acc-to', projectId: null, message: '' },
         }),
       );
-      expect(dto).toMatchObject({
-        id: 'inv-1',
-        status: 'pending',
-        from: { userId: 'acc-from', name: 'Name acc-from', slug: 'slug-acc-from', role: 'scenariste' },
-        to: { userId: 'acc-to', role: 'dessinateur' },
-        project: null,
-        respondedAt: null,
-      });
     });
 
-    it('notifies the recipient (F-5) with type=invitation, refId, sourceUser', async () => {
+    it('notifies each recipient (F-5) with type=invitation, refId, sourceUser', async () => {
       await service.create('acc-from', { toUser: 'acc-to', message: 'hi' });
       expect(notifications.create).toHaveBeenCalledWith({
         recipientId: 'acc-to',
@@ -105,21 +118,72 @@ describe('InvitationsService', () => {
       });
     });
 
-    it('rejects self-invite (400)', async () => {
-      await expect(service.create('acc-me', { toUser: 'acc-me' })).rejects.toBeInstanceOf(BadRequestException);
+    it('fans out toUsers:[a,b] → two creates, two notifications, two sent results in payload order', async () => {
+      const res = await service.create('acc-from', { kind: 'direct', toUsers: ['a', 'b'] });
+      expect(prisma.invitation.create).toHaveBeenCalledTimes(2);
+      expect(notifications.create).toHaveBeenCalledTimes(2);
+      expect(res.results.map((r) => r.toUser)).toEqual(['a', 'b']);
+      expect(res.results.every((r) => r.status === 'sent')).toBe(true);
+    });
+
+    it('dedupes duplicate ids inside the payload: [a,a] → one create, one result', async () => {
+      const res = await service.create('acc-from', { toUsers: ['a', 'a'] });
+      expect(prisma.invitation.create).toHaveBeenCalledTimes(1);
+      expect(res.results).toHaveLength(1);
+      expect(res.results[0]).toMatchObject({ toUser: 'a', status: 'sent' });
+    });
+
+    it('partial duplicate: a already pending → [a:duplicate, b:sent], one create, no notify for a', async () => {
+      prisma.invitation.findFirst.mockImplementation(({ where }) =>
+        Promise.resolve(where.toUserId === 'a' ? INV() : null),
+      );
+      const res = await service.create('acc-from', { toUsers: ['a', 'b'] });
+      expect(res.results).toEqual([
+        { toUser: 'a', status: 'duplicate', invitation: null },
+        expect.objectContaining({ toUser: 'b', status: 'sent' }),
+      ]);
+      expect(prisma.invitation.create).toHaveBeenCalledTimes(1);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+      expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientId: 'b' }));
+    });
+
+    it('self-exclusion: [fromUser, b] → [self, b:sent], no create for self', async () => {
+      const res = await service.create('acc-from', { toUsers: ['acc-from', 'b'] });
+      expect(res.results).toEqual([
+        { toUser: 'acc-from', status: 'self', invitation: null },
+        expect.objectContaining({ toUser: 'b', status: 'sent' }),
+      ]);
+      expect(prisma.invitation.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('unavailable: unknown recipient → status unavailable, no create, no notify', async () => {
+      prisma.account.findFirst.mockImplementation(({ where }) =>
+        Promise.resolve(where.id === 'ghost' ? null : userRow(where.id)),
+      );
+      const res = await service.create('acc-from', { toUsers: ['ghost', 'b'] });
+      expect(res.results[0]).toEqual({ toUser: 'ghost', status: 'unavailable', invitation: null });
+      expect(res.results[1]).toMatchObject({ toUser: 'b', status: 'sent' });
+      expect(prisma.invitation.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('unavailable: blocked pair (MC-10) — indistinguishable from unknown, no create', async () => {
+      blocks.isBlockedPair.mockImplementation((_from, to) => Promise.resolve(to === 'blk'));
+      const res = await service.create('acc-from', { toUsers: ['blk'] });
+      expect(res.results[0]).toEqual({ toUser: 'blk', status: 'unavailable', invitation: null });
       expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
-    it('404s when the recipient is unknown or tombstoned', async () => {
-      prisma.account.findFirst.mockResolvedValue(null);
-      await expect(service.create('acc-from', { toUser: 'ghost' })).rejects.toBeInstanceOf(NotFoundException);
+    it('unavailable: recipient with no creator roles → unavailable, no create', async () => {
+      prisma.account.findFirst.mockImplementation(({ where }) =>
+        Promise.resolve(userRow(where.id, [])),
+      );
+      const res = await service.create('acc-from', { toUsers: ['x'] });
+      expect(res.results[0]).toEqual({ toUser: 'x', status: 'unavailable', invitation: null });
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
-    it('MC-10: 404s a blocked pair with the identical not-found wording', async () => {
-      blocks.isBlockedPair.mockResolvedValue(true);
-      await expect(service.create('acc-from', { toUser: 'acc-to' })).rejects.toThrow(
-        'Ce créateur est introuvable.',
-      );
+    it('empty selection (neither toUser nor toUsers) → 400', async () => {
+      await expect(service.create('acc-from', {})).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
@@ -130,32 +194,27 @@ describe('InvitationsService', () => {
       );
     });
 
-    it('422s when the recipient has no creator roles', async () => {
-      prisma.account.findFirst.mockResolvedValue(userRow('acc-to', []));
-      await expect(service.create('acc-from', { toUser: 'acc-to' })).rejects.toBeInstanceOf(
-        UnprocessableEntityException,
-      );
-    });
-
-    it('403s when projectId is not owned by the sender', async () => {
+    it('403s the whole request when projectId is not owned by the sender (zero creates)', async () => {
       prisma.project.findFirst.mockResolvedValue(null);
       await expect(
-        service.create('acc-from', { toUser: 'acc-to', projectId: 'proj-x' }),
+        service.create('acc-from', { toUsers: ['a', 'b'], projectId: 'proj-x' }),
       ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
-    it('attaches an owned project', async () => {
+    it('attaches an owned project to every fanned-out row', async () => {
       prisma.project.findFirst.mockResolvedValue({ id: 'proj-1', ownerId: 'acc-from' });
-      await service.create('acc-from', { toUser: 'acc-to', projectId: 'proj-1' });
-      expect(prisma.project.findFirst).toHaveBeenCalledWith({ where: { id: 'proj-1', ownerId: 'acc-from' } });
+      await service.create('acc-from', { toUsers: ['a'], projectId: 'proj-1' });
+      expect(prisma.project.findFirst).toHaveBeenCalledWith({
+        where: { id: 'proj-1', ownerId: 'acc-from' },
+      });
       expect(prisma.invitation.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ projectId: 'proj-1' }) }),
       );
     });
 
-    it('409s on a duplicate pending invite to the same recipient (key = fromUser,toUser)', async () => {
-      prisma.invitation.findFirst.mockResolvedValue(INV());
-      await expect(service.create('acc-from', { toUser: 'acc-to' })).rejects.toBeInstanceOf(ConflictException);
+    it('duplicate check keys on (fromUser, toUser, pending)', async () => {
+      await service.create('acc-from', { toUser: 'acc-to' });
       expect(prisma.invitation.findFirst).toHaveBeenCalledWith({
         where: { fromUserId: 'acc-from', toUserId: 'acc-to', status: 'pending' },
       });

@@ -17,9 +17,11 @@ import { io, type Socket } from 'socket.io-client';
 import {
   WS_EVENTS,
   type ConversationItem,
+  type ConversationRequestAction,
   type MessageDto,
   type WsMessageNew,
   type WsConversationRead,
+  type WsConversationUpdated,
   type WsTypingServer,
 } from '@encre-et-plume/shared';
 import * as api from './api';
@@ -46,6 +48,9 @@ interface MessagingCtx {
   conversations: ConversationItem[];
   totalUnread: number;
   conversationsState: 'loading' | 'ready' | 'error';
+  // MC-9 delta: incoming pending DM requests (the "Demandes" tab) + their count (badge).
+  requests: ConversationItem[];
+  requestsCount: number;
 
   panelState: PanelState;
   activeConversationId: string | null;
@@ -62,6 +67,8 @@ interface MessagingCtx {
   openConversation: (id: string) => void;
   closeThread: () => void;
   openDm: (userId: string) => Promise<void>;
+  // MC-9 delta: recipient accepts/declines a pending DM request.
+  respondToRequest: (conversationId: string, action: ConversationRequestAction) => Promise<void>;
   reloadConversations: () => void;
   loadOlderMessages: () => void;
   sendMessage: (conversationId: string, body: string, attachmentIds?: string[]) => Promise<void>;
@@ -79,6 +86,8 @@ export const MessagingContext = createContext<MessagingCtx>({
   conversations: [],
   totalUnread: 0,
   conversationsState: 'loading',
+  requests: [],
+  requestsCount: 0,
   panelState: 'closed',
   activeConversationId: null,
   activeMessages: [],
@@ -92,6 +101,7 @@ export const MessagingContext = createContext<MessagingCtx>({
   openConversation: noop,
   closeThread: noop,
   openDm: async () => {},
+  respondToRequest: async () => {},
   reloadConversations: noop,
   loadOlderMessages: noop,
   sendMessage: async () => {},
@@ -135,6 +145,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
   const [conversationsState, setConversationsState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // MC-9 delta: incoming pending DM requests + authoritative count (from the unfiltered response).
+  const [requests, setRequests] = useState<ConversationItem[]>([]);
+  const [requestsCount, setRequestsCount] = useState(0);
 
   const [panelState, setPanelState] = useState<PanelState>('closed');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -152,6 +165,16 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   // Per-(conversation:user) typing expiry timers.
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // MC-9 delta: the incoming-requests list (Demandes tab). Best-effort; a failure leaves the
+  // last-known list — the badge count still comes from the main response's `requestsCount`.
+  const reloadRequests = useCallback(() => {
+    if (!myId) return;
+    api
+      .getConversations(undefined, 'requests')
+      .then((res) => setRequests(res.items))
+      .catch(() => {});
+  }, [myId]);
+
   const reloadConversations = useCallback(() => {
     if (!myId) return;
     setConversationsState('loading');
@@ -160,10 +183,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       .then((res) => {
         setConversations(res.items);
         setTotalUnread(res.totalUnread);
+        setRequestsCount(res.requestsCount);
         setConversationsState('ready');
       })
       .catch(() => setConversationsState('error'));
-  }, [myId]);
+    reloadRequests();
+  }, [myId, reloadRequests]);
 
   // ── Socket lifecycle: connect only for an authenticated account. ──────────────
   useEffect(() => {
@@ -174,6 +199,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       setConnected(false);
       setConversations([]);
       setTotalUnread(0);
+      setRequests([]);
+      setRequestsCount(0);
       return;
     }
 
@@ -268,6 +295,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       refreshUnread();
     });
 
+    // MC-9 delta: a DM request was accepted/declined → refetch both lists (clears the requester's
+    // "Demande envoyée" pill on accept; drops a declined row; keeps the Demandes count accurate).
+    socket.on(WS_EVENTS.conversationUpdated, (_payload: WsConversationUpdated) => {
+      reloadConversations();
+    });
+
     const timers = typingTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
@@ -348,6 +381,23 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [addConversation, loadThread, markRead],
+  );
+
+  // MC-9 delta: the recipient accepts (thread opens, conv moves to the main list) or declines
+  // (row disappears) a pending DM request. Optimistic so the UI reacts instantly; the WS
+  // `conversation:updated` echo reconciles both sides.
+  const respondToRequest = useCallback(
+    async (conversationId: string, action: ConversationRequestAction) => {
+      const updated = await api.respondConversationRequest(conversationId, action);
+      setRequests((prev) => prev.filter((c) => c.id !== conversationId));
+      setRequestsCount((n) => Math.max(0, n - 1));
+      if (action === 'accept') {
+        setConversations((prev) =>
+          prev.some((c) => c.id === updated.id) ? prev : [updated, ...prev],
+        );
+      }
+    },
+    [],
   );
 
   const doSend = useCallback(
@@ -449,6 +499,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         conversations,
         totalUnread,
         conversationsState,
+        requests,
+        requestsCount,
         panelState,
         activeConversationId,
         activeMessages,
@@ -462,6 +514,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         openConversation,
         closeThread,
         openDm,
+        respondToRequest,
         reloadConversations,
         loadOlderMessages,
         sendMessage,

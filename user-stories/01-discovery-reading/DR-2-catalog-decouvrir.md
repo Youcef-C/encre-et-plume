@@ -16,7 +16,7 @@
   - **LANGUE** chips: Français, English, 日本語 (no « Traduit »).
   - **No THÈMES section** — the full-vocabulary GENRE picker covers it (genre selection matches a work's genre *or* its themes).
   - **No "Appliquer les filtres" button** — every filter change immediately reloads the results. "Réinitialiser" remains.
-- **Main column**: heading "Catalogue" + result count (e.g. "47 résultats"); active-filter chips row labeled "FILTRES ACTIFS" with removable "✕" per chip and "Tout effacer".
+- **Main column**: heading "Catalogue" + result count (e.g. "47 résultats"), with a **"＋ Poster une œuvre"** button on the **right of that same heading row** (creators only) → opens the "Nouveau projet" wizard ([[CS-1]]), which forks to the manga/story flow or the "Publier une illustration" flow ([[DR-5]]/[[DR-12]]). Active-filter chips row labeled "FILTRES ACTIFS" with removable "✕" per chip and "Tout effacer". (The "＋ Poster une œuvre" button is an induced addition 2026-07-09 — not drawn in the prototype catalogue.)
 - **Work cards** (3-col grid): title, genre, chapter count (e.g. "12 ch."), ♥ count, "✓ Complet" badge when complete, "📖 Roman" badge for roman format. Card → work page [[DR-3]].
 - **Right rail**: "Actualités" concours card "Prix du jeune mangaka 2026" with "Participer" ([[PUB-7]]); "En vogue cette semaine" top-3; "SÉLECTION ÉDITEUR" (editor picks).
 - **States**: loading skeleton grid; empty state ("aucun résultat") with a "Réinitialiser" affordance; error state with retry. Filters reflect in URL query so results are shareable/back-navigable.

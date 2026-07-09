@@ -26,7 +26,7 @@ const mockAccount: AccountSummary = {
   slug: 'yuki',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   needsCguReconsent: false,
   onboarded: false,
   isAdult: true,

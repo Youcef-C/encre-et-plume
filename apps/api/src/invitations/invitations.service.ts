@@ -4,12 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import type {
+  CreateInvitationsResponse,
   CreatorRole,
   InvitationDirection,
   InvitationDto,
+  InvitationSendResult,
   InvitationsResponse,
   InvitationStatus,
   InvitationUserRef,
@@ -104,43 +105,70 @@ export class InvitationsService {
     private readonly blocks: BlocksService,
   ) {}
 
-  async create(fromUserId: string, dto: CreateInvitationDto): Promise<InvitationDto> {
-    if (dto.toUser === fromUserId) {
-      throw new BadRequestException('Vous ne pouvez pas vous inviter vous-même.');
+  /**
+   * Mode A fan-out: one independent Invitation per recipient. Request-level failures (empty
+   * selection, unowned project) throw and fail the whole batch; per-recipient failures (self,
+   * unavailable, duplicate) become result statuses so the rest of the batch still sends. Always
+   * returns the { results } envelope (single recipient included). Mode B (kind:'join') is rejected
+   * at the DTO — deferred to the CS-10 follow-up.
+   */
+  async create(fromUserId: string, dto: CreateInvitationDto): Promise<CreateInvitationsResponse> {
+    // Normalize: prefer the multi-recipient field; legacy single-recipient sugar folds into it.
+    const requested = dto.toUsers ?? (dto.toUser ? [dto.toUser] : []);
+    const recipients = [...new Set(requested)];
+    if (recipients.length === 0) {
+      throw new BadRequestException('Sélectionnez au moins un·e destinataire.');
     }
 
-    const recipient = (await this.prisma.account.findFirst({
-      where: { id: dto.toUser, deletedAt: null }, // AD-6 seam: ban flag joins here when it lands
-      ...USER_SELECT,
-    })) as UserRow | null;
-    // MC-10: a blocked pair 404s with the SAME wording as an unknown recipient (no block disclosure).
-    if (!recipient || (await this.blocks.isBlockedPair(fromUserId, dto.toUser))) {
-      throw new NotFoundException('Ce créateur est introuvable.');
-    }
-
-    if ((recipient.profile?.creatorRoles?.length ?? 0) === 0) {
-      throw new UnprocessableEntityException('Ce créateur ne peut pas recevoir de proposition pour le moment.');
-    }
-
-    // message length is capped by the DTO (@MaxLength); default to '' when absent.
+    // Request-level: project ownership checked ONCE before the loop (message capped by the DTO).
     if (dto.projectId) {
       const owned = await this.prisma.project.findFirst({ where: { id: dto.projectId, ownerId: fromUserId } });
       if (!owned) throw new ForbiddenException('Ce projet ne vous appartient pas.');
     }
 
-    // ponytail: service-level duplicate check on (fromUser, toUser) pending — DB partial unique index
-    // if invite races ever matter. Key ignores projectId (strictest reading of the story).
+    // ponytail: N≤20 loop, batch the lookups if the cap ever grows.
+    const results: InvitationSendResult[] = [];
+    for (const toUser of recipients) {
+      results.push(await this.sendOne(fromUserId, toUser, dto.projectId, dto.message));
+    }
+    return { results };
+  }
+
+  /** One recipient's outcome — converts the round-1 throws into per-recipient result statuses. */
+  private async sendOne(
+    fromUserId: string,
+    toUser: string,
+    projectId: string | undefined,
+    message: string | undefined,
+  ): Promise<InvitationSendResult> {
+    if (toUser === fromUserId) return { toUser, status: 'self', invitation: null };
+
+    const recipient = (await this.prisma.account.findFirst({
+      where: { id: toUser, deletedAt: null }, // AD-6 seam: ban flag joins here when it lands
+      ...USER_SELECT,
+    })) as UserRow | null;
+    // MC-10: a blocked pair is indistinguishable from unknown (no block disclosure). No creator
+    // roles → cannot receive a proposal. Both collapse to 'unavailable'.
+    if (!recipient || (await this.blocks.isBlockedPair(fromUserId, toUser))) {
+      return { toUser, status: 'unavailable', invitation: null };
+    }
+    if ((recipient.profile?.creatorRoles?.length ?? 0) === 0) {
+      return { toUser, status: 'unavailable', invitation: null };
+    }
+
+    // ponytail: service-level duplicate check on (fromUser, toUser) pending — DB partial unique
+    // index if invite races ever matter. Key ignores projectId (strictest reading of the story).
     const dupe = await this.prisma.invitation.findFirst({
-      where: { fromUserId, toUserId: dto.toUser, status: 'pending' },
+      where: { fromUserId, toUserId: toUser, status: 'pending' },
     });
-    if (dupe) throw new ConflictException('Une proposition est déjà en attente pour ce créateur.');
+    if (dupe) return { toUser, status: 'duplicate', invitation: null };
 
     const row = (await this.prisma.invitation.create({
       data: {
         fromUserId,
-        toUserId: dto.toUser,
-        projectId: dto.projectId ?? null,
-        message: dto.message ?? '',
+        toUserId: toUser,
+        projectId: projectId ?? null,
+        message: message ?? '',
       },
       include: INVITATION_INCLUDE,
     })) as InvitationRow;
@@ -152,7 +180,7 @@ export class InvitationsService {
       sourceUserId: fromUserId,
     });
 
-    return toInvitationDto(row);
+    return { toUser, status: 'sent', invitation: toInvitationDto(row) };
   }
 
   async list(

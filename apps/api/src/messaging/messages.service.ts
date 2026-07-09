@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type {
   ConversationItem,
+  ConversationRequestAction,
   ConversationsResponse,
   CreateConversationRequest,
   MarkReadResponse,
@@ -19,6 +20,8 @@ import type {
 import {
   CONVERSATIONS_PAGE_MAX,
   CONVERSATIONS_PAGE_SIZE,
+  DM_POLICIES,
+  DM_POLICY_DEFAULT,
   GROUP_NAME_MAX_LENGTH,
   MESSAGE_MAX_ATTACHMENTS,
   MESSAGE_MAX_LENGTH,
@@ -26,12 +29,15 @@ import {
   MESSAGES_PAGE_SIZE,
   SEND_RATE_LIMIT,
 } from '@encre-et-plume/shared';
+import type { DmPolicy } from '@encre-et-plume/shared';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
 import { PresenceService } from '../connections/presence.service';
 import { MessagingGateway } from './messaging.gateway';
 import { BlocksService } from '../blocks/blocks.service';
+import { ConnectionsService } from '../connections/connections.service';
 
 // No-existence-leak: unknown conversation AND non-participant both return this 404 (MC-7/MC-8 pattern).
 const NOT_FOUND = 'Conversation introuvable.';
@@ -39,6 +45,7 @@ const NOT_FOUND = 'Conversation introuvable.';
 interface PageOpts {
   cursor?: string;
   limit?: number;
+  filter?: 'requests';
 }
 
 // Shape of a participant row with its account, as loaded via the include below.
@@ -62,6 +69,8 @@ interface ConvRow {
   type: 'dm' | 'group';
   name: string | null;
   projectId: string | null;
+  status: 'open' | 'requested' | 'declined';
+  requestedBy: string | null;
   lastMessageAt: Date;
   participants: PartRow[];
   messages: MsgRow[];
@@ -92,15 +101,32 @@ export class MessagesService {
     private readonly presence: PresenceService,
     private readonly gateway: MessagingGateway,
     private readonly blocks: BlocksService,
+    private readonly connections: ConnectionsService,
   ) {}
 
   // ── GET /conversations ──────────────────────────────────────────────────────
   async listConversations(accountId: string, opts: PageOpts): Promise<ConversationsResponse> {
     const limit = clampLimit(opts.limit, CONVERSATIONS_PAGE_SIZE, CONVERSATIONS_PAGE_MAX);
 
+    // MC-9 delta: filter=requests → the recipient's incoming pending DM requests (backs the Demandes
+    // tab). The main list shows open threads + the caller's OWN outgoing requests ("Demande envoyée");
+    // incoming requests and every 'declined' row stay out. MC-11 drift guard: salon is never a list row.
+    const requestsWhere: Prisma.ConversationWhereInput = {
+      type: 'dm',
+      status: 'requested',
+      requestedBy: { not: accountId },
+    };
+    const where: Prisma.ConversationWhereInput =
+      opts.filter === 'requests'
+        ? { ...requestsWhere, participants: { some: { accountId } } }
+        : {
+            type: { not: 'salon' },
+            participants: { some: { accountId } },
+            OR: [{ status: 'open' }, { status: 'requested', requestedBy: accountId }],
+          };
+
     const convs = (await this.prisma.conversation.findMany({
-      // MC-11 drift guard: the global salon room is its own dock widget, never a list row here.
-      where: { type: { not: 'salon' }, participants: { some: { accountId } } },
+      where,
       orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
       take: limit,
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
@@ -115,7 +141,7 @@ export class MessagesService {
       JOIN "ConversationParticipant" p
         ON p."conversationId" = m."conversationId" AND p."accountId" = ${accountId}
       JOIN "Conversation" c
-        ON c."id" = m."conversationId" AND c."type" <> 'salon'
+        ON c."id" = m."conversationId" AND c."type" <> 'salon' AND c."status" = 'open'
       WHERE m."senderId" <> ${accountId} AND m."createdAt" > p."lastReadAt"
       GROUP BY m."conversationId"
     `) as { conversationId: string; unread: bigint | number }[];
@@ -130,7 +156,11 @@ export class MessagesService {
 
     const items = convs.map((c) => this.toItem(c, accountId, unreadBy.get(c.id) ?? 0));
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
-    return { items, nextCursor, totalUnread };
+    // Always compute the incoming-requests count (backs the Demandes tab badge on every response).
+    const requestsCount = await this.prisma.conversation.count({
+      where: { ...requestsWhere, participants: { some: { accountId } } },
+    });
+    return { items, nextCursor, totalUnread, requestsCount };
   }
 
   // ── GET /conversations/:id/messages ─────────────────────────────────────────
@@ -264,6 +294,15 @@ export class MessagesService {
   // story's neutral copy (no block disclosure). Group conversations are out of story scope (D7).
   private async assertCanSend(accountId: string, conv: ConvRow): Promise<void> {
     if (conv.type !== 'dm') return;
+    // MC-9 delta send-gating: a declined DM refuses BOTH parties with the neutral copy (decline vs block
+    // is not disclosed, D2). A requested DM lets only the REQUESTER send opening message(s); the recipient
+    // must accept first (the UI hides their composer — this is the server backstop, BE-6).
+    if (conv.status === 'declined') {
+      throw new BadRequestException("Impossible d'envoyer le message.");
+    }
+    if (conv.status === 'requested' && accountId !== conv.requestedBy) {
+      throw new BadRequestException('Acceptez la demande pour répondre.');
+    }
     const other = conv.participants.find((p) => p.accountId !== accountId);
     if (other && (await this.blocks.isBlockedPair(accountId, other.accountId))) {
       throw new BadRequestException("Impossible d'envoyer le message.");
@@ -326,9 +365,17 @@ export class MessagesService {
     }
   }
 
+  // MC-9 delta: a DM to a non-contact is routed by the RECIPIENT's dmPolicy (F-19). Order is
+  // authz-relevant — block check runs BEFORE any policy read so a blocked caller never learns the
+  // target's dmPolicy (D3). Already-connected pairs always open a normal thread (policy governs
+  // non-contacts only, D5). 'declined' rows re-request (D1). Existing open/requested rows are returned
+  // as-is (policy never retro-closes a thread).
   private async getOrCreateDm(accountId: string, otherId: string): Promise<ConversationItem> {
     if (otherId === accountId) throw new BadRequestException('Vous ne pouvez pas discuter avec vous-même.');
-    const other = await this.prisma.account.findFirst({ where: { id: otherId, deletedAt: null }, select: { id: true } });
+    const other = await this.prisma.account.findFirst({
+      where: { id: otherId, deletedAt: null },
+      select: { id: true, preferences: true },
+    });
     if (!other) throw new NotFoundException('Ce membre est introuvable.');
     // MC-10: a blocked user must not open a fresh DM around the wall — same neutral copy as send.
     if (await this.blocks.isBlockedPair(accountId, otherId)) {
@@ -339,18 +386,73 @@ export class MessagesService {
     const existing = (await this.prisma.conversation.findUnique({
       where: { dmKey },
       include: CONV_INCLUDE,
-    })) as unknown as ConvRow | null;
-    if (existing) return this.toItem(existing, accountId, 0);
+    })) as unknown as (ConvRow | null);
+    if (existing) {
+      if (existing.status === 'declined') {
+        // Re-request: flip the row back to a pending request from the current caller (D1).
+        const revived = (await this.prisma.conversation.update({
+          where: { id: existing.id },
+          data: { status: 'requested', requestedBy: accountId },
+          include: CONV_INCLUDE,
+        })) as unknown as ConvRow;
+        return this.toItem(revived, accountId, 0);
+      }
+      return this.toItem(existing, accountId, 0); // 'open' or 'requested' — return current state
+    }
 
+    const status = await this.routeNewDm(accountId, otherId, other.preferences);
+    if (status === 'refused') {
+      throw new BadRequestException("Ce membre n'accepte que les messages de ses contacts.");
+    }
     const created = (await this.prisma.conversation.create({
       data: {
         type: 'dm',
         dmKey,
+        status,
+        requestedBy: status === 'requested' ? accountId : null,
         participants: { create: [{ accountId }, { accountId: otherId }] },
       },
       include: CONV_INCLUDE,
     })) as unknown as ConvRow;
     return this.toItem(created, accountId, 0);
+  }
+
+  /** Decide the initial status of a brand-new DM from the recipient's dmPolicy (F-19). */
+  private async routeNewDm(
+    callerId: string,
+    otherId: string,
+    rawPreferences: unknown,
+  ): Promise<'open' | 'requested' | 'refused'> {
+    if ((await this.connections.stateBetween(callerId, otherId)) === 'connected') return 'open';
+    const dmPolicy = readDmPolicy(rawPreferences);
+    if (dmPolicy === 'anyone') return 'open';
+    if (dmPolicy === 'contacts') return 'refused';
+    return 'requested'; // 'requests' (default)
+  }
+
+  /** BE-4: recipient responds to a DM request. Recipient-only; every other caller/state gets one 404. */
+  async respondToRequest(
+    accountId: string,
+    conversationId: string,
+    action: ConversationRequestAction,
+  ): Promise<ConversationItem> {
+    const conv = await this.loadForMember(conversationId, accountId); // 404 if unknown or non-participant
+    // Recipient-only: the requester, a stranger, and a non-requested conversation all collapse to the
+    // same 404 — no state disclosure (D2/D3).
+    if (conv.type !== 'dm' || conv.status !== 'requested' || accountId === conv.requestedBy) {
+      throw new NotFoundException(NOT_FOUND);
+    }
+    const updated = (await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { status: action === 'accept' ? 'open' : 'declined' },
+      include: CONV_INCLUDE,
+    })) as unknown as ConvRow;
+
+    // Both participants refetch their lists (requester's "Demande envoyée" clears on accept; the row
+    // disappears on decline). Decline is otherwise silent — no notification (mirrors MC-8 decline).
+    const ids = conv.participants.map((p) => p.accountId);
+    this.gateway.emitConversationUpdated(ids, { conversationId });
+    return this.toItem(updated, accountId, 0);
   }
 
   private async createGroup(accountId: string, name: string, participantIds: string[]): Promise<ConversationItem> {
@@ -413,6 +515,9 @@ export class MessagesService {
           }
         : null,
       lastMessageAt: conv.lastMessageAt.toISOString(),
+      // 'declined' rows are never returned by any route, so the client-facing type stays 'open'|'requested'.
+      status: conv.status === 'requested' ? 'requested' : 'open',
+      requestedBy: conv.status === 'requested' ? conv.requestedBy : null,
     };
   }
 
@@ -431,6 +536,13 @@ export class MessagesService {
       readBy,
     };
   }
+}
+
+// F-19: read the recipient's dmPolicy from their preferences JSON (defaults to 'requests'). Duplicated
+// coercion (ponytail: same 2 lines as the accounts readPreferences; not worth a shared util across modules).
+function readDmPolicy(raw: unknown): DmPolicy {
+  const p = (raw as Record<string, unknown> | null | undefined)?.['dmPolicy'];
+  return DM_POLICIES.includes(p as DmPolicy) ? (p as DmPolicy) : DM_POLICY_DEFAULT;
 }
 
 function clampLimit(raw: number | undefined, def: number, max: number): number {

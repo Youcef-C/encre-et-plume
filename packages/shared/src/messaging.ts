@@ -16,6 +16,9 @@ export interface LastMessagePreview {
   createdAt: string; // ISO
 }
 
+/** DM request lifecycle (MC-9 delta). 'declined' exists only in the DB — never serialized to clients. */
+export type ConversationStatus = 'open' | 'requested';
+
 export interface ConversationItem {
   id: string;
   type: ConversationType;
@@ -25,12 +28,20 @@ export interface ConversationItem {
   unreadCount: number;
   lastMessage: LastMessagePreview | null;
   lastMessageAt: string; // ISO — list ordering key
+  status: ConversationStatus; // groups/salon always 'open'; DM requests may be 'requested'
+  requestedBy: string | null; // accountId of the requester while status === 'requested', else null
 }
 
 export interface ConversationsResponse {
   items: ConversationItem[];
   nextCursor: string | null;
-  totalUnread: number; // launcher badge — summed across ALL the user's conversations
+  totalUnread: number; // launcher badge — summed across the user's OPEN conversations
+  requestsCount: number; // pending incoming DM requests — backs the "Demandes" tab badge
+}
+
+export type ConversationRequestAction = 'accept' | 'decline';
+export interface RespondConversationRequestRequest {
+  action: ConversationRequestAction;
 }
 
 export interface MessageAttachment {
@@ -79,7 +90,13 @@ export const WS_EVENTS = {
   // MC-11 salon: new message broadcast to all connected clients + live presence count.
   salonMessage: 'salon:message',
   salonPresence: 'salon:presence',
+  // MC-9 delta: a DM request was accepted/declined → both participants refetch their lists.
+  conversationUpdated: 'conversation:updated',
 } as const;
+
+export interface WsConversationUpdated {
+  conversationId: string;
+}
 
 export interface WsMessageNew {
   conversationId: string;

@@ -1,0 +1,89 @@
+// DR-12 iter3 V12 — EditIllustrationForm. Seeds every field from IllustrationDetail (incl. Visibilité
+// "Publique" when publishedAt is set), blocks an empty Titre, saves the full editable set via
+// updateIllustration and fires onSaved with the response; an API error shows a French notice.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { IllustrationDetail } from '@encre-et-plume/shared';
+
+vi.mock('../lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/api')>();
+  return { ...actual, updateIllustration: vi.fn() };
+});
+
+import * as api from '../lib/api';
+import EditIllustrationForm from '../components/illustration/EditIllustrationForm';
+
+function makeDetail(overrides: Partial<IllustrationDetail> = {}): IllustrationDetail {
+  return {
+    id: 'ill-1', title: 'Aube', description: 'Une aube.', category: 'personnages', categoryLabel: 'Personnages',
+    genres: [], hashtags: ['encre'], image: null, dimensionsLabel: null, tools: 'Encre · CSP', license: null,
+    likeCount: 0, publishedAt: '2026-01-01T00:00:00.000Z',
+    artist: { id: 'acc-yuki', name: 'Yuki', slug: 'yuki-moreau', role: 'Dessinateur·rice', city: null, avatar: null },
+    is18plus: false, collections: [],
+    ...overrides,
+  };
+}
+
+describe('EditIllustrationForm (DR-12 FE-13 · V12)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('seeds every field from the detail (Visibilité "Publique" when publishedAt is set)', () => {
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect((screen.getByLabelText('Titre') as HTMLInputElement).value).toBe('Aube');
+    expect((screen.getByLabelText('Outils') as HTMLInputElement).value).toBe('Encre · CSP');
+    expect(screen.getByText('#encre')).toBeInTheDocument();
+    // Visibility select seeded to "Publique".
+    expect(screen.getByRole('combobox', { name: /Visibilité/ })).toHaveTextContent('Publique');
+  });
+
+  it('seeds Visibilité "Privée" when the piece is unpublished', () => {
+    render(<EditIllustrationForm detail={makeDetail({ publishedAt: null })} onSaved={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: /Visibilité/ })).toHaveTextContent('Privée');
+  });
+
+  it('blocks an empty Titre with "Un titre est requis"', async () => {
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    await user.clear(screen.getByLabelText('Titre'));
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(await screen.findByText('Un titre est requis')).toBeInTheDocument();
+    expect(api.updateIllustration).not.toHaveBeenCalled();
+  });
+
+  it('saves the full editable set and fires onSaved with the response', async () => {
+    const saved = makeDetail({ title: 'Crépuscule' });
+    vi.mocked(api.updateIllustration).mockResolvedValue(saved);
+    const onSaved = vi.fn();
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={onSaved} onClose={vi.fn()} />);
+
+    await user.clear(screen.getByLabelText('Titre'));
+    await user.type(screen.getByLabelText('Titre'), 'Crépuscule');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() =>
+      expect(api.updateIllustration).toHaveBeenCalledWith('ill-1', {
+        title: 'Crépuscule',
+        category: 'personnages',
+        description: 'Une aube.',
+        hashtags: ['encre'],
+        tools: 'Encre · CSP',
+        license: null,
+        visibility: 'public',
+      }),
+    );
+    expect(onSaved).toHaveBeenCalledWith(saved);
+  });
+
+  it('shows a French notice and keeps values on an API error', async () => {
+    vi.mocked(api.updateIllustration).mockRejectedValue({ statusCode: 400, message: 'Catégorie invalide', error: 'BAD_REQUEST' });
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(await screen.findByText('Catégorie invalide')).toBeInTheDocument();
+    expect((screen.getByLabelText('Titre') as HTMLInputElement).value).toBe('Aube');
+  });
+});

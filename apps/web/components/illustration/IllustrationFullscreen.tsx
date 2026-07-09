@@ -43,7 +43,7 @@ export default function IllustrationFullscreen({ detail, onClose }: { detail: Il
         aria-modal="true"
         aria-label={detail.title}
         tabIndex={-1}
-        style={{ position: 'relative', maxWidth: '92vw', maxHeight: '92dvh', width: '100%', height: '100%' }}
+        style={{ position: 'relative', display: 'inline-flex', maxWidth: '92vw', maxHeight: '92dvh' }}
       >
         <button
           type="button"
@@ -64,11 +64,30 @@ export default function IllustrationFullscreen({ detail, onClose }: { detail: Il
         >
           <XIcon size={16} />
         </button>
-        <div
-          role="img"
-          aria-label={detail.title}
-          style={{ width: '100%', height: '100%', border: '3px solid var(--ink)', borderRadius: 12, ...coverStyle(detail.id, detail.image) }}
-        />
+        {/* Real <img> so the border hugs the actual image edges, not a letterboxed box. */}
+        {detail.image ? (
+          <img
+            src={detail.image}
+            alt={detail.title}
+            style={{
+              display: 'block',
+              maxWidth: '90vw',
+              maxHeight: '88dvh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              border: '3px solid var(--ink)',
+              borderRadius: 12,
+              background: 'var(--card)',
+            }}
+          />
+        ) : (
+          <div
+            role="img"
+            aria-label={detail.title}
+            style={{ width: 'min(85vw, 62dvh)', height: '85dvh', border: '3px solid var(--ink)', borderRadius: 12, ...coverStyle(detail.id, detail.image, 'contain') }}
+          />
+        )}
       </div>
     </div>
   );

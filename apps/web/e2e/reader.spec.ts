@@ -126,7 +126,7 @@ test.describe('Lecteur — manga reader', () => {
         json: {
           id: 'mock-reader-1', slug: 'camille', displayName: 'Camille', role: 'utilisateur',
           verified: true, emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
-          preferences: { theme: 'system' },
+          preferences: { theme: 'system', dmPolicy: 'requests' },
         },
       }),
     );
@@ -149,7 +149,15 @@ test.describe('Lecteur — manga reader', () => {
     await expect(page.getByRole('button', { name: 'Retirer de ma liste' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('paging via the "›" button and ArrowRight advances the slider + label', async ({ page }) => {
+  // DR-4 sens-de-lecture delta: `lames-de-brume` is a Manga-format work, which now defaults to RTL
+  // (AC1/AC6) — the arrow-key mapping inverts accordingly (AC4: → = précédente, ← = suivante in
+  // RTL). This test's original assertion ("ArrowRight advances") predates that delta and silently
+  // broke (QA re-verification, real e2e run): "Page suivante" still advances regardless of
+  // direction (glyph/handler swap, not the button itself), so that half is untouched; the arrow-key
+  // half is updated to ArrowLeft to match the new default. The "DR-4 sens de lecture" describe block
+  // below covers the inversion itself in full; this is just the pre-existing paging smoke test kept
+  // accurate to the shipped default.
+  test('paging via the "›" button and ArrowLeft advances the slider + label (RTL default for Manga)', async ({ page }) => {
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
     const slider = page.getByRole('slider');
     await expect(slider).toHaveAttribute('aria-valuetext', 'page 1 sur 6');
@@ -157,7 +165,7 @@ test.describe('Lecteur — manga reader', () => {
     await page.getByRole('button', { name: 'Page suivante' }).click();
     await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 6');
 
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowLeft');
     await expect(slider).toHaveAttribute('aria-valuetext', 'page 3 sur 6');
   });
 
@@ -546,7 +554,7 @@ test.describe('Lecteur — 18+ age gate (DR-10)', () => {
         json: {
           id: 'minor-1', slug: 'minor', displayName: 'Minor', role: 'utilisateur', verified: false,
           emailVerified: true, avatar: null, createdAt: new Date().toISOString(),
-          preferences: { theme: 'system' }, needsCguReconsent: false, onboarded: true, isAdult: false,
+          preferences: { theme: 'system', dmPolicy: 'requests' }, needsCguReconsent: false, onboarded: true, isAdult: false,
         },
       }),
     );
@@ -566,5 +574,118 @@ test.describe('Lecteur — 18+ age gate (DR-10)', () => {
     // Unchanged by the blur presentation update: the server 403s before the work/pages fetch
     // resolves, so there is nothing to blur — no reader chrome mounts for a blocked minor either.
     await expect(page.getByText('Chapitres')).toHaveCount(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DR-4 delta — « Sens de lecture » (reading direction). Hermetic, same route-mock pattern as
+// above. Each Playwright test gets an isolated browser context (fresh localStorage), so no
+// explicit clearing is needed between tests. Manga (`lames-de-brume`) defaults RTL; Roman
+// (`dr2-le-murmure-des-cendres`) defaults LTR. AC map: AC1/AC4/AC6 (arrow inversion + default),
+// AC3/AC10 (slider dir + stable aria-valuetext), AC2 (2-page spread order), AC5 (Roman stays
+// LTR), AC7/AC8/AC9 (toggle + persistence + labelled group).
+// ─────────────────────────────────────────────────────────────────────────────
+test.describe('DR-4 sens de lecture (reading direction)', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockCommon(page);
+  });
+
+  test('manga defaults RTL: ArrowLeft pages forward (suivante), ArrowRight pages back (précédente); slider dir=rtl; aria-valuetext stable (AC1/AC3/AC4/AC6/AC10)', async ({ page }) => {
+    await mockMangaFeeds(page);
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    const slider = page.getByRole('slider');
+    await expect(slider).toHaveAttribute('dir', 'rtl');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'page 1 sur 6');
+
+    // ← = page suivante in RTL.
+    await page.keyboard.press('ArrowLeft');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 6');
+
+    // → = page précédente in RTL.
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'page 1 sur 6');
+
+    // Button/label swap: the LEFT circle is "Page suivante" (accent), the RIGHT is "Page
+    // précédente" and disabled at page 1.
+    const navBar = page.locator('.ep-reader-navbtn');
+    const buttons = navBar.getByRole('button');
+    await expect(buttons.first()).toHaveAccessibleName('Page suivante');
+    await expect(buttons.last()).toHaveAccessibleName('Page précédente');
+    await expect(buttons.last()).toBeDisabled();
+  });
+
+  test('the "Sens de lecture" group is labelled and announces the active direction (AC9)', async ({ page }) => {
+    await mockMangaFeeds(page);
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    const group = page.getByRole('group', { name: 'Sens de lecture' });
+    await expect(group).toBeVisible();
+    await expect(group.getByRole('button', { name: 'Droite→Gauche' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('a 2-page manga spread orders pages right-then-left in RTL (AC2)', async ({ page }) => {
+    await mockMangaFeeds(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    await page.getByRole('button', { name: '2 pages' }).click();
+
+    const pageCard1 = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 1' }).locator('xpath=..');
+    const pageCard2 = page.getByRole('img', { name: 'Lames de Brume — chapitre 1, page 2' }).locator('xpath=..');
+    const [box1, box2] = await Promise.all([pageCard1.boundingBox(), pageCard2.boundingBox()]);
+    expect(box1).not.toBeNull();
+    expect(box2).not.toBeNull();
+    // Page 1 (the current reading page) sits visually to the RIGHT of page 2 in RTL.
+    expect(box1!.x).toBeGreaterThan(box2!.x);
+  });
+
+  test('clicking "Gauche→Droite" flips to LTR and the choice persists on reload (AC7/AC8)', async ({ page }) => {
+    await mockMangaFeeds(page);
+    await page.goto('/lecteur/lames-de-brume?chapitre=1');
+    const group = page.getByRole('group', { name: 'Sens de lecture' });
+
+    await group.getByRole('button', { name: 'Gauche→Droite' }).click();
+    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+    const slider = page.getByRole('slider');
+    await expect(slider).toHaveAttribute('dir', 'ltr');
+
+    // Now advances normally (LTR): ArrowRight = suivante.
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 6');
+
+    await page.reload();
+    await expect(page.getByRole('group', { name: 'Sens de lecture' }).getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('slider')).toHaveAttribute('dir', 'ltr');
+    // QA finding (flaky, ~1/5 runs): a key press sent immediately after page.reload() can race the
+    // document keydown listener's post-reload (re-)attachment and get dropped — retry the press
+    // rather than sleep-and-hope; AC8 itself (pressed state + dir persisting) is already proven above.
+    await expect(async () => {
+      await page.keyboard.press('ArrowRight');
+      await expect(page.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 2 sur 6', { timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
+  });
+
+  test('Roman stays LTR by default (per-work default, no cross-work leak) (AC5)', async ({ page }) => {
+    await mockRomanFeeds(page);
+    await page.goto('/lecteur/dr2-le-murmure-des-cendres?chapitre=1');
+    const group = page.getByRole('group', { name: 'Sens de lecture' });
+    await expect(group.getByRole('button', { name: 'Gauche→Droite' })).toHaveAttribute('aria-pressed', 'true');
+    const slider = page.getByRole('slider');
+    await expect(slider).toHaveAttribute('dir', 'ltr');
+    await page.keyboard.press('ArrowRight');
+    await expect(slider).toHaveAttribute('aria-valuetext', 'page 2 sur 2');
+  });
+
+  test('responsive: the "Sens de lecture" group wraps without overflow at 375/768/1280 (regression: reader flex-wrap)', async ({ page }) => {
+    await mockMangaFeeds(page);
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/lecteur/lames-de-brume?chapitre=1');
+      await expect(page.getByRole('group', { name: 'Sens de lecture' })).toBeVisible();
+      const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+      expect(hasOverflow).toBe(false);
+    }
   });
 });

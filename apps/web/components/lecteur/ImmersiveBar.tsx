@@ -18,6 +18,7 @@ import { StarIcon, CaretDownIcon, XIcon } from '../icons';
 import FavoritesMenu from './FavoritesMenu';
 import { ChapterRows } from './ChapterAside';
 import ReaderNav from './ReaderNav';
+import type { ReadingDirection } from './readingDirection';
 
 const HIDE_DELAY_MS = 2800;
 
@@ -25,6 +26,7 @@ type Props = {
   page: number;
   totalPages: number;
   step: number;
+  direction: ReadingDirection;
   onPrev: () => void;
   onNext: () => void;
   onSetPage: (page: number) => void;
@@ -57,6 +59,7 @@ export default function ImmersiveBar({
   page,
   totalPages,
   step,
+  direction,
   onPrev,
   onNext,
   onSetPage,
@@ -179,7 +182,7 @@ export default function ImmersiveBar({
       </span>
 
       <div style={{ flex: '1 1 200px', minWidth: 160 }}>
-        <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={onPrev} onNext={onNext} onSetPage={onSetPage} />
+        <ReaderNav direction={direction} page={page} totalPages={totalPages} step={step} onPrev={onPrev} onNext={onNext} onSetPage={onSetPage} />
       </div>
 
       <button

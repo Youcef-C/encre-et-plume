@@ -84,7 +84,7 @@ describe('AccountsController', () => {
 
       const result = await controller.updatePreferences(fakeReq, { theme: 'dark' });
 
-      expect(service.updatePreferences).toHaveBeenCalledWith('cuid-1', 'dark');
+      expect(service.updatePreferences).toHaveBeenCalledWith('cuid-1', { theme: 'dark' });
       expect(result).toEqual(updated);
     });
 

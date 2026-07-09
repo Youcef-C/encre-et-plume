@@ -16,7 +16,8 @@ export function catalogGenreLabel(id: string): string {
   return GENRES.find((g) => g.id === id)?.fr ?? id;
 }
 
-export const CATALOG_FORMATS = ['Manga', 'One-shot', 'Roman'] as const;
+// DR-12: 'Illustration(s)' identifies a collection Work (see collections.ts / WORK_FORMAT_ILLUSTRATIONS).
+export const CATALOG_FORMATS = ['Manga', 'One-shot', 'Roman', 'Illustration(s)'] as const;
 // audienceRating vocabulary — the Work column's own vocabulary (also read by DR-10 for 18+ gating).
 // No longer a query facet on its own (see CATALOG_PUBLICS below); kept so the column's valid values
 // stay documented in one place.

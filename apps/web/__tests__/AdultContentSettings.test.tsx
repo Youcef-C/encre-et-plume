@@ -31,7 +31,7 @@ const base: AccountSummary = {
   slug: 'yuki',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   emailVerified: true,
   needsCguReconsent: false,
   onboarded: true,

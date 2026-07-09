@@ -25,6 +25,7 @@ Give every visitor and member of "Encre & Plume" a compelling way to find manga,
 9. [[DR-9]] — Like / favorite a work or illustration
 10. [[DR-10]] — Age verification & 18+ content gating
 11. [[DR-11]] — Reading history & resume "Reprendre la lecture"
+12. [[DR-12]] — Illustration collections "Collection"
 
 ## Key cross-epic dependencies
 

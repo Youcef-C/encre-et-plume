@@ -139,27 +139,68 @@ describe('AccountsService', () => {
     });
   });
 
-  describe('F-6: updatePreferences', () => {
+  describe('F-6 + F-19: updatePreferences (merge, not overwrite)', () => {
     it('persists theme and returns AccountSummary with updated preference', async () => {
-      const updated = { ...BASE_ACCOUNT, preferences: { theme: 'dark' } };
+      prisma.account.findUnique.mockResolvedValue({ preferences: { theme: 'system', dmPolicy: 'requests' } });
+      const updated = { ...BASE_ACCOUNT, preferences: { theme: 'dark', dmPolicy: 'requests' } };
       prisma.account.update.mockResolvedValue(updated);
 
-      const result = await service.updatePreferences('cuid-1', 'dark');
+      const result = await service.updatePreferences('cuid-1', { theme: 'dark' });
 
       expect(prisma.account.update).toHaveBeenCalledWith({
         where: { id: 'cuid-1' },
-        data: { preferences: { theme: 'dark' } },
+        data: { preferences: { theme: 'dark', dmPolicy: 'requests' } },
       });
-      expect(result.preferences).toEqual({ theme: 'dark' });
+      expect(result.preferences).toEqual({ theme: 'dark', dmPolicy: 'requests' });
       expect(result.id).toBe('cuid-1');
     });
 
-    it('handles absent preferences column gracefully (defaults to system)', async () => {
-      const updated = { ...BASE_ACCOUNT, preferences: undefined };
+    it('handles absent preferences column gracefully (defaults theme=system, dmPolicy=requests)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ preferences: null });
+      const updated = { ...BASE_ACCOUNT, preferences: { theme: 'system' } };
       prisma.account.update.mockResolvedValue(updated);
 
-      const result = await service.updatePreferences('cuid-1', 'system');
-      expect(result.preferences).toEqual({ theme: 'system' });
+      const result = await service.updatePreferences('cuid-1', { theme: 'system' });
+      expect(result.preferences).toEqual({ theme: 'system', dmPolicy: 'requests' });
+    });
+
+    // J12 — the merge fix + F-19 field
+    it('J12: setting dmPolicy preserves the stored theme (merge, not whole-JSON overwrite)', async () => {
+      prisma.account.findUnique.mockResolvedValue({ preferences: { theme: 'dark' } });
+      prisma.account.update.mockResolvedValue({ ...BASE_ACCOUNT, preferences: { theme: 'dark', dmPolicy: 'contacts' } });
+
+      const result = await service.updatePreferences('cuid-1', { dmPolicy: 'contacts' });
+
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 'cuid-1' },
+        data: { preferences: { theme: 'dark', dmPolicy: 'contacts' } },
+      });
+      expect(result.preferences).toEqual({ theme: 'dark', dmPolicy: 'contacts' });
+    });
+
+    it('J12: setting theme preserves the stored dmPolicy', async () => {
+      prisma.account.findUnique.mockResolvedValue({ preferences: { theme: 'system', dmPolicy: 'contacts' } });
+      prisma.account.update.mockResolvedValue({ ...BASE_ACCOUNT, preferences: { theme: 'light', dmPolicy: 'contacts' } });
+
+      const result = await service.updatePreferences('cuid-1', { theme: 'light' });
+
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 'cuid-1' },
+        data: { preferences: { theme: 'light', dmPolicy: 'contacts' } },
+      });
+      expect(result.preferences).toEqual({ theme: 'light', dmPolicy: 'contacts' });
+    });
+
+    it('J12: summary defaults dmPolicy to "requests" when the key is absent', async () => {
+      prisma.account.findUnique.mockResolvedValue({ preferences: { theme: 'dark' } });
+      prisma.account.update.mockResolvedValue({ ...BASE_ACCOUNT, preferences: { theme: 'dark' } });
+
+      const result = await service.updatePreferences('cuid-1', { theme: 'dark' });
+      expect(result.preferences.dmPolicy).toBe('requests');
+    });
+
+    it('rejects a body with neither theme nor dmPolicy (400)', async () => {
+      await expect(service.updatePreferences('cuid-1', {})).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { FundingGoalDto, PlancheDto, WorkChaptersResponse, WorkCreatorDto, WorkDetail, WorkReviewDto } from '@encre-et-plume/shared';
-import { WORK_CHAPTER_PAGE_SIZE } from '@encre-et-plume/shared';
+import type { CollectionItemDto, FundingGoalDto, PlancheDto, WorkChaptersResponse, WorkCreatorDto, WorkDetail, WorkReviewDto } from '@encre-et-plume/shared';
+import { WORK_CHAPTER_PAGE_SIZE, WORK_FORMAT_ILLUSTRATIONS, galleryCategoryLabel, hasPlus18Genre } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -26,6 +26,13 @@ export class WorksService {
           creators: { orderBy: { order: 'asc' }, include: { account: { include: { profile: true } } } },
           fundingGoals: { orderBy: { order: 'asc' } },
           reviews: { orderBy: { createdAt: 'desc' } },
+          // DR-12: ordered member illustrations — mapped only for Illustration(s) (collection) works.
+          // BE-9: the œuvre page is public — exclude private (unpublished) members.
+          collectionItems: {
+            where: { illustration: { publishedAt: { not: null } } },
+            orderBy: { order: 'asc' },
+            include: { illustration: true },
+          },
         },
       });
       if (!work) return null;
@@ -145,6 +152,12 @@ interface WorkRow {
   creators: CreatorRow[];
   fundingGoals: FundingGoalRow[];
   reviews: ReviewRow[];
+  collectionItems?: CollectionItemRow[];
+}
+
+interface CollectionItemRow {
+  order: number;
+  illustration: { id: string; title: string; image: string | null; likeCount: number; category: string; genres: string[] };
 }
 
 interface ChapterRow {
@@ -189,6 +202,22 @@ function mapWorkDetail(work: WorkRow, chapterCount: number): WorkDetail {
     team,
     fundingGoals,
     reviews,
+    // DR-12: member grid for a collection; null for every other format.
+    // ponytail: unpaginated member grid, bounded by one artist's uploads; paginate past ~100.
+    collectionItems: work.format === WORK_FORMAT_ILLUSTRATIONS ? (work.collectionItems ?? []).map(mapCollectionItem) : null,
+  };
+}
+
+function mapCollectionItem(ci: CollectionItemRow): CollectionItemDto {
+  return {
+    id: ci.illustration.id,
+    title: ci.illustration.title,
+    thumbnail: ci.illustration.image,
+    likeCount: ci.illustration.likeCount,
+    category: ci.illustration.category,
+    categoryLabel: galleryCategoryLabel(ci.illustration.category),
+    order: ci.order,
+    is18plus: hasPlus18Genre(ci.illustration.genres ?? []),
   };
 }
 

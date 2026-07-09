@@ -39,7 +39,7 @@ describe('TrendingGrid', () => {
     render(<TrendingGrid items={items} />);
     expect(screen.getByText('Populaires à chaud')).toBeInTheDocument();
     expect(screen.getByText('cette semaine')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /tout voir/i })).toHaveAttribute('href', '/classement');
+    expect(screen.getByRole('link', { name: /tout voir/i })).toHaveAttribute('href', '/decouvrir');
   });
 
   it('renders 4 cards with rank, genre, formatted ♥, and growth', () => {

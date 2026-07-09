@@ -19,6 +19,7 @@ export * from './work.js';
 export * from './reader.js';
 export * from './reading-history.js';
 export * from './gallery.js';
+export * from './collections.js';
 export * from './hashtags.js';
 export * from './list.js';
 export * from './reactions.js';

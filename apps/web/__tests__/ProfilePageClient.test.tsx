@@ -32,21 +32,26 @@ vi.mock('../components/AvatarCropModal', () => ({
   default: () => <div data-testid="avatar-crop-modal" />,
 }));
 
-// Stub UploadControl — captures onBusyChange for save-button tests
+// Stub UploadControl — captures onBusyChange (save-button tests) and currentUrl (FE-15 side preview).
 let capturedOnBusyChange: ((busy: boolean) => void) | undefined;
+let capturedCurrentUrl: string | null | undefined;
 vi.mock('../components/UploadControl', () => ({
   default: ({
     label,
     onBusyChange,
+    currentUrl,
   }: {
     label: string;
     onBusyChange?: (busy: boolean) => void;
+    currentUrl?: string | null;
   }) => {
     capturedOnBusyChange = onBusyChange;
+    capturedCurrentUrl = currentUrl;
     return (
       <div>
         <div>{label}</div>
         <div>Glissez une image ou cliquez pour choisir</div>
+        {currentUrl && <img src={currentUrl} alt={label} />}
       </div>
     );
   },
@@ -99,7 +104,7 @@ const mockAccount: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   needsCguReconsent: false,
   onboarded: false,
   isAdult: true,
@@ -256,6 +261,15 @@ describe('ProfilePageClient — owner view', () => {
     // The UploadControl drop zone should appear with its label
     expect(screen.getByText('Photo de profil')).toBeInTheDocument();
     expect(screen.getByText(/Glissez une image/i)).toBeInTheDocument();
+  });
+
+  it('passes the current avatar to UploadControl as the side-preview source (FE-15/V13)', async () => {
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    // The avatar module hands its current avatar to the always-droppable box as the side preview.
+    expect(capturedCurrentUrl).toBe(mockProfile.avatar);
   });
 
   it('"Enregistrer" calls updateMyProfile and exits edit mode', async () => {

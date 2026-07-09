@@ -23,7 +23,7 @@ async function mockLogin(page: Page, displayName: string) {
           verified: false,
           slug,
           createdAt: new Date().toISOString(),
-          preferences: { theme: 'dark' }, // stale dark preference must be ignored
+          preferences: { theme: 'dark', dmPolicy: 'requests' }, // stale dark preference must be ignored
         }),
       });
     } else {

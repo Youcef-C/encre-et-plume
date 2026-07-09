@@ -7,9 +7,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { catalogGenreLabel, galleryCategoryLabel } from '@encre-et-plume/shared';
-import type { GalleryIllustrationCard, GalleryFeatureCard, GalleryPreview, GalleryQuery, GallerySummary } from '@encre-et-plume/shared';
+import type { CollectionCard, GalleryIllustrationCard, GalleryFeatureCard, GalleryPreview, GallerySummary } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
-import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS, TRI_LABELS } from '../../lib/gallery';
+import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS, TRI_LABELS, type GalerieFilters } from '../../lib/gallery';
 import GalerieHeader from './GalerieHeader';
 import CategoryChips from './CategoryChips';
 import SortSelect from './SortSelect';
@@ -18,6 +18,7 @@ import GalleryTagFilter from './GalleryTagFilter';
 import GalleryGenreFilter from './GalleryGenreFilter';
 import TrendingFeature from './TrendingFeature';
 import GalleryGrid, { type GalleryGridState } from './GalleryGrid';
+import CollectionCardsGrid from './CollectionCardsGrid';
 import QuickPreview, { type QuickPreviewState } from './QuickPreview';
 
 const EMPTY_SUMMARY: GallerySummary = { illustrationCount: 0, artistCount: 0 };
@@ -27,17 +28,45 @@ export default function GalerieClient() {
   const searchParams = useSearchParams();
   const filters = parseGalleryFilters(new URLSearchParams(searchParams.toString()));
   const facetKey = filtersToGalleryQuery({ ...filters, page: 1 }).toString();
-  // Any non-default view (search, category, or a changed sort) overrides the "Tendances" feature
-  // and relabels the grid "Résultats pour <terms>": title in guillemets, hashtags as #tag, genres
-  // + category by their labels, and the sort label when it isn't the default "Tendance".
+
+  // DR-12: a `collection` facet filters the grid to one collection's members; the heading names it.
+  const [collectionTitle, setCollectionTitle] = useState<string | null>(null);
+  useEffect(() => {
+    if (!filters.collection) {
+      setCollectionTitle(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getCollection(filters.collection)
+      .then((d) => !cancelled && setCollectionTitle(d.title))
+      .catch(() => !cancelled && setCollectionTitle(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.collection]);
+
+  // Any non-default view (search, category, collection, or a changed sort) overrides the "Tendances"
+  // feature and relabels the grid "Résultats pour <terms>": title in guillemets, hashtags as #tag,
+  // genres + category by their labels, and the sort label when it isn't the default "Tendance".
   const activeTerms = [
+    ...(filters.collection && collectionTitle ? [`« ${collectionTitle} »`] : []),
     ...(filters.q ? [`« ${filters.q} »`] : []),
     ...filters.tags.map((t) => `#${t}`),
     ...filters.genre.map((id) => catalogGenreLabel(id)),
     ...(filters.category ? [galleryCategoryLabel(filters.category)] : []),
     ...(filters.tri !== 'tendance' ? [TRI_LABELS[filters.tri]] : []),
   ];
-  const isFiltered = activeTerms.length > 0;
+  const isFiltered = activeTerms.length > 0 || !!filters.collection;
+
+  // DR-12 iter2 (FE-8): "Collections" view mode — browse collection œuvres. Only q/genre/hashtag
+  // facets apply (D11: no sort/category); the heading names them with "Collections" appended.
+  const collectionsMode = !!filters.collectionsMode;
+  const collectionSearchTerms = [
+    ...(filters.q ? [`« ${filters.q} »`] : []),
+    ...filters.tags.map((t) => `#${t}`),
+    ...filters.genre.map((id) => catalogGenreLabel(id)),
+  ];
 
   const [items, setItems] = useState<GalleryIllustrationCard[]>([]);
   const [summary, setSummary] = useState<GallerySummary>(EMPTY_SUMMARY);
@@ -47,6 +76,26 @@ export default function GalerieClient() {
   const [retryKey, setRetryKey] = useState(0);
 
   const [trending, setTrending] = useState<GalleryFeatureCard[]>([]);
+
+  // Collections view (FE-8) — parallel to the illustrations grid, only one is active at a time.
+  const [collections, setCollections] = useState<CollectionCard[]>([]);
+  const [collState, setCollState] = useState<GalleryGridState>('loading');
+  const [collPage, setCollPage] = useState(1);
+  const [collTotalPages, setCollTotalPages] = useState(1);
+
+  const collectionsQuery = useCallback(
+    (pageNum: number) => {
+      const p = new URLSearchParams();
+      if (filters.q) p.set('q', filters.q);
+      for (const t of filters.tags) p.append('tags', t);
+      for (const g of filters.genre) p.append('genre', g);
+      if (pageNum > 1) p.set('page', String(pageNum));
+      return p;
+    },
+    // filters is derived from the URL each render; facetKey drives the effects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [facetKey],
+  );
 
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewState, setPreviewState] = useState<QuickPreviewState>('loading');
@@ -59,6 +108,7 @@ export default function GalerieClient() {
   }, []);
 
   useEffect(() => {
+    if (collectionsMode) return; // the collections effect owns this view
     let cancelled = false;
     setGridState('loading');
     api
@@ -78,10 +128,32 @@ export default function GalerieClient() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facetKey, retryKey]);
+  }, [facetKey, retryKey, collectionsMode]);
+
+  useEffect(() => {
+    if (!collectionsMode) return;
+    let cancelled = false;
+    setCollState('loading');
+    api
+      .getCollectionsList(collectionsQuery(1))
+      .then((res) => {
+        if (cancelled) return;
+        setCollections(res.items);
+        setCollPage(res.page);
+        setCollTotalPages(res.totalPages);
+        setCollState(res.items.length === 0 ? 'empty' : 'ready');
+      })
+      .catch(() => {
+        if (!cancelled) setCollState('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [facetKey, retryKey, collectionsMode]);
 
   const navigate = useCallback(
-    (next: GalleryQuery) => {
+    (next: GalerieFilters) => {
       const query = filtersToGalleryQuery(next).toString();
       router.push(`/galerie${query ? `?${query}` : ''}`);
     },
@@ -96,6 +168,13 @@ export default function GalerieClient() {
     setPage(res.page);
     setTotalPages(res.totalPages);
   }, [facetKey, page]);
+
+  const collLoadMore = useCallback(async () => {
+    const res = await api.getCollectionsList(collectionsQuery(collPage + 1));
+    setCollections((prev) => [...prev, ...res.items]);
+    setCollPage(res.page);
+    setCollTotalPages(res.totalPages);
+  }, [collectionsQuery, collPage]);
 
   const openQuickPreview = useCallback((id: string) => {
     triggerRef.current = document.activeElement as HTMLElement | null;
@@ -135,32 +214,46 @@ export default function GalerieClient() {
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
           <CategoryChips filters={filters} onChange={navigate} />
           <div style={{ flex: 1 }} />
-          <SortSelect filters={filters} onChange={navigate} />
+          {/* D11: the sort control is meaningless for collections (fixed publishedAt desc) — hide it. */}
+          {!collectionsMode && <SortSelect filters={filters} onChange={navigate} />}
         </div>
       </div>
 
-      {!isFiltered && <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />}
+      {/* Trending is a default-view-only feature — collections mode counts as non-default. */}
+      {!collectionsMode && !isFiltered && <TrendingFeature items={trending} onQuickPreview={openQuickPreview} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase' }}>
-          {isFiltered ? `Résultats pour ${activeTerms.join(' · ')}` : 'Toutes les illustrations'}
+          {collectionsMode
+            ? collectionSearchTerms.length
+              ? `Résultats pour ${[...collectionSearchTerms, 'Collections'].join(' · ')}`
+              : 'Collections'
+            : isFiltered
+              ? `Résultats pour ${activeTerms.join(' · ')}`
+              : 'Toutes les illustrations'}
         </span>
       </div>
 
-      <GalleryGrid
-        state={gridState}
-        items={items}
-        category={filters.category}
-        onReset={() => navigate(EMPTY_GALLERY_FILTERS)}
-        onRetry={() => setRetryKey((k) => k + 1)}
-        onQuickPreview={openQuickPreview}
-      />
+      {collectionsMode ? (
+        <CollectionCardsGrid state={collState} items={collections} onRetry={() => setRetryKey((k) => k + 1)} />
+      ) : (
+        <GalleryGrid
+          state={gridState}
+          items={items}
+          category={filters.category}
+          onReset={() => navigate(EMPTY_GALLERY_FILTERS)}
+          onRetry={() => setRetryKey((k) => k + 1)}
+          onQuickPreview={openQuickPreview}
+        />
+      )}
 
-      {gridState === 'ready' && page < totalPages && (
+      {(collectionsMode
+        ? collState === 'ready' && collPage < collTotalPages
+        : gridState === 'ready' && page < totalPages) && (
         <div style={{ textAlign: 'center', marginTop: 24 }}>
           <button
             type="button"
-            onClick={loadMore}
+            onClick={collectionsMode ? collLoadMore : loadMore}
             style={{
               fontSize: 13,
               fontWeight: 700,

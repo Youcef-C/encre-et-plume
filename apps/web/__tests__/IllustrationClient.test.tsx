@@ -1,7 +1,7 @@
 // DR-6 FE-T1 — route client: loading/404/error/ready states (mirrors OeuvreClient's pattern).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import type { IllustrationDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
+import type { AccountSummary, IllustrationDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -9,6 +9,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     ...actual,
     getIllustration: vi.fn(),
     getIllustrationMore: vi.fn(),
+    updateIllustration: vi.fn(),
   };
 });
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -17,7 +18,9 @@ vi.mock('next/link', () => ({
     <a href={href} {...rest}>{children}</a>
   ),
 }));
-vi.mock('../lib/session', () => ({ useSession: () => ({ account: null, loading: false }) }));
+// Mutable session account so owner-only affordances (FE-13) can be exercised.
+let sessionAccount: AccountSummary | null = null;
+vi.mock('../lib/session', () => ({ useSession: () => ({ account: sessionAccount, loading: false }) }));
 
 import * as api from '../lib/api';
 import IllustrationClient from '../components/illustration/IllustrationClient';
@@ -38,6 +41,7 @@ const detail: IllustrationDetail = {
   publishedAt: '2026-06-12T00:00:00.000Z',
   artist: { id: 'a1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'Dessinateur·rice', city: 'Lyon', avatar: null },
   is18plus: false,
+  collections: [],
 };
 
 const more: GalleryIllustrationCard[] = [];
@@ -48,7 +52,10 @@ function mockReady() {
 }
 
 describe('IllustrationClient (DR-6 FE-T1)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionAccount = null;
+  });
 
   it('shows a loading placeholder then the ready page', async () => {
     mockReady();
@@ -119,5 +126,40 @@ describe('IllustrationClient (DR-6 FE-T1)', () => {
     render(<IllustrationClient id="dr5-illus-1" />);
     await waitFor(() => expect(screen.getByText('Ce contenu est réservé aux adultes.')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+  });
+
+  // ── FE-13: owner edit of the illustration itself ─────────────────────────────
+  const ownerAccount: AccountSummary = {
+    id: 'a1', displayName: 'Yuki', email: 'y@x.fr', role: 'utilisateur', verified: false, slug: 'dr1-yuki-moreau',
+    avatar: null, createdAt: '2026-01-01T00:00:00.000Z', preferences: { theme: 'system', dmPolicy: 'requests' }, emailVerified: true,
+    needsCguReconsent: false, onboarded: true, isAdult: true,
+  };
+
+  it('shows no owner "Modifier" for a visitor', async () => {
+    mockReady();
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: "Modifier l'illustration" })).not.toBeInTheDocument();
+  });
+
+  it('owner opens the edit form and the page re-renders from the save response (FE-13)', async () => {
+    sessionAccount = ownerAccount;
+    mockReady();
+    const { updateIllustration } = await import('../lib/api');
+    vi.mocked(updateIllustration).mockResolvedValue({ ...detail, title: 'Aube Nouvelle', hashtags: ['nuit'] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+
+    render(<IllustrationClient id="dr5-illus-1" />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: "Modifier l'illustration" }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText('Titre'));
+    await user.type(screen.getByLabelText('Titre'), 'Aube Nouvelle');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Aube Nouvelle' })).toBeInTheDocument());
+    expect(screen.getByText('#nuit')).toBeInTheDocument();
   });
 });

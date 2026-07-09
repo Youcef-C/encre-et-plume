@@ -13,8 +13,10 @@ import { useAgeCleared } from '../../lib/ageGate';
 import AgeGate from '../age/AgeGate';
 import IllustrationViewer from './IllustrationViewer';
 import IllustrationMeta from './IllustrationMeta';
+import IllustrationCollections from './IllustrationCollections';
 import IllustrationComments from './IllustrationComments';
 import ArtistSidebar from './ArtistSidebar';
+import EditIllustrationForm from './EditIllustrationForm';
 
 type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
@@ -27,6 +29,9 @@ export default function IllustrationClient({ id }: { id: string }) {
   const [more, setMore] = useState<GalleryIllustrationCard[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  // FE-13: owner-only edit of the illustration itself (distinct from the FE-5 collection-membership
+  // "Modifier"). Saving commits the returned detail so title/byline/description/hashtags/Détails re-render.
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +130,7 @@ export default function IllustrationClient({ id }: { id: string }) {
   // suppressing the content outright — real content only exists here once the server actually let
   // it load (visitor/self-declaration), unlike the 403 'age-refused' minor case above.
   const gated = detail.is18plus && !cleared;
+  const isOwner = !!account && account.id === detail.artist.id;
 
   const content = (
     <>
@@ -136,6 +142,33 @@ export default function IllustrationClient({ id }: { id: string }) {
         <div>
           <IllustrationViewer detail={detail} account={account} />
           <IllustrationMeta detail={detail} />
+          {isOwner && (
+            <div style={{ marginBottom: 18 }}>
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                aria-label="Modifier l'illustration"
+                style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 14px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)', boxShadow: '3px 3px 0 var(--shadow)' }}
+              >
+                Modifier
+              </button>
+            </div>
+          )}
+          {isOwner && editOpen && (
+            <EditIllustrationForm
+              detail={detail}
+              onClose={() => setEditOpen(false)}
+              onSaved={(updated) => {
+                setDetail(updated);
+                setEditOpen(false);
+              }}
+            />
+          )}
+          <IllustrationCollections
+            detail={detail}
+            account={account}
+            onHashtagsChange={(hashtags) => setDetail((d) => (d ? { ...d, hashtags } : d))}
+          />
           <IllustrationComments account={account} />
         </div>
 

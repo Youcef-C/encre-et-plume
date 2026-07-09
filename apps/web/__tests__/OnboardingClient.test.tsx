@@ -30,7 +30,7 @@ const baseAccount: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   needsCguReconsent: false,
   onboarded: false,
   isAdult: true,

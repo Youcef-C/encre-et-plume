@@ -6,7 +6,8 @@
 
 ## Frontend
 - Member list: each row shows the co-author (avatar, name, role) with role/permission controls.
-- Per-member actions: change role/permissions; "revoke" a member (revoke modal); invite a new collaborator ([[MC-3]]).
+- **Group roles** (user-specified 2026-07-09): each member holds a role of **Leader (chef·fe de groupe) / Co-leader (co-chef·fe) / Member (membre)**. A group has **at least one leader** and **may have several co-leaders** (equal leadership). A leader can promote a member to co-leader or hand over/leader status; the last leader cannot be demoted/revoked.
+- Per-member actions: change role/permissions (incl. promote to co-leader); "revoke" a member (revoke modal); invite a new collaborator ([[MC-3]]).
 - Revenue-split section: per-member share percentage (e.g. "votre part"), editable; live total with a constraint that shares sum to 100%.
 - Share/invite affordance (share modal) to bring in a co-author.
 - States: loading members; saving role/share; empty (owner only); revoke confirmation; error (e.g. shares don't sum to 100%, last owner cannot be revoked).
@@ -19,8 +20,8 @@
 - **POST /projects/{slug}/invites** — invite a collaborator → [[MC-3]].
 - **DELETE /members/{id}** — revoke a member.
 - **PATCH /projects/{slug}/revenue-split** — `{ shares: [{ memberId, pct }] }`.
-- Entities: **Member** `{ id, projectId, userId, role, permissions[], revenueSharePct }`.
-- Business rules: shares must sum to 100%; cannot revoke the last owner; permissions gate edit/publish across the studio ([[CS-4]], [[CS-6]], [[CS-7]], [[CS-9]]).
+- Entities: **Member** `{ id, projectId, userId, role: 'leader'|'coleader'|'member', permissions[], revenueSharePct }`.
+- Business rules: shares must sum to 100%; cannot revoke/demote the **last leader** (≥1 leader always); permissions gate edit/publish across the studio ([[CS-4]], [[CS-6]], [[CS-7]], [[CS-9]]); **leadership decisions require every leader's consent** — notably a `join` collab proposal ([[MC-3]]) is established only when the leader and **all** co-leaders accept (any leader declining closes it).
 - Authorization: owner / users with manage-group permission only.
 - Side effects: revenue shares consumed by the project "Soutien" tab (MR epic); invite sends notification ([[F-5]]).
 

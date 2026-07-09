@@ -6,7 +6,7 @@ import { GalleryService } from './gallery.service';
 import { AgeGateService } from '../age-gate/age-gate.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
-import type { AuthRequest } from '../auth/guards/session.guard';
+import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 
 const ANON = {} as AuthRequest;
 const hc = (o: Partial<{ illustrationIds: Set<string> }> = {}) => ({
@@ -25,6 +25,9 @@ describe('GalleryController', () => {
     getPreview: jest.Mock;
     getIllustration: jest.Mock;
     getMoreByArtist: jest.Mock;
+    publishIllustration: jest.Mock;
+    getMineIllustrations: jest.Mock;
+    updateIllustration: jest.Mock;
   };
   let ageGate: { assertMayView18Plus: jest.Mock };
   let blocks: { hiddenContent: jest.Mock };
@@ -43,6 +46,9 @@ describe('GalleryController', () => {
       getPreview: jest.fn().mockResolvedValue({ id: 'i1', title: 'Pluie de Néons' }),
       getIllustration: jest.fn().mockResolvedValue({ id: 'i1', title: 'Pluie de Néons', is18plus: false }),
       getMoreByArtist: jest.fn().mockResolvedValue([]),
+      publishIllustration: jest.fn().mockResolvedValue({ id: 'newIllu1' }),
+      getMineIllustrations: jest.fn().mockResolvedValue([]),
+      updateIllustration: jest.fn().mockResolvedValue({ id: 'i1', title: 'Nouveau' }),
     };
     ageGate = { assertMayView18Plus: jest.fn().mockResolvedValue(undefined) };
     blocks = { hiddenContent: jest.fn().mockResolvedValue(null) };
@@ -54,9 +60,12 @@ describe('GalleryController', () => {
         { provide: AgeGateService, useValue: ageGate },
         { provide: BlocksService, useValue: blocks },
         { provide: OptionalSessionGuard, useValue: { canActivate: () => true } },
+        { provide: SessionGuard, useValue: { canActivate: () => true } },
       ],
     })
       .overrideGuard(OptionalSessionGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(SessionGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -142,12 +151,21 @@ describe('GalleryController', () => {
     });
   });
 
-  it('GET /illustrations/:id delegates to getIllustration and returns the detail', async () => {
-    const req = {} as AuthRequest;
+  it('GET /illustrations/:id delegates to getIllustration with the viewer id and returns the detail', async () => {
+    const req = { accountId: 'acc-1' } as AuthRequest;
     const result = await controller.illustration('i1', req);
 
-    expect(service.getIllustration).toHaveBeenCalledWith('i1');
+    expect(service.getIllustration).toHaveBeenCalledWith('i1', 'acc-1');
     expect(result).toEqual({ id: 'i1', title: 'Pluie de Néons', is18plus: false });
+  });
+
+  it('PATCH /illustrations/:id delegates to updateIllustration with the owner id + body', async () => {
+    const req = { accountId: 'acc-1' } as AuthRequest;
+    const dto = { title: 'Nouveau' };
+    const result = await controller.update('i1', req, dto);
+
+    expect(service.updateIllustration).toHaveBeenCalledWith('acc-1', 'i1', dto);
+    expect(result).toEqual({ id: 'i1', title: 'Nouveau' });
   });
 
   it('GET /illustrations/:id throws a 404 when the service returns null (missing/unpublished)', async () => {

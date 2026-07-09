@@ -353,6 +353,8 @@ model Conversation {
   name          String? // group only; DM title is computed per-viewer (the OTHER party)
   projectId     String? // CS-8 seam: a project group chat IS this conversation
   dmKey         String?                   @unique // dm only: "minId:maxId" — DB backstop, one DM per pair
+  status        String                    @default("open") // 'open' | 'requested' | 'declined' — DM request lifecycle; groups/salon always 'open'
+  requestedBy   String? // accountId of the requester while status != 'open'
   createdAt     DateTime                  @default(now())
   lastMessageAt DateTime                  @default(now()) // list ordering key (bumped on each send)
   participants  ConversationParticipant[]
@@ -512,6 +514,11 @@ model Work {
 
   // ── DR-8: "Ma liste" saved works ─────────────────────────────────────────
   watchlistedBy WatchlistItem[]
+
+  // ── DR-12: illustration collections (format 'Illustration(s)' Works) ──────
+  collectionItems IllustrationCollection[] // ordered member illustrations of this collection
+  contestId       String? // FK-by-convention link to Contest (validated in service; no Prisma relation)
+  soutien         Json? // ponytail: raw Soutien config {tiers,allowDonations,revenueSplit}; MR-1/MR-2/CS-10 normalize into real tables
 
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
@@ -821,10 +828,27 @@ model Illustration {
   publishedAt     DateTime? // null = not public; non-null = in gallery + "nouveautes" sort key
   createdAt       DateTime  @default(now())
 
+  collections IllustrationCollection[] // DR-12: collections (Illustration(s) Works) this piece belongs to
+
   @@index([publishedAt])
   @@index([weeklyLikeDelta])
   @@index([likeCount])
   @@index([category])
+}
+
+// ── DR-12: illustration collections (many-to-many, ordered per collection) ────
+// A collection is a Work with format 'Illustration(s)'. This join carries the membership + per-
+// collection ordering. Composite-unique on (illustrationId, workId) — dedup on re-add; both sides
+// cascade-delete (deleting the collection Work or the Illustration removes the membership row).
+model IllustrationCollection {
+  illustrationId String
+  illustration   Illustration @relation(fields: [illustrationId], references: [id], onDelete: Cascade)
+  workId         String
+  work           Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+
+  @@id([illustrationId, workId])
+  @@index([workId, order])
 }
 
 // ── F-21: support & contact tickets (help/contact/bug channel) ────────────────

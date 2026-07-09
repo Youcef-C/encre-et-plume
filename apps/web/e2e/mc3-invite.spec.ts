@@ -187,3 +187,140 @@ test('MC3-E6: anonymous visitor — profile "Proposer une collab" redirects to /
   await expect(page).toHaveURL('/connexion');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+/**
+ * MC-3 delta (round 2) — Mode A multi-recipient picker (`InviteModal` in picker mode, launched
+ * recipient-less from the new `/contacts` "Proposer une collab" header button, F3).
+ *
+ * Sender: the dedicated MC-8 fixture account `contacts.mc8@seed.encre-et-plume.local`
+ * (mc8-contacts-fixture, "Camille R.") — the ONLY seeded account with real accepted MC-8 contacts
+ * (Léa B. / Hugo D., per `MC8_ACCEPTED` in seed.js), which is what the picker's pool draws from
+ * (decision 4, plan §7). `dr1-camille-roux` (round-1's sender) has none, so she can't exercise a
+ * real multi-select here.
+ */
+const MC8_EMAIL = 'contacts.mc8@seed.encre-et-plume.local';
+const LEA_EMAIL = 'lea.b@seed.encre-et-plume.local';
+const HUGO_EMAIL = 'hugo.d@seed.encre-et-plume.local';
+
+async function loginAsMc8Fixture(page: Page) {
+  await page.goto('/connexion');
+  await page.getByLabel(/e-mail/i).fill(MC8_EMAIL);
+  await page.getByLabel(/mot de passe/i).fill(PASSWORD);
+  await page.getByRole('button', { name: /se connecter/i }).click();
+  await expect(page).toHaveURL('/', { timeout: 10_000 });
+}
+
+test.describe('MC-3 delta — Mode A multi-recipient picker (mc8-contacts-fixture ⇄ Léa B. / Hugo D.)', () => {
+  test.beforeAll(async () => {
+    await clearPendingInvitesTo(LEA_EMAIL);
+    await clearPendingInvitesTo(HUGO_EMAIL);
+  });
+
+  test('MC3-D1: /contacts "Proposer une collab" opens picker mode; selecting two contacts sends two independent invitations with per-recipient results', async ({
+    page,
+  }) => {
+    await loginAsMc8Fixture(page);
+    await page.goto('/contacts');
+    await expect(page.getByRole('heading', { name: 'Contacts & connexions', level: 1 })).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Proposer une collab' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Proposer une collab' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await expect(dialog).toBeFocused();
+
+    // No prefilled/read-only recipient in picker mode — the multi-select IS the recipient field.
+    await expect(dialog.getByText('DESTINATAIRES')).toBeVisible();
+    await dialog.getByRole('button', { name: /^Contacts/ }).click();
+    await dialog.getByRole('checkbox', { name: 'Léa B.' }).check();
+    await dialog.getByRole('checkbox', { name: 'Hugo D.' }).check();
+    await expect(dialog.getByRole('button', { name: /^Contacts \(2\)/ })).toBeVisible();
+
+    const message = dialog.getByLabel('MESSAGE');
+    await expect(message).toHaveAttribute('placeholder', 'Écrivez un mot aux destinataires…');
+    await message.fill('On monte un projet à trois ?');
+
+    // 2+ selected → plural send label (F1).
+    const sendButton = dialog.getByRole('button', { name: 'Envoyer les invitations' });
+    await sendButton.click();
+
+    // Per-recipient result list — role=status, one line per selected contact.
+    const results = dialog.getByRole('status');
+    await expect(results).toBeVisible({ timeout: 10_000 });
+    await expect(results.getByText('Léa B.')).toBeVisible();
+    await expect(results.getByText('Hugo D.')).toBeVisible();
+    await expect(results.getByText('Envoyée')).toHaveCount(2);
+
+    // Two "Fermer": the header's icon close button (aria-label) and the footer button — the footer
+    // one is last in DOM order (same disambiguation as MC3-E1 above).
+    await dialog.getByRole('button', { name: 'Fermer' }).last().click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // Each fanned-out invitation is independently visible/respondable by ITS recipient.
+    const leaCtx = await playwrightRequest.newContext({ baseURL: API_BASE });
+    const hugoCtx = await playwrightRequest.newContext({ baseURL: API_BASE });
+    try {
+      await leaCtx.post('/auth/login', { data: { email: LEA_EMAIL, password: PASSWORD } });
+      const leaInbox = await leaCtx.get('/invitations?direction=received&pageSize=50');
+      const leaBody = await leaInbox.json();
+      const leaInvite = (leaBody.items ?? []).find(
+        (inv: { status: string; message?: string }) => inv.status === 'pending' && inv.message === 'On monte un projet à trois ?',
+      );
+      expect(leaInvite).toBeTruthy();
+      const leaAccept = await leaCtx.patch(`/invitations/${leaInvite.id}`, { data: { status: 'accepted' } });
+      expect(leaAccept.status()).toBe(200);
+
+      await hugoCtx.post('/auth/login', { data: { email: HUGO_EMAIL, password: PASSWORD } });
+      const hugoInbox = await hugoCtx.get('/invitations?direction=received&pageSize=50');
+      const hugoBody = await hugoInbox.json();
+      const hugoInvite = (hugoBody.items ?? []).find(
+        (inv: { status: string; message?: string }) => inv.status === 'pending' && inv.message === 'On monte un projet à trois ?',
+      );
+      expect(hugoInvite).toBeTruthy();
+      // Declining Hugo's copy must not affect Léa's already-accepted one (independent rows).
+      const hugoDecline = await hugoCtx.patch(`/invitations/${hugoInvite.id}`, { data: { status: 'declined' } });
+      expect(hugoDecline.status()).toBe(200);
+    } finally {
+      await leaCtx.dispose();
+      await hugoCtx.dispose();
+    }
+  });
+
+  test('MC3-D2: picker mode — sending with zero recipients selected shows an inline error and makes no API call', async ({ page }) => {
+    await loginAsMc8Fixture(page);
+    await page.goto('/contacts');
+    await expect(page.getByRole('heading', { name: 'Contacts & connexions', level: 1 })).toBeVisible({ timeout: 10_000 });
+
+    let invitationsPosted = false;
+    await page.route('**/invitations', (route) => {
+      if (route.request().method() === 'POST') invitationsPosted = true;
+      return route.continue();
+    });
+
+    await page.getByRole('button', { name: 'Proposer une collab' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Proposer une collab' });
+    await dialog.getByRole('button', { name: "Envoyer l'invitation" }).click();
+
+    await expect(dialog.getByRole('alert')).toHaveText('Sélectionnez au moins un·e destinataire.');
+    expect(invitationsPosted).toBe(false);
+  });
+
+  test('MC3-D3: responsive — the picker-mode modal is usable at 375/768/1280 with no horizontal overflow', async ({ page }) => {
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await loginAsMc8Fixture(page);
+      await page.goto('/contacts');
+      await expect(page.getByRole('heading', { name: 'Contacts & connexions', level: 1 })).toBeVisible({ timeout: 10_000 });
+
+      await page.getByRole('button', { name: 'Proposer une collab' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Proposer une collab' });
+      await expect(dialog).toBeVisible();
+
+      const overflow = await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth + 1);
+      expect(overflow).toBe(true);
+
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
+  });
+});

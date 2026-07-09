@@ -42,7 +42,7 @@ const account: AccountSummary = {
   slug: 'camille-roux',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   needsCguReconsent: false,
   onboarded: true,
   isAdult: true,

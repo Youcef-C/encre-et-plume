@@ -30,7 +30,7 @@ export class AccountsController {
     @Req() req: AuthRequest,
     @Body() dto: UpdatePreferencesDto,
   ): Promise<AccountSummary> {
-    return this.accountsService.updatePreferences(req.accountId, dto.theme);
+    return this.accountsService.updatePreferences(req.accountId, dto);
   }
 
   @Patch('me/avatar')

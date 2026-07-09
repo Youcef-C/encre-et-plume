@@ -25,7 +25,7 @@ const account: AccountSummary = {
   slug: 'camille-r',
   avatar: null,
   createdAt: '2026-01-01T00:00:00.000Z',
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   emailVerified: true,
   needsCguReconsent: false,
   onboarded: true,
@@ -58,6 +58,7 @@ const work: WorkDetail = {
   team: [],
   fundingGoals: [],
   reviews,
+  collectionItems: null,
 };
 
 describe('ReviewsSection (DR-3 FE-6)', () => {

@@ -38,6 +38,7 @@ const base: WorkDetail = {
   team: [],
   fundingGoals: [],
   reviews: [],
+  collectionItems: null,
 };
 
 describe('SynopsisBlock (F-22 genre tag row)', () => {

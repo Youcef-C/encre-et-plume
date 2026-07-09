@@ -1,8 +1,14 @@
-import { parseGalleryQuery } from './parse-gallery-query';
+import { parseGalleryQuery, parseCollectionsListQuery } from './parse-gallery-query';
 
 describe('parseGalleryQuery', () => {
   it('defaults to no category (Tout), no q, empty genre, empty tags, tri=tendance, page=1 when nothing is provided', () => {
-    expect(parseGalleryQuery({})).toEqual({ q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1 });
+    expect(parseGalleryQuery({})).toEqual({ q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1, collection: undefined });
+  });
+
+  it('DR-12: passes an opaque collection id through (undefined when absent/empty)', () => {
+    expect(parseGalleryQuery({ collection: 'w123' }).collection).toBe('w123');
+    expect(parseGalleryQuery({ collection: '' }).collection).toBeUndefined();
+    expect(parseGalleryQuery({}).collection).toBeUndefined();
   });
 
   it('F-22: normalizes a tag (strips #, lowercases, trims) and coerces a scalar into an array', () => {
@@ -80,5 +86,39 @@ describe('parseGalleryQuery', () => {
     ['3', 3],
   ])('clamps page=%s to %i', (input, expected) => {
     expect(parseGalleryQuery({ page: input }).page).toBe(expected);
+  });
+});
+
+// BE-6 (J6): the DR-5 gallery query subset for the Galerie "Collections" facet — q/tags/genre/page
+// only (no category/tri/collection keys).
+describe('parseCollectionsListQuery', () => {
+  it('defaults to no q, empty tags, empty genre, page=1', () => {
+    expect(parseCollectionsListQuery({})).toEqual({ q: undefined, tags: [], genre: [], page: 1 });
+  });
+
+  it('caps q at 100 chars and treats empty as undefined', () => {
+    expect(parseCollectionsListQuery({ q: 'a'.repeat(150) }).q).toBe('a'.repeat(100));
+    expect(parseCollectionsListQuery({ q: '' }).q).toBeUndefined();
+  });
+
+  it('normalizes + dedupes tags (reusing the gallery normalizer)', () => {
+    expect(parseCollectionsListQuery({ tags: ['#Encre', 'encre', '  Noir '] }).tags).toEqual(['encre', 'noir']);
+    expect(parseCollectionsListQuery({ tags: ['', '#'] }).tags).toEqual([]);
+  });
+
+  it('validates genre against the full F-20 vocabulary, dropping unknowns', () => {
+    expect(parseCollectionsListQuery({ genre: ['action', 'not-a-real-genre'] }).genre).toEqual(['action']);
+  });
+
+  it('clamps page to >= 1', () => {
+    expect(parseCollectionsListQuery({ page: '0' }).page).toBe(1);
+    expect(parseCollectionsListQuery({ page: '4' }).page).toBe(4);
+  });
+
+  it('does NOT carry category/tri/collection keys', () => {
+    const q = parseCollectionsListQuery({ category: 'personnages', tri: 'populaires', collection: 'w1' }) as unknown as Record<string, unknown>;
+    expect(q['category']).toBeUndefined();
+    expect(q['tri']).toBeUndefined();
+    expect(q['collection']).toBeUndefined();
   });
 });

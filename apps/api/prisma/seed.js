@@ -1024,6 +1024,47 @@ async function main() {
     await prisma.illustration.upsert({ where: { id: i.id }, create: { id: i.id, ...data }, update: data });
   }
 
+  // DR-12: illustration collection "Carnet d'Encre" — a Work (format 'Illustration(s)') owned by the
+  // login-tested creator Yuki Moreau (dr1-yuki-moreau, creatorRoles ['dessinateur']) via a WorkCreator
+  // row, with 3 of her own seeded illustrations as ordered members. Gives QA the drawn "Carnet d'Encre"
+  // fixture (prototype line 3122) + gives the e2e a second/third owned illustration to add/remove/reorder.
+  {
+    const owner = await prisma.account.findUnique({ where: { profileSlug: 'dr1-yuki-moreau' }, select: { id: true } });
+    // Yuki's own seeded illustrations (artistAccountSlug: 'dr1-yuki-moreau'): illus-1, illus-3, illus-6, illus-11.
+    const memberIds = ['dr5-illus-1', 'dr5-illus-3', 'dr5-illus-6'];
+    if (owner) {
+      const collectionData = {
+        slug: 'carnet-d-encre',
+        title: "Carnet d'Encre",
+        format: 'Illustration(s)',
+        genre: 'Art',
+        themes: [],
+        audienceRating: 'Tous publics',
+        meta: `${memberIds.length} illustrations · collection`,
+        publishedAt: inDays(-30),
+        synopsis: "Un carnet d'encre — recueil de recherches, planches et études réunies en une seule collection.",
+      };
+      const collection = await prisma.work.upsert({
+        where: { slug: 'carnet-d-encre' },
+        create: collectionData,
+        update: collectionData,
+      });
+      // WorkCreator (owner) — upsert on the (workId, accountId) unique key.
+      await prisma.workCreator.upsert({
+        where: { workId_accountId: { workId: collection.id, accountId: owner.id } },
+        create: { workId: collection.id, accountId: owner.id, role: 'dessinateur', order: 0 },
+        update: {},
+      });
+      // Membership rows (order 0/1/2). Clear + recreate so reseeding never leaves stale order.
+      await prisma.illustrationCollection.deleteMany({ where: { workId: collection.id } });
+      for (let i = 0; i < memberIds.length; i++) {
+        await prisma.illustrationCollection.create({
+          data: { workId: collection.id, illustrationId: memberIds[i], order: i },
+        });
+      }
+    }
+  }
+
   // DR-9: pre-active chapter/illustration Reaction fixtures — upsert on the model's own unique key
   // so reseeding never accumulates duplicates.
   for (const r of REACTIONS) {

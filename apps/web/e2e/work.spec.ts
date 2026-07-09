@@ -271,7 +271,7 @@ const signedInAccount = {
   emailVerified: true,
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
 };
 
 const resumeEntry = {

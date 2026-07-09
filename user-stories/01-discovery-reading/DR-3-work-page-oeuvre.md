@@ -13,7 +13,7 @@
 - **Chapter list**: rows (cover, "Ch. N — title", planche count + date, ♥, "Lire →"); collapsible "Voir les 12 chapitres ▾".
 - **"Illustrations & planches"**: 3-col grid (→ illustration detail [[DR-6]]).
 - **Reviews "Avis des lecteur·rices"** ([[PUB-3]]): aggregate X/5, Histoire/Dessin sub-scores, review list, and "Laisser un avis" form.
-- **Sidebar "ÉQUIPE CRÉATIVE"**: members with role + city, each with "Suivre" ([[PUB-4]]).
+- **Sidebar "ÉQUIPE CRÉATIVE"**: members with role + city, each with "Suivre" ([[PUB-4]]). **Every creator is listed — no 2-name cap** (user-verified 2026-07-09): the sidebar already maps the full team; additionally, wherever a creator **byline** is shown (hero meta, cards), the names must be **derived from the full creators list**, not the denormalized 2-name `meta` string (a work with >2 authors must show them all, e.g. "A × B × C" or "A, B +2"), so the team is never misrepresented.
 - **Sidebar "DÉTAILS"**: Type, Statut, chapter count, Public, Sortie.
 - **Support card**: "à partir de 3 €/mois" ([[MR-1]]).
 - **"Objectifs de financement"**: progress bars ([[MR-2]]).

@@ -18,6 +18,7 @@ import ReaderNav from './ReaderNav';
 import ReactionsAside from './ReactionsAside';
 import Paywall from './Paywall';
 import ImmersiveBar from './ImmersiveBar';
+import { type ReadingDirection, defaultDirectionForFormat, readStoredDirection, writeStoredDirection } from './readingDirection';
 
 type WorkState = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
@@ -58,6 +59,10 @@ export default function Reader({ slug }: { slug: string }) {
   const [pagesRetryKey, setPagesRetryKey] = useState(0);
   const [page, setPage] = useState(1);
   const [spreadMode, setSpreadMode] = useState<'single' | 'double'>('single');
+  // DR-4 delta: reader's explicit override (per work, remembered on the device). Null → fall back
+  // to the per-format default below. `slug` is a route param and never changes while mounted, so
+  // the lazy initializer stays consistent (direction-dependent UI only mounts after the fetch).
+  const [directionOverride, setDirectionOverride] = useState<ReadingDirection | null>(() => readStoredDirection(slug));
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -247,6 +252,13 @@ export default function Reader({ slug }: { slug: string }) {
     setPage(Math.min(totalPages, Math.max(1, n)));
   }
 
+  // Manga/One-shot default RTL, Roman/other LTR; a remembered per-work choice overrides the default.
+  const readingDirection: ReadingDirection = directionOverride ?? defaultDirectionForFormat(work?.format);
+  function changeDirection(direction: ReadingDirection) {
+    setDirectionOverride(direction);
+    writeStoredDirection(slug, direction);
+  }
+
   if (workState === 'loading') {
     return (
       <div role="status" aria-label="Chargement du lecteur…" style={{ background: 'var(--ink)', minHeight: 'calc(100vh - 69px)' }} />
@@ -359,6 +371,7 @@ export default function Reader({ slug }: { slug: string }) {
               pagesData={displayPagesData}
               page={page}
               spreadMode={effectiveSpreadMode}
+              direction={readingDirection}
               onRetry={() => setPagesRetryKey((k) => k + 1)}
               noChapters={chaptersLoaded && chapters.length === 0}
             />
@@ -389,6 +402,7 @@ export default function Reader({ slug }: { slug: string }) {
             page={page}
             totalPages={totalPages}
             step={step}
+            direction={readingDirection}
             onPrev={goPrev}
             onNext={goNext}
             onSetPage={setPageDirect}
@@ -415,6 +429,8 @@ export default function Reader({ slug }: { slug: string }) {
             signedIn={!!account}
             spreadMode={effectiveSpreadMode}
             onSpreadChange={setSpreadMode}
+            readingDirection={readingDirection}
+            onDirectionChange={changeDirection}
             isFullscreen={fullscreen}
             onFullscreenToggle={toggleFullscreen}
             clearViewActive={clearViewActive}
@@ -451,6 +467,7 @@ export default function Reader({ slug }: { slug: string }) {
                   pagesData={displayPagesData}
                   page={page}
                   spreadMode={effectiveSpreadMode}
+                  direction={readingDirection}
                   onRetry={() => setPagesRetryKey((k) => k + 1)}
                   noChapters={chaptersLoaded && chapters.length === 0}
                 />
@@ -478,7 +495,7 @@ export default function Reader({ slug }: { slug: string }) {
                 )}
               </div>
               {displayPagesState === 'ready' && (
-                <ReaderNav page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
+                <ReaderNav direction={readingDirection} page={page} totalPages={totalPages} step={step} onPrev={goPrev} onNext={goNext} onSetPage={setPageDirect} />
               )}
             </div>
 

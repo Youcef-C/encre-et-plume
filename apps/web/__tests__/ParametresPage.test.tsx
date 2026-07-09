@@ -35,6 +35,9 @@ vi.mock('../components/settings/AdultContentSettings', () => ({
 vi.mock('../components/settings/BlockedAccounts', () => ({
   default: () => <div>BlockedAccounts stub</div>,
 }));
+vi.mock('../components/settings/ConfidentialiteSettings', () => ({
+  default: () => <div>ConfidentialiteSettings stub</div>,
+}));
 vi.mock('../components/SupprimerCompteModal', () => ({
   default: () => <div>SupprimerCompteModal stub</div>,
 }));
@@ -51,7 +54,7 @@ const mockAccount: AccountSummary = {
   slug: 'yuki-moreau',
   avatar: null,
   createdAt: new Date().toISOString(),
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   needsCguReconsent: false,
   onboarded: false,
   isAdult: true,
@@ -71,11 +74,12 @@ describe('ParametresPage', () => {
     expect(h1s[0]).toHaveTextContent('Paramètres');
   });
 
-  it('renders the six h2 section headings in order', () => {
+  it('renders the h2 section headings in order (Confidentialité between Notifications and Cookies)', () => {
     render(<ParametresPage />);
     const h2s = screen.getAllByRole('heading', { level: 2 });
     expect(h2s.map((h) => h.textContent)).toEqual([
       'Préférences de notification',
+      'Confidentialité',
       'Cookies',
       'Sécurité',
       'Contenu 18+',
@@ -89,11 +93,12 @@ describe('ParametresPage', () => {
     expect(screen.getByRole('navigation', { name: 'Sections des paramètres' })).toBeInTheDocument();
   });
 
-  it('renders the six sections as collapsible <details>, expanded by default', () => {
+  it('renders the sections as collapsible <details>, expanded by default', () => {
     const { container } = render(<ParametresPage />);
     const sections = container.querySelectorAll('details.ep-settings-section');
     expect(Array.from(sections).map((d) => d.id)).toEqual([
       'notifications',
+      'confidentialite',
       'cookies',
       'securite',
       'contenu-adulte',

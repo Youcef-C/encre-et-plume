@@ -614,3 +614,122 @@ describe('UploadControl — onBusyChange', () => {
     await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false));
   });
 });
+
+// DR-12 iter2 (FE-10 · V9) — the `frameHeight` prop makes the drop box and the ready preview occupy
+// one consistent cover frame; without it, the default 80px box / 64×64 preview is unchanged.
+describe('UploadControl — frameHeight (DR-12 FE-10)', () => {
+  it('sets the drop-zone minHeight to frameHeight and previews the ready image at 120×frameHeight', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'cover', status: 'ready' });
+
+    render(<UploadControl kind="cover" label="Déposez la couverture" frameHeight={165} onUploaded={vi.fn()} />);
+
+    const dropBox = screen.getByRole('button', { name: /Déposez la couverture/i });
+    expect(dropBox).toHaveStyle({ minHeight: '165px' });
+
+    fireEvent.change(getFileInput(), { target: { files: [validFile()] } });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+
+    const img = await screen.findByRole('img', { name: 'Déposez la couverture' });
+    expect(img).toHaveAttribute('width', '120');
+    expect(img).toHaveAttribute('height', '165');
+  });
+
+  it('keeps the default 80px box and 64×64 preview when frameHeight is unset', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'cover', status: 'ready' });
+
+    render(<UploadControl kind="cover" label="Déposez la couverture" onUploaded={vi.fn()} />);
+
+    const dropBox = screen.getByRole('button', { name: /Déposez la couverture/i });
+    expect(dropBox).toHaveStyle({ minHeight: '80px' });
+
+    fireEvent.change(getFileInput(), { target: { files: [validFile()] } });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+
+    const img = await screen.findByRole('img', { name: 'Déposez la couverture' });
+    expect(img).toHaveAttribute('width', '64');
+    expect(img).toHaveAttribute('height', '64');
+  });
+});
+
+// DR-12 iter3 (FE-15 · V13) — the drop box NEVER disappears when an image is set; the preview is a
+// separate side thumbnail. The old ready-state swap + "Changer" button are gone.
+describe('UploadControl — persistent box + side preview (DR-12 FE-15)', () => {
+  it('keeps the drop box (idle copy) after a completed upload and shows a side preview img', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'cover', status: 'ready' });
+
+    render(<UploadControl kind="cover" label="Déposez la couverture" frameHeight={165} onUploaded={vi.fn()} />);
+
+    fireEvent.change(getFileInput(), { target: { files: [validFile()] } });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+
+    // Preview appears…
+    const img = await screen.findByRole('img', { name: 'Déposez la couverture' });
+    expect(img).toHaveAttribute('width', '120');
+    expect(img).toHaveAttribute('height', '165');
+    // …and the drop box is STILL present with its idle copy, and "Changer" is gone.
+    expect(screen.getByRole('button', { name: /Déposez la couverture/i })).toBeInTheDocument();
+    expect(screen.getByText('Glissez une image ou cliquez pour choisir')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Changer' })).not.toBeInTheDocument();
+  });
+
+  it('accepts a new file after a completed upload (the box is the replace control)', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'cover', status: 'ready' });
+
+    render(<UploadControl kind="cover" label="Déposez la couverture" onUploaded={vi.fn()} />);
+
+    fireEvent.change(getFileInput(), { target: { files: [validFile()] } });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+    await waitFor(() => expect(screen.getByRole('img', { name: 'Déposez la couverture' })).toBeInTheDocument());
+
+    // A second file starts another upload straight from the still-present box.
+    vi.mocked(requestUpload).mockClear();
+    fireEvent.change(getFileInput(), { target: { files: [validFile()] } });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+  });
+
+  it('renders currentUrl as the initial side preview beside an empty box (avatar → circular)', () => {
+    render(
+      <UploadControl kind="avatar" label="Photo de profil" currentUrl="https://cdn/avatar.webp" onUploaded={vi.fn()} />,
+    );
+    const img = screen.getByRole('img', { name: 'Photo de profil' });
+    expect(img).toHaveAttribute('src', 'https://cdn/avatar.webp');
+    expect(img).toHaveStyle({ borderRadius: '50%' });
+    // The droppable box is present alongside the preview.
+    expect(screen.getByRole('button', { name: /Photo de profil/i })).toBeInTheDocument();
+    expect(screen.getByText('Glissez une image ou cliquez pour choisir')).toBeInTheDocument();
+  });
+
+  it('shows no thumbnail when there is no image and no currentUrl', () => {
+    render(<UploadControl kind="cover" label="Déposez la couverture" onUploaded={vi.fn()} />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('document ready keeps "✓ {name}" beside a still-present box (no "Changer")', async () => {
+    vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
+    vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
+    vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'call_document', status: 'ready' });
+
+    render(<UploadControl kind="call_document" label="Ajouter un document (PDF)" onUploaded={vi.fn()} />);
+    fireEvent.change(getFileInput(), {
+      target: { files: [new File(['%PDF-1.4'], 'scenario.pdf', { type: 'application/pdf' })] },
+    });
+    await waitFor(() => expect(requestUpload).toHaveBeenCalled());
+    capturedXHR!.onload?.();
+
+    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ajouter un document/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Changer' })).not.toBeInTheDocument();
+  });
+});

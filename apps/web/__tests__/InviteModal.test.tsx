@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { MyProjectsResponse } from '@encre-et-plume/shared';
+import type {
+  ContactsResponse,
+  CreateInvitationsResponse,
+  MyProjectsResponse,
+} from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', () => ({
   getMyProjects: vi.fn(),
+  getContacts: vi.fn(),
   createInvitation: vi.fn(),
 }));
 import * as api from '../lib/api';
@@ -24,67 +29,92 @@ const projects: MyProjectsResponse = {
   ],
 };
 
-function renderModal(onClose = vi.fn()) {
+const contacts: ContactsResponse = {
+  items: [
+    { userId: 'u-alma', slug: 'alma', name: 'Alma R.', avatarUrl: null, role: 'scenariste', city: 'Nantes', mutualProjects: 0, presence: { online: false, lastSeen: null } },
+    { userId: 'u-bao', slug: 'bao', name: 'Bao T.', avatarUrl: null, role: 'dessinateur', city: 'Paris', mutualProjects: 1, presence: { online: true, lastSeen: null } },
+  ],
+};
+
+// Envelope helper — the API now always returns { results }.
+function envelope(results: CreateInvitationsResponse['results']): CreateInvitationsResponse {
+  return { results };
+}
+const sentResult = (toUser: string): CreateInvitationsResponse['results'][number] => ({
+  toUser,
+  status: 'sent',
+  invitation: { id: `inv-${toUser}` } as never,
+});
+
+function renderPrefilled(onClose = vi.fn()) {
   render(<InviteModal recipient={recipient} onClose={onClose} />);
   return { onClose };
 }
 
-describe('InviteModal', () => {
+function renderPicker(onClose = vi.fn()) {
+  render(<InviteModal onClose={onClose} />);
+  return { onClose };
+}
+
+describe('InviteModal — prefilled (single recipient)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getMyProjects).mockResolvedValue(projects);
-    vi.mocked(api.createInvitation).mockResolvedValue({} as never);
+    vi.mocked(api.getContacts).mockResolvedValue(contacts);
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([sentResult('theo-1')]));
   });
 
   it('renders a labelled dialog with the read-only recipient header', async () => {
-    renderModal();
+    renderPrefilled();
     const dialog = await screen.findByRole('dialog', { name: /inviter théo m\./i });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText(/dessinateur·rice · lyon/i)).toBeInTheDocument();
+    // No contacts multi-select in prefilled mode.
+    expect(screen.queryByRole('button', { name: /^contacts/i })).not.toBeInTheDocument();
   });
 
   it('lists the sender projects as selectable radio rows and toggles selection', async () => {
     const user = userEvent.setup();
-    renderModal();
+    renderPrefilled();
     const lames = await screen.findByRole('radio', { name: /lames de brume/i });
     expect(lames).toHaveAttribute('aria-checked', 'false');
     await user.click(lames);
     expect(lames).toHaveAttribute('aria-checked', 'true');
-    // Clicking the selected row again deselects (invite goes unattached).
     await user.click(lames);
     expect(lames).toHaveAttribute('aria-checked', 'false');
   });
 
   it('shows the optional-project hint when the sender has no projects', async () => {
     vi.mocked(api.getMyProjects).mockResolvedValue({ items: [] });
-    renderModal();
+    renderPrefilled();
     expect(await screen.findByText(/aucun projet pour l'instant/i)).toBeInTheDocument();
   });
 
   it('bounds the message textarea length', async () => {
-    renderModal();
+    renderPrefilled();
     const textarea = await screen.findByLabelText(/message/i);
     expect(textarea).toHaveAttribute('maxLength', '1000');
   });
 
-  it('sends the invitation with toUser, projectId and message', async () => {
+  it('sends the Mode-A shape with toUsers, projectId and message', async () => {
     const user = userEvent.setup();
-    renderModal();
+    renderPrefilled();
     await user.click(await screen.findByRole('radio', { name: /lames de brume/i }));
     await user.type(screen.getByLabelText(/message/i), 'Salut !');
     await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
     await waitFor(() => {
       expect(api.createInvitation).toHaveBeenCalledWith({
-        toUser: 'theo-1',
+        kind: 'direct',
+        toUsers: ['theo-1'],
         projectId: 'p1',
         message: 'Salut !',
       });
     });
   });
 
-  it('shows the success confirmation after sending', async () => {
+  it('shows the success confirmation on a sent result', async () => {
     const user = userEvent.setup();
-    renderModal();
+    renderPrefilled();
     await screen.findByRole('radio', { name: /lames de brume/i });
     await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
     await waitFor(() => {
@@ -92,14 +122,12 @@ describe('InviteModal', () => {
     });
   });
 
-  it('renders the API error and keeps the send button disabled after a duplicate 409', async () => {
-    vi.mocked(api.createInvitation).mockRejectedValue({
-      statusCode: 409,
-      error: 'CONFLICT',
-      message: 'Une proposition est déjà en attente pour ce créateur.',
-    });
+  it('renders the duplicate copy and locks the send button on a duplicate result', async () => {
+    vi.mocked(api.createInvitation).mockResolvedValue(
+      envelope([{ toUser: 'theo-1', status: 'duplicate', invitation: null }]),
+    );
     const user = userEvent.setup();
-    renderModal();
+    renderPrefilled();
     await screen.findByRole('radio', { name: /lames de brume/i });
     await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
     await waitFor(() => {
@@ -110,7 +138,7 @@ describe('InviteModal', () => {
 
   it('Escape closes the modal', async () => {
     const user = userEvent.setup();
-    const { onClose } = renderModal();
+    const { onClose } = renderPrefilled();
     await screen.findByRole('dialog');
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
@@ -118,10 +146,73 @@ describe('InviteModal', () => {
 
   it('the ✕ and "Annuler" buttons close the modal', async () => {
     const user = userEvent.setup();
-    const { onClose } = renderModal();
+    const { onClose } = renderPrefilled();
     await user.click(await screen.findByRole('button', { name: /fermer/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', { name: /annuler/i }));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('InviteModal — picker mode (no recipient)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getMyProjects).mockResolvedValue(projects);
+    vi.mocked(api.getContacts).mockResolvedValue(contacts);
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([]));
+  });
+
+  it('shows the "Proposer une collab" title and a contacts multi-select', async () => {
+    renderPicker();
+    expect(await screen.findByRole('dialog', { name: /proposer une collab/i })).toBeInTheDocument();
+    // OnBrandMultiSelect trigger labelled "Contacts".
+    expect(await screen.findByRole('button', { name: /^contacts/i })).toBeInTheDocument();
+  });
+
+  it('shows an empty-contacts hint when the sender has no contacts', async () => {
+    vi.mocked(api.getContacts).mockResolvedValue({ items: [] });
+    renderPicker();
+    expect(await screen.findByText(/aucun contact pour l'instant/i)).toBeInTheDocument();
+  });
+
+  it('blocks send with 0 selected and does not call the API', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await screen.findByRole('button', { name: /^contacts/i });
+    await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/sélectionnez au moins un·e destinataire/i);
+    expect(api.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('sends the selected recipients and renders per-recipient results', async () => {
+    vi.mocked(api.createInvitation).mockResolvedValue(
+      envelope([
+        { toUser: 'u-alma', status: 'sent', invitation: { id: 'inv-1' } as never },
+        { toUser: 'u-bao', status: 'duplicate', invitation: null },
+      ]),
+    );
+    const user = userEvent.setup();
+    renderPicker();
+
+    // Open the multi-select and pick both contacts.
+    await user.click(await screen.findByRole('button', { name: /^contacts/i }));
+    await user.click(await screen.findByRole('checkbox', { name: /alma r\./i }));
+    await user.click(screen.getByRole('checkbox', { name: /bao t\./i }));
+
+    // Plural send label appears with 2+ selected.
+    await user.click(screen.getByRole('button', { name: /envoyer les invitations/i }));
+
+    await waitFor(() => {
+      expect(api.createInvitation).toHaveBeenCalledWith({
+        kind: 'direct',
+        toUsers: ['u-alma', 'u-bao'],
+      });
+    });
+
+    const status = await screen.findByRole('status');
+    expect(within(status).getByText(/alma r\./i)).toBeInTheDocument();
+    expect(within(status).getByText(/envoyée/i)).toBeInTheDocument();
+    expect(within(status).getByText(/bao t\./i)).toBeInTheDocument();
+    expect(within(status).getByText(/déjà une proposition en attente/i)).toBeInTheDocument();
   });
 });

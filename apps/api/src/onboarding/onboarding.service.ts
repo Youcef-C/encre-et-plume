@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { AccountSummary, AccountPreferences, ThemePreference, LookingForStatus } from '@encre-et-plume/shared';
-import { deriveIsAdult } from '@encre-et-plume/shared';
+import type { AccountSummary, AccountPreferences, ThemePreference, DmPolicy, LookingForStatus } from '@encre-et-plume/shared';
+import { deriveIsAdult, DM_POLICIES, DM_POLICY_DEFAULT } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { Account } from '@prisma/client';
 import type { OnboardingDto } from './dto/onboarding.dto';
@@ -10,8 +10,13 @@ const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 // ponytail: duplicated in auth.service.ts / accounts.service.ts — 3-line coercion is cheaper
 // than a shared util that ties auth↔accounts↔onboarding modules together.
 function readPreferences(raw: unknown): AccountPreferences {
-  const theme = (raw as Record<string, unknown> | null | undefined)?.['theme'];
-  return { theme: VALID_THEMES.includes(theme as ThemePreference) ? (theme as ThemePreference) : 'system' };
+  const obj = raw as Record<string, unknown> | null | undefined;
+  const theme = obj?.['theme'];
+  const dmPolicy = obj?.['dmPolicy'];
+  return {
+    theme: VALID_THEMES.includes(theme as ThemePreference) ? (theme as ThemePreference) : 'system',
+    dmPolicy: DM_POLICIES.includes(dmPolicy as DmPolicy) ? (dmPolicy as DmPolicy) : DM_POLICY_DEFAULT,
+  };
 }
 
 // ponytail: duplicated from auth.service.ts / accounts.service.ts — same reasoning.

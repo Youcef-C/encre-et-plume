@@ -1,6 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ProfileResponse, PortfolioItemResponse, SeekingTargetRole, PartnerRegion, PartnerAvailability, CreatorRole } from '@encre-et-plume/shared';
-import { normalizeGenres } from '@encre-et-plume/shared';
+import type {
+  ProfileResponse,
+  PortfolioItemResponse,
+  SeekingTargetRole,
+  PartnerRegion,
+  PartnerAvailability,
+  CreatorRole,
+  ProfileCollectionsResponse,
+  GalleryIllustrationCard,
+  GalleryCategoryKey,
+} from '@encre-et-plume/shared';
+import { normalizeGenres, WORK_FORMAT_ILLUSTRATIONS, galleryCategoryLabel, hasPlus18Genre } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { ConnectionsService } from '../connections/connections.service';
@@ -28,6 +38,23 @@ type ProfileRow = {
   region: string | null;
   availability: string;
 } | null;
+
+// DR-12: standalone illustration card mapper (mirrors GalleryService.mapToCard, kept local — ponytail:
+// a 10-line duplication is lazier than exporting/threading GalleryService into ProfilesModule).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapStandaloneCard(row: any): GalleryIllustrationCard {
+  return {
+    id: row.id,
+    title: row.title,
+    artistName: row.artistName,
+    artistSlug: row.artist?.profileSlug ?? null,
+    category: row.category as GalleryCategoryKey,
+    categoryLabel: galleryCategoryLabel(row.category),
+    likeCount: row.likeCount,
+    thumbnail: row.image,
+    is18plus: hasPlus18Genre(row.genres ?? []),
+  };
+}
 
 @Injectable()
 export class ProfilesService {
@@ -119,6 +146,40 @@ export class ProfilesService {
       caption: item.caption,
       order: item.order,
     }));
+  }
+
+  /**
+   * DR-12 (BE-5): the account's collections (owned, published Illustration(s) works) + their
+   * STANDALONE illustrations (published, no collection membership). Feeds the profile "Œuvres
+   * publiées" grouped section. Public — no viewer gating (collections are public œuvres).
+   */
+  async getCollections(slug: string): Promise<ProfileCollectionsResponse> {
+    const account = await this.prisma.account.findUnique({ where: { profileSlug: slug }, select: { id: true } });
+    if (!account) throw new NotFoundException();
+
+    const [works, illustrations] = await Promise.all([
+      this.prisma.work.findMany({
+        where: { format: WORK_FORMAT_ILLUSTRATIONS, publishedAt: { not: null }, creators: { some: { accountId: account.id } } },
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { collectionItems: true } } },
+      }),
+      this.prisma.illustration.findMany({
+        where: { artistId: account.id, publishedAt: { not: null }, collections: { none: {} } },
+        orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+        include: { artist: true },
+      }),
+    ]);
+
+    return {
+      collections: works.map((w) => ({
+        id: w.id,
+        slug: w.slug,
+        title: w.title,
+        cover: w.coverImage,
+        count: (w as unknown as { _count: { collectionItems: number } })._count.collectionItems,
+      })),
+      illustrations: illustrations.map(mapStandaloneCard),
+    };
   }
 
   private compose(account: AccountRow, profile: ProfileRow): ProfileResponse {

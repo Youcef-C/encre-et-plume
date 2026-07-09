@@ -7,7 +7,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import type { ProfileResponse, PortfolioItemResponse } from '@encre-et-plume/shared';
+import type { ProfileResponse, PortfolioItemResponse, ProfileCollectionsResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { ProfilesService } from './profiles.service';
@@ -29,6 +29,12 @@ export class ProfilesController {
   @UseGuards(OptionalSessionGuard)
   getPortfolio(@Param('slug') slug: string, @Req() req: AuthRequest): Promise<PortfolioItemResponse[]> {
     return this.profilesService.getPortfolio(slug, req.accountId);
+  }
+
+  /** Public — DR-12: the account's collections + standalone illustrations (profile grouped section). */
+  @Get(':slug/collections')
+  getCollections(@Param('slug') slug: string): Promise<ProfileCollectionsResponse> {
+    return this.profilesService.getCollections(slug);
   }
 
   /** Owner-only: session account edits their own row — no slug needed (D1). */

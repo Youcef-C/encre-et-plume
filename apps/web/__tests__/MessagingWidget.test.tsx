@@ -32,6 +32,7 @@ vi.mock('../lib/api', () => ({
   sendMessage: vi.fn(),
   markConversationRead: vi.fn(),
   createConversation: vi.fn(),
+  respondConversationRequest: vi.fn(),
   getMediaSignedUrl: vi.fn(),
   getPresence: vi.fn(),
   getContacts: vi.fn(),
@@ -56,7 +57,7 @@ const account: AccountSummary = {
   slug: 'camille-r',
   avatar: null,
   createdAt: '2026-01-01T00:00:00.000Z',
-  preferences: { theme: 'system' },
+  preferences: { theme: 'system', dmPolicy: 'requests' },
   emailVerified: true,
   needsCguReconsent: false,
   onboarded: true,
@@ -75,6 +76,8 @@ const groupConv: ConversationItem = {
   unreadCount: 1,
   lastMessage: { body: 'nemu planche 4 prêt', senderName: 'Yuki', createdAt: '2026-07-08T10:00:00.000Z' },
   lastMessageAt: '2026-07-08T10:00:00.000Z',
+  status: 'open',
+  requestedBy: null,
 };
 
 const dmConv: ConversationItem = {
@@ -89,6 +92,42 @@ const dmConv: ConversationItem = {
   unreadCount: 0,
   lastMessage: { body: 'Partante pour le Seinen ?', senderName: 'Léa B.', createdAt: '2026-07-08T09:00:00.000Z' },
   lastMessageAt: '2026-07-08T09:00:00.000Z',
+  status: 'open',
+  requestedBy: null,
+};
+
+// MC-9 delta: an incoming DM request (I am the recipient — requestedBy is the other party).
+const incomingRequest: ConversationItem = {
+  id: 'req-1',
+  type: 'dm',
+  name: 'Noa T.',
+  projectId: null,
+  participants: [
+    { userId: 'me-1', slug: 'camille-r', name: 'Camille R.', avatarUrl: null },
+    { userId: 'u-noa', slug: 'noa-t', name: 'Noa T.', avatarUrl: null },
+  ],
+  unreadCount: 1,
+  lastMessage: { body: 'On collabore ?', senderName: 'Noa T.', createdAt: '2026-07-09T09:00:00.000Z' },
+  lastMessageAt: '2026-07-09T09:00:00.000Z',
+  status: 'requested',
+  requestedBy: 'u-noa',
+};
+
+// MC-9 delta: an outgoing request I sent (in the main list, shows "Demande envoyée").
+const outgoingRequest: ConversationItem = {
+  id: 'req-2',
+  type: 'dm',
+  name: 'Sora K.',
+  projectId: null,
+  participants: [
+    { userId: 'me-1', slug: 'camille-r', name: 'Camille R.', avatarUrl: null },
+    { userId: 'u-sora', slug: 'sora-k', name: 'Sora K.', avatarUrl: null },
+  ],
+  unreadCount: 0,
+  lastMessage: { body: 'Bonjour !', senderName: 'Camille R.', createdAt: '2026-07-09T08:00:00.000Z' },
+  lastMessageAt: '2026-07-09T08:00:00.000Z',
+  status: 'requested',
+  requestedBy: 'me-1',
 };
 
 const emptyPage: MessagesPage = { items: [], nextCursor: null };
@@ -106,11 +145,16 @@ function renderWidget(acc: AccountSummary | null = account) {
 beforeEach(() => {
   vi.clearAllMocks();
   for (const k of Object.keys(handlers)) delete handlers[k];
-  (api.getConversations as ReturnType<typeof vi.fn>).mockResolvedValue({
-    items: [groupConv, dmConv],
-    nextCursor: null,
-    totalUnread: 1,
-  });
+  // The provider fetches the main list (no filter) and the requests list (filter='requests').
+  (api.getConversations as ReturnType<typeof vi.fn>).mockImplementation(
+    (_cursor?: string, filter?: 'requests') =>
+      filter === 'requests'
+        ? Promise.resolve({ items: [], nextCursor: null, totalUnread: 0, requestsCount: 0 })
+        : Promise.resolve({ items: [groupConv, dmConv], nextCursor: null, totalUnread: 1, requestsCount: 0 }),
+  );
+  (api.respondConversationRequest as ReturnType<typeof vi.fn>).mockImplementation(
+    (id: string) => Promise.resolve({ ...incomingRequest, id, status: 'open', requestedBy: null }),
+  );
   (api.getMessages as ReturnType<typeof vi.fn>).mockResolvedValue(emptyPage);
   (api.markConversationRead as ReturnType<typeof vi.fn>).mockResolvedValue({ unreadCount: 0 });
   (api.getPresence as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
@@ -450,5 +494,108 @@ describe('MessagingWidget — realtime', () => {
     refreshUnread.mockClear();
     await fire('unread:changed');
     expect(refreshUnread).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── MC-9 delta: DM requests (Demandes tab + Accepter/Refuser + "Demande envoyée") ──
+
+describe('MessagingWidget — Demandes tab (MC-9 delta)', () => {
+  function mockRequests(items: ConversationItem[], count = items.length) {
+    (api.getConversations as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cursor?: string, filter?: 'requests') =>
+        filter === 'requests'
+          ? Promise.resolve({ items, nextCursor: null, totalUnread: 0, requestsCount: count })
+          : Promise.resolve({
+              items: [groupConv, dmConv],
+              nextCursor: null,
+              totalUnread: 1,
+              requestsCount: count,
+            }),
+    );
+  }
+
+  it('V1: shows Conversations / Demandes tabs, lists request rows, empty state, hides 0 count', async () => {
+    mockRequests([incomingRequest]);
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+
+    // Tab labelled with the count.
+    const demandesTab = await screen.findByRole('tab', { name: /Demandes, 1 en attente/i });
+    expect(screen.getByRole('tab', { name: 'Conversations' })).toBeInTheDocument();
+
+    // Demandes tab lists the incoming request row.
+    await userEvent.click(demandesTab);
+    expect(await screen.findByText('Noa T.')).toBeInTheDocument();
+    // The open conversations are not shown on the Demandes tab.
+    expect(screen.queryByText('Projet · Lames de Brume')).not.toBeInTheDocument();
+  });
+
+  it('V1: empty Demandes tab shows "Aucune demande" and the tab count is hidden at 0', async () => {
+    mockRequests([], 0);
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    const tab = await screen.findByRole('tab', { name: 'Demandes' });
+    expect(tab).toHaveTextContent('Demandes');
+    expect(tab).not.toHaveTextContent('(');
+    await userEvent.click(tab);
+    expect(await screen.findByText('Aucune demande')).toBeInTheDocument();
+  });
+
+  it('V2: recipient sees the "Demande de message" bar and Accepter swaps in the composer', async () => {
+    mockRequests([incomingRequest]);
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByRole('tab', { name: /Demandes/i }));
+    await userEvent.click(await screen.findByText('Noa T.'));
+
+    // Action bar instead of the composer.
+    expect(await screen.findByText('Demande de message')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Écrire un message')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Accepter' }));
+    await waitFor(() => expect(api.respondConversationRequest).toHaveBeenCalledWith('req-1', 'accept'));
+    // Composer replaces the bar.
+    expect(await screen.findByLabelText('Écrire un message')).toBeInTheDocument();
+    expect(screen.queryByText('Demande de message')).not.toBeInTheDocument();
+  });
+
+  it('V2: Refuser fires decline and returns to the list', async () => {
+    mockRequests([incomingRequest]);
+    (api.respondConversationRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...incomingRequest,
+      status: 'requested',
+    });
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByRole('tab', { name: /Demandes/i }));
+    await userEvent.click(await screen.findByText('Noa T.'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Refuser' }));
+
+    await waitFor(() => expect(api.respondConversationRequest).toHaveBeenCalledWith('req-1', 'decline'));
+    // Back on the list (search field visible).
+    expect(await screen.findByLabelText('Rechercher une conversation')).toBeInTheDocument();
+  });
+
+  it('V3: sender thread shows "Demande envoyée" with the composer enabled; gone when open', async () => {
+    // The outgoing request lives in the MAIN list.
+    (api.getConversations as ReturnType<typeof vi.fn>).mockImplementation(
+      (_cursor?: string, filter?: 'requests') =>
+        filter === 'requests'
+          ? Promise.resolve({ items: [], nextCursor: null, totalUnread: 0, requestsCount: 0 })
+          : Promise.resolve({
+              items: [outgoingRequest],
+              nextCursor: null,
+              totalUnread: 0,
+              requestsCount: 0,
+            }),
+    );
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages' }));
+    await userEvent.click(await screen.findByText('Sora K.'));
+
+    expect(await screen.findByText('Demande envoyée')).toBeInTheDocument();
+    // Composer stays enabled — opening messages allowed.
+    expect(screen.getByLabelText('Écrire un message')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Envoyer' })).toBeEnabled();
   });
 });

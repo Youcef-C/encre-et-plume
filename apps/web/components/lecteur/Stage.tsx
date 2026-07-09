@@ -3,6 +3,7 @@
 // DR-4 FE-4 — center stage: manga page panels (single/2-page spread) or paginated prose.
 // Replica of LECTEUR lines 780-816. F7 (loading placeholder) / F9 (error+retry) states live here.
 import { PROSE_PARAGRAPHS_PER_PAGE, type ChapterPagesResponse, type ReaderPageDto } from '@encre-et-plume/shared';
+import type { ReadingDirection } from './readingDirection';
 
 export type PagesState = 'loading' | 'ready' | 'locked' | 'error' | 'age-restricted';
 
@@ -14,6 +15,7 @@ type Props = {
   pagesData: ChapterPagesResponse | null;
   page: number;
   spreadMode: 'single' | 'double';
+  direction: ReadingDirection;
   onRetry: () => void;
   /** True once the chapter list has loaded and is empty — a legitimate state, not an error. */
   noChapters?: boolean;
@@ -121,7 +123,7 @@ function PageCard({ workTitle, chapterNumber, page, double }: { workTitle: strin
   );
 }
 
-function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode }: { workTitle: string; chapterNumber: number; pages: ReaderPageDto[]; page: number; spreadMode: 'single' | 'double' }) {
+function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode, direction }: { workTitle: string; chapterNumber: number; pages: ReaderPageDto[]; page: number; spreadMode: 'single' | 'double'; direction: ReadingDirection }) {
   const current = pages[page - 1];
   if (!current) return null;
   const showSecond = spreadMode === 'double' && !current.double && page < pages.length;
@@ -133,7 +135,8 @@ function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode }: { wor
       // width:100%/height:100% give this wrapper the stage's definite box; each PageCard then
       // contain-sizes within it (single) or width-caps to half the row (double, side by side).
       // flexWrap only kicks in on genuinely narrow widths where two half-pages can't fit.
-      style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
+      // RTL orders the spread right-then-left (row-reverse) while DOM order stays reading order.
+      style={{ display: 'flex', flexDirection: direction === 'rtl' ? 'row-reverse' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
     >
       <PageCard workTitle={workTitle} chapterNumber={chapterNumber} page={current} double={!!second} />
       {second && <PageCard workTitle={workTitle} chapterNumber={chapterNumber} page={second} double />}
@@ -191,12 +194,14 @@ function RomanPages({
   prose,
   page,
   spreadMode,
+  direction,
 }: {
   chapterNumber: number;
   chapterTitle: string | null;
   prose: string[];
   page: number;
   spreadMode: 'single' | 'double';
+  direction: ReadingDirection;
 }) {
   const start = (page - 1) * PROSE_PARAGRAPHS_PER_PAGE;
   const paragraphs = prose.slice(start, start + PROSE_PARAGRAPHS_PER_PAGE);
@@ -210,7 +215,7 @@ function RomanPages({
     <div
       key={`${chapterNumber}-${page}`}
       className="ep-reader-page-enter"
-      style={{ display: 'flex', gap: 18, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
+      style={{ display: 'flex', flexDirection: direction === 'rtl' ? 'row-reverse' : 'row', gap: 18, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
     >
       <RomanPageSurface chapterNumber={chapterNumber} chapterTitle={chapterTitle} paragraphs={paragraphs} showKicker double={showSecond} />
       {showSecond && (
@@ -220,7 +225,7 @@ function RomanPages({
   );
 }
 
-export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, onRetry, noChapters }: Props) {
+export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesState, pagesData, page, spreadMode, direction, onRetry, noChapters }: Props) {
   // A work without any chapter is a normal state, not an error (owner rule: error messages
   // are for errors only).
   if (noChapters) {
@@ -267,8 +272,8 @@ export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesSta
   }
 
   if (pagesData.readMode === 'prose') {
-    return <RomanPages chapterNumber={chapterNumber} chapterTitle={chapterTitle} prose={pagesData.prose} page={page} spreadMode={spreadMode} />;
+    return <RomanPages chapterNumber={chapterNumber} chapterTitle={chapterTitle} prose={pagesData.prose} page={page} spreadMode={spreadMode} direction={direction} />;
   }
 
-  return <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} />;
+  return <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} direction={direction} />;
 }

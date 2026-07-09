@@ -293,7 +293,7 @@ test('FE-5: re-consent modal shown when needsCguReconsent=true; dismissed on acc
         slug: 'reconsent-user',
         avatar: null,
         createdAt: new Date().toISOString(),
-        preferences: { theme: 'system' },
+        preferences: { theme: 'system', dmPolicy: 'requests' },
         needsCguReconsent: authMeCount === 1,
       }),
     });

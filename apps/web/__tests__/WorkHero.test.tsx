@@ -55,6 +55,7 @@ const work: WorkDetail = {
   team: [],
   fundingGoals: [],
   reviews: [],
+  collectionItems: null,
 };
 
 const admin: AccountSummary = {

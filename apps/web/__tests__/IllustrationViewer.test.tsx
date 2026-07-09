@@ -1,6 +1,6 @@
 // DR-6 FE-T2 (FE-2, FE-3, FE-9, FE-10, FE-11) — artwork viewer, action bar, fullscreen, admin bar.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { IllustrationDetail, AccountSummary } from '@encre-et-plume/shared';
 import IllustrationViewer from '../components/illustration/IllustrationViewer';
@@ -43,6 +43,7 @@ const detail: IllustrationDetail = {
   publishedAt: null,
   artist: { id: 'a1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'Dessinateur·rice', city: 'Lyon', avatar: null },
   is18plus: false,
+  collections: [],
 };
 
 const admin: AccountSummary = { id: 'u1', slug: 'admin-1', displayName: 'Admin', role: 'admin', verified: true } as AccountSummary;
@@ -138,6 +139,21 @@ describe('IllustrationViewer (DR-6)', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('preview shows a real image centered/cover; fullscreen shows it whole with contain (2026-07-09)', async () => {
+    const user = userEvent.setup();
+    const withImage = { ...detail, image: 'https://cdn.example/pluie.png' };
+    render(<IllustrationViewer detail={withImage} account={null} />);
+    // inline preview: fills the frame but centred (not top-left cropped)
+    const preview = screen.getByRole('img', { name: 'Pluie de Néons' });
+    expect(preview).toHaveStyle({ backgroundSize: 'cover', backgroundPosition: 'center' });
+    // fullscreen: a real <img>, contained, with the border on the image itself so it hugs the edges
+    await user.click(screen.getByRole('button', { name: 'Voir en plein écran' }));
+    const full = within(screen.getByRole('dialog')).getByRole('img', { name: 'Pluie de Néons' });
+    expect(full.tagName).toBe('IMG');
+    expect(full).toHaveAttribute('src', 'https://cdn.example/pluie.png');
+    expect(full).toHaveStyle({ objectFit: 'contain', border: '3px solid var(--ink)' });
   });
 
   it('shows the admin moderation bar only for admins (FE-9)', () => {

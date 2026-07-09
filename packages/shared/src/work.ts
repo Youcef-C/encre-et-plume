@@ -2,6 +2,8 @@
 // Work/Chapter models. FE `null` cover/avatar/image -> CSS halftone placeholder (never a broken <img>).
 // Dates are ISO 8601 strings; all counters are plain integers formatted client-side.
 
+import type { CollectionItemDto } from './collections.js';
+
 export const WORK_CHAPTER_PAGE_SIZE = 10;
 export const WORK_CHAPTER_PREVIEW = 3; // FE collapse threshold (prototype shows 3 then "Voir les N…")
 
@@ -60,6 +62,8 @@ export interface WorkDetail {
   team: WorkCreatorDto[];
   fundingGoals: FundingGoalDto[];
   reviews: WorkReviewDto[]; // read-only preview list (PUB-3 owns write)
+  // DR-12: ordered member illustrations when format === 'Illustration(s)' (a collection); null otherwise.
+  collectionItems: CollectionItemDto[] | null;
 }
 
 export interface WorkChapterDto {

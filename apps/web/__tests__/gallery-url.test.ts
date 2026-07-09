@@ -114,8 +114,51 @@ describe('parseGalleryFilters / filtersToGalleryQuery — tags (F-22)', () => {
   });
 });
 
+describe('collection facet (DR-12)', () => {
+  it('parses the opaque collection Work id', () => {
+    expect(parseGalleryFilters(new URLSearchParams('collection=w-carnet')).collection).toBe('w-carnet');
+  });
+
+  it('round-trips the collection id back into the query', () => {
+    const q = filtersToGalleryQuery({ ...EMPTY_GALLERY_FILTERS, collection: 'w-carnet' });
+    expect(q.get('collection')).toBe('w-carnet');
+  });
+
+  it('omits collection when unset', () => {
+    expect(filtersToGalleryQuery(EMPTY_GALLERY_FILTERS).has('collection')).toBe(false);
+  });
+});
+
+// DR-12 iter2 (FE-8 · V7) — "Collections" is an FE-only view mode (D10): the URL carries
+// category=collections but it must never become a GalleryCategoryKey — parse maps it to
+// collectionsMode:true + category:undefined, and serialize writes it back as category=collections.
+describe('collections mode (DR-12 iter2 FE-8)', () => {
+  it('parses category=collections into collectionsMode (never a category)', () => {
+    const f = parseGalleryFilters(new URLSearchParams('category=collections'));
+    expect(f.collectionsMode).toBe(true);
+    expect(f.category).toBeUndefined();
+  });
+
+  it('defaults collectionsMode to false when absent', () => {
+    expect(parseGalleryFilters(new URLSearchParams('')).collectionsMode).toBe(false);
+    expect(parseGalleryFilters(new URLSearchParams('category=fanart')).collectionsMode).toBe(false);
+  });
+
+  it('serializes collectionsMode back as category=collections and round-trips with facets', () => {
+    const f = parseGalleryFilters(new URLSearchParams('category=collections&tags=encre&genre=seinen&q=carnet'));
+    const q = filtersToGalleryQuery(f);
+    expect(q.get('category')).toBe('collections');
+    expect(q.getAll('tags')).toEqual(['encre']);
+    expect(parseGalleryFilters(q)).toEqual(f);
+  });
+
+  it('omits category when collectionsMode is false', () => {
+    expect(filtersToGalleryQuery(EMPTY_GALLERY_FILTERS).has('category')).toBe(false);
+  });
+});
+
 describe('CATEGORY_CHIPS', () => {
-  it('leads with "Tout" (undefined key) then the 5 canonical categories, verbatim French labels', () => {
+  it('leads with "Tout" (undefined key) then the 5 canonical categories + "Collections", verbatim French labels', () => {
     expect(CATEGORY_CHIPS.map((c) => c.label)).toEqual([
       'Tout',
       'Personnages',
@@ -123,8 +166,10 @@ describe('CATEGORY_CHIPS', () => {
       'Décors',
       'Fan-art',
       'Process',
+      'Collections',
     ]);
     expect(CATEGORY_CHIPS[0]!.key).toBeUndefined();
+    expect(CATEGORY_CHIPS[CATEGORY_CHIPS.length - 1]!.key).toBe('collections');
   });
 });
 

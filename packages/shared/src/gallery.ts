@@ -30,6 +30,7 @@ export interface GalleryQuery {
   category?: GalleryCategoryKey; // undefined = "Tout" (all categories)
   tri: GalleryTri; // default 'tendance'
   page: number; // 1-based, clamped >= 1
+  collection?: string; // DR-12: filter to a collection Work id (opaque, no vocabulary check)
 }
 
 export interface GalleryIllustrationCard {
@@ -79,6 +80,39 @@ export interface GalleryPreview {
 
 // DR-6: illustration detail screen ("/illustration/:id"). Additive — nothing above changes.
 
+import type { CollectionRef } from './collections.js';
+
+/** DR-12: minimal publish endpoint (POST /illustrations) — the interim CS-3 stand-in. */
+export interface PublishIllustrationRequest {
+  title: string;
+  category: GalleryCategoryKey;
+  mediaId?: string; // F-10 media (kind 'illustration', ready) -> Illustration.image; omitted -> halftone
+  genres?: string[]; // F-20 vocabulary ids, stored as fr labels
+  hashtags?: string[]; // F-22 freetext chips -> Illustration.hashtags (normalized server-side)
+  description?: string;
+  collectionIds?: string[]; // collection Work ids owned by the caller (assign-at-publish)
+}
+export interface PublishIllustrationResponse {
+  id: string;
+}
+
+/** DR-6/DR-12 (SC-3): visibility maps to the existing `publishedAt` convention (null = not public). */
+export type IllustrationVisibility = 'public' | 'private';
+
+/**
+ * PATCH /illustrations/:id — owner-only partial edit of the illustration itself. Every key is
+ * optional; an absent key leaves that field untouched. Response is the full `IllustrationDetail`.
+ */
+export interface UpdateIllustrationRequest {
+  title?: string; // trimmed; empty -> 400 "Un titre est requis"
+  category?: GalleryCategoryKey; // 400 "Catégorie invalide" otherwise
+  description?: string | null; // ''/null -> null
+  hashtags?: string[]; // normalizeHashtags, replace-all (iteration-2 semantics)
+  tools?: string | null; // ''/null -> null
+  license?: string | null; // null -> BE display default "© Tous droits réservés"
+  visibility?: IllustrationVisibility; // 'private' -> publishedAt=null; 'public' -> republish (D21)
+}
+
 /** Artist block on the illustration detail response. */
 export interface IllustrationArtist {
   id: string | null; // Account id, null when the fixture has no linked Account
@@ -107,4 +141,6 @@ export interface IllustrationDetail {
   artist: IllustrationArtist;
   /** DR-10: true iff any genre is a plus18 entry — hard-gates the read via AgeGateService. */
   is18plus: boolean;
+  /** DR-12: collections this illustration belongs to (chips -> /oeuvre/:slug). */
+  collections: CollectionRef[];
 }

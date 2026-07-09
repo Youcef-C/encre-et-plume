@@ -79,6 +79,8 @@ describe('ProfilesService', () => {
   let prisma: {
     account: { findUnique: jest.Mock };
     profile: { upsert: jest.Mock; findUnique: jest.Mock };
+    work: { findMany: jest.Mock };
+    illustration: { findMany: jest.Mock };
   };
   let blocks: { pairFlags: jest.Mock; isBlockedPair: jest.Mock };
   let connections: { stateBetween: jest.Mock };
@@ -87,6 +89,8 @@ describe('ProfilesService', () => {
     prisma = {
       account: { findUnique: jest.fn() },
       profile: { upsert: jest.fn(), findUnique: jest.fn() },
+      work: { findMany: jest.fn().mockResolvedValue([]) },
+      illustration: { findMany: jest.fn().mockResolvedValue([]) },
     };
     blocks = {
       pairFlags: jest.fn().mockResolvedValue({ viewerHasBlocked: false, blockedByTarget: false }),
@@ -136,6 +140,38 @@ describe('ProfilesService', () => {
       prisma.account.findUnique.mockResolvedValue(null);
 
       await expect(service.getBySlug('no-such-slug')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ── getCollections (DR-12 / BE-5) ──────────────────────────────────────────────
+
+  describe('getCollections', () => {
+    it("returns the account's collections + only standalone (uncollected) illustrations", async () => {
+      prisma.account.findUnique.mockResolvedValue({ id: 'acc-1' });
+      prisma.work.findMany.mockResolvedValue([
+        { id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", coverImage: null, _count: { collectionItems: 3 } },
+      ]);
+      prisma.illustration.findMany.mockResolvedValue([
+        { id: 'i9', title: 'Solo', artistName: 'Yuki', artist: { profileSlug: 'yuki-moreau' }, category: 'personnages', genres: [], likeCount: 4, image: null },
+      ]);
+
+      const res = await service.getCollections('yuki-moreau');
+
+      // collections scoped to owned, published Illustration(s) works
+      const workWhere = prisma.work.findMany.mock.calls[0][0].where;
+      expect(workWhere.format).toBe('Illustration(s)');
+      expect(workWhere.creators).toEqual({ some: { accountId: 'acc-1' } });
+      expect(res.collections).toEqual([{ id: 'w1', slug: 'carnet-d-encre', title: "Carnet d'Encre", cover: null, count: 3 }]);
+
+      // standalone = published illustrations with no collection membership
+      const illuWhere = prisma.illustration.findMany.mock.calls[0][0].where;
+      expect(illuWhere).toEqual({ artistId: 'acc-1', publishedAt: { not: null }, collections: { none: {} } });
+      expect(res.illustrations.map((c) => c.id)).toEqual(['i9']);
+    });
+
+    it('throws NotFoundException for an unknown slug', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      await expect(service.getCollections('nope')).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('composes roleLine from specialty only when city is absent', async () => {

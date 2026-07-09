@@ -229,6 +229,40 @@ describe('WorksService', () => {
 
       expect(prisma.work.update).not.toHaveBeenCalled();
     });
+
+    it('DR-12: an Illustration(s) work maps ordered collectionItems', async () => {
+      prisma.work.findFirst.mockResolvedValue(
+        WORK_ROW({
+          format: 'Illustration(s)',
+          collectionItems: [
+            { order: 0, illustration: { id: 'a', title: 'A', image: null, likeCount: 5, category: 'personnages', genres: [] } },
+            { order: 1, illustration: { id: 'b', title: 'B', image: 'x', likeCount: 9, category: 'decors', genres: [] } },
+          ],
+        }),
+      );
+
+      const result = await service.getWork('carnet-d-encre');
+
+      expect(result?.collectionItems?.map((i) => i.id)).toEqual(['a', 'b']);
+      expect(result?.collectionItems?.[1]).toMatchObject({ id: 'b', thumbnail: 'x', categoryLabel: 'Décors', order: 1 });
+    });
+
+    it('BE-9: excludes unpublished (private) members from the public collectionItems query', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ format: 'Illustration(s)', collectionItems: [] }));
+
+      await service.getWork('carnet-d-encre');
+
+      const include = prisma.work.findFirst.mock.calls[0][0].include;
+      expect(include.collectionItems.where).toEqual({ illustration: { publishedAt: { not: null } } });
+    });
+
+    it('DR-12: a non-collection (Manga) work has collectionItems null', async () => {
+      prisma.work.findFirst.mockResolvedValue(WORK_ROW({ format: 'Manga' }));
+
+      const result = await service.getWork('lames-de-brume');
+
+      expect(result?.collectionItems).toBeNull();
+    });
   });
 
   describe('getChapters', () => {

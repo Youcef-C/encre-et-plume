@@ -7,11 +7,27 @@ export type InvitationStatus = 'pending' | 'accepted' | 'declined';
 export const INVITATION_MESSAGE_MAX = 1000;
 export const INVITATIONS_PAGE_SIZE = 20;
 export const INVITATIONS_MAX_PAGE_SIZE = 50;
+export const INVITATION_MAX_RECIPIENTS = 20;
 
 export interface CreateInvitationRequest {
-  toUser: string; // recipient Account id
+  kind?: 'direct'; // 'join' deferred to the CS-10 follow-up; server 400s it
+  toUser?: string; // legacy single-recipient sugar (server normalizes to toUsers)
+  toUsers?: string[]; // 1..INVITATION_MAX_RECIPIENTS recipient Account ids
   projectId?: string; // optional; must belong to the sender
   message?: string; // ≤ INVITATION_MESSAGE_MAX; default ''
+}
+
+export type InvitationSendStatus = 'sent' | 'duplicate' | 'unavailable' | 'self';
+
+export interface InvitationSendResult {
+  toUser: string; // recipient Account id (FE maps id → name locally)
+  status: InvitationSendStatus;
+  invitation: InvitationDto | null; // non-null iff status === 'sent'
+}
+
+/** POST /invitations response — always this envelope (single recipient included). */
+export interface CreateInvitationsResponse {
+  results: InvitationSendResult[];
 }
 
 export interface InvitationUserRef {
