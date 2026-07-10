@@ -220,6 +220,9 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
             onDropTargetLeave={() => setDropStage((s) => (s === stage ? null : s))}
             onDropCard={(id) => {
               setDropStage(null);
+              // The optimistic move unmounts the dragged node, so `dragend` may
+              // never fire — clear the fade here where the drop actually lands.
+              setDragId(null);
               void moveCard(id, stage);
             }}
             onAddCard={() => void addCard(stage)}

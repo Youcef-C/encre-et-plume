@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WorkspaceChapter, WorkspacePage } from '@encre-et-plume/shared';
 
@@ -92,6 +92,17 @@ describe('KanbanBoard', () => {
     await userEvent.click(addButtons[0]); // Scénario column
     expect(api.createPage).toHaveBeenCalledWith('nuit-blanche', { chapterId: 'c1', stage: 'scenario' });
     await screen.findByText('Page 8');
+  });
+
+  it('un-fades the card after a drag-and-drop (dragend may never fire once it moves)', async () => {
+    (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...page7, stage: 'nemu' });
+    renderBoard();
+    const card = screen.getByText('Page 7').closest('[draggable="true"]') as HTMLElement;
+    const dataTransfer = { getData: () => 'pg7', setData: () => {} };
+    fireEvent.dragStart(card, { dataTransfer });
+    expect(card).toHaveStyle({ opacity: '0.5' }); // faded while dragging
+    fireEvent.drop(screen.getByRole('group', { name: /Nemu/i }), { dataTransfer });
+    await waitFor(() => expect(screen.getByText('Page 7').closest('[draggable="true"]')).toHaveStyle({ opacity: '1' }));
   });
 
   it('moves a card via the ⋯ menu (keyboard path) → updatePageStage', async () => {
