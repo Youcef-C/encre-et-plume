@@ -54,6 +54,11 @@ const SPECS = [
   { key: 'MC12_B', email: 'qa_e2e_mc12_b@test.com', slug: 'e2e-mc12-b' }, // earliest-joined member (ownership transfer target)
   { key: 'MC12_C', email: 'qa_e2e_mc12_c@test.com', slug: 'e2e-mc12-c' }, // kicked member
   { key: 'MC12_D', email: 'qa_e2e_mc12_d@test.com', slug: 'e2e-mc12-d' }, // added-later member
+  // F-3 (2026-07-10 bug-fix batch) — dedicated fixture reproducing the legacy stale-role save bug
+  // out of the box: a Profile with seekingActive:true + the legacy INVALID seekingTargetRole
+  // ('dessinateur' isn't in SEEKING_TARGET_ROLES, only 'dessinateur·rice' is) plus an ACCEPTED
+  // application. No other spec file references this account.
+  { key: 'F3_STALE_ROLE', email: 'qa_e2e_f3_stale_role@test.com', slug: 'e2e-f3-stale-role' },
 ];
 
 async function main() {
@@ -469,6 +474,44 @@ async function main() {
       },
     });
     accounts.MC12_PROJECT_GROUP = { email: '', id: mc12ProjectGroup.id };
+  }
+
+  // ── F-3: stale/invalid seeking.targetRole must not block a creatorRoles save (2026-07-10 bug fix)
+  // — dedicated F3_STALE_ROLE fixture. Reset then recreate: an ACCEPTED application on a standalone
+  // call (authorId: null — no owner needed) plus the legacy invalid seekingTargetRole, so the e2e test
+  // reads this precondition read-only instead of shelling out to psql (which can't reach CI's DB).
+  {
+    const fixture = accounts.F3_STALE_ROLE.id;
+    await prisma.profile.upsert({
+      where: { accountId: fixture },
+      update: { creatorRoles: ['scenariste'], seekingActive: true, seekingTargetRole: 'dessinateur' },
+      create: { accountId: fixture, creatorRoles: ['scenariste'], seekingActive: true, seekingTargetRole: 'dessinateur' },
+    });
+
+    await prisma.application.deleteMany({ where: { applicantId: fixture } });
+    await prisma.projectCall.deleteMany({ where: { id: 'e2e-f3-stale-role-call' } });
+    const f3Call = await prisma.projectCall.create({
+      data: {
+        id: 'e2e-f3-stale-role-call',
+        title: 'E2E F3 Stale Role Call',
+        authorRoles: ['dessinateur'],
+        seekingRoles: ['scenariste'],
+        seats: { scenariste: 1 },
+        authorId: null,
+        authorName: 'E2E Fixture',
+        genres: ['shonen'],
+        status: 'open',
+      },
+    });
+    await prisma.application.create({
+      data: {
+        callId: f3Call.id,
+        applicantId: fixture,
+        sampleUrl: 'https://example.com/e2e-f3-sample.jpg',
+        status: 'accepted',
+        appliedAs: 'scenariste',
+      },
+    });
   }
 
   await prisma.$disconnect();

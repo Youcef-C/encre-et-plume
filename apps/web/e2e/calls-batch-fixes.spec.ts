@@ -19,12 +19,12 @@
  * Everything below uses FRESH scratch accounts (Date.now()-suffixed emails) signed up via the API +
  * dev-latest email-verify seam (privacy.spec.ts's established pattern) so nothing here depends on,
  * or mutates, the shared seed.js fixtures other spec files assert exact counts against — except
- * item 7, which deliberately reuses the seeded `mc6-candidatures-fixture` account (it already has an
- * ACCEPTED application out of the box) and only touches its Profile row (never its Application rows),
- * restoring it at the end.
+ * item 7, which reads a DEDICATED e2e-seed.js fixture (F3_STALE_ROLE, from `.e2e-accounts.json`)
+ * read-only: no runtime SQL (CI's Postgres isn't reachable via a local `psql` shellout — that's what
+ * broke `develop`'s e2e job when this test used to reproduce its precondition that way), no mutation
+ * of any shared fixture.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -555,51 +555,36 @@ test.describe('Item 4 — MC-4 close a call early', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7 — F-3: a stale/invalid seeking.targetRole no longer blocks a creatorRoles save; the accepted
-// application's appliedAs stays untouched. Reuses the seeded mc6-candidatures-fixture account
-// (already has an accepted application) — mutates ONLY its Profile row via direct SQL to reproduce
-// the exact legacy bug precondition, and restores it afterwards.
+// application's appliedAs stays untouched. Uses the DEDICATED e2e-seed fixture F3_STALE_ROLE
+// (apps/api/prisma/e2e-seed.js) read-only: its Profile already has seekingActive:true +
+// seekingTargetRole:'dessinateur' (the legacy invalid value — not in SEEKING_TARGET_ROLES) AND an
+// accepted application, out of the box. No runtime SQL, no mutation of any shared fixture — CI-safe
+// (a raw `psql` shellout to a hardcoded localhost:5433 can't reach the CI runner's Postgres, which is
+// exactly what broke `develop`'s e2e job when this test used to reproduce the precondition that way).
 // ─────────────────────────────────────────────────────────────────────────────
 test.describe('Item 7 — F-3 profile creatorRoles save survives a stale invalid seeking.targetRole', () => {
-  const SLUG = 'mc6-candidatures-fixture';
-  const EMAIL = 'candidatures.mc6@seed.encre-et-plume.local';
+  const ACCOUNTS = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '.e2e-accounts.json'), 'utf8'),
+  ) as Record<string, { email: string; id: string }>;
 
-  function psql(sql: string): void {
-    execFileSync(
-      'psql',
-      ['-h', 'localhost', '-p', '5433', '-U', 'postgres', '-d', 'encre_et_plume', '-c', sql],
-      { env: { ...process.env, PGPASSWORD: 'postgres' } },
-    );
-  }
-
-  test.afterEach(() => {
-    // Restore the shared fixture for other spec files (mc6-mes-candidatures.spec.ts etc.).
-    psql(
-      `UPDATE "Profile" SET "seekingActive"=false, "seekingTargetRole"=NULL, "creatorRoles"='{scenariste}' FROM "Account" WHERE "Account".id="Profile"."accountId" AND "Account"."profileSlug"='${SLUG}';`,
-    );
-  });
-
-  test('reproduces the legacy bug precondition (seeking active + invalid targetRole) and saves creatorRoles anyway; appliedAs unchanged', async ({
+  test('dedicated fixture already has the legacy precondition — toggle creatorRoles, save, reload; appliedAs unchanged', async ({
     page,
   }) => {
-    // Reproduce the exact legacy state the bug report described (SEEKING_TARGET_ROLES no longer
-    // includes bare 'dessinateur' — only 'dessinateur·rice' — so this used to 400 the whole PATCH).
-    psql(
-      `UPDATE "Profile" SET "seekingActive"=true, "seekingTargetRole"='dessinateur' FROM "Account" WHERE "Account".id="Profile"."accountId" AND "Account"."profileSlug"='${SLUG}';`,
-    );
-
-    await loginUi(page, EMAIL);
+    const email = ACCOUNTS.F3_STALE_ROLE.email;
+    await loginUi(page, email);
+    const slug = ((await (await page.request.get(`${API}/auth/me`)).json()) as { slug: string }).slug;
 
     // Capture the accepted application's appliedAs BEFORE the profile edit.
     const beforeRes = await page.request.get(`${API}/me/applications`);
-    const beforeBody = (await beforeRes.json()) as { items: Array<{ callTitle: string; status: string; appliedAs: string | null }> };
+    const beforeBody = (await beforeRes.json()) as { items: Array<{ status: string; appliedAs: string | null }> };
     const acceptedBefore = beforeBody.items.find((a) => a.status === 'accepted');
     expect(acceptedBefore).toBeTruthy();
 
-    await page.goto(`/${SLUG}`);
+    await page.goto(`/${slug}`);
     await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: /Modifier le profil/i }).click();
 
-    // Toggle "Dessinateur·rice" on (this account starts with only Scénariste, per seed.js).
+    // Toggle "Dessinateur·rice" on (this fixture starts with only Scénariste, per e2e-seed.js).
     const dessinateurToggle = page.getByRole('button', { name: 'Dessinateur·rice', exact: true });
     await expect(dessinateurToggle).toHaveAttribute('aria-pressed', 'false');
     await dessinateurToggle.click();
@@ -613,7 +598,7 @@ test.describe('Item 7 — F-3 profile creatorRoles save survives a stale invalid
     await expect(page.getByRole('button', { name: /Modifier le profil/i })).toBeVisible();
 
     // Persisted server-side (no GET /profiles/me — read back via the public GET /profiles/:slug).
-    const meRes = await page.request.get(`${API}/profiles/${SLUG}`);
+    const meRes = await page.request.get(`${API}/profiles/${slug}`);
     const me = (await meRes.json()) as { creatorRoles: string[] };
     expect(me.creatorRoles.sort()).toEqual(['dessinateur', 'scenariste']);
 

@@ -115,6 +115,13 @@ async function main() {
   await prisma.work.deleteMany({ where: { slug: 'e2e-cs12-carnet' } });
   await prisma.illustration.deleteMany({ where: { id: { startsWith: 'e2e-cs12-illu' } } });
 
+  // 4i. F-3: MC-5 Application rows FK-restrict Account deletion (applicantId). The re-seed on the
+  // next run recreates the F3_STALE_ROLE fixture's application; the standalone (authorId: null) call
+  // itself has no FK to a seeded account, so it doesn't need cleanup here.
+  if (accountIds.length > 0) {
+    await prisma.application.deleteMany({ where: { applicantId: { in: accountIds } } });
+  }
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },
