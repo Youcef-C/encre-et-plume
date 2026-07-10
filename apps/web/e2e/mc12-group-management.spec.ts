@@ -166,7 +166,9 @@ test.describe('MC-12 — standalone group lifecycle (MC12_A creator ⇄ B/C/D)',
       // ── MC12-E3: C's open list DROPS the row live (no reload) + C gets a group_removed notification ──
       await expect(rowByName(pageC, groupName)).toHaveCount(0, { timeout: 10_000 });
       await pageC.goto('/notifications');
-      await expect(pageC.getByText(/vous a retiré·e d'un groupe/)).toBeVisible({ timeout: 10_000 });
+      // .first(): the shared CI DB can carry group_removed notifications from a retried run — assert
+      // at least one is shown (strict-mode would otherwise fail on 2+ accumulated matches).
+      await expect(pageC.getByText(/vous a retiré·e d'un groupe/).first()).toBeVisible({ timeout: 10_000 });
 
       // ── MC12-E4a: creator (A) leaves → the group drops from A's own list ──
       await panel(pageA).getByRole('button', { name: 'Quitter le groupe' }).click();
