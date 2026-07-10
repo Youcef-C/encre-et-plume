@@ -25,6 +25,8 @@ export default function LegalFooter() {
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
           gap: '8px 20px',
           maxWidth: 1200,
           margin: '0 auto',
