@@ -179,6 +179,28 @@ describe('BlocksService.hiddenAuthorIds (symmetric for block — R2-B4)', () => 
   });
 });
 
+describe('BlocksService.blockedPairIds (MC-13 — block-kind-only, symmetric)', () => {
+  it('maps each block row to the OTHER id, both directions, kind:block only', async () => {
+    const prisma = makePrisma();
+    prisma.userBlock.findMany.mockResolvedValue([
+      { blockerId: 'acc-a', blockedId: 'acc-b' }, // viewer blocked b → b
+      { blockerId: 'acc-c', blockedId: 'acc-a' }, // c blocked viewer → c
+    ]);
+    const ids = await build(prisma).blockedPairIds('acc-a');
+    expect(prisma.userBlock.findMany).toHaveBeenCalledWith({
+      where: { kind: 'block', OR: [{ blockerId: 'acc-a' }, { blockedId: 'acc-a' }] },
+      select: { blockerId: true, blockedId: true },
+    });
+    expect([...ids].sort()).toEqual(['acc-b', 'acc-c']);
+  });
+
+  it('returns an empty set when the viewer has no block rows', async () => {
+    const prisma = makePrisma();
+    prisma.userBlock.findMany.mockResolvedValue([]);
+    expect((await build(prisma).blockedPairIds('acc-a')).size).toBe(0);
+  });
+});
+
 describe('BlocksService.pairFlags (directional block flags — R2-B1)', () => {
   it('derives both flags from block rows in either direction', async () => {
     const prisma = makePrisma();

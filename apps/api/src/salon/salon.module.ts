@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { MessagingModule } from '../messaging/messaging.module';
+import { BlocksModule } from '../blocks/blocks.module';
 
 /**
  * MC-11 "Le Comptoir": REST for the public salon dock. Reuses the MC-9 messaging backend — imports
@@ -17,6 +18,7 @@ import { MessagingModule } from '../messaging/messaging.module';
   imports: [
     JwtModule.register({ secret: getJwtSecret(), signOptions: { expiresIn: '7d' } }),
     MessagingModule, // exports MessagingGateway (salon fan-out + presence)
+    BlocksModule, // MC-13: blockedPairIds per-viewer roster filtering
   ],
   controllers: [SalonController],
   providers: [SalonService, PrismaService, RedisService, SessionGuard],

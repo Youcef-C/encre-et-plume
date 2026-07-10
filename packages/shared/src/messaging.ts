@@ -96,6 +96,10 @@ export const WS_EVENTS = {
   // MC-11 salon: new message broadcast to all connected clients + live presence count.
   salonMessage: 'salon:message',
   salonPresence: 'salon:presence',
+  // MC-13 Comptoir roster = salon MEMBERSHIP (joined via "Rejoindre le salon" until "Quitter"), NOT
+  // WS/app-online. Server broadcasts these to the salon room on join/leave so open viewers refresh live.
+  salonMemberJoined: 'salon:member:joined', // server → salon room, { user: ReachableUser }
+  salonMemberLeft: 'salon:member:left', // server → salon room, { userId }
   // MC-9 delta: a DM request was accepted/declined → both participants refetch their lists.
   conversationUpdated: 'conversation:updated',
   // MC-12: group membership changes fan out to every (former) participant's user room.
@@ -106,6 +110,14 @@ export const WS_EVENTS = {
 
 export interface WsConversationUpdated {
   conversationId: string;
+}
+
+// MC-13 Comptoir membership realtime payloads (broadcast to the salon room on join/leave).
+export interface WsSalonMemberJoined {
+  user: import('./salon.js').ReachableUser;
+}
+export interface WsSalonMemberLeft {
+  userId: string;
 }
 
 // MC-12 group-management realtime payloads.

@@ -5,6 +5,7 @@ import type {
   SalonMessageDto,
   SalonMessagesPage,
   SalonOnlineResponse,
+  SalonPresenceResponse,
   SalonSummary,
 } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
@@ -43,6 +44,12 @@ export class SalonController {
   @Get('online')
   online(@Req() _req: AuthRequest): Promise<SalonOnlineResponse> {
     return this.service.getOnlineUsers();
+  }
+
+  // MC-13: the Comptoir room roster (currently-in-the-room users), per-viewer (self + blocked excluded).
+  @Get('presence')
+  presence(@Req() req: AuthRequest): Promise<SalonPresenceResponse> {
+    return this.service.getPresence(req.accountId);
   }
 
   @Post('join')

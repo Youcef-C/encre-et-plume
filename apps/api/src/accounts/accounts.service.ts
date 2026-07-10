@@ -1,9 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AccountSummary, UserRole, AccountPreferences, ThemePreference, DmPolicy, UpdatePreferencesRequest, MediaVariants, BirthdateResponse } from '@encre-et-plume/shared';
-import { deriveIsAdult, DM_POLICIES, DM_POLICY_DEFAULT } from '@encre-et-plume/shared';
+import type { AccountSearchResponse, AccountSummary, UserRole, AccountPreferences, ReachableUser, ThemePreference, DmPolicy, UpdatePreferencesRequest, MediaVariants, BirthdateResponse } from '@encre-et-plume/shared';
+import { ACCOUNT_SEARCH_MAX, deriveIsAdult, DM_POLICIES, DM_POLICY_DEFAULT } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import { ConnectionsService } from '../connections/connections.service';
+import { BlocksService } from '../blocks/blocks.service';
 import type { Account } from '@prisma/client';
+
+const SEARCH_QUERY_MAX = 100; // bound the input at the trust boundary
+const SEARCH_CANDIDATE_WINDOW = 60; // DB window before the in-memory reachability filter caps at ACCOUNT_SEARCH_MAX
 
 const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
@@ -41,7 +46,44 @@ export class AccountsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly connections: ConnectionsService,
+    private readonly blocks: BlocksService,
   ) {}
+
+  /**
+   * MC-13 reachable-user search (backs both group pickers). Accounts whose displayName matches `q`
+   * (case-insensitive contains), RESTRICTED to users the caller may reach: their contacts (MC-8) OR
+   * users whose dmPolicy ∈ {anyone, requests} (F-19) — contacts-only non-contacts are dropped. Excludes
+   * the caller and any blocked pair (MC-10). Capped at ACCOUNT_SEARCH_MAX. Deliberately NOT /partners
+   * (creator-only, excludes readers).
+   * ponytail: in-memory policy filter over a 60-row window; move dmPolicy to a queryable column if
+   * search volume demands.
+   */
+  async search(callerId: string, rawQ: string): Promise<AccountSearchResponse> {
+    const q = (rawQ ?? '').trim().slice(0, SEARCH_QUERY_MAX);
+    if (q.length === 0) return { items: [] };
+
+    const [candidates, contacts, blocked] = await Promise.all([
+      this.prisma.account.findMany({
+        where: { deletedAt: null, id: { not: callerId }, displayName: { contains: q, mode: 'insensitive' } },
+        select: { id: true, displayName: true, avatar: true, profileSlug: true, preferences: true },
+        orderBy: { displayName: 'asc' },
+        take: SEARCH_CANDIDATE_WINDOW,
+      }) as Promise<{ id: string; displayName: string; avatar: string | null; profileSlug: string; preferences: unknown }[]>,
+      this.connections.connectedIds(callerId),
+      this.blocks.blockedPairIds(callerId),
+    ]);
+
+    const items: ReachableUser[] = [];
+    for (const c of candidates) {
+      if (blocked.has(c.id)) continue;
+      const reachable = contacts.has(c.id) || readPreferences(c.preferences).dmPolicy !== 'contacts';
+      if (!reachable) continue;
+      items.push({ id: c.id, name: c.displayName, avatarUrl: c.avatar, slug: c.profileSlug });
+      if (items.length >= ACCOUNT_SEARCH_MAX) break;
+    }
+    return { items };
+  }
 
   async updateRole(id: string, role: UserRole): Promise<AccountSummary> {
     const exists = await this.prisma.account.findUnique({ where: { id } });

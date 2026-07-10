@@ -1,7 +1,10 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { ACCOUNT_SEARCH_MAX } from '@encre-et-plume/shared';
 import { AccountsService } from './accounts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import type { ConnectionsService } from '../connections/connections.service';
+import type { BlocksService } from '../blocks/blocks.service';
 
 const BASE_ACCOUNT = {
   id: 'cuid-1',
@@ -30,13 +33,23 @@ const READY_MEDIA = {
 
 describe('AccountsService', () => {
   let service: AccountsService;
-  let prisma: { account: { findUnique: jest.Mock; update: jest.Mock } };
+  let prisma: { account: { findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock } };
   let media: { getForOwner: jest.Mock; deleteOwnerAvatarMedia: jest.Mock };
 
+  let connections: { connectedIds: jest.Mock };
+  let blocks: { blockedPairIds: jest.Mock };
+
   beforeEach(() => {
-    prisma = { account: { findUnique: jest.fn(), update: jest.fn() } };
+    prisma = { account: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) } };
     media = { getForOwner: jest.fn().mockResolvedValue(READY_MEDIA), deleteOwnerAvatarMedia: jest.fn().mockResolvedValue(undefined) };
-    service = new AccountsService(prisma as unknown as PrismaService, media as unknown as MediaService);
+    connections = { connectedIds: jest.fn().mockResolvedValue(new Set<string>()) };
+    blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set<string>()) };
+    service = new AccountsService(
+      prisma as unknown as PrismaService,
+      media as unknown as MediaService,
+      connections as unknown as ConnectionsService,
+      blocks as unknown as BlocksService,
+    );
   });
 
   it('F-17: toSummary includes onboarded:false (hardcoded like needsCguReconsent)', async () => {
@@ -298,6 +311,67 @@ describe('AccountsService', () => {
 
       const result = await service.deleteAvatar('cuid-1');
       expect(result.avatar).toBeNull();
+    });
+  });
+
+  describe('search (MC-13 reachable-user search)', () => {
+    const acc = (id: string, dmPolicy?: string, name = `User ${id}`) => ({
+      id,
+      displayName: name,
+      avatar: null,
+      profileSlug: `slug-${id}`,
+      preferences: dmPolicy ? { dmPolicy } : {},
+    });
+
+    it('empty / whitespace query → { items: [] } without a DB hit', async () => {
+      await expect(service.search('caller', '   ')).resolves.toEqual({ items: [] });
+      await expect(service.search('caller', undefined as unknown as string)).resolves.toEqual({ items: [] });
+      expect(prisma.account.findMany).not.toHaveBeenCalled();
+    });
+
+    it('queries case-insensitive displayName contains, trims + bounds q, excludes the caller', async () => {
+      prisma.account.findMany.mockResolvedValue([acc('a', 'anyone')]);
+      await service.search('caller', '  Yu' + 'x'.repeat(200) + '  ');
+      const where = prisma.account.findMany.mock.calls[0][0].where;
+      expect(where.id).toEqual({ not: 'caller' });
+      expect(where.deletedAt).toBeNull();
+      expect(where.displayName.mode).toBe('insensitive');
+      expect((where.displayName.contains as string).length).toBeLessThanOrEqual(100);
+      expect((where.displayName.contains as string).startsWith('Yu')).toBe(true);
+    });
+
+    it('includes reachable dmPolicy (anyone / requests / missing default) but excludes contacts-only non-contacts', async () => {
+      prisma.account.findMany.mockResolvedValue([
+        acc('anyone', 'anyone'),
+        acc('requests', 'requests'),
+        acc('missing'), // no dmPolicy key → defaults to requests → reachable
+        acc('contacts', 'contacts'), // non-contact with contacts-only → excluded
+      ]);
+      const res = await service.search('caller', 'user');
+      expect(res.items.map((i) => i.id).sort()).toEqual(['anyone', 'missing', 'requests']);
+    });
+
+    it('includes a contacts-only user WHEN they are a contact of the caller', async () => {
+      prisma.account.findMany.mockResolvedValue([acc('friend', 'contacts')]);
+      connections.connectedIds.mockResolvedValue(new Set(['friend']));
+      const res = await service.search('caller', 'user');
+      expect(res.items.map((i) => i.id)).toEqual(['friend']);
+    });
+
+    it('excludes a blocked pair in either direction', async () => {
+      prisma.account.findMany.mockResolvedValue([acc('ok', 'anyone'), acc('blk', 'anyone')]);
+      blocks.blockedPairIds.mockResolvedValue(new Set(['blk']));
+      const res = await service.search('caller', 'user');
+      expect(res.items.map((i) => i.id)).toEqual(['ok']);
+    });
+
+    it('caps the result at ACCOUNT_SEARCH_MAX and maps to ReachableUser', async () => {
+      prisma.account.findMany.mockResolvedValue(
+        Array.from({ length: ACCOUNT_SEARCH_MAX + 15 }, (_, i) => acc(`u${i}`, 'anyone')),
+      );
+      const res = await service.search('caller', 'user');
+      expect(res.items.length).toBe(ACCOUNT_SEARCH_MAX);
+      expect(res.items[0]).toEqual({ id: 'u0', name: 'User u0', avatarUrl: null, slug: 'slug-u0' });
     });
   });
 });

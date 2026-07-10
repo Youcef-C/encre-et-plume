@@ -397,7 +397,7 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
     }
   });
 
-  test('MC9-E8: "＋ Groupe" — name + a contact via OnBrandMultiSelect → thread opens empty, send works', async ({
+  test('MC9-E8: "＋ Groupe" — name + a contact via the MC-13 reachable-user search → thread opens empty, send works', async ({
     page,
   }) => {
     await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
@@ -407,8 +407,9 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
     const modal = page.getByRole('dialog', { name: 'Nouveau groupe' }).or(page.getByRole('dialog').filter({ hasText: 'Nouveau groupe' }));
     await expect(modal).toBeVisible({ timeout: 10_000 });
     await modal.getByLabel('Nom du groupe').fill('Projet · Test QA');
-    await modal.getByRole('button', { name: /^Contacts/ }).click();
-    await modal.getByRole('checkbox', { name: 'E2E MSG_CONTACT' }).check();
+    // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
+    await modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' }).fill('MSG_CONTACT');
+    await modal.getByRole('option', { name: /MSG_CONTACT/ }).click();
     await modal.getByRole('button', { name: 'Créer le groupe' }).click();
 
     await expect(modal).toHaveCount(0);

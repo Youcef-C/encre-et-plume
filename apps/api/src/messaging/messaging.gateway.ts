@@ -20,6 +20,8 @@ import type {
   WsParticipantAdded,
   WsParticipantRemoved,
   WsConversationDeleted,
+  WsSalonMemberJoined,
+  WsSalonMemberLeft,
 } from '@encre-et-plume/shared';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -116,6 +118,18 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
       this.presenceTimers.delete(socket.id);
     }
     this.scheduleSalonPresence(); // MC-11: a leaver changes the "N en ligne" count
+  }
+
+  /** MC-13: a user joined the salon (SalonService.join) → open viewers append them to the roster live. */
+  emitSalonMemberJoined(payload: WsSalonMemberJoined): void {
+    if (!this.server) return; // worker context — best-effort, never throws
+    this.server.to(SALON_ROOM).emit(WS_EVENTS.salonMemberJoined, payload);
+  }
+
+  /** MC-13: a user left the salon (SalonService.leave) → open viewers drop them from the roster live. */
+  emitSalonMemberLeft(payload: WsSalonMemberLeft): void {
+    if (!this.server) return;
+    this.server.to(SALON_ROOM).emit(WS_EVENTS.salonMemberLeft, payload);
   }
 
   /** MC-11: broadcast a new salon message to all connected clients (members AND previewers). */

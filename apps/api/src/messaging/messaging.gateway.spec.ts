@@ -157,6 +157,39 @@ describe('MessagingGateway typing relay (participant-gated)', () => {
   });
 });
 
+describe('MessagingGateway Comptoir membership broadcasts (MC-13)', () => {
+  function serverOf(gateway: MessagingGateway) {
+    const emit = jest.fn();
+    const to = jest.fn().mockReturnValue({ emit });
+    (gateway as unknown as { server: unknown }).server = { to };
+    return { emit, to };
+  }
+
+  it('emitSalonMemberJoined broadcasts salon:member:joined { user } to the salon room', () => {
+    const { gateway } = build();
+    const { emit, to } = serverOf(gateway);
+    const user = { id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice' };
+    gateway.emitSalonMemberJoined({ user });
+    expect(to).toHaveBeenCalledWith('salon');
+    expect(emit).toHaveBeenCalledWith('salon:member:joined', { user });
+  });
+
+  it('emitSalonMemberLeft broadcasts salon:member:left { userId } to the salon room', () => {
+    const { gateway } = build();
+    const { emit, to } = serverOf(gateway);
+    gateway.emitSalonMemberLeft({ userId: 'acc-9' });
+    expect(to).toHaveBeenCalledWith('salon');
+    expect(emit).toHaveBeenCalledWith('salon:member:left', { userId: 'acc-9' });
+  });
+
+  it('both are no-ops (never throw) when the socket server is absent (worker context)', () => {
+    const { gateway } = build();
+    (gateway as unknown as { server: unknown }).server = undefined;
+    expect(() => gateway.emitSalonMemberJoined({ user: { id: 'a', name: 'A', avatarUrl: null, slug: 'a' } })).not.toThrow();
+    expect(() => gateway.emitSalonMemberLeft({ userId: 'a' })).not.toThrow();
+  });
+});
+
 describe('MessagingGateway.emitMessageNew', () => {
   it('emits message:new to every recipient user room', () => {
     const { gateway } = build();

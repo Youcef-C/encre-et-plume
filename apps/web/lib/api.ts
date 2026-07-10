@@ -739,9 +739,19 @@ import type {
   SalonMessageDto,
   SalonMembershipResponse,
   SalonOnlineResponse,
+  SalonPresenceResponse,
+  AccountSearchResponse,
 } from '@encre-et-plume/shared';
 
 export const getSalon = (): Promise<SalonSummary> => request<SalonSummary>('/salon');
+
+// MC-13: the live Comptoir room roster (who is currently in the room).
+export const getSalonPresence = (): Promise<SalonPresenceResponse> =>
+  request<SalonPresenceResponse>('/salon/presence');
+
+// MC-13: reachable-user search for both group pickers (contacts OR dmPolicy ∈ {anyone, requests}).
+export const searchAccounts = (q: string): Promise<AccountSearchResponse> =>
+  request<AccountSearchResponse>(`/accounts/search?q=${encodeURIComponent(q)}`);
 
 export const getSalonMessages = (cursor?: string): Promise<SalonMessagesPage> =>
   request<SalonMessagesPage>(`/salon/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);

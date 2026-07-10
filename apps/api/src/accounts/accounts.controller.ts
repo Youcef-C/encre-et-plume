@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
-import type { AccountSummary, BirthdateResponse } from '@encre-et-plume/shared';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import type { AccountSearchResponse, AccountSummary, BirthdateResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -13,6 +13,14 @@ import { UpdateBirthdateDto } from './dto/update-birthdate.dto';
 @UseGuards(SessionGuard, RolesGuard)
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
+
+  // MC-13: reachable-user search for the group pickers. No @Roles → any authenticated user (readers
+  // included). Caller is always the session account, never a client field; `q` is trimmed/bounded in
+  // the service. Declared before the `:id/role` param route so the static path isn't shadowed.
+  @Get('search')
+  search(@Req() req: AuthRequest, @Query('q') q?: string): Promise<AccountSearchResponse> {
+    return this.accountsService.search(req.accountId, q as string);
+  }
 
   @Patch(':id/role')
   @Roles('admin')

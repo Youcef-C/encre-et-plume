@@ -10,12 +10,14 @@ import {
   type SalonMessageDto,
   type SalonOnlineUser,
   type WsSalonMessage,
-  type WsSalonPresence,
+  type WsSalonMemberJoined,
+  type WsSalonMemberLeft,
 } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import { ChatIcon } from '../icons';
+import SalonRoster from './SalonRoster';
 
 // Optimistic / failed local send state layered on the DTO (same shape idea as MC-9).
 type FeedMessage = SalonMessageDto & { pending?: boolean; failed?: boolean; error?: string };
@@ -48,6 +50,8 @@ export default function SalonDock() {
   const [expanded, setExpanded] = useState(false);
   const [isMember, setIsMember] = useState(false);
   const [onlineCount, setOnlineCount] = useState(0);
+  // Bumped on the user's OWN Rejoindre/Quitter → signals SalonRoster to re-fetch its presence.
+  const [membershipVersion, setMembershipVersion] = useState(0);
   const [unread, setUnread] = useState(0);
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [feedState, setFeedState] = useState<FeedState>('idle');
@@ -138,12 +142,26 @@ export default function SalonDock() {
         setMentionPending(m.id);
       }
     };
-    const onPresence = (payload: WsSalonPresence) => setOnlineCount(payload.onlineCount);
+    // MC-13: the header "N en ligne" is the Comptoir MEMBERSHIP count (repointed server-side to match
+    // the roster) — NOT the separate app-online salonPresence event. Keep it live off the same
+    // membership deltas the roster uses, skipping self + blocked so it stays consistent with the list.
+    const onMemberJoined = (payload: WsSalonMemberJoined) => {
+      const u = payload.user;
+      if (u.id === myId || blockedRef.current.has(u.id)) return;
+      setOnlineCount((n) => n + 1);
+    };
+    const onMemberLeft = (payload: WsSalonMemberLeft) => {
+      if (payload.userId === myId) return; // own leave is refetch-driven (symmetric with join)
+      if (blockedRef.current.has(payload.userId)) return; // a blocked user was never counted → don't decrement
+      setOnlineCount((n) => Math.max(0, n - 1));
+    };
     socket.on(WS_EVENTS.salonMessage, onMessage);
-    socket.on(WS_EVENTS.salonPresence, onPresence);
+    socket.on(WS_EVENTS.salonMemberJoined, onMemberJoined);
+    socket.on(WS_EVENTS.salonMemberLeft, onMemberLeft);
     return () => {
       socket.off(WS_EVENTS.salonMessage, onMessage);
-      socket.off(WS_EVENTS.salonPresence, onPresence);
+      socket.off(WS_EVENTS.salonMemberJoined, onMemberJoined);
+      socket.off(WS_EVENTS.salonMemberLeft, onMemberLeft);
     };
   }, [socket, myId]);
 
@@ -184,23 +202,35 @@ export default function SalonDock() {
     setMentionPending(null);
   }, []);
 
+  // Own membership change: refetch the authoritative membership count for the header and bump
+  // membershipVersion so SalonRoster re-fetches its {count, items} (gains/loses the "· vous" row).
+  const refetchOwnMembership = useCallback(() => {
+    setMembershipVersion((v) => v + 1);
+    api
+      .getSalon()
+      .then((s) => setOnlineCount(s.onlineCount))
+      .catch(() => {});
+  }, []);
+
   const join = useCallback(async () => {
     try {
       const r = await api.joinSalon();
       setIsMember(r.isMember);
+      refetchOwnMembership();
     } catch {
       /* stays on the join panel */
     }
-  }, []);
+  }, [refetchOwnMembership]);
 
   const leave = useCallback(async () => {
     try {
       const r = await api.leaveSalon();
       setIsMember(r.isMember);
+      refetchOwnMembership();
     } catch {
       /* stays on the composer */
     }
-  }, []);
+  }, [refetchOwnMembership]);
 
   // ── Sending (optimistic, with retry on failure) ──
   const doSend = useCallback(
@@ -338,17 +368,16 @@ export default function SalonDock() {
   const paper = '#f1ece1';
 
   return (
+    // Flex cluster: the dock + the roster's user-icon trigger sit side by side, bottom-left. The trigger
+    // is 8px to the RIGHT of the dock (outside the thread) and follows the dock's width with no jump.
+    <div className="ep-salon-dock-cluster">
     <div
       className="ep-salon-dock"
       style={{
-        position: 'fixed',
-        left: 26,
-        bottom: 26,
-        zIndex: 40,
         // Collapsed, the Comptoir is just its header bar — show it as a compact 300px dock; it
         // expands to the full 400 panel when opened.
         width: expanded ? 400 : 300,
-        maxWidth: 'calc(100vw - 52px)',
+        maxWidth: '100%',
         background: 'var(--card)',
         border: '3px solid var(--ink)',
         borderRadius: 12,
@@ -728,6 +757,20 @@ export default function SalonDock() {
           )}
         </div>
       )}
+    </div>
+
+      {/* MC-13 — Comptoir roster: a user-icon button to the right of the dock (outside the thread)
+          toggling the members list. Membership persists across dock collapse, so it renders always. */}
+      <SalonRoster
+        blockedIds={blockedIds}
+        onBlocked={(userId) => {
+          setBlockedIds((prev) => new Set(prev).add(userId));
+          // Blocking a present member drops them from the roster count; re-sync the header count to the
+          // server (identical behavior to the roster) so header === roster stays true.
+          refetchOwnMembership();
+        }}
+        membershipVersion={membershipVersion}
+      />
     </div>
   );
 }

@@ -1,17 +1,18 @@
 'use client';
 
-// MC-9 FE-4 — "＋ Groupe": on-brand modal to create a group conversation. Name field + an
-// OnBrandMultiSelect of my contacts (never a native select). Submit → POST /conversations
-// { name, participantIds } → opens the new thread. Same focus-trap/Esc pattern as InviteModal.
+// MC-9 FE-4 / MC-13 — "Nouveau groupe": on-brand modal to create a group conversation. Name field +
+// the shared reachable-user search (contacts OR anyone reachable, never a native select); picked
+// people show as removable chips. Direct add — a non-contact can be added straight in. Submit →
+// POST /conversations { name, participantIds } → opens the new thread. Focus-trap/Esc as InviteModal.
 import { useEffect, useRef, useState } from 'react';
 import {
   GROUP_NAME_MAX_LENGTH,
   type ApiError,
-  type ContactItem,
+  type ReachableUser,
   type ConversationItem,
 } from '@encre-et-plume/shared';
-import { getContacts, createConversation } from '../../lib/api';
-import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
+import { createConversation } from '../../lib/api';
+import ReachableUserSearch from './ReachableUserSearch';
 import { XIcon } from '../icons';
 
 function focusTrap(e: React.KeyboardEvent, ref: React.RefObject<HTMLDivElement | null>) {
@@ -42,9 +43,8 @@ export default function GroupCreateModal({
   onClose: () => void;
   onCreated: (conversation: ConversationItem) => void;
 }) {
-  const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [name, setName] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<ReachableUser[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,18 +52,15 @@ export default function GroupCreateModal({
   const titleId = 'group-modal-title';
 
   useEffect(() => {
-    let cancelled = false;
-    getContacts()
-      .then((res) => !cancelled && setContacts(res.items))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     dialogRef.current?.focus();
   }, []);
+
+  function addParticipant(u: ReachableUser) {
+    setSelected((cur) => (cur.some((s) => s.id === u.id) ? cur : [...cur, u]));
+  }
+  function removeParticipant(id: string) {
+    setSelected((cur) => cur.filter((s) => s.id !== id));
+  }
 
   async function handleSubmit() {
     if (submitting) return;
@@ -78,15 +75,13 @@ export default function GroupCreateModal({
     setError(null);
     setSubmitting(true);
     try {
-      const conv = await createConversation({ name: name.trim(), participantIds: selected });
+      const conv = await createConversation({ name: name.trim(), participantIds: selected.map((s) => s.id) });
       onCreated(conv);
     } catch (err) {
       setError((err as ApiError).message ?? 'Une erreur est survenue. Veuillez réessayer.');
       setSubmitting(false);
     }
   }
-
-  const options = contacts.map((c) => ({ value: c.userId, label: c.name }));
 
   return (
     <div
@@ -135,7 +130,31 @@ export default function GroupCreateModal({
 
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 6 }}>Participant·e·s</div>
-            <OnBrandMultiSelect label="Contacts" options={options} values={selected} onChange={setSelected} searchable />
+            <ReachableUserSearch
+              label="Ajouter un·e participant·e"
+              excludeIds={selected.map((s) => s.id)}
+              onPick={addParticipant}
+            />
+            {selected.length > 0 && (
+              <ul style={{ display: 'flex', flexWrap: 'wrap', gap: 8, listStyle: 'none', margin: '10px 0 0', padding: 0 }}>
+                {selected.map((s) => (
+                  <li
+                    key={s.id}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 999, padding: '4px 6px 4px 12px', background: 'var(--paper)', minHeight: 36 }}
+                  >
+                    {s.name}
+                    <button
+                      type="button"
+                      onClick={() => removeParticipant(s.id)}
+                      aria-label={`Retirer ${s.name}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 28, minHeight: 28, border: 'none', background: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                    >
+                      <XIcon size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {error && (

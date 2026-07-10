@@ -10,6 +10,7 @@ function build() {
     getSummary: jest.fn().mockResolvedValue({ conversationId: 's', name: 'Le Comptoir', onlineCount: 0, unreadCount: 0, isMember: false }),
     getMessages: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
     getOnlineUsers: jest.fn().mockResolvedValue({ items: [] }),
+    getPresence: jest.fn().mockResolvedValue({ count: 0, items: [] }),
     join: jest.fn().mockResolvedValue({ isMember: true }),
     leave: jest.fn().mockResolvedValue({ isMember: false }),
     sendMessage: jest.fn().mockResolvedValue({ id: 'm', senderId: 'acc-1', senderName: 'Me', body: 'hi', createdAt: 'x' }),
@@ -40,6 +41,12 @@ describe('SalonController', () => {
     const { controller, service } = build();
     await controller.online(req);
     expect(service.getOnlineUsers).toHaveBeenCalled();
+  });
+
+  it('GET /salon/presence delegates the session account (MC-13 roster)', async () => {
+    const { controller, service } = build();
+    await controller.presence(req);
+    expect(service.getPresence).toHaveBeenCalledWith('acc-1');
   });
 
   it('POST /salon/join and /salon/leave use the session account', async () => {

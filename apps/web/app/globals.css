@@ -279,15 +279,93 @@ h1, h2, h3, h4, h5, h6 {
   animation: ep-skeleton-appear 0s 0.15s both;
 }
 
-/* MC-11 salon "Le Comptoir" dock: Quitter hover (prototype style-hover) + narrow-width clearance
-   from the MC-9 launcher (bottom-right). At <=480px the prototype cap would overlap it; tighten it. */
+/* MC-11 salon "Le Comptoir" dock cluster: the dock + the MC-13 roster trigger sit side by side,
+   fixed bottom-left. Flex row aligned to the bottom so the trigger tracks the dock's right edge with
+   no width-jump. At <=480px cap the whole cluster to clear the MC-9 launcher (bottom-right). */
+.ep-salon-dock-cluster {
+  position: fixed;
+  left: 26px;
+  bottom: 26px;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100vw - 52px);
+}
 .ep-salon-leave:hover {
   background: #c0392b !important;
   color: #fff !important;
 }
 @media (max-width: 480px) {
-  .ep-salon-dock {
-    max-width: calc(100vw - 112px) !important;
+  .ep-salon-dock-cluster {
+    max-width: calc(100vw - 112px);
+  }
+}
+/* MC-13 roster trigger: a small user-icon button to the right of the dock, outside the thread, with
+   the member count as an accent badge. Design-system ink border + hard offset shadow. */
+.ep-salon-roster-trigger {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--shadow);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ep-salon-roster-trigger:hover,
+.ep-salon-roster-trigger[aria-expanded='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+.ep-salon-roster-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--ink);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+/* MC-13 Comptoir roster panel — the user-icon button transforms into this list in place. Mobile-first
+   (<768px): an overlay drawer (bottom sheet) since there's no room beside the dock. On desktop (>=768px)
+   it grows IN FLOW inside the cluster slot, right of the dock and upward (bottom-aligned), so the list
+   opens exactly where the button was and never crowds the salon thread. */
+.ep-salon-roster-panel {
+  position: fixed;
+  z-index: 41;
+  left: 26px;
+  right: 26px;
+  bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  max-height: 60dvh;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 6px 6px 0 var(--shadow);
+  overflow: hidden;
+}
+@media (min-width: 768px) {
+  .ep-salon-roster-panel {
+    position: static;
+    z-index: auto;
+    inset: auto;
+    width: 240px;
+    max-height: 420px;
   }
 }
 /* MC-11 mention impact: an incoming @-mention of me flashes accent then settles to the

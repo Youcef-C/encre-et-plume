@@ -1,9 +1,10 @@
 import { BadRequestException, ForbiddenException, HttpException } from '@nestjs/common';
-import { SALON_ONLINE_LIST_MAX, SALON_SEND_RATE_LIMIT, MESSAGE_MAX_LENGTH } from '@encre-et-plume/shared';
+import { SALON_ONLINE_LIST_MAX, SALON_ROSTER_MAX, SALON_SEND_RATE_LIMIT, MESSAGE_MAX_LENGTH } from '@encre-et-plume/shared';
 import { SalonService } from './salon.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
 import type { MessagingGateway } from '../messaging/messaging.gateway';
+import type { BlocksService } from '../blocks/blocks.service';
 
 const SALON = {
   id: 'salon-conv',
@@ -33,7 +34,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     conversationParticipant: {
       findUnique: jest.fn().mockResolvedValue(null),
-      upsert: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({}),
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
@@ -44,6 +46,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     },
     account: {
       findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue({ id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' }),
     },
     $transaction: jest.fn().mockImplementation((ops: unknown[]) => Promise.resolve([
       MSG({ senderId: 'acc-1', sender: undefined }),
@@ -53,19 +56,26 @@ function makePrisma(over: Record<string, unknown> = {}) {
   };
 }
 
-function build(over: { prisma?: Record<string, unknown>; redis?: Record<string, unknown>; gateway?: Record<string, unknown> } = {}) {
+function build(over: { prisma?: Record<string, unknown>; redis?: Record<string, unknown>; gateway?: Record<string, unknown>; blocks?: Record<string, unknown> } = {}) {
   const prisma = over.prisma ?? makePrisma();
-  const redis = over.redis ?? { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(undefined) };
+  const redis = over.redis ?? {
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(undefined),
+  };
   const gateway = over.gateway ?? {
     emitSalonMessage: jest.fn(),
+    emitSalonMemberJoined: jest.fn(),
+    emitSalonMemberLeft: jest.fn(),
     getSalonOnlineAccountIds: jest.fn().mockResolvedValue([]),
   };
+  const blocks = over.blocks ?? { blockedPairIds: jest.fn().mockResolvedValue(new Set<string>()) };
   const service = new SalonService(
     prisma as unknown as PrismaService,
     redis as unknown as RedisService,
     gateway as unknown as MessagingGateway,
+    blocks as unknown as BlocksService,
   );
-  return { service, prisma, redis, gateway };
+  return { service, prisma, redis, gateway, blocks };
 }
 
 describe('SalonService.ensureSalon (seeded once, idempotent)', () => {
@@ -106,11 +116,28 @@ describe('SalonService.getSummary', () => {
     expect(countArgs.where.conversationId).toBe('salon-conv');
   });
 
-  it('onlineCount comes from the gateway salon room', async () => {
-    const gateway = { emitSalonMessage: jest.fn(), getSalonOnlineAccountIds: jest.fn().mockResolvedValue(['a', 'b', 'c']) };
-    const { service } = build({ gateway });
+  it('onlineCount = ALL visible salon members INCLUDING self (membership, not app-online sockets)', async () => {
+    const prisma = makePrisma();
+    // members query includes self now (no accountId:{not} filter)
+    (prisma.conversationParticipant as any).findMany.mockResolvedValue([{ accountId: 'acc-1' }, { accountId: 'acc-2' }, { accountId: 'acc-3' }]);
+    (prisma.account as any).findMany.mockResolvedValue([
+      { id: 'acc-1', displayName: 'Me', avatar: null, profileSlug: 'me' },
+      { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
+      { id: 'acc-3', displayName: 'Cara', avatar: null, profileSlug: 'cara' },
+    ]);
+    const { service } = build({ prisma });
     const summary = await service.getSummary('acc-1');
-    expect(summary.onlineCount).toBe(3);
+    expect(summary.onlineCount).toBe(3); // self counted
+  });
+
+  it('onlineCount excludes blocked members (per-viewer)', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).findMany.mockResolvedValue([{ accountId: 'acc-1' }, { accountId: 'blk' }]);
+    (prisma.account as any).findMany.mockResolvedValue([{ id: 'acc-1', displayName: 'Me', avatar: null, profileSlug: 'me' }]);
+    const blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set(['blk'])) };
+    const { service } = build({ prisma, blocks });
+    const summary = await service.getSummary('acc-1');
+    expect(summary.onlineCount).toBe(1); // only self visible
   });
 });
 
@@ -140,22 +167,77 @@ describe('SalonService.getMessages (public preview — no membership required)',
   });
 });
 
-describe('SalonService.join / leave (idempotent)', () => {
-  it('join upserts the participant row and returns isMember true', async () => {
+describe('SalonService.join / leave (idempotent + SYMMETRIC live broadcast)', () => {
+  const p2002 = () => Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+  const gw = () => ({ emitSalonMessage: jest.fn(), emitSalonMemberJoined: jest.fn(), emitSalonMemberLeft: jest.fn(), getSalonOnlineAccountIds: jest.fn().mockResolvedValue([]) });
+
+  it('join creates the participant row and returns isMember true', async () => {
     const { service, prisma } = build();
     const res = await service.join('acc-1');
     expect(res).toEqual({ isMember: true });
-    expect((prisma.conversationParticipant as any).upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { conversationId_accountId: { conversationId: 'salon-conv', accountId: 'acc-1' } } }),
+    expect((prisma.conversationParticipant as any).create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { conversationId: 'salon-conv', accountId: 'acc-1' } }),
     );
   });
 
-  it('leave deleteMany (0 rows fine) and returns isMember false', async () => {
+  it('join of a NEW member broadcasts salon:member:joined { user } (mutation-driven, like leave)', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).create.mockResolvedValue({}); // create SUCCEEDS = genuine new member
+    (prisma.account as any).findFirst.mockResolvedValue({ id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' });
+    const gateway = gw();
+    const { service } = build({ prisma, gateway });
+    await service.join('acc-1');
+    expect(gateway.emitSalonMemberJoined).toHaveBeenCalledWith({ user: { id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice' } });
+  });
+
+  it('join of an ALREADY-member (create → P2002) is an idempotent no-op: no broadcast, still isMember true', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).create.mockRejectedValue(p2002()); // unique-violation = already a member
+    const gateway = gw();
+    const { service } = build({ prisma, gateway });
+    const res = await service.join('acc-1');
+    expect(res).toEqual({ isMember: true });
+    expect(gateway.emitSalonMemberJoined).not.toHaveBeenCalled();
+  });
+
+  it('join rethrows a non-P2002 DB error (never swallows real failures)', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).create.mockRejectedValue(new Error('db down'));
+    const { service } = build({ prisma });
+    await expect(service.join('acc-1')).rejects.toThrow('db down');
+  });
+
+  it('SYMMETRY: a genuine join emits joined and a genuine leave emits left (same room audience)', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).create.mockResolvedValue({});
+    (prisma.conversationParticipant as any).deleteMany.mockResolvedValue({ count: 1 });
+    (prisma.account as any).findFirst.mockResolvedValue({ id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' });
+    const gateway = gw();
+    const { service } = build({ prisma, gateway });
+    await service.join('acc-1');
+    await service.leave('acc-1');
+    expect(gateway.emitSalonMemberJoined).toHaveBeenCalledTimes(1);
+    expect(gateway.emitSalonMemberLeft).toHaveBeenCalledTimes(1);
+    expect(gateway.emitSalonMemberLeft).toHaveBeenCalledWith({ userId: 'acc-1' });
+  });
+
+  it('leave deleteMany (0 rows fine) and returns isMember false; no broadcast when nothing was removed', async () => {
     const prisma = makePrisma();
     (prisma.conversationParticipant as any).deleteMany.mockResolvedValue({ count: 0 });
-    const { service } = build({ prisma });
+    const gateway = { emitSalonMessage: jest.fn(), emitSalonMemberJoined: jest.fn(), emitSalonMemberLeft: jest.fn(), getSalonOnlineAccountIds: jest.fn().mockResolvedValue([]) };
+    const { service } = build({ prisma, gateway });
     const res = await service.leave('never-joined');
     expect(res).toEqual({ isMember: false });
+    expect(gateway.emitSalonMemberLeft).not.toHaveBeenCalled();
+  });
+
+  it('leave of an actual member broadcasts salon:member:left with the userId', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).deleteMany.mockResolvedValue({ count: 1 });
+    const gateway = { emitSalonMessage: jest.fn(), emitSalonMemberJoined: jest.fn(), emitSalonMemberLeft: jest.fn(), getSalonOnlineAccountIds: jest.fn().mockResolvedValue([]) };
+    const { service } = build({ prisma, gateway });
+    await service.leave('acc-1');
+    expect(gateway.emitSalonMemberLeft).toHaveBeenCalledWith({ userId: 'acc-1' });
   });
 });
 
@@ -227,5 +309,80 @@ describe('SalonService.getOnlineUsers', () => {
     const queried = (prisma.account as any).findMany.mock.calls[0][0].where.id.in as string[];
     expect(queried.length).toBeLessThanOrEqual(SALON_ONLINE_LIST_MAX);
     expect(res.items).toContainEqual({ userId: 'u-0', name: 'Alice' });
+  });
+});
+
+describe('SalonService.getPresence (MC-13 — salon MEMBERSHIP roster, self INCLUDED)', () => {
+  const withMembers = (ids: string[]) => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).findMany.mockResolvedValue(ids.map((id) => ({ accountId: id })));
+    return prisma;
+  };
+
+  it('includes ALL members INCLUDING the caller (flagged self), count === items.length, sorted fr', async () => {
+    const prisma = withMembers(['acc-1', 'acc-2', 'acc-3']); // members query includes self
+    (prisma.account as any).findMany.mockResolvedValue([
+      { id: 'acc-3', displayName: 'Cara', avatar: 'http://cdn/c.webp', profileSlug: 'cara' },
+      { id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' }, // the caller
+      { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
+    ]);
+    const { service } = build({ prisma });
+    const res = await service.getPresence('acc-1');
+    // members query is NOT filtered by accountId:{not:viewer} anymore (self is a member too)
+    expect((prisma.conversationParticipant as any).findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { conversationId: 'salon-conv' } }),
+    );
+    expect(res.items).toEqual([
+      { id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice', self: true }, // caller flagged
+      { id: 'acc-2', name: 'Bob', avatarUrl: null, slug: 'bob', self: false },
+      { id: 'acc-3', name: 'Cara', avatarUrl: 'http://cdn/c.webp', slug: 'cara', self: false },
+    ]);
+    expect(res.count).toBe(res.items.length);
+    expect(res.count).toBe(3);
+  });
+
+  it('excludes ONLY blocked pairs (self stays); count === items.length', async () => {
+    const prisma = withMembers(['acc-1', 'acc-2', 'acc-blocked']);
+    (prisma.account as any).findMany.mockResolvedValue([
+      { id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' },
+      { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
+    ]);
+    const blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set(['acc-blocked'])) };
+    const { service } = build({ prisma, blocks });
+    const res = await service.getPresence('acc-1');
+    const queriedIds = (prisma.account as any).findMany.mock.calls[0][0].where.id.in as string[];
+    expect(queriedIds).not.toContain('acc-blocked');
+    expect(queriedIds).toContain('acc-1'); // self kept
+    expect(res.count).toBe(2);
+    expect(res.count).toBe(res.items.length);
+  });
+
+  it('caller alone in the salon → { count: 1, items: [<self>] }', async () => {
+    const prisma = withMembers(['acc-1']);
+    (prisma.account as any).findMany.mockResolvedValue([{ id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' }]);
+    const { service } = build({ prisma });
+    const res = await service.getPresence('acc-1');
+    expect(res).toEqual({ count: 1, items: [{ id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice', self: true }] });
+  });
+
+  it('no members at all → { count: 0, items: [] } (no account query)', async () => {
+    const prisma = withMembers([]);
+    const { service } = build({ prisma });
+    await expect(service.getPresence('acc-1')).resolves.toEqual({ count: 0, items: [] });
+    expect((prisma.account as any).findMany).not.toHaveBeenCalled();
+  });
+
+  it('caps BOTH count and items at SALON_ROSTER_MAX (count === items.length even when capped)', async () => {
+    const many = Array.from({ length: SALON_ROSTER_MAX + 20 }, (_, i) => `u-${i}`);
+    const prisma = withMembers(many);
+    // account query returns as many rows as it was asked for (capped ids)
+    (prisma.account as any).findMany.mockImplementation((args: any) =>
+      Promise.resolve((args.where.id.in as string[]).map((id) => ({ id, displayName: id, avatar: null, profileSlug: id }))),
+    );
+    const { service } = build({ prisma });
+    const res = await service.getPresence('acc-1');
+    expect(res.count).toBe(SALON_ROSTER_MAX);
+    expect(res.items).toHaveLength(SALON_ROSTER_MAX);
+    expect(res.count).toBe(res.items.length);
   });
 });

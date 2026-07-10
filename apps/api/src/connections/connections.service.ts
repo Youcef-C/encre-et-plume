@@ -318,6 +318,19 @@ export class ConnectionsService {
     }
   }
 
+  /**
+   * MC-13 reachable-user search: the light set of the viewer's accepted-connection accountIds
+   * (the other party of each accepted row, both directions). Deliberately NOT `listContacts` —
+   * that drags mutualProjects + presence the search doesn't need.
+   */
+  async connectedIds(viewerId: string): Promise<Set<string>> {
+    const rows = (await this.prisma.connection.findMany({
+      where: { status: 'accepted', OR: [{ requesterId: viewerId }, { addresseeId: viewerId }] },
+      select: { requesterId: true, addresseeId: true },
+    })) as unknown as { requesterId: string; addresseeId: string }[];
+    return new Set(rows.map((r) => (r.requesterId === viewerId ? r.addresseeId : r.requesterId)));
+  }
+
   /** D12: fold a connection pair row (viewer-relative) into a ConnectionState. */
   private classifyState(viewerId: string, c: { requesterId: string; status: string } | null): ConnectionState {
     if (!c) return 'none';

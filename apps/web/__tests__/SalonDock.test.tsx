@@ -22,21 +22,27 @@ function fire(event: string, payload?: unknown) {
   });
 }
 
-const messagingValue: { socket: unknown; connectionState: string } = {
+const openDm = vi.fn();
+const messagingValue: { socket: unknown; connectionState: string; openDm: typeof openDm } = {
   socket: mockSocket,
   connectionState: 'connected',
+  openDm,
 };
 vi.mock('../lib/messaging', () => ({ useMessaging: () => messagingValue }));
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 vi.mock('../lib/api', () => ({
   getSalon: vi.fn(),
   getSalonMessages: vi.fn(),
   getSalonOnline: vi.fn(),
+  getSalonPresence: vi.fn(),
   joinSalon: vi.fn(),
   leaveSalon: vi.fn(),
   sendSalonMessage: vi.fn(),
   markSalonRead: vi.fn(),
   getMyBlocks: vi.fn(),
+  createBlock: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -96,6 +102,7 @@ beforeEach(() => {
   vi.mocked(api.getMyBlocks).mockResolvedValue({ items: [] });
   vi.mocked(api.getSalonMessages).mockResolvedValue({ items: [], nextCursor: null });
   vi.mocked(api.getSalonOnline).mockResolvedValue({ items: [] });
+  vi.mocked(api.getSalonPresence).mockResolvedValue({ count: 0, items: [] });
   vi.mocked(api.joinSalon).mockResolvedValue({ isMember: true });
   vi.mocked(api.leaveSalon).mockResolvedValue({ isMember: false });
   vi.mocked(api.markSalonRead).mockResolvedValue({ unreadCount: 0 });
@@ -130,16 +137,33 @@ describe('SalonDock', () => {
 
   it('header is a button whose accessible name includes the unread count and toggles aria-expanded', async () => {
     renderDock();
-    const header = await screen.findByRole('button', { name: /Le Comptoir/ });
+    const header = await screen.findByRole('button', { name: /^Le Comptoir/ });
     expect(header).toHaveAttribute('aria-expanded', 'false');
     expect(header).toHaveAccessibleName(/aucun message non lu/i);
     await userEvent.click(header);
     expect(header).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('never signals room enter/leave — membership is driven by Rejoindre/Quitter, not the dock', async () => {
+    renderDock();
+    const header = await screen.findByRole('button', { name: /^Le Comptoir/ });
+    await userEvent.click(header); // expand
+    await userEvent.click(header); // collapse
+    // No client→server presence emit: the dock does not track room presence anymore.
+    expect(mockSocket.emit).not.toHaveBeenCalled();
+  });
+
+  it('renders the MC-13 roster user-icon trigger outside the thread, even while collapsed', async () => {
+    renderDock();
+    // The trigger is a sibling of the dock, always present — no need to expand the dock to reach it.
+    // Its name must NOT contain "Le Comptoir" (would collide with the dock header button in mc11).
+    const trigger = await screen.findByRole('button', { name: /Voir les membres présents/ });
+    expect(trigger).not.toHaveAccessibleName(/Le Comptoir/);
+  });
+
   it('shows the join panel for a non-member and reveals the composer after joining', async () => {
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(
       await screen.findByText(/Rejoignez/),
     ).toHaveTextContent('Rejoignez Le Comptoir pour discuter avec la communauté.');
@@ -155,7 +179,7 @@ describe('SalonDock', () => {
   it('a member can leave, returning to the join panel', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     await userEvent.click(await screen.findByRole('button', { name: /Quitter/ }));
     await waitFor(() => expect(api.leaveSalon).toHaveBeenCalled());
     expect(await screen.findByText(/Rejoignez/)).toBeInTheDocument();
@@ -164,7 +188,7 @@ describe('SalonDock', () => {
 
   it('shows the empty-feed line when there is no history', async () => {
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(await screen.findByText('Soyez le premier à écrire.')).toBeInTheDocument();
   });
 
@@ -174,7 +198,7 @@ describe('SalonDock', () => {
       nextCursor: null,
     });
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(await screen.findByText('Salut')).toBeInTheDocument();
     expect(screen.getByText('Yuki Moreau')).toBeInTheDocument();
   });
@@ -182,7 +206,7 @@ describe('SalonDock', () => {
   it('counts an incoming message as unread while collapsed and clears it on expand (member)', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    const header = await screen.findByRole('button', { name: /Le Comptoir/ });
+    const header = await screen.findByRole('button', { name: /^Le Comptoir/ });
     await fire(WS_EVENTS.salonMessage, { message: msg({ id: 'in1' }) });
     expect(await screen.findByText('1 nouveau·x')).toBeInTheDocument();
     expect(header).toHaveAttribute('data-unread', 'yes');
@@ -192,11 +216,86 @@ describe('SalonDock', () => {
     expect(screen.queryByText('1 nouveau·x')).not.toBeInTheDocument();
   });
 
-  it('updates the online count from a presence event', async () => {
+  it('updates the online count from ANOTHER user membership join/leave (WS, not self)', async () => {
     renderDock();
     await screen.findByText(/144 en ligne/);
-    await fire(WS_EVENTS.salonPresence, { onlineCount: 152 });
-    expect(await screen.findByText(/152 en ligne/)).toBeInTheDocument();
+    await fire(WS_EVENTS.salonMemberJoined, {
+      user: { id: 'u-new', name: 'Nouveau', avatarUrl: null, slug: 'nouveau' },
+    });
+    expect(await screen.findByText(/145 en ligne/)).toBeInTheDocument();
+    await fire(WS_EVENTS.salonMemberLeft, { userId: 'u-new' });
+    expect(await screen.findByText(/144 en ligne/)).toBeInTheDocument();
+  });
+
+  it('ignores the WS echo of my OWN join and leave (self is refetch-driven, not WS)', async () => {
+    renderDock();
+    await screen.findByText(/144 en ligne/);
+    await fire(WS_EVENTS.salonMemberJoined, { user: { id: 'me-1', name: 'Camille R.', avatarUrl: null, slug: 'camille-r' } });
+    await fire(WS_EVENTS.salonMemberLeft, { userId: 'me-1' });
+    // Neither self echo touches the header count.
+    expect(screen.getByText(/144 en ligne/)).toBeInTheDocument();
+  });
+
+  it('own Rejoindre refetches the summary and bumps the header count', async () => {
+    vi.mocked(api.getSalon)
+      .mockResolvedValueOnce(summary({ onlineCount: 144, isMember: false }))
+      .mockResolvedValue(summary({ onlineCount: 145, isMember: true }));
+    renderDock();
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
+    await userEvent.click(screen.getByRole('button', { name: '＋ Rejoindre le salon' }));
+    await waitFor(() => expect(api.joinSalon).toHaveBeenCalled());
+    expect(await screen.findByText(/145 en ligne/)).toBeInTheDocument();
+  });
+
+  it('B1: blocking a present member keeps the header count === the roster count, and a later leave of the blocked user does not double-decrement', async () => {
+    vi.mocked(api.getSalon)
+      .mockResolvedValueOnce(summary({ onlineCount: 3, isMember: true }))
+      .mockResolvedValue(summary({ onlineCount: 2, isMember: true }));
+    vi.mocked(api.getSalonPresence)
+      .mockResolvedValueOnce({
+        count: 3,
+        items: [
+          { id: 'me-1', name: 'Camille R.', avatarUrl: null, slug: 'camille-r', self: true },
+          { id: 'u-lea', name: 'Léa B.', avatarUrl: null, slug: 'lea-b', self: false },
+          { id: 'u-mika', name: 'Mika', avatarUrl: null, slug: 'mika', self: false },
+        ],
+      })
+      .mockResolvedValue({
+        count: 2,
+        items: [
+          { id: 'me-1', name: 'Camille R.', avatarUrl: null, slug: 'camille-r', self: true },
+          { id: 'u-mika', name: 'Mika', avatarUrl: null, slug: 'mika', self: false },
+        ],
+      });
+    renderDock();
+    await screen.findByText(/3 en ligne/);
+
+    // Open the roster and block a present member.
+    await userEvent.click(await screen.findByRole('button', { name: /Voir les membres présents/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions sur Léa B.' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Bloquer Léa B.' }));
+    const dialog = await screen.findByRole('dialog', { name: /Bloquer Léa B\./ });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Bloquer' }));
+
+    // Invariant: dock header AND roster header both settle at 2 (N−1) — two elements, both "2 en ligne".
+    await waitFor(() => expect(screen.getByText(/2 en ligne dans Le Comptoir/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText(/2 en ligne/)).toHaveLength(2));
+    expect(screen.queryByText(/3 en ligne/)).not.toBeInTheDocument();
+
+    // A later member:left for the already-blocked user must NOT decrement either count again.
+    await fire(WS_EVENTS.salonMemberLeft, { userId: 'u-lea' });
+    expect(screen.getAllByText(/2 en ligne/)).toHaveLength(2);
+  });
+
+  it('own Quitter refetches the summary and drops the header count', async () => {
+    vi.mocked(api.getSalon)
+      .mockResolvedValueOnce(summary({ onlineCount: 144, isMember: true }))
+      .mockResolvedValue(summary({ onlineCount: 143, isMember: false }));
+    renderDock();
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Quitter/ }));
+    await waitFor(() => expect(api.leaveSalon).toHaveBeenCalled());
+    expect(await screen.findByText(/143 en ligne/)).toBeInTheDocument();
   });
 
   it('filters out messages from blocked and muted users (MC-10)', async () => {
@@ -215,7 +314,7 @@ describe('SalonDock', () => {
       nextCursor: null,
     });
     renderDock();
-    const header = await screen.findByRole('button', { name: /Le Comptoir/ });
+    const header = await screen.findByRole('button', { name: /^Le Comptoir/ });
     await userEvent.click(header);
     expect(await screen.findByText('visible')).toBeInTheDocument();
     expect(screen.queryByText('caché-bloque')).not.toBeInTheDocument();
@@ -236,7 +335,7 @@ describe('SalonDock', () => {
       ],
     });
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const input = await screen.findByPlaceholderText('Votre message…');
     await userEvent.type(input, '@');
     await waitFor(() => expect(api.getSalonOnline).toHaveBeenCalled());
@@ -252,7 +351,7 @@ describe('SalonDock', () => {
     let resolveSend!: (v: SalonMessageDto) => void;
     vi.mocked(api.sendSalonMessage).mockReturnValue(new Promise((r) => { resolveSend = r; }));
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const input = await screen.findByPlaceholderText('Votre message…');
     await userEvent.type(input, 'unique-echo-body{Enter}');
     await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('unique-echo-body'));
@@ -271,7 +370,7 @@ describe('SalonDock', () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     vi.mocked(api.sendSalonMessage).mockRejectedValueOnce({ message: 'Échec' });
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const input = await screen.findByPlaceholderText('Votre message…');
     await userEvent.type(input, 'coucou{Enter}');
     await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('coucou'));
@@ -286,7 +385,7 @@ describe('SalonDock', () => {
   it('(a) flashes an incoming @-mention of me in the feed', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     await screen.findByText('Soyez le premier à écrire.');
     await fire(WS_EVENTS.salonMessage, {
       message: msg({ id: 'men1', senderId: 'u-yuki', senderName: 'Yuki', body: 'hey @Camille R. ça va ?' }),
@@ -298,7 +397,7 @@ describe('SalonDock', () => {
   it('(a2) does not flash my own message or a non-mention', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     await screen.findByText('Soyez le premier à écrire.');
     // my own message that literally @-mentions me → not a mention of me
     await fire(WS_EVENTS.salonMessage, {
@@ -315,7 +414,7 @@ describe('SalonDock', () => {
   it('(b) shows a jump-to-mention pill when scrolled up and scrolls on click', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const feed = await screen.findByRole('log');
     Object.defineProperty(feed, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(feed, 'clientHeight', { value: 280, configurable: true });
@@ -333,7 +432,7 @@ describe('SalonDock', () => {
   it('(c) shows a distinct mention indicator on the collapsed header and clears on open', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    const header = await screen.findByRole('button', { name: /Le Comptoir/ });
+    const header = await screen.findByRole('button', { name: /^Le Comptoir/ });
     await fire(WS_EVENTS.salonMessage, {
       message: msg({ id: 'men3', senderId: 'u-yuki', body: 'coucou @Camille R.' }),
     });
@@ -350,7 +449,7 @@ describe('SalonDock', () => {
       nextCursor: null,
     });
     renderDock();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const feed = await screen.findByRole('log');
     // Pinned to bottom by default → no scroll-to-newest affordance.
     expect(screen.queryByRole('button', { name: /Aller au plus récent/ })).not.toBeInTheDocument();
@@ -371,7 +470,7 @@ describe('SalonDock', () => {
     // Even a joined member loses "· Connecté" while the realtime link is down.
     await screen.findByText(/144 en ligne/);
     expect(screen.queryByText(/· Connecté/)).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: /Le Comptoir/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(await screen.findByText('Reconnexion…')).toBeInTheDocument();
   });
 });

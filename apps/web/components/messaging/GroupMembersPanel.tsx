@@ -9,10 +9,9 @@
 // optimistic in the provider (rollback on error) and surface a role="alert" inline error here.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { ContactItem, ConversationItem } from '@encre-et-plume/shared';
-import { getContacts } from '../../lib/api';
+import type { ReachableUser, ConversationItem } from '@encre-et-plume/shared';
 import { useMessaging } from '../../lib/messaging';
-import OnBrandSelect from '../form/OnBrandSelect';
+import ReachableUserSearch from './ReachableUserSearch';
 import { ChevronLeftIcon } from '../icons';
 
 const ERROR_TEXT = 'Une erreur est survenue. Veuillez réessayer.';
@@ -133,40 +132,19 @@ export default function GroupMembersPanel({
   const { addParticipant, removeParticipant, leaveGroup } = useMessaging();
   const isCreator = conv.createdBy != null && conv.createdBy === myId;
 
-  const [contacts, setContacts] = useState<ContactItem[]>([]);
-  const [selectedToAdd, setSelectedToAdd] = useState('');
   const [busy, setBusy] = useState<null | 'add' | 'leave' | string>(null); // string = kicking that userId
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
-  // Contacts for "Ajouter" (creator only). Reuses the MC-8 source, same as GroupCreateModal.
-  useEffect(() => {
-    if (!isCreator) return;
-    let cancelled = false;
-    getContacts()
-      .then((res) => !cancelled && setContacts(res.items))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isCreator]);
+  const memberIds = useMemo(() => conv.participants.map((p) => p.userId), [conv.participants]);
 
-  const memberIds = useMemo(() => new Set(conv.participants.map((p) => p.userId)), [conv.participants]);
-  const addOptions = useMemo(() => contacts.filter((c) => !memberIds.has(c.userId)), [contacts, memberIds]);
-
-  async function handleAdd() {
-    const contact = addOptions.find((c) => c.userId === selectedToAdd);
-    if (!contact || busy) return;
+  // MC-13 direct add: a picked reachable user (contact or not) goes straight into the group.
+  async function handlePick(u: ReachableUser) {
+    if (busy) return;
     setError(null);
     setBusy('add');
     try {
-      await addParticipant(conv.id, {
-        userId: contact.userId,
-        slug: contact.slug,
-        name: contact.name,
-        avatarUrl: contact.avatarUrl,
-      });
-      setSelectedToAdd('');
+      await addParticipant(conv.id, { userId: u.id, slug: u.slug, name: u.name, avatarUrl: u.avatarUrl });
     } catch {
       setError(ERROR_TEXT);
     } finally {
@@ -227,36 +205,16 @@ export default function GroupMembersPanel({
           </p>
         )}
 
-        {/* Ajouter — creator only */}
+        {/* Ajouter — creator only. MC-13: reachable-user search, direct add on pick. */}
         {isCreator && (
           <div style={{ padding: '12px 13px', borderBottom: '2px solid var(--border)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 6 }}>Ajouter un membre</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <OnBrandSelect
-                  value={selectedToAdd}
-                  onChange={(e) => setSelectedToAdd(e.target.value)}
-                  aria-label="Ajouter un membre"
-                  searchable
-                  searchPlaceholder="Rechercher un contact…"
-                >
-                  <option value="">Choisir un contact…</option>
-                  {addOptions.map((c) => (
-                    <option key={c.userId} value={c.userId}>
-                      {c.name}
-                    </option>
-                  ))}
-                </OnBrandSelect>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleAdd()}
-                disabled={!selectedToAdd || busy === 'add'}
-                style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '0 14px', minHeight: 44, cursor: !selectedToAdd || busy === 'add' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: !selectedToAdd || busy === 'add' ? 0.55 : 1, whiteSpace: 'nowrap' }}
-              >
-                {busy === 'add' ? 'Ajout…' : 'Ajouter'}
-              </button>
-            </div>
+            <ReachableUserSearch label="Ajouter un membre" excludeIds={memberIds} onPick={(u) => void handlePick(u)} />
+            {busy === 'add' && (
+              <p role="status" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', margin: '8px 0 0' }}>
+                Ajout…
+              </p>
+            )}
           </div>
         )}
 

@@ -88,9 +88,12 @@ test.describe('MC-12 — standalone group lifecycle (MC12_A creator ⇄ B/C/D)',
       const modal = pageA.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
       await expect(modal).toBeVisible({ timeout: 10_000 });
       await modal.getByLabel('Nom du groupe').fill(groupName);
-      await modal.getByRole('button', { name: /^Contacts/ }).click();
-      await modal.getByRole('checkbox', { name: 'E2E MC12_B' }).check();
-      await modal.getByRole('checkbox', { name: 'E2E MC12_C' }).check();
+      // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
+      const createSearch = modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' });
+      await createSearch.fill('MC12_B');
+      await modal.getByRole('option', { name: /MC12_B/ }).click();
+      await createSearch.fill('MC12_C');
+      await modal.getByRole('option', { name: /MC12_C/ }).click();
       await modal.getByRole('button', { name: 'Créer le groupe' }).click();
       await expect(modal).toHaveCount(0);
       await expect(panel(pageA).getByText('Démarrez la conversation')).toBeVisible({ timeout: 10_000 });
@@ -137,12 +140,12 @@ test.describe('MC-12 — standalone group lifecycle (MC12_A creator ⇄ B/C/D)',
       await fab(pageC).click();
       await expect(rowByName(pageC, groupName)).toBeVisible({ timeout: 10_000 });
 
-      // ── MC12-E2: creator adds D via "Ajouter" (OnBrandSelect over MC-8 contacts) ──
+      // ── MC12-E2: creator adds D via the MC-13 reachable-user search (direct add, no submit step) ──
       const comboA = panel(pageA).getByRole('combobox', { name: 'Ajouter un membre' });
-      await comboA.click();
-      await expect(panel(pageA).getByRole('option', { name: 'E2E MC12_B' })).toHaveCount(0); // excludes members
-      await panel(pageA).getByRole('option', { name: 'E2E MC12_D' }).click();
-      await panel(pageA).getByRole('button', { name: 'Ajouter' }).click();
+      await comboA.fill('MC12_B'); // already a member → excluded from suggestions
+      await expect(panel(pageA).getByRole('option', { name: /MC12_B/ })).toHaveCount(0);
+      await comboA.fill('MC12_D');
+      await panel(pageA).getByRole('option', { name: /MC12_D/ }).click();
       await expect(panel(pageA).getByText('4 membres')).toBeVisible({ timeout: 10_000 });
       await expect(panel(pageA).getByRole('link', { name: 'Voir le profil de E2E MC12_D' })).toBeVisible();
 
@@ -326,8 +329,9 @@ test.describe('MC-12 — responsive', () => {
     await panel(page).getByRole('button', { name: '＋ Groupe' }).click();
     const modal = page.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
     await modal.getByLabel('Nom du groupe').fill(groupName);
-    await modal.getByRole('button', { name: /^Contacts/ }).click();
-    await modal.getByRole('checkbox', { name: 'E2E MC12_B' }).check();
+    // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
+    await modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' }).fill('MC12_B');
+    await modal.getByRole('option', { name: /MC12_B/ }).click();
     await modal.getByRole('button', { name: 'Créer le groupe' }).click();
     await expect(modal).toHaveCount(0);
     await panel(page).getByRole('button', { name: 'Gérer le groupe' }).click();

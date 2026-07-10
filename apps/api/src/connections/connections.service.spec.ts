@@ -488,3 +488,27 @@ describe('ConnectionsService.listRequests', () => {
     });
   });
 });
+
+describe('ConnectionsService.connectedIds (MC-13 — light accepted-pair set)', () => {
+  it('maps each accepted row to the OTHER id, both directions', async () => {
+    const prisma = makePrisma();
+    prisma.connection.findMany.mockResolvedValue([
+      { requesterId: 'viewer', addresseeId: 'acc-b' }, // viewer requested b → b
+      { requesterId: 'acc-c', addresseeId: 'viewer' }, // c requested viewer → c
+    ]);
+    const { service } = build(prisma);
+    const ids = await service.connectedIds('viewer');
+    expect(prisma.connection.findMany).toHaveBeenCalledWith({
+      where: { status: 'accepted', OR: [{ requesterId: 'viewer' }, { addresseeId: 'viewer' }] },
+      select: { requesterId: true, addresseeId: true },
+    });
+    expect([...ids].sort()).toEqual(['acc-b', 'acc-c']);
+  });
+
+  it('returns an empty set with no accepted connections', async () => {
+    const prisma = makePrisma();
+    prisma.connection.findMany.mockResolvedValue([]);
+    const { service } = build(prisma);
+    expect((await service.connectedIds('viewer')).size).toBe(0);
+  });
+});

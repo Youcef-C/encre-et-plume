@@ -35,6 +35,7 @@ vi.mock('../lib/api', () => ({
   getMediaSignedUrl: vi.fn(),
   getPresence: vi.fn(),
   getContacts: vi.fn(),
+  searchAccounts: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -138,6 +139,12 @@ beforeEach(() => {
     items: [
       { userId: 'u-yuki', slug: 'yuki', name: 'Yuki Moreau', avatarUrl: null, role: null, city: null, mutualProjects: 0, presence: { online: false, lastSeen: null } },
       { userId: 'u-theo', slug: 'theo-l', name: 'Théo Lin', avatarUrl: null, role: null, city: null, mutualProjects: 0, presence: { online: false, lastSeen: null } },
+    ],
+  });
+  (api.searchAccounts as ReturnType<typeof vi.fn>).mockResolvedValue({
+    items: [
+      { id: 'u-yuki', name: 'Yuki Moreau', avatarUrl: null, slug: 'yuki' },
+      { id: 'u-theo', name: 'Théo Lin', avatarUrl: null, slug: 'theo-l' },
     ],
   });
 });
@@ -250,19 +257,19 @@ describe('GroupMembersPanel — kick', () => {
   });
 });
 
-describe('GroupMembersPanel — add', () => {
-  it('lists only non-members and calls addGroupParticipant on submit', async () => {
+describe('GroupMembersPanel — add (MC-13 reachable-user search, direct add)', () => {
+  it('search-picks a reachable non-member and adds them directly', async () => {
     (api.addGroupParticipant as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...ownedGroup,
       participants: [...members, { userId: 'u-theo', slug: 'theo-l', name: 'Théo Lin', avatarUrl: null }],
     });
     await openPanel();
     const combo = await screen.findByRole('combobox', { name: 'Ajouter un membre' });
-    await userEvent.click(combo);
-    // Yuki is already a member → excluded from the options; Théo is offered.
-    expect(screen.queryByRole('option', { name: 'Yuki Moreau' })).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('option', { name: 'Théo Lin' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Ajouter' }));
+    await userEvent.type(combo, 'th');
+    // Yuki is already a member → excluded from the suggestions; Théo is offered.
+    expect(screen.queryByRole('option', { name: /Yuki Moreau/ })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('option', { name: /Théo Lin/ }));
+    // Direct add — no separate "Ajouter" submit button.
     await waitFor(() => expect(api.addGroupParticipant).toHaveBeenCalledWith('g1', 'u-theo'));
   });
 });

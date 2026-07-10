@@ -28,6 +28,7 @@ describe('AccountsController', () => {
     deleteAvatar: jest.Mock;
     setBirthdate: jest.Mock;
     getBirthdate: jest.Mock;
+    search: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -38,6 +39,7 @@ describe('AccountsController', () => {
       deleteAvatar: jest.fn(),
       setBirthdate: jest.fn(),
       getBirthdate: jest.fn(),
+      search: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -145,6 +147,23 @@ describe('AccountsController', () => {
       service.setBirthdate.mockRejectedValue(new NotFoundException());
       const fakeReq = { accountId: 'cuid-1' } as AuthRequest;
       await expect(controller.setBirthdate(fakeReq, { birthdate: '1990-01-01' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('MC-13: GET accounts/search', () => {
+    it('delegates to search with the session accountId and the q query param', async () => {
+      service.search.mockResolvedValue({ items: [] });
+      const fakeReq = { accountId: 'acc-caller' } as AuthRequest;
+      const result = await controller.search(fakeReq, 'yuki');
+      expect(service.search).toHaveBeenCalledWith('acc-caller', 'yuki');
+      expect(result).toEqual({ items: [] });
+    });
+
+    it('never trusts a client accountId — always the session one', async () => {
+      service.search.mockResolvedValue({ items: [] });
+      const fakeReq = { accountId: 'acc-caller' } as AuthRequest;
+      await controller.search(fakeReq, undefined);
+      expect(service.search).toHaveBeenCalledWith('acc-caller', undefined);
     });
   });
 

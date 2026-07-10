@@ -1,10 +1,13 @@
 import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import type {
   MarkReadResponse,
+  ReachableUser,
   SalonMembershipResponse,
   SalonMessageDto,
   SalonMessagesPage,
   SalonOnlineResponse,
+  SalonPresenceResponse,
+  SalonRosterItem,
   SalonSendRequest,
   SalonSummary,
 } from '@encre-et-plume/shared';
@@ -14,11 +17,13 @@ import {
   SALON_MESSAGES_PAGE_SIZE,
   SALON_NAME,
   SALON_ONLINE_LIST_MAX,
+  SALON_ROSTER_MAX,
   SALON_SEND_RATE_LIMIT,
 } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { MessagingGateway } from '../messaging/messaging.gateway';
+import { BlocksService } from '../blocks/blocks.service';
 
 interface PageOpts {
   cursor?: string;
@@ -49,6 +54,7 @@ export class SalonService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly gateway: MessagingGateway,
+    private readonly blocks: BlocksService,
   ) {}
 
   // Reuse the existing unique dmKey column as the singleton key — DB-enforced, no new migration.
@@ -76,7 +82,9 @@ export class SalonService {
           },
         })
       : 0;
-    const onlineCount = (await this.gateway.getSalonOnlineAccountIds()).length;
+    // MC-13: "en ligne" = salon MEMBERSHIP (joined until they leave, self INCLUDED), NOT app-online
+    // sockets. Derived from the SAME visibleMembers set as the roster → header === roster, always.
+    const onlineCount = (await this.visibleMembers(salon.id, accountId)).length;
     return {
       conversationId: salon.id,
       name: salon.name ?? SALON_NAME,
@@ -104,19 +112,34 @@ export class SalonService {
   async join(accountId: string): Promise<SalonMembershipResponse> {
     const salon = await this.ensureSalon();
     // AD-6 seam: ban check lands with AD-6.
-    await this.prisma.conversationParticipant.upsert({
-      where: { conversationId_accountId: { conversationId: salon.id, accountId } },
-      update: {},
-      create: { conversationId: salon.id, accountId },
-    });
+    // MC-13: symmetric with leave() — the DB MUTATION drives the broadcast (not a separate pre-read).
+    // A create that SUCCEEDS is a genuine new membership → broadcast salon:member:joined; a unique
+    // violation (P2002) means the account was already a member → idempotent no-op (already in the
+    // roster). This removes the old findUnique→upsert TOCTOU that could diverge from the actual write
+    // and silently skip the join broadcast while leave (deleteMany.count) always fired.
+    let created = false;
+    try {
+      await this.prisma.conversationParticipant.create({
+        data: { conversationId: salon.id, accountId },
+      });
+      created = true;
+    } catch (e) {
+      if (!isP2002(e)) throw e; // already a member → idempotent; anything else is a real failure
+    }
+    if (created) {
+      const user = await this.loadReachableUser(accountId);
+      if (user) this.gateway.emitSalonMemberJoined({ user });
+    }
     return { isMember: true };
   }
 
   async leave(accountId: string): Promise<SalonMembershipResponse> {
     const salon = await this.ensureSalon();
-    await this.prisma.conversationParticipant.deleteMany({
+    const res = await this.prisma.conversationParticipant.deleteMany({
       where: { conversationId: salon.id, accountId },
     });
+    // MC-13: only broadcast when a membership row was actually removed.
+    if (res.count > 0) this.gateway.emitSalonMemberLeft({ userId: accountId });
     return { isMember: false };
   }
 
@@ -172,6 +195,58 @@ export class SalonService {
     return { items: accounts.map((a) => ({ userId: a.id, name: a.displayName })) };
   }
 
+  /**
+   * MC-13: the Comptoir roster = salon MEMBERSHIP (accounts that JOINED via "Rejoindre le salon" until
+   * they "Quitter"), NOT WS/app-online. Persists across widget-collapse and disconnect. Returns ALL
+   * members the viewer can see (self INCLUDED, flagged; ONLY blocked pairs excluded). `count` is exactly
+   * `items.length` — header (summary.onlineCount) and roster read the SAME `visibleMembers` set, so the
+   * two numbers are always identical. Caller alone → { count: 1, items: [<self>] }.
+   */
+  async getPresence(viewerId: string): Promise<SalonPresenceResponse> {
+    const salon = await this.ensureSalon();
+    const rows = await this.visibleMembers(salon.id, viewerId);
+    const items: SalonRosterItem[] = rows
+      .map((a) => ({ id: a.id, name: a.displayName, avatarUrl: a.avatar, slug: a.profileSlug, self: a.id === viewerId }))
+      .sort((x, y) => x.name.localeCompare(y.name, 'fr'));
+    return { count: items.length, items };
+  }
+
+  /**
+   * Resolved live accounts that are salon members the viewer can see: ALL members (self INCLUDED) minus
+   * the viewer's blocked pairs, capped at SALON_ROSTER_MAX. The single source both getPresence (roster)
+   * and getSummary (header onlineCount) derive their number from, so header === roster always.
+   */
+  private async visibleMembers(
+    salonId: string,
+    viewerId: string,
+  ): Promise<{ id: string; displayName: string; avatar: string | null; profileSlug: string }[]> {
+    const [members, blocked] = await Promise.all([
+      this.prisma.conversationParticipant.findMany({
+        where: { conversationId: salonId },
+        select: { accountId: true },
+      }) as Promise<{ accountId: string }[]>,
+      this.blocks.blockedPairIds(viewerId), // never contains viewerId (can't block yourself) → self kept
+    ]);
+    const ids = members.map((m) => m.accountId).filter((id) => !blocked.has(id));
+    if (ids.length === 0) return [];
+    const rows = (await this.prisma.account.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, displayName: true, avatar: true, profileSlug: true },
+      orderBy: { displayName: 'asc' },
+    })) as { id: string; displayName: string; avatar: string | null; profileSlug: string }[];
+    return rows.slice(0, SALON_ROSTER_MAX); // cap AFTER resolving → count === items.length, bounded response
+  }
+
+  /** Map an account to the shared ReachableUser shape for a join broadcast. */
+  private async loadReachableUser(accountId: string): Promise<ReachableUser | null> {
+    const acc = (await this.prisma.account.findFirst({
+      where: { id: accountId, deletedAt: null },
+      select: { id: true, displayName: true, avatar: true, profileSlug: true },
+    })) as { id: string; displayName: string; avatar: string | null; profileSlug: string } | null;
+    if (!acc) return null;
+    return { id: acc.id, name: acc.displayName, avatarUrl: acc.avatar, slug: acc.profileSlug };
+  }
+
   private async enforceSendRateLimit(accountId: string): Promise<void> {
     // Never honor the escape hatch in production.
     if (process.env['DISABLE_RATE_LIMIT'] === 'true' && process.env['NODE_ENV'] !== 'production') return;
@@ -182,6 +257,12 @@ export class SalonService {
       throw new HttpException('Vous envoyez des messages trop vite. Réessayez dans un instant.', HttpStatus.TOO_MANY_REQUESTS);
     }
   }
+}
+
+// ponytail: same 1-liner as blocks/connections/reactions services — a shared util would tie 4 modules
+// together for one predicate.
+function isP2002(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
 }
 
 function clampLimit(raw: number | undefined, def: number, max: number): number {

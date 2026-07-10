@@ -156,6 +156,20 @@ export class BlocksService {
   }
 
   /**
+   * MC-13 roster/search filter: the set of accountIds in a `block` pair with the viewer, BOTH
+   * directions. Block-kind-only — mutes must NOT hide people from the roster/search (a mute is
+   * read-filtering for content, not a "can't see this person" door). The first query of
+   * `hiddenContent` without the work/illustration follow-ups.
+   */
+  async blockedPairIds(viewerId: string): Promise<Set<string>> {
+    const rows = (await this.prisma.userBlock.findMany({
+      where: { kind: 'block', OR: [{ blockerId: viewerId }, { blockedId: viewerId }] },
+      select: { blockerId: true, blockedId: true },
+    })) as unknown as { blockerId: string; blockedId: string }[];
+    return new Set(rows.map((r) => (r.blockerId === viewerId ? r.blockedId : r.blockerId)));
+  }
+
+  /**
    * Directional block flags for the profile read (R2-B1, kind=`block` only). Both false when no block
    * row joins the pair. Consumed by ProfilesService for viewerHasBlocked / blockedByTarget.
    */

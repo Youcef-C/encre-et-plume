@@ -44,3 +44,36 @@ export const SALON_SEND_RATE_LIMIT = { max: 10, windowSec: 30 } as const; // flo
 export const SALON_MESSAGES_PAGE_SIZE = 30;
 export const SALON_MESSAGES_PAGE_MAX = 100;
 export const SALON_ONLINE_LIST_MAX = 50;
+
+// ── MC-13: Comptoir room-presence roster + reachable-user search ──────────────
+
+// One user shape shared by the Comptoir roster (GET /salon/presence) and the
+// reachable-user search (GET /accounts/search). Distinct from SalonOnlineUser
+// (MC-11 app-online) — this is "joined the salon" / "reachable to DM".
+export interface ReachableUser {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  slug: string;
+}
+
+// A roster row = a ReachableUser plus a `self` flag. The caller's own row is included and flagged so
+// the FE renders it as "· vous" with no actions. (search keeps the plain ReachableUser — no self.)
+export interface SalonRosterItem extends ReachableUser {
+  self: boolean;
+}
+
+export interface SalonPresenceResponse {
+  count: number; // === items.length — ALL salon members the viewer can see (self INCLUDED, only blocked excluded)
+  items: SalonRosterItem[]; // the "N en ligne dans Le Comptoir" list; caller alone → [<self>], count 1
+}
+
+export const SALON_ROSTER_MAX = 100; // ponytail: cap applied to BOTH count + roster identically; paginate when a salon exceeds this
+
+// MC-13: reachable-user search response (reuses ReachableUser). Lives here beside
+// ReachableUser (ponytail: no new shared file for one interface + one const).
+export interface AccountSearchResponse {
+  items: ReachableUser[];
+}
+
+export const ACCOUNT_SEARCH_MAX = 20;
