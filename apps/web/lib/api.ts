@@ -481,6 +481,14 @@ export const updateCall = (id: string, body: UpdateCallRequest): Promise<CallCar
 export const deleteCall = (id: string): Promise<void> =>
   request<void>(`/calls/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+// MC-4 amendment: owner ends a call early — PATCH /calls/:id { status: 'closed' }. Distinct from delete
+// (delete stays blocked once an applicant is accepted; close-early is always available to the owner).
+export const closeCall = (id: string): Promise<CallCard> =>
+  request<CallCard>(`/calls/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'closed' }),
+  });
+
 // ─── Apply to a call "Candidater" (MC-5) ──────────────────────────────────────
 import type { ApplyToCallRequest, ApplicationDto } from '@encre-et-plume/shared';
 
@@ -491,7 +499,7 @@ export const applyToCall = (callId: string, body: ApplyToCallRequest): Promise<A
   });
 
 // ─── Mes candidatures (MC-6) ──────────────────────────────────────────────────
-import type { MyApplicationsQuery, MyApplicationsResponse } from '@encre-et-plume/shared';
+import type { MyApplicationsQuery, MyApplicationsResponse, MyApplicationRow } from '@encre-et-plume/shared';
 
 export const getMyApplications = (query: MyApplicationsQuery = {}): Promise<MyApplicationsResponse> => {
   const q = new URLSearchParams();
@@ -500,9 +508,23 @@ export const getMyApplications = (query: MyApplicationsQuery = {}): Promise<MyAp
   return request<MyApplicationsResponse>(`/me/applications${q.toString() ? `?${q.toString()}` : ''}`);
 };
 
-// Withdraw a pending application (204). Owner extension — DELETE /me/applications/:id.
+// Withdraw a pending OR accepted application (204). Owner extension — DELETE /me/applications/:id.
 export const withdrawApplication = (id: string): Promise<void> =>
   request<void>(`/me/applications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// MC-6 amendment — view + edit the caller's own application.
+import type { EditApplicationRequest } from '@encre-et-plume/shared';
+
+// GET /me/applications/:id — the caller's application detail (message + all samples/documents).
+export const getMyApplication = (id: string): Promise<MyApplicationRow> =>
+  request<MyApplicationRow>(`/me/applications/${encodeURIComponent(id)}`);
+
+// PATCH /me/applications/:id — edit message + samples (PENDING only server-side → 409 otherwise).
+export const updateMyApplication = (id: string, body: EditApplicationRequest): Promise<MyApplicationRow> =>
+  request<MyApplicationRow>(`/me/applications/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 
 // ─── Candidatures reçues "Mes appels à projets" (MC-7) ────────────────────────
 import type { ReceivedApplicationsResponse } from '@encre-et-plume/shared';
@@ -518,6 +540,11 @@ export const decideApplication = (
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+
+// MC-7 amendment: owner removes an applicant regardless of status (deletes the row; frees an accepted
+// seat). Owner resolved server-side from call.authorId; non-owner → 404. Distinct from "Refuser".
+export const removeApplicant = (id: string): Promise<void> =>
+  request<void>(`/applications/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 // ─── Match suggestions (MC-2) ─────────────────────────────────────────────────
 import type { MatchSuggestionsResponse } from '@encre-et-plume/shared';

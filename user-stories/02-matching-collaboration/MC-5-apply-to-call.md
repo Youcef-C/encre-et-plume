@@ -29,3 +29,7 @@
 ## Notes
 - Explicit: the "Candidater" action and the wireframe annotation "candidater avec un échantillon" (sample attachment required).
 - Inferred: the full application form layout, duplicate/closed-call guards, and message field — the form itself was not fully specified.
+
+## Amendment (bug fix 2026-07-10) — Send enabled at max samples
+- **Bug**: with the maximum number of samples selected (`APPLICATION_MAX_SAMPLES`), the "Envoyer"/submit button is disabled, so a full application can't be sent.
+- **Requirement**: the submit is enabled whenever the sample count is **1..APPLICATION_MAX_SAMPLES** (≥1 required, ≤MAX allowed). Only *exceeding* MAX (not reaching it) blocks adding more; reaching MAX must NOT disable submit. Add/fix the count guard + a test at exactly MAX. Approved change — grade against this.

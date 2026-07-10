@@ -382,7 +382,18 @@ export default function ProfilePageClient({ slug }: Props) {
     if (!editData) return;
     setSaving(true);
     try {
-      const updated = await updateMyProfile(editData);
+      // Never resubmit a targetRole the server can't accept: it's hidden when seeking is inactive,
+      // and a stored legacy value (e.g. 'dessinateur' vs the current 'dessinateur·rice') would fail
+      // DTO validation and 400 the WHOLE PATCH — silently dropping every field, incl. creatorRoles.
+      const { targetRole } = editData.seeking;
+      const safeTargetRole =
+        editData.seeking.active && SEEKING_TARGET_ROLES.includes(targetRole as SeekingTargetRole)
+          ? targetRole
+          : null;
+      const updated = await updateMyProfile({
+        ...editData,
+        seeking: { ...editData.seeking, targetRole: safeTargetRole },
+      });
       setProfile(updated);
       setIsEditing(false);
       setEditData(null);

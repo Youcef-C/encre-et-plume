@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CREATOR_ROLES, type CallCard, type CallDetail, type ApiError } from '@encre-et-plume/shared';
-import { getCallDetail, deleteCall } from '../../lib/api';
+import { getCallDetail, deleteCall, closeCall } from '../../lib/api';
 import { roleGateHint, ROLE_LABEL } from '../../lib/calls';
 import { formatBytes } from '../../lib/format';
 import { XIcon } from '../icons';
@@ -104,6 +104,10 @@ export default function CallDetailModal({
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // MC-4 amendment: end-a-call-early confirm/pending/error, separate from delete.
+  const [closeConfirming, setCloseConfirming] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   async function handleDelete() {
     setDeleting(true);
@@ -115,6 +119,23 @@ export default function CallDetailModal({
     } catch (err) {
       setDeleting(false);
       setDeleteError((err as ApiError).message ?? 'Suppression impossible.');
+    }
+  }
+
+  // MC-4 amendment: PATCH { status: 'closed' } — keeps accepted collaborators, stops new applications.
+  // On success reflect the closed state in-place (refetch) and ripple to the host page.
+  async function handleCloseCall() {
+    setClosing(true);
+    setCloseError(null);
+    try {
+      await closeCall(callId);
+      setCloseConfirming(false);
+      setClosing(false);
+      setReloadKey((k) => k + 1);
+      onChanged?.();
+    } catch (err) {
+      setClosing(false);
+      setCloseError((err as ApiError).message ?? 'Clôture impossible.');
     }
   }
 
@@ -479,6 +500,41 @@ export default function CallDetailModal({
                   </span>
                 )}
               </div>
+            ) : closeConfirming ? (
+              // MC-4 amendment: inline on-brand close-early confirm (same pattern as delete).
+              <div
+                role="group"
+                aria-label="Confirmer la clôture de l'appel"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, width: '100%' }}
+              >
+                <span style={{ fontSize: 13, color: 'var(--ink2)' }}>Clôturer cet appel ? Les collaborateurs acceptés sont conservés.</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => void handleCloseCall()}
+                    disabled={closing}
+                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: closing ? 0.6 : 1 }}
+                  >
+                    {closing ? 'Clôture…' : 'Confirmer la clôture'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCloseConfirming(false);
+                      setCloseError(null);
+                    }}
+                    disabled={closing}
+                    style={{ ...footerBtn, background: 'var(--card)' }}
+                  >
+                    Annuler
+                  </button>
+                </span>
+                {closeError && (
+                  <span role="alert" style={{ width: '100%', textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>
+                    {closeError}
+                  </span>
+                )}
+              </div>
             ) : (
               <>
                 <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
@@ -492,6 +548,19 @@ export default function CallDetailModal({
                     {!closed && (
                       <button type="button" onClick={() => setEditing(true)} style={{ ...footerBtn, background: 'var(--card)' }}>
                         Éditer
+                      </button>
+                    )}
+                    {/* MC-4 amendment: end the call early — open calls only (distinct from delete). */}
+                    {!closed && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCloseError(null);
+                          setCloseConfirming(true);
+                        }}
+                        style={{ ...footerBtn, background: 'var(--card)' }}
+                      >
+                        Clôturer l&apos;appel
                       </button>
                     )}
                     <button

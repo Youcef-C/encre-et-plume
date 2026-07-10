@@ -8,6 +8,7 @@ vi.mock('../lib/api', () => ({
   getProfile: vi.fn(),
   getProfilePortfolio: vi.fn(),
   applyToCall: vi.fn(),
+  updateMyApplication: vi.fn(),
 }));
 
 // Mock the single combined UploadControl — exposes an "upload image" and an "upload doc" button, each
@@ -253,10 +254,128 @@ describe('ApplyCallModal', () => {
     expect(screen.getByRole('button', { name: 'Envoyer ma candidature' })).toBeDisabled();
   });
 
+  // MC-5 amendment: reaching the sample cap must NOT disable submit. Reproduces the real bug — the
+  // upload control unmounts at MAX, so its onBusyChange(false) can never fire and a lingering busy=true
+  // would otherwise wedge the button. At MAX (no upload control), submit must stay enabled.
+  it('keeps "Envoyer" enabled at exactly the max samples even with a lingering upload-busy flag', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole('button', { name: 'busy' })); // uploadBusy → true
+    await user.click(screen.getByRole('button', { name: /Encre nocturne/ }));
+    await user.click(screen.getByRole('button', { name: 'upload image' }));
+    await user.click(screen.getByRole('button', { name: 'upload doc' }));
+    expect(await screen.findByText('3/3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Envoyer ma candidature' })).toBeEnabled();
+  });
+
   it('closes on Escape', async () => {
     const user = userEvent.setup();
     const { onClose } = open();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // ─── MC-6 amendment: edit a PENDING application (reuses this modal) ────────────
+  describe('edit mode', () => {
+    beforeEach(() => {
+      (api.updateMyApplication as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'app-9', callId: 'call-1' });
+    });
+
+    it('titles the dialog "Modifier ma candidature", pre-fills the message and labels submit "Enregistrer"', async () => {
+      render(
+        <ApplyCallModal
+          call={call}
+          edit={{ applicationId: 'app-9', initialMessage: 'Texte initial', initialSamples: [] }}
+          onClose={vi.fn()}
+          onApplied={vi.fn()}
+        />,
+      );
+      expect(await screen.findByRole('dialog', { name: 'Modifier ma candidature' })).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Texte initial')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Envoyer ma candidature' })).not.toBeInTheDocument();
+    });
+
+    it('saves via updateMyApplication with the samples + message and fires onApplied', async () => {
+      const user = userEvent.setup();
+      const onApplied = vi.fn();
+      render(
+        <ApplyCallModal
+          call={call}
+          edit={{ applicationId: 'app-9', initialMessage: 'Texte initial', initialSamples: [] }}
+          onClose={vi.fn()}
+          onApplied={onApplied}
+        />,
+      );
+      await user.click(await screen.findByRole('button', { name: /Encre nocturne/ }));
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+      await waitFor(() =>
+        expect(api.updateMyApplication).toHaveBeenCalledWith('app-9', {
+          samples: [{ portfolioItemId: 'pf-1' }],
+          message: 'Texte initial',
+        }),
+      );
+      expect(api.applyToCall).not.toHaveBeenCalled();
+      expect(onApplied).toHaveBeenCalledWith('call-1', 'app-9');
+    });
+
+    // MC-6 #7: existing samples come back from the detail with their ref → pre-fill + re-submit, no re-upload.
+    it('pre-fills existing samples from the detail refs and re-submits them (portfolio + media) unchanged', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApplyCallModal
+          call={call}
+          edit={{
+            applicationId: 'app-9',
+            initialMessage: 'Texte initial',
+            initialSamples: [
+              { url: 'https://cdn/pf.jpg', kind: 'image', size: null, portfolioItemId: 'pf-1' },
+              { url: 'https://cdn/up.jpg', kind: 'image', size: null, mediaId: 'media-x' },
+            ],
+          }}
+          onClose={vi.fn()}
+          onApplied={vi.fn()}
+        />,
+      );
+      // Both pre-filled samples counted; the portfolio one shows selected, the media one as an upload chip.
+      expect(await screen.findByText('2/3')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Encre nocturne/ })).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+      await waitFor(() =>
+        expect(api.updateMyApplication).toHaveBeenCalledWith('app-9', {
+          samples: [{ portfolioItemId: 'pf-1' }, { mediaId: 'media-x' }],
+          message: 'Texte initial',
+        }),
+      );
+    });
+
+    it('lets the applicant remove a pre-filled sample before saving', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApplyCallModal
+          call={call}
+          edit={{
+            applicationId: 'app-9',
+            initialMessage: '',
+            initialSamples: [
+              { url: 'https://cdn/pf.jpg', kind: 'image', size: null, portfolioItemId: 'pf-1' },
+              { url: 'https://cdn/up.jpg', kind: 'image', size: null, mediaId: 'media-x' },
+            ],
+          }}
+          onClose={vi.fn()}
+          onApplied={vi.fn()}
+        />,
+      );
+      expect(await screen.findByText('2/3')).toBeInTheDocument();
+      // Drop the uploaded (media) sample; the portfolio one stays.
+      await user.click(screen.getByRole('button', { name: 'Retirer cet échantillon' }));
+      expect(await screen.findByText('1/3')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+      await waitFor(() =>
+        expect(api.updateMyApplication).toHaveBeenCalledWith('app-9', { samples: [{ portfolioItemId: 'pf-1' }] }),
+      );
+    });
   });
 });

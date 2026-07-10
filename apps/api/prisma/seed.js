@@ -309,7 +309,7 @@ const CREATORS = [
   { email: 'yuki.moreau@seed.encre-et-plume.local', displayName: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', birthdate: new Date('1996-04-12'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Encre dense'] },
   // MC-2: Camille is the login-tested suggestions viewer. Genre 'Seinen' + style 'Ambiances urbaines',
   // plus seeking prefs so Théo M. tops her suggestions with "même genre · rythme compatible".
-  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Ambiances urbaines'], seekingProjectLength: 'projet long', seekingTargetRole: 'dessinateur' },
+  { email: 'camille.roux@seed.encre-et-plume.local', displayName: 'Camille Roux', slug: 'dr1-camille-roux', role: 'scenariste', birthdate: new Date('1994-09-03'), country: 'FR', region: 'Auvergne-Rhône-Alpes', availability: 'ouvert', tags: ['Seinen', 'Ambiances urbaines'], seekingProjectLength: 'projet long', seekingTargetRole: 'dessinateur·rice' },
 ];
 
 // MC-1 "Trouver un·e partenaire" directory fixtures. Each seeds an Account+Profile (creator role) +

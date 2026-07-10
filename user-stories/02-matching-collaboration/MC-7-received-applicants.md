@@ -36,3 +36,6 @@
 ## Notes
 
 - Inferred: this view exists only as the avatar-menu entry `goCandidatsRecus` with no wireframe. Kept conservative — review sample + accept/reject. Grouping, re-open semantics, and copy are inferred.
+
+## Amendment (2026-07-10) — Remove an applicant
+- **Remove an applicant (approved)**: the call **owner** can remove an applicant from a call — for a *pending*, *accepted*, or *rejected* application. Removing an **accepted** applicant **frees their seat** (so the call can seek again) and drops them from the call; the [[MC-8]] connection is left intact. New owner-only endpoint (owner resolved server-side from `call.authorId`; non-owner → 404/403). UI: a "Retirer" control on the applicant card. Distinct from "Refuser" (which is a pending→rejected decision).

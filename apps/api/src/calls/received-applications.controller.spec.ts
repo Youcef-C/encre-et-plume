@@ -14,12 +14,13 @@ function req(accountId = 'acc-1'): AuthRequest {
 
 describe('ReceivedApplicationsController', () => {
   let controller: ReceivedApplicationsController;
-  let service: { list: jest.Mock; decide: jest.Mock };
+  let service: { list: jest.Mock; decide: jest.Mock; remove: jest.Mock };
 
   beforeEach(async () => {
     service = {
       list: jest.fn().mockResolvedValue({ groups: [] }),
       decide: jest.fn().mockResolvedValue({ id: 'app-1', status: 'accepted' }),
+      remove: jest.fn().mockResolvedValue(undefined),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ReceivedApplicationsController],
@@ -60,4 +61,9 @@ describe('ReceivedApplicationsController', () => {
       expect(await validate(dto)).not.toHaveLength(0);
     },
   );
+
+  it('removes the given application scoped to the session account (id from the path, owner from the session)', async () => {
+    await controller.remove(req('acc-owner'), 'app-42');
+    expect(service.remove).toHaveBeenCalledWith('acc-owner', 'app-42');
+  });
 });

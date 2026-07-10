@@ -640,7 +640,8 @@ export class CallsService {
    * thumb url) or application_document (PDF, orig url + size); portfolio items must belong to the
    * applicant. Returns the resolved samples in request order (position). 400 on any invalid ref.
    */
-  private async resolveApplicationSamples(
+  // Public so MC-6 edit (MyApplicationsService.edit) reuses the exact apply normalization/validation.
+  async resolveApplicationSamples(
     viewerId: string,
     refs: { mediaId?: string; portfolioItemId?: string }[] | undefined,
   ): Promise<ResolvedSample[]> {
@@ -888,7 +889,7 @@ interface PortfolioSampleRow {
 }
 
 /** A validated application sample ready to persist as an ApplicationAsset row. */
-interface ResolvedSample {
+export interface ResolvedSample {
   mediaId?: string;
   portfolioItemId?: string;
   url: string;
@@ -933,9 +934,22 @@ interface ApplicationRow {
   assets: { url: string; kind: string; size: number | null; position: number }[];
 }
 
-/** MC-4X: map ApplicationAsset rows (position-ordered) → the shared ApplicationSample display shape. */
-export function toApplicationSamples(assets: { url: string; kind: string; size: number | null }[]): ApplicationSample[] {
-  return assets.map((a) => ({ url: a.url, kind: a.kind === 'document' ? 'document' : 'image', size: a.size ?? null }));
+/**
+ * MC-4X: map ApplicationAsset rows (position-ordered) → the shared ApplicationSample display shape.
+ * MC-6 #7: carry the ref (mediaId XOR portfolioItemId) when the row stores one, so the applicant's
+ * edit modal can re-submit an existing sample without re-uploading. Rows without a ref (unknown / not
+ * selected) simply omit both.
+ */
+export function toApplicationSamples(
+  assets: { url: string; kind: string; size: number | null; mediaId?: string | null; portfolioItemId?: string | null }[],
+): ApplicationSample[] {
+  return assets.map((a) => ({
+    url: a.url,
+    kind: a.kind === 'document' ? 'document' : 'image',
+    size: a.size ?? null,
+    ...(a.mediaId ? { mediaId: a.mediaId } : {}),
+    ...(a.portfolioItemId ? { portfolioItemId: a.portfolioItemId } : {}),
+  }));
 }
 
 // MC-4X req6: shared account→ref select/shape/mapper (applicant refs AND team members).

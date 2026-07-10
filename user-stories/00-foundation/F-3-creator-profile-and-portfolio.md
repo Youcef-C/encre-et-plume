@@ -37,3 +37,7 @@
 ## Notes
 - Explicit: layout, tags, status banner, stats, tabs, portfolio grid, and action buttons all appear in the prototype.
 - "Œuvres publiées" / "Avis" tab contents draw on published works and reviews owned by other epics ([[DR-3]], [[PUB-3]]); list them here but defer their detail to those stories.
+
+## Amendment (bug fix 2026-07-10) — Profile save must not silently drop on a stale hidden field
+- **Bug**: editing the profile (e.g. the "Type de création" creator role, [[MC-1]] §9) silently failed to persist for some users. Root cause: `handleSave` resubmitted the whole form including a **hidden, stale `seeking.targetRole`** whose legacy value (`'dessinateur'`) is invalid under the current `SEEKING_TARGET_ROLES` vocab, so the `PATCH /profiles/me` DTO rejected the **entire** request (400) and the client `catch` swallowed it. It correlated with "has an accepted application" only because partner-seekers both set a targetRole and tend to get accepted — coincidental, not causal.
+- **Requirement**: the profile edit **only sends `seeking.targetRole` when seeking is active AND the value is a valid `SEEKING_TARGET_ROLES` entry** (otherwise `null`); a hidden/stale/invalid targetRole must never be resubmitted and must never block an unrelated field's save. `creatorRoles` (and every profile field) stays editable regardless of any application; the accepted application's own `Application.appliedAs` is independent and unchanged. Keep the strict server-side DTO validation. Grade against this.

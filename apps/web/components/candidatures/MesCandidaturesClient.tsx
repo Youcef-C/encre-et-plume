@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   GENRES,
+  type ApplicationSample,
+  type CallCard,
   type CallDirection,
   type CreatorRole,
   type MyApplicationRow,
@@ -18,6 +20,8 @@ import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import StatusBadge from './StatusBadge';
+import ApplicationDetailModal from './ApplicationDetailModal';
+import ApplyCallModal from '../appels/ApplyCallModal';
 
 type Screen = 'loading' | 'ready' | 'empty' | 'error';
 
@@ -93,17 +97,63 @@ const actionBtn: React.CSSProperties = {
   alignItems: 'center',
 };
 
+// MC-6 amendment: a MyApplicationRow lacks the call's seekingRoles/seats — build the minimal CallCard the
+// reused ApplyCallModal reads (header title/heading + owner) for edit mode. appliedAs is immutable there.
+function toEditCall(app: MyApplicationRow): CallCard {
+  return {
+    id: app.callId,
+    heading: DIRECTION_LABEL[app.callDirection],
+    title: app.callTitle,
+    tags: [],
+    authorName: app.ownerName,
+    closesInDays: null,
+    applicationCount: 0,
+    direction: app.callDirection,
+    seekingRoles: app.appliedAs ? [app.appliedAs] : [],
+    seats: {},
+    acceptedByRole: {},
+    remainingSeats: 0,
+    description: '',
+    sampleUrl: app.callSampleUrl,
+    status: 'open',
+    deadline: null,
+    isOwner: false,
+    hasApplied: true,
+    myApplicationId: app.id,
+    viewerHasRole: true,
+  };
+}
+
 function ApplicationRow({
   app,
   onWithdrawn,
+  onEdited,
 }: {
   app: MyApplicationRow;
   onWithdrawn: (id: string) => void;
+  // MC-6 amendment: after an edit save, refresh the list (message/samples may have changed).
+  onEdited: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  // Edit: fetch the detail first (the list row omits the message; the detail's samples carry their refs),
+  // then open the pre-filled ApplyCallModal.
+  const [editState, setEditState] = useState<'idle' | 'loading' | 'error' | 'open'>('idle');
+  const [editInitial, setEditInitial] = useState<{ message: string; samples: ApplicationSample[] }>({ message: '', samples: [] });
   const { openDm } = useMessaging();
+
+  async function openEdit() {
+    setEditState('loading');
+    try {
+      const detail = await api.getMyApplication(app.id);
+      setEditInitial({ message: detail.message ?? '', samples: detail.samples });
+      setEditState('open');
+    } catch {
+      setEditState('error');
+    }
+  }
 
   const genreLabel = app.callGenres.length ? GENRE_FR.get(app.callGenres[0]) ?? app.callGenres[0] : null;
   const meta = [DIRECTION_LABEL[app.callDirection], genreLabel, app.ownerName].filter(Boolean).join(' · ');
@@ -166,9 +216,11 @@ function ApplicationRow({
 
       <StatusBadge status={app.status} />
 
-      {/* Actions. MC-9: accepted rows switch to the "Message" CTA here. */}
+      {/* Actions. MC-9: accepted rows also expose the "Message" CTA.
+          MC-6 amendment: "Retirer" (withdraw) is available on pending AND accepted rows — withdrawing an
+          accepted application frees the call seat server-side. Rejected rows have nothing to withdraw. */}
       <div className="ep-candidature-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        {app.status === 'pending' &&
+        {app.status !== 'rejected' &&
           (confirming ? (
             <span role="group" aria-label="Confirmer le retrait de la candidature" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button type="button" onClick={confirmWithdraw} disabled={busy} style={{ ...actionBtn, background: 'var(--accent)', color: '#fff' }}>
@@ -198,10 +250,49 @@ function ApplicationRow({
             Message
           </button>
         )}
+
+        {/* MC-6 amendment: "Voir" (detail, all statuses) + "Modifier" (pending only). */}
+        <button type="button" onClick={() => setDetailOpen(true)} style={actionBtn}>
+          Voir
+        </button>
+        {app.status === 'pending' && (
+          <button
+            type="button"
+            onClick={() => void openEdit()}
+            disabled={editState === 'loading'}
+            aria-label={`Modifier ma candidature pour « ${app.callTitle} »`}
+            style={{ ...actionBtn, opacity: editState === 'loading' ? 0.6 : 1 }}
+          >
+            {editState === 'loading' ? 'Ouverture…' : 'Modifier'}
+          </button>
+        )}
+
         <Link href={`/appels?call=${app.callId}`} aria-label={`Voir l'appel « ${app.callTitle} »`} style={actionBtn}>
           Voir l&apos;appel
         </Link>
       </div>
+
+      {editState === 'error' && (
+        <span role="alert" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+          Ouverture impossible.
+        </span>
+      )}
+
+      {detailOpen && (
+        <ApplicationDetailModal applicationId={app.id} callTitle={app.callTitle} onClose={() => setDetailOpen(false)} />
+      )}
+
+      {editState === 'open' && (
+        <ApplyCallModal
+          call={toEditCall(app)}
+          edit={{ applicationId: app.id, initialMessage: editInitial.message, initialSamples: editInitial.samples }}
+          onClose={() => setEditState('idle')}
+          onApplied={() => {
+            setEditState('idle');
+            onEdited();
+          }}
+        />
+      )}
     </li>
   );
 }
@@ -392,7 +483,12 @@ export default function MesCandidaturesClient() {
         <>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
             {items.map((app) => (
-              <ApplicationRow key={app.id} app={app} onWithdrawn={handleWithdrawn} />
+              <ApplicationRow
+                key={app.id}
+                app={app}
+                onWithdrawn={handleWithdrawn}
+                onEdited={() => setRetryKey((k) => k + 1)}
+              />
             ))}
           </ul>
           {total > items.length && (

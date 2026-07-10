@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
 import type { ApplicationDto, ReceivedApplicationsResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { ReceivedApplicationsService } from './received-applications.service';
@@ -28,5 +28,13 @@ export class ReceivedApplicationsController {
     @Body() dto: DecideApplicationDto,
   ): Promise<ApplicationDto> {
     return this.service.decide(req.accountId, id, dto.status);
+  }
+
+  // MC-7 amendment: owner removes an applicant (any status). Distinct from decide('rejected').
+  // 204 no content; 404 unknown/not-owner. Owner resolved server-side from call.authorId.
+  @Delete('applications/:id')
+  @HttpCode(204)
+  remove(@Req() req: AuthRequest, @Param('id') id: string): Promise<void> {
+    return this.service.remove(req.accountId, id);
   }
 }

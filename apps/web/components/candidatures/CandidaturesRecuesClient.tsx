@@ -73,12 +73,19 @@ const sampleThumb: React.CSSProperties = {
 function ApplicantRow({
   app,
   onDecided,
+  onRemove,
+  removeError,
 }: {
   app: ApplicationDto;
   onDecided: (id: string, next: ApplicationDto) => void;
+  // MC-7 amendment: fire-and-forget remove — the parent optimistically drops the row and rolls back on
+  // error (re-mounting this row with removeError set). Distinct from "Refuser" (a pending→rejected flip).
+  onRemove: () => void;
+  removeError: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [removeConfirming, setRemoveConfirming] = useState(false);
 
   const role = app.appliedAs ?? app.applicant.role;
   const roleLabel = role ? ROLE_LABEL[role] : null;
@@ -189,7 +196,8 @@ function ApplicantRow({
             </div>
           )}
 
-          {/* Action row (proto line 2189): Voir le profil / green Accepter / red Refuser — stuck right. */}
+          {/* Action row (proto line 2189): Voir le profil / green Accepter / red Refuser — stuck right.
+              MC-7 amendment appends an owner "Retirer" (delete the applicant, any status). */}
           <div className="ep-candidature-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
             <Link href={`/${app.applicant.slug}`} style={actionBtn}>
               Voir le profil
@@ -219,10 +227,38 @@ function ApplicantRow({
             ) : (
               <StatusBadge status={app.status} />
             )}
+
+            {/* Owner "Retirer" (delete) — with an inline on-brand confirm, no browser confirm(). */}
+            {removeConfirming ? (
+              <span role="group" aria-label={`Confirmer le retrait de ${app.applicant.name}`} style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRemoveConfirming(false);
+                    onRemove();
+                  }}
+                  style={{ ...actionBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)' }}
+                >
+                  Confirmer le retrait
+                </button>
+                <button type="button" onClick={() => setRemoveConfirming(false)} style={actionBtn}>
+                  Annuler
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRemoveConfirming(true)}
+                aria-label={`Retirer la candidature de ${app.applicant.name}`}
+                style={actionBtn}
+              >
+                Retirer
+              </button>
+            )}
           </div>
         </div>
 
-        {error && (
+        {(error || removeError) && (
           <span role="alert" style={{ display: 'block', textAlign: 'right', fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginTop: 6 }}>
             Action impossible.
           </span>
@@ -251,6 +287,8 @@ export default function CandidaturesRecuesClient() {
   const [announce, setAnnounce] = useState('');
   const [selectedCallId, setSelectedCallId] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
+  // MC-7 amendment: the applicant id whose optimistic remove failed (rolled back) — surfaces the alert.
+  const [removeErrorId, setRemoveErrorId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!account) return;
@@ -293,6 +331,24 @@ export default function CandidaturesRecuesClient() {
         ? `Candidature de ${next.applicant.name} acceptée.`
         : `Candidature de ${next.applicant.name} refusée.`,
     );
+  }
+
+  // MC-7 amendment: owner removes an applicant. Optimistic drop; rollback + inline alert on failure.
+  async function handleRemove(callId: string, app: ApplicationDto) {
+    const snapshot = groups;
+    setRemoveErrorId(null);
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.callId !== callId ? g : { ...g, applications: g.applications.filter((a) => a.id !== app.id) },
+      ),
+    );
+    try {
+      await api.removeApplicant(app.id);
+      setAnnounce(`Candidature de ${app.applicant.name} retirée.`);
+    } catch {
+      setGroups(snapshot);
+      setRemoveErrorId(app.id);
+    }
   }
 
   if (sessionLoading) {
@@ -434,6 +490,8 @@ export default function CandidaturesRecuesClient() {
                 key={app.id}
                 app={app}
                 onDecided={(id, next) => handleDecided(selected.callId, id, next)}
+                onRemove={() => void handleRemove(selected.callId, app)}
+                removeError={removeErrorId === app.id}
               />
             ))}
           </ul>

@@ -150,10 +150,15 @@ test.describe('MC-6 "Mes candidatures" — signed in (dedicated mc6-candidatures
     await expect(rowByTitle(page, 'Récit fantastique').getByText('● En attente')).toBeVisible();
   });
 
-  test('MC6-E5: "Retirer" is not offered on decided (accepted/rejected) rows — pending-only withdrawal', async ({
+  test('MC6-E5: amendment (2026-07-10) — "Retirer" is now offered on the ACCEPTED row too (withdraw-when-accepted); still absent on the rejected (decided, nothing to free) row', async ({
     page,
   }) => {
-    await expect(rowByTitle(page, 'Comédie douce-amère').getByRole('button', { name: 'Retirer' })).toHaveCount(0);
+    // Structural check only (does not click/withdraw) — this account's accepted row is a shared
+    // fixture other tests in this file assume stays at "accepted" (e.g. MC6-E1's newest-first/status
+    // assertions). The functional end-to-end proof (click → confirm → row gone → seat freed) lives in
+    // calls-batch-fixes.spec.ts using dedicated scratch accounts, so it can actually complete the
+    // withdrawal without destroying this shared fixture's baseline for the rest of the file.
+    await expect(rowByTitle(page, 'Comédie douce-amère').getByRole('button', { name: 'Retirer' })).toBeVisible();
     await expect(rowByTitle(page, 'Aventure onirique').getByRole('button', { name: 'Retirer' })).toHaveCount(0);
   });
 

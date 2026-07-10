@@ -774,4 +774,33 @@ describe('ProfilePageClient — MC-1 §9 creator type(s)', () => {
     const body = vi.mocked(updateMyProfile).mock.calls[0][0];
     expect(body.creatorRoles).toEqual(['dessinateur', 'scenariste']);
   });
+
+  // Regression: a creator-role change must persist regardless of a hidden, inactive seeking that
+  // still holds a stale/legacy targetRole (e.g. seeded 'dessinateur' vs the current
+  // SEEKING_TARGET_ROLES 'dessinateur·rice'). handleSave used to resubmit the whole editData, so the
+  // invalid targetRole 400'd the entire PATCH — creatorRoles never persisted and the error was
+  // swallowed. The save must NOT resubmit an inactive/invalid targetRole.
+  it('persists a creator-role change even when an inactive seeking holds a stale/legacy targetRole', async () => {
+    vi.mocked(getProfile).mockResolvedValue({
+      ...mockProfile,
+      seeking: {
+        active: false,
+        targetRole: 'dessinateur' as ProfileResponse['seeking']['targetRole'], // legacy/invalid vocab
+        genres: [],
+        projectLength: 'projet long',
+        text: null,
+      },
+    });
+    const user = userEvent.setup();
+    renderProfile('yuki-moreau', mockAccount);
+    await screen.findByText('Yuki Moreau');
+    await user.click(screen.getByRole('button', { name: /modifier le profil/i }));
+    await user.click(screen.getByRole('button', { name: 'Scénariste' }));
+    await user.click(screen.getByRole('button', { name: /enregistrer/i }));
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    const body = vi.mocked(updateMyProfile).mock.calls[0][0];
+    expect(body.creatorRoles).toEqual(['dessinateur', 'scenariste']);
+    // the hidden, stale targetRole must be dropped, not resubmitted (it would reject the PATCH)
+    expect(body.seeking?.targetRole).toBeNull();
+  });
 });

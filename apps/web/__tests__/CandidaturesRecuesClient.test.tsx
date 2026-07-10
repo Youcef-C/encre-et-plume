@@ -16,9 +16,11 @@ vi.mock('../lib/api', async (importOriginal) => {
     ...actual,
     getReceivedApplications: vi.fn(),
     decideApplication: vi.fn(),
+    removeApplicant: vi.fn(),
     getCallDetail: vi.fn(),
     deleteCall: vi.fn(),
     updateCall: vi.fn(),
+    closeCall: vi.fn(),
     getMyProjects: vi.fn(() => Promise.resolve({ items: [] })),
   };
 });
@@ -126,9 +128,11 @@ function renderClient(acc: AccountSummary | null = account) {
 
 const getList = () => api.getReceivedApplications as ReturnType<typeof vi.fn>;
 const getDecide = () => api.decideApplication as ReturnType<typeof vi.fn>;
+const getRemove = () => api.removeApplicant as ReturnType<typeof vi.fn>;
 const getDetail = () => api.getCallDetail as ReturnType<typeof vi.fn>;
 const getDelete = () => api.deleteCall as ReturnType<typeof vi.fn>;
 const getUpdate = () => api.updateCall as ReturnType<typeof vi.fn>;
+const getClose = () => api.closeCall as ReturnType<typeof vi.fn>;
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -418,5 +422,46 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
     renderClient(null);
     const link = await screen.findByRole('link', { name: 'Se connecter' });
     expect(link).toHaveAttribute('href', '/connexion?redirect=/candidatures-recues');
+  });
+
+  // ─── MC-7 amendment: owner removes an applicant (any status) ──────────────────
+  it('offers "Retirer" on every applicant row, including a rejected one', async () => {
+    getList().mockResolvedValue(response([group({ applications: threeApps })]));
+    renderClient();
+    await screen.findByText('« Polar nocturne »');
+    // Present on the pending row (Léa B.) and the rejected row (Diego S.).
+    expect(screen.getByRole('button', { name: 'Retirer la candidature de Léa B.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retirer la candidature de Diego S.' })).toBeInTheDocument();
+  });
+
+  it('removes an applicant via inline confirm and drops the row (optimistic)', async () => {
+    getList().mockResolvedValue(response([group({ applications: threeApps })]));
+    getRemove().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Polar nocturne »');
+
+    await user.click(screen.getByRole('button', { name: 'Retirer la candidature de Léa B.' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirmer le retrait' }));
+
+    await waitFor(() => expect(api.removeApplicant).toHaveBeenCalledWith('a1'));
+    await waitFor(() => expect(screen.queryByText('Léa B.')).not.toBeInTheDocument());
+    // Distinct from "Refuser": the other rows remain.
+    expect(screen.getByText('Noé P.')).toBeInTheDocument();
+  });
+
+  it('rolls back the removed row and shows an inline error when the remove fails', async () => {
+    getList().mockResolvedValue(response([group()]));
+    getRemove().mockRejectedValue(new Error('boom'));
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Polar nocturne »');
+
+    await user.click(screen.getByRole('button', { name: 'Retirer la candidature de Léa B.' }));
+    await user.click(await screen.findByRole('button', { name: 'Confirmer le retrait' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Action impossible.');
+    // Rolled back — the applicant is still listed.
+    expect(screen.getByText('Léa B.')).toBeInTheDocument();
   });
 });

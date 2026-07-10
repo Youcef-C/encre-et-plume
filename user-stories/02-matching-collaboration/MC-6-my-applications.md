@@ -26,3 +26,12 @@
 
 ## Notes
 - Inferred: this view exists only as the avatar-menu entry `goCandidatures` with no wireframe. Kept conservative — a status list linking to calls. Exact columns, pagination, and copy are inferred.
+
+## Amendment (2026-07-10) — Withdraw allowed even when accepted
+- **Was**: withdraw hard-deleted only a *pending* application; an accepted (or rejected) one returned 409 ("déjà traitée … ne peut plus être retirée").
+- **Now (approved)**: an applicant may **withdraw even after being accepted**. Withdrawing an accepted application **frees the call seat** (decrement the accepted-seat count for its `appliedAs` role so the call reopens that seat) and removes the application; the social Connection ([[MC-8]]) created on acceptance is left intact. Rejected applications still cannot be withdrawn (nothing to free; keep 409) — or allow removal from the list, implementer's call, but the primary requirement is accepted→withdraw. Server-side, self-scoped. Confirm/notify the call owner ([[F-5]]). Grade against this.
+
+## Amendment (2026-07-10) — View + edit a pending application
+- **View details (approved)**: from "Mes candidatures", the applicant can open a **detail view** of an application they sent — the full **message text** and its attached **documents/samples** (images + PDFs), not just the list thumbnail.
+- **Edit a PENDING application (approved)**: while an application is **pending**, the applicant can edit it — change the **message** and the **samples/documents** (add/remove, within the 1..`APPLICATION_MAX_SAMPLES` rule) — reusing the [[MC-5]] `ApplyCallModal` fields, pre-filled. Accepted/rejected applications are **view-only** (no edit). Applicant-scoped, server-side.
+- **Backend**: `GET /me/applications/:id` (applicant-scoped detail with message + assets) and `PATCH /me/applications/:id` (edit message + samples; **pending only** → 409 otherwise; self-scoped; re-validate sample count 1..MAX and denormalize the first sample's `sampleUrl`). Grade against this.

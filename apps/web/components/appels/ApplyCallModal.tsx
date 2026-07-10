@@ -13,15 +13,17 @@ import {
   APPLICATION_MESSAGE_MAX,
   APPLICATION_MAX_SAMPLES,
   type ApiError,
+  type ApplicationSample,
   type ApplicationSampleRef,
   type ApplyToCallRequest,
   type CallCard,
   type CreatorRole,
+  type EditApplicationRequest,
   type MediaResponse,
   type MediaVariants,
   type PortfolioItemResponse,
 } from '@encre-et-plume/shared';
-import { getMe, getProfile, getProfilePortfolio, applyToCall } from '../../lib/api';
+import { getMe, getProfile, getProfilePortfolio, applyToCall, updateMyApplication } from '../../lib/api';
 import { ROLE_LABEL } from '../../lib/calls';
 import { XIcon } from '../icons';
 import UploadControl from '../UploadControl';
@@ -64,6 +66,15 @@ function toRef(p: Picked): ApplicationSampleRef {
   return p.source === 'portfolio' ? { portfolioItemId: p.id } : { mediaId: p.id };
 }
 
+// MC-6 #7: pre-fill edit mode from the detail's samples (each now carries its ref) so existing pieces
+// re-submit as refs without re-uploading. Exactly one of portfolioItemId / mediaId is set.
+function sampleToPicked(s: ApplicationSample, i: number): Picked {
+  if (s.portfolioItemId) return { source: 'portfolio', id: s.portfolioItemId, thumb: s.url, alt: `Échantillon ${i + 1}` };
+  return s.kind === 'document'
+    ? { source: 'document', id: s.mediaId as string, name: 'Document' }
+    : { source: 'image', id: s.mediaId as string, thumb: s.url };
+}
+
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
@@ -91,20 +102,26 @@ const errText: React.CSSProperties = {
 
 export default function ApplyCallModal({
   call,
+  edit,
   onClose,
   onApplied,
 }: {
   call: CallCard;
+  // MC-6 amendment: when set, the modal edits a PENDING application (PATCH /me/applications/:id) instead
+  // of creating one — pre-fills the message + existing samples and saves via updateMyApplication.
+  // Role/appliedAs is immutable. `initialSamples` are the detail's samples (ref-carrying, MC-6 #7).
+  edit?: { applicationId: string; initialMessage: string; initialSamples: ApplicationSample[] };
   onClose: () => void;
   onApplied: (callId: string, applicationId: string) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'apply-call-title';
   const sampleErrId = 'apply-call-sample-error';
+  const isEdit = edit != null;
 
   const [portfolio, setPortfolio] = useState<PortfolioState>({ status: 'loading' });
-  const [samples, setSamples] = useState<Picked[]>([]);
-  const [message, setMessage] = useState('');
+  const [samples, setSamples] = useState<Picked[]>(() => edit?.initialSamples.map(sampleToPicked) ?? []);
+  const [message, setMessage] = useState(edit?.initialMessage ?? '');
   // req6: when the call seeks >1 role the applicant also holds, they pick which role they apply as.
   const [chooserRoles, setChooserRoles] = useState<CreatorRole[]>([]);
   const [appliedAs, setAppliedAs] = useState<CreatorRole | null>(null);
@@ -176,7 +193,9 @@ export default function ApplyCallModal({
   }
 
   async function handleSubmit() {
-    if (pending || uploadBusy) return;
+    // Mirror the submit button's enabled condition: at max samples the UploadControl unmounts and its
+    // onBusyChange(false) never fires, leaving uploadBusy stuck true — so ignore uploadBusy when atMax.
+    if (pending || (uploadBusy && !atMax)) return;
     if (samples.length === 0) {
       setSampleError(true);
       return;
@@ -185,15 +204,26 @@ export default function ApplyCallModal({
     setServerError(null);
     setPending(true);
     try {
-      const body: ApplyToCallRequest = {
-        samples: samples.map(toRef),
-        ...(message.trim() ? { message: message.trim() } : {}),
-        // Only sent when the chooser is shown (multi-role intersection); otherwise the server derives it.
-        ...(chooserRoles.length > 1 && appliedAs ? { appliedAs } : {}),
-      };
-      const created = await applyToCall(call.id, body);
-      setSent(true);
-      onApplied(call.id, created.id);
+      if (isEdit) {
+        // MC-6 amendment: PATCH the caller's pending application — message + samples only (no appliedAs).
+        const body: EditApplicationRequest = {
+          samples: samples.map(toRef),
+          ...(message.trim() ? { message: message.trim() } : {}),
+        };
+        const updated = await updateMyApplication(edit.applicationId, body);
+        setSent(true);
+        onApplied(updated.callId, edit.applicationId);
+      } else {
+        const body: ApplyToCallRequest = {
+          samples: samples.map(toRef),
+          ...(message.trim() ? { message: message.trim() } : {}),
+          // Only sent when the chooser is shown (multi-role intersection); otherwise the server derives it.
+          ...(chooserRoles.length > 1 && appliedAs ? { appliedAs } : {}),
+        };
+        const created = await applyToCall(call.id, body);
+        setSent(true);
+        onApplied(call.id, created.id);
+      }
     } catch (err) {
       const apiErr = err as ApiError;
       setServerError(apiErr.message ?? 'Une erreur est survenue. Veuillez réessayer.');
@@ -263,7 +293,7 @@ export default function ApplyCallModal({
                 lineHeight: 1,
               }}
             >
-              Candidater
+              {isEdit ? 'Modifier ma candidature' : 'Candidater'}
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 4 }}>
               {call.heading} · {call.title}
@@ -283,16 +313,19 @@ export default function ApplyCallModal({
           // Success state — body replaced by confirmation.
           <div style={{ padding: '28px 18px' }}>
             <p role="status" style={{ fontSize: 17, fontWeight: 700, margin: 0, lineHeight: 1.5 }}>
-              Candidature envoyée !
+              {isEdit ? 'Candidature modifiée !' : 'Candidature envoyée !'}
             </p>
             <p style={{ fontSize: 14, color: 'var(--ink2)', margin: '8px 0 0', lineHeight: 1.5 }}>
-              {call.authorName} recevra votre candidature pour {call.title}.
+              {isEdit
+                ? `Vos modifications pour ${call.title} ont été enregistrées.`
+                : `${call.authorName} recevra votre candidature pour ${call.title}.`}
             </p>
           </div>
         ) : (
           <div style={{ padding: '16px 18px' }}>
-            {/* req6: role chooser — only when the call seeks >1 role the applicant holds. */}
-            {chooserRoles.length > 1 && (
+            {/* req6: role chooser — only when the call seeks >1 role the applicant holds. Hidden in edit
+               mode (appliedAs is immutable via PATCH /me/applications/:id). */}
+            {!isEdit && chooserRoles.length > 1 && (
               <div role="group" aria-label="Je candidate en tant que :" style={{ marginBottom: 14 }}>
                 <div style={{ ...sectionLabel, marginBottom: 8 }}>Je candidate en tant que :</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -501,16 +534,25 @@ export default function ApplyCallModal({
               <button
                 type="button"
                 onClick={() => void handleSubmit()}
-                disabled={pending || uploadBusy}
+                // MC-5 amendment: reaching MAX must NOT block submit. At MAX the UploadControl unmounts,
+                // so a lingering uploadBusy can never clear — ignore it once the cap is reached (only
+                // the "add more" affordance is gated by atMax). ≥1 sample is enforced in handleSubmit.
+                disabled={pending || (uploadBusy && !atMax)}
                 style={{
                   ...footerBtn,
                   background: 'var(--accent)',
                   color: '#fff',
                   boxShadow: '3px 3px 0 var(--shadow)',
-                  opacity: pending || uploadBusy ? 0.6 : 1,
+                  opacity: pending || (uploadBusy && !atMax) ? 0.6 : 1,
                 }}
               >
-                {pending ? 'Envoi…' : 'Envoyer ma candidature'}
+                {isEdit
+                  ? pending
+                    ? 'Enregistrement…'
+                    : 'Enregistrer'
+                  : pending
+                    ? 'Envoi…'
+                    : 'Envoyer ma candidature'}
               </button>
             </>
           )}

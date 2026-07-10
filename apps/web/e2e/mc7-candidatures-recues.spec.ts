@@ -296,13 +296,17 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     const lea = rowByApplicant(page, 'Léa B.');
     await lea.getByRole('button', { name: 'Accepter la candidature de Léa B.' }).click();
     await expect(lea.getByText('✓ Acceptée')).toBeVisible({ timeout: 10_000 });
-    await expect(lea.getByRole('button')).toHaveCount(0);
+    // Accepter/Refuser are gone (a decision is final) — MC-7 amendment (2026-07-10): "Retirer" now
+    // stays available on every row regardless of status, so the row isn't buttonless anymore.
+    await expect(lea.getByRole('button', { name: /Accepter|Refuser/ })).toHaveCount(0);
+    await expect(lea.getByRole('button', { name: 'Retirer la candidature de Léa B.' })).toBeVisible();
     await expect(page.getByRole('status', { name: /décision/i })).toHaveText('Candidature de Léa B. acceptée.');
 
     const noe = rowByApplicant(page, 'Noé P.');
     await noe.getByRole('button', { name: 'Refuser la candidature de Noé P.' }).click();
     await expect(noe.getByText('✕ Refusée')).toBeVisible({ timeout: 10_000 });
-    await expect(noe.getByRole('button')).toHaveCount(0);
+    await expect(noe.getByRole('button', { name: /Accepter|Refuser/ })).toHaveCount(0);
+    await expect(noe.getByRole('button', { name: 'Retirer la candidature de Noé P.' })).toBeVisible();
     await expect(page.getByRole('status', { name: /décision/i })).toHaveText('Candidature de Noé P. refusée.');
 
     // Reload — the decisions persisted server-side (order-independent, content-based locators).

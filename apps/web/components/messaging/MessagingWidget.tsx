@@ -3,8 +3,9 @@
 // MC-9 — floating chat widget. Faithful replica of the prototype FLOATING CHAT MODULE section
 // (.dc.html lines 2987–3036): FAB launcher with unread badge, panel with a dark header, conversation
 // list (group chip / typing / preview rows), thread view (own/other bubbles, attachment tiles, typing
-// line, "Lu"), and the composer. Deviations D1 (minimize ▁), D2 (search field), D5 (MailIcon vs ✉)
-// per plan. On-brand: SVG icons, tokens, no emojis. State + realtime live in lib/messaging.tsx.
+// line, "Lu"), and the composer. Deviations D2 (search field), D5 (MailIcon vs ✉) per plan. The
+// prototype's minimize ▁ (ex-D1) is intentionally dropped — MC-9 amendment (2026-07-10): "Fermer" (X)
+// already collapses to the FAB. On-brand: SVG icons, tokens, no emojis. State + realtime in lib/messaging.tsx.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { ConversationItem, ConversationParticipantDto } from '@encre-et-plume/shared';
@@ -791,7 +792,6 @@ export default function MessagingWidget() {
     typing,
     openWidget,
     closeWidget,
-    minimizeWidget,
     openConversation,
     reloadConversations,
     addConversation,
@@ -893,21 +893,16 @@ export default function MessagingWidget() {
               <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--accent)', borderRadius: 5, padding: '0 7px' }}>{totalUnread}</span>
             )}
             <div style={{ flex: 1 }} />
+            {/* MC-9 amendment: primary accent-red group-create trigger (matches other primary actions). */}
             <button
               type="button"
               onClick={() => setGroupOpen(true)}
-              style={{ fontSize: 12, color: '#cabfb2', cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit' }}
+              style={{ fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '4px 10px', minHeight: 30, fontFamily: 'inherit' }}
             >
               ＋ Groupe
             </button>
-            <button
-              type="button"
-              onClick={minimizeWidget}
-              aria-label="Réduire"
-              style={{ fontSize: 15, color: '#cabfb2', cursor: 'pointer', background: 'none', border: 'none', lineHeight: 1, padding: '0 2px' }}
-            >
-              ▁
-            </button>
+            {/* MC-9 amendment: the minimize "Réduire" (▁) button is removed — "Fermer" (X) already
+               collapses the widget to the FAB. */}
             <button
               type="button"
               onClick={() => {

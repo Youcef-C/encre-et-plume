@@ -7,6 +7,7 @@ vi.mock('../lib/api', () => ({
   getCallDetail: vi.fn(),
   updateCall: vi.fn(),
   deleteCall: vi.fn(),
+  closeCall: vi.fn(),
   createCall: vi.fn(),
   getMyProjects: vi.fn(() => Promise.resolve({ items: [] })),
 }));
@@ -54,6 +55,7 @@ const base: CallDetail = {
 
 const getDetail = () => api.getCallDetail as ReturnType<typeof vi.fn>;
 const getDelete = () => api.deleteCall as ReturnType<typeof vi.fn>;
+const getClose = () => api.closeCall as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -243,6 +245,63 @@ describe('CallDetailModal', () => {
       await waitFor(() => expect(api.deleteCall).toHaveBeenCalledWith('call-1'));
       expect(onDeleted).toHaveBeenCalledTimes(1);
       expect(onClose).toHaveBeenCalled();
+    });
+
+    // ─── MC-4 amendment: end a call early ("Clôturer l'appel") ─────────────────
+    it('shows "Clôturer l\'appel" only for the owner of an open call', async () => {
+      open({ isOwner: true, status: 'open' });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.getByRole('button', { name: "Clôturer l'appel" })).toBeInTheDocument();
+    });
+
+    it('hides "Clôturer l\'appel" for a non-owner', async () => {
+      open({ isOwner: false, status: 'open' });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.queryByRole('button', { name: "Clôturer l'appel" })).not.toBeInTheDocument();
+    });
+
+    it('hides "Clôturer l\'appel" on an already-closed call', async () => {
+      open({ isOwner: true, status: 'closed' });
+      await screen.findByText('« Lames de Brume »');
+      expect(screen.queryByRole('button', { name: "Clôturer l'appel" })).not.toBeInTheDocument();
+    });
+
+    it('closes the call on confirm, then reflects the closed state (badge, no Éditer)', async () => {
+      getDetail()
+        .mockResolvedValueOnce({ ...base, isOwner: true, status: 'open' })
+        .mockResolvedValueOnce({ ...base, isOwner: true, status: 'closed' });
+      getClose().mockResolvedValue({ ...base, status: 'closed' });
+      const user = userEvent.setup();
+      const onChanged = vi.fn();
+      render(<CallDetailModal callId="call-1" onClose={vi.fn()} onCandidater={vi.fn()} onChanged={onChanged} />);
+
+      await user.click(await screen.findByRole('button', { name: "Clôturer l'appel" }));
+      await user.click(screen.getByRole('button', { name: 'Confirmer la clôture' }));
+
+      await waitFor(() => expect(api.closeCall).toHaveBeenCalledWith('call-1'));
+      // Closed badge shows in both the meta line and the footer once the refetch lands.
+      expect((await screen.findAllByText('Clôturé')).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('button', { name: 'Éditer' })).not.toBeInTheDocument();
+      expect(onChanged).toHaveBeenCalled();
+    });
+
+    it('backs out of the close confirm with Annuler without calling the API', async () => {
+      const user = userEvent.setup();
+      open({ isOwner: true });
+      await user.click(await screen.findByRole('button', { name: "Clôturer l'appel" }));
+      const group = screen.getByRole('group', { name: "Confirmer la clôture de l'appel" });
+      await user.click(within(group).getByRole('button', { name: 'Annuler' }));
+      expect(api.closeCall).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: "Clôturer l'appel" })).toBeInTheDocument();
+    });
+
+    it('shows the server message when closing fails', async () => {
+      getClose().mockRejectedValue({ statusCode: 403, message: "Seul l'auteur peut clôturer cet appel.", error: 'FORBIDDEN' });
+      const user = userEvent.setup();
+      open({ isOwner: true });
+      await user.click(await screen.findByRole('button', { name: "Clôturer l'appel" }));
+      await user.click(screen.getByRole('button', { name: 'Confirmer la clôture' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Seul l'auteur peut clôturer/);
     });
 
     it('shows the server 409 message when deletion is refused', async () => {

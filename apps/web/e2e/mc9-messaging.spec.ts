@@ -133,8 +133,12 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Messages', { exact: true })).toBeVisible();
     await expect(dialog.getByText('3', { exact: true })).toBeVisible(); // header count chip
-    await expect(dialog.getByRole('button', { name: '＋ Groupe' })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Réduire' })).toBeVisible();
+    // MC-9 amendment (2026-07-10): "＋ Groupe" is now accent-red (matches other primary actions);
+    // the minimize "Réduire" (▁) button is removed — only "Fermer" (X) remains.
+    const groupBtn = dialog.getByRole('button', { name: '＋ Groupe' });
+    await expect(groupBtn).toBeVisible();
+    await expect(groupBtn).toHaveCSS('background-color', 'rgb(232, 38, 28)'); // var(--accent) #e8261c
+    await expect(dialog.getByRole('button', { name: 'Réduire' })).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Fermer' })).toBeVisible();
     await expect(dialog.getByRole('searchbox', { name: 'Rechercher une conversation' })).toBeVisible();
 
@@ -173,7 +177,9 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
     await expect(dialog.getByText('Oui, avec plaisir.')).toBeVisible();
     await expect(dialog.getByText('On se cale un créneau demain ?')).toBeVisible();
     await expect(dialog.getByLabel('Écrire un message')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Réduire' })).toBeVisible(); // still the panel header
+    // MC-9 amendment: no minimize "Réduire" button anywhere — only "Fermer" (X) in the panel header.
+    await expect(dialog.getByRole('button', { name: 'Réduire' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Fermer' })).toBeVisible();
 
     // Opening the thread marks it read: badge drops from 3 → 1 (only the group stays unread).
     await expect(fab(page)).toHaveAttribute('aria-label', 'Messages, 1 non lus', { timeout: 10_000 });
@@ -182,7 +188,7 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
     await expect(fab(page)).toHaveAttribute('aria-label', 'Messages, 1 non lus', { timeout: 10_000 });
   });
 
-  test('MC9-E4: a11y — Esc closes the panel (list view) and refocuses the FAB; minimize collapses to the FAB', async ({
+  test('MC9-E4: a11y — Esc closes the panel (list view) and refocuses the FAB; "Fermer" (X) also collapses to the FAB (no minimize button)', async ({
     page,
   }) => {
     await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
@@ -190,8 +196,10 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
     await launcher.click();
     const dialog = panel(page);
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Réduire' }).click();
-    // Minimize preserves nothing yet to preserve (no thread open) but panel collapses to the FAB.
+    // MC-9 amendment: the minimize "Réduire" (▁) button is gone entirely — only "Fermer" (X) collapses
+    // the widget back to the FAB.
+    await expect(dialog.getByRole('button', { name: 'Réduire' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Fermer' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(launcher).toBeVisible();
 

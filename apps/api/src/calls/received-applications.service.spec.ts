@@ -191,3 +191,62 @@ describe('ReceivedApplicationsService.decide', () => {
     expect(connections.ensureConnected).not.toHaveBeenCalled();
   });
 });
+
+// MC-7 amendment (2026-07-10): the call owner can REMOVE an applicant regardless of status.
+describe('ReceivedApplicationsService.remove', () => {
+  let service: ReceivedApplicationsService;
+  let prisma: {
+    application: { findUnique: jest.Mock; delete: jest.Mock };
+    projectCall: { updateMany: jest.Mock };
+    $transaction: jest.Mock;
+  };
+
+  const ROW = (o: Partial<Record<string, unknown>> = {}) => ({
+    id: 'app-1',
+    callId: 'call-1',
+    status: 'pending',
+    call: { authorId: 'acc-owner' },
+    ...o,
+  });
+
+  beforeEach(() => {
+    prisma = {
+      application: {
+        findUnique: jest.fn().mockResolvedValue(ROW()),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      projectCall: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    service = new ReceivedApplicationsService(
+      prisma as unknown as PrismaService,
+      { create: jest.fn() } as unknown as NotificationsService,
+      { ensureConnected: jest.fn() } as unknown as ConnectionsService,
+    );
+  });
+
+  it('404s an unknown application', async () => {
+    prisma.application.findUnique.mockResolvedValue(null);
+    await expect(service.remove('acc-owner', 'nope')).rejects.toThrow(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('404s when the requester does not own the parent call (no existence leak)', async () => {
+    prisma.application.findUnique.mockResolvedValue(ROW({ call: { authorId: 'someone-else' } }));
+    await expect(service.remove('acc-owner', 'app-1')).rejects.toThrow(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it.each(['pending', 'accepted', 'rejected'])(
+    'removes a %s application: deletes it and decrements the count (accepted frees the derived seat)',
+    async (status) => {
+      prisma.application.findUnique.mockResolvedValue(ROW({ status }));
+      await service.remove('acc-owner', 'app-1');
+      expect(prisma.application.delete).toHaveBeenCalledWith({ where: { id: 'app-1' } });
+      expect(prisma.projectCall.updateMany).toHaveBeenCalledWith({
+        where: { id: 'call-1', applicationCount: { gt: 0 } },
+        data: { applicationCount: { decrement: 1 } },
+      });
+    },
+  );
+});

@@ -39,7 +39,7 @@ const TYPING_EXPIRY_MS = 4000;
 // A thread message can be optimistic (pending) or a failed send awaiting retry.
 export type ThreadMessage = MessageDto & { pending?: boolean; failed?: boolean; error?: string };
 
-export type PanelState = 'closed' | 'open' | 'minimized';
+export type PanelState = 'closed' | 'open';
 export type ConnectionState = 'connected' | 'reconnecting';
 type MessagesState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -66,7 +66,6 @@ interface MessagingCtx {
   openWidget: () => void;
   toggleWidget: () => void;
   closeWidget: () => void;
-  minimizeWidget: () => void;
   openConversation: (id: string) => void;
   closeThread: () => void;
   openDm: (userId: string) => Promise<void>;
@@ -104,7 +103,6 @@ export const MessagingContext = createContext<MessagingCtx>({
   openWidget: noop,
   toggleWidget: noop,
   closeWidget: noop,
-  minimizeWidget: noop,
   openConversation: noop,
   closeThread: noop,
   openDm: async () => {},
@@ -591,7 +589,6 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     () => setPanelState((s) => (s === 'open' ? 'closed' : 'open')),
     [],
   );
-  const minimizeWidget = useCallback(() => setPanelState('minimized'), []);
   const closeWidget = useCallback(() => {
     setPanelState('closed');
     setActiveConversationId(null);
@@ -624,7 +621,6 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         openWidget,
         toggleWidget,
         closeWidget,
-        minimizeWidget,
         openConversation,
         closeThread,
         openDm,

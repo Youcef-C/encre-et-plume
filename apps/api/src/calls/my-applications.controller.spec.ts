@@ -12,12 +12,14 @@ function req(query: Record<string, unknown> = {}, accountId = 'acc-1'): AuthRequ
 
 describe('MyApplicationsController', () => {
   let controller: MyApplicationsController;
-  let service: { list: jest.Mock; withdraw: jest.Mock };
+  let service: { list: jest.Mock; withdraw: jest.Mock; get: jest.Mock; edit: jest.Mock };
 
   beforeEach(async () => {
     service = {
       list: jest.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, total: 0, totalAll: 0 }),
       withdraw: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue({ id: 'app-42', message: 'hi' }),
+      edit: jest.fn().mockResolvedValue({ id: 'app-42', message: 'edited' }),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MyApplicationsController],
@@ -57,5 +59,18 @@ describe('MyApplicationsController', () => {
   it('withdraws the given application scoped to the session account (id from the path, not the body)', async () => {
     await controller.withdraw(req(), 'app-42');
     expect(service.withdraw).toHaveBeenCalledWith('acc-1', 'app-42');
+  });
+
+  it('gets the given application detail scoped to the session account (id from the path)', async () => {
+    const res = await controller.detail(req(), 'app-42');
+    expect(service.get).toHaveBeenCalledWith('acc-1', 'app-42');
+    expect(res).toMatchObject({ id: 'app-42', message: 'hi' });
+  });
+
+  it('edits the given application scoped to the session account (id from the path, applicant from the session)', async () => {
+    const dto = { samples: [{ mediaId: 'med-1' }], message: 'edited' } as never;
+    const res = await controller.edit(req(), 'app-42', dto);
+    expect(service.edit).toHaveBeenCalledWith('acc-1', 'app-42', dto);
+    expect(res).toMatchObject({ id: 'app-42', message: 'edited' });
   });
 });

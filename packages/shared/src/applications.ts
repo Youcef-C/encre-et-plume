@@ -21,6 +21,11 @@ export interface ApplicationSample {
   url: string; // image thumb / portfolio image, or document CDN url
   kind: 'image' | 'document'; // FE renders a thumbnail vs a PDF download link
   size: number | null; // bytes — documents only
+  // MC-6 #7: the underlying ref (exactly one), so the edit modal can re-submit an existing sample as an
+  // ApplicationSampleRef without re-uploading. GET /me/applications/:id (detail) MUST populate one of
+  // these; the list and other read paths may leave both undefined.
+  mediaId?: string;
+  portfolioItemId?: string;
 }
 
 /**
@@ -74,7 +79,14 @@ export interface MyApplicationRow {
   status: ApplicationStatus;
   appliedAs: CreatorRole | null; // MC-6: the role the applicant applied as; null = unspecified (FE falls back to creatorRoles[0])
   samples: ApplicationSample[]; // MC-4X: the applicant's own submitted samples, position order (first feeds the thumbnail)
+  message?: string; // MC-6 amendment: the applicant's message — populated by GET /me/applications/:id (detail), omitted in the list
   createdAt: string; // ISO — "Candidaté le …"
+}
+
+/** PATCH /me/applications/:id body — edit the caller's own PENDING application (message + samples). */
+export interface EditApplicationRequest {
+  samples: ApplicationSampleRef[]; // 1..APPLICATION_MAX_SAMPLES (same shape/validation as apply)
+  message?: string; // optional, ≤ APPLICATION_MESSAGE_MAX
 }
 
 export interface MyApplicationsResponse {

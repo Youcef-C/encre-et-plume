@@ -10,8 +10,36 @@ vi.mock('../lib/api', async (importOriginal) => {
     ...actual,
     getMyApplications: vi.fn(),
     withdrawApplication: vi.fn(),
+    getMyApplication: vi.fn(),
+    updateMyApplication: vi.fn(),
   };
 });
+
+// MC-6 amendment: the edit modal reuses ApplyCallModal — stub it (its own suite covers edit-mode wiring).
+// The stub echoes the wired-through pre-fill (message + sample count) so we can assert MesCandidatures
+// passes the fetched detail into the modal.
+vi.mock('../components/appels/ApplyCallModal', () => ({
+  default: ({
+    edit,
+    onClose,
+    onApplied,
+  }: {
+    edit?: { applicationId: string; initialMessage: string; initialSamples: unknown[] };
+    onClose: () => void;
+    onApplied: (c: string, a: string) => void;
+  }) => (
+    <div role="dialog" aria-label="Modifier ma candidature">
+      <p>msg:{edit?.initialMessage}</p>
+      <p>samples:{edit?.initialSamples?.length ?? 0}</p>
+      <button type="button" onClick={() => onApplied('call-1', edit?.applicationId ?? 'x')}>
+        stub-save
+      </button>
+      <button type="button" onClick={onClose}>
+        stub-close
+      </button>
+    </div>
+  ),
+}));
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
@@ -80,6 +108,7 @@ function renderClient(acc: AccountSummary | null = account) {
 
 const getList = () => api.getMyApplications as ReturnType<typeof vi.fn>;
 const getWithdraw = () => api.withdrawApplication as ReturnType<typeof vi.fn>;
+const getDetail = () => api.getMyApplication as ReturnType<typeof vi.fn>;
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -185,9 +214,9 @@ describe('MesCandidaturesClient (MC-6)', () => {
     renderClient();
     await screen.findByText('« En attente »');
 
-    // Only the pending row offers "Retirer".
-    const retirer = screen.getByRole('button', { name: /Retirer/ });
-    await user.click(retirer);
+    // Both pending and accepted rows now offer "Retirer" (MC-6 amendment) — scope to the pending row.
+    const pendingRow = screen.getByText('« En attente »').closest('li') as HTMLElement;
+    await user.click(within(pendingRow).getByRole('button', { name: /Retirer/ }));
 
     // Inline confirm appears (no browser confirm()).
     const confirm = await screen.findByRole('button', { name: 'Confirmer le retrait' });
@@ -212,8 +241,96 @@ describe('MesCandidaturesClient (MC-6)', () => {
     const messageBtn = screen.getByRole('button', { name: 'Message à Théo M.' });
     await user.click(messageBtn);
     expect(openDm).toHaveBeenCalledWith('owner-1');
-    // The pending-only "Retirer" CTA never appears on a decided row.
+    // MC-6 amendment: accepted rows now ALSO offer "Retirer" (withdraw-when-accepted), alongside Message.
+    expect(screen.getByRole('button', { name: /Retirer/ })).toBeInTheDocument();
+  });
+
+  // MC-6 amendment: an accepted application can be withdrawn (frees the seat); rejected cannot.
+  it('offers "Retirer" on an accepted application and withdraws it via inline confirm', async () => {
+    getList().mockResolvedValue(
+      response([row({ id: 'a1', callTitle: '« Acceptée »', status: 'accepted', ownerId: 'o1', ownerName: 'Théo M.' })], { totalAll: 1 }),
+    );
+    getWithdraw().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« Acceptée »');
+
+    await user.click(screen.getByRole('button', { name: /^Retirer$/ }));
+    await user.click(await screen.findByRole('button', { name: 'Confirmer le retrait' }));
+
+    await waitFor(() => expect(api.withdrawApplication).toHaveBeenCalledWith('a1'));
+    await waitFor(() => expect(screen.queryByText('« Acceptée »')).not.toBeInTheDocument());
+  });
+
+  it('hides "Retirer" on a rejected application', async () => {
+    getList().mockResolvedValue(response([row({ id: 'r1', callTitle: '« Refusée »', status: 'rejected' })]));
+    renderClient();
+    await screen.findByText('« Refusée »');
     expect(screen.queryByRole('button', { name: /Retirer/ })).not.toBeInTheDocument();
+  });
+
+  // ─── MC-6 amendment: view + edit a pending application ─────────────────────────
+  it('a pending row offers "Voir" and "Modifier"; "Voir" opens the detail with the message + samples', async () => {
+    getList().mockResolvedValue(response([row({ id: 'p1', callTitle: '« En attente »', status: 'pending' })]));
+    getDetail().mockResolvedValue(
+      row({
+        id: 'p1',
+        callTitle: '« En attente »',
+        status: 'pending',
+        message: 'Mon message détaillé.',
+        samples: [{ url: 'https://cdn/s.jpg', kind: 'image', size: null }],
+      }),
+    );
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« En attente »');
+
+    const rowEl = screen.getByText('« En attente »').closest('li') as HTMLElement;
+    expect(within(rowEl).getByRole('button', { name: /^Modifier/ })).toBeInTheDocument();
+    await user.click(within(rowEl).getByRole('button', { name: 'Voir' }));
+
+    await waitFor(() => expect(api.getMyApplication).toHaveBeenCalledWith('p1'));
+    expect(await screen.findByText('Mon message détaillé.')).toBeInTheDocument();
+  });
+
+  it('a pending row opens the edit modal via "Modifier", passing the fetched message + existing samples, and refreshes on save', async () => {
+    getList().mockResolvedValue(response([row({ id: 'p1', callTitle: '« En attente »', status: 'pending' })]));
+    getDetail().mockResolvedValue(
+      row({
+        id: 'p1',
+        callTitle: '« En attente »',
+        status: 'pending',
+        message: 'Texte initial',
+        samples: [
+          { url: 'https://cdn/pf.jpg', kind: 'image', size: null, portfolioItemId: 'pf-1' },
+          { url: 'https://cdn/up.jpg', kind: 'image', size: null, mediaId: 'media-x' },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderClient();
+    await screen.findByText('« En attente »');
+
+    await user.click(screen.getByRole('button', { name: /^Modifier/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier ma candidature' });
+    await waitFor(() => expect(api.getMyApplication).toHaveBeenCalledWith('p1'));
+    // The fetched detail (message + 2 existing samples) is wired into the modal.
+    expect(within(dialog).getByText('msg:Texte initial')).toBeInTheDocument();
+    expect(within(dialog).getByText('samples:2')).toBeInTheDocument();
+    // Saving via the reused modal triggers a list refresh.
+    await user.click(within(dialog).getByRole('button', { name: 'stub-save' }));
+    await waitFor(() => expect(getList().mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('an accepted row offers "Voir" but not "Modifier" (view-only)', async () => {
+    getList().mockResolvedValue(response([row({ id: 'a1', callTitle: '« Acceptée »', status: 'accepted' })]));
+    getDetail().mockResolvedValue(row({ id: 'a1', callTitle: '« Acceptée »', status: 'accepted', message: 'Vu.' }));
+    renderClient();
+    await screen.findByText('« Acceptée »');
+
+    const rowEl = screen.getByText('« Acceptée »').closest('li') as HTMLElement;
+    expect(within(rowEl).getByRole('button', { name: 'Voir' })).toBeInTheDocument();
+    expect(within(rowEl).queryByRole('button', { name: /^Modifier/ })).not.toBeInTheDocument();
   });
 
   it('MC-9 seam: an accepted row WITHOUT an ownerId (pre-MC-9 / seed calls) shows no "Message" CTA', async () => {

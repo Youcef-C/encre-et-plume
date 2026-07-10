@@ -56,3 +56,7 @@
   `unread:changed` to the recipient's authenticated per-user room (best-effort, authz-scoped, Redis-adapter
   fan-out); the client calls the existing `UnreadProvider.refresh()`. Unread counts still come from the
   REST source of truth — the socket event is a "refetch now" signal.
+
+## Amendment (2026-07-10) — "＋ Groupe" red + remove minimize
+- **"＋ Groupe" button red (approved)**: the group-create trigger in the widget header renders **accent-red** (`var(--accent)` bg, white text) like the other primary actions — not the neutral style.
+- **Remove the minimize "Réduire" (▁) button (approved)**: the widget header's minimize control (deviation D1) is removed because it behaves the same as the close "X" (both collapse the widget to the FAB). Keep only "Fermer". Update/retire the D1 deviation note. Grade against these (the prototype's drawn ▁ is intentionally dropped).

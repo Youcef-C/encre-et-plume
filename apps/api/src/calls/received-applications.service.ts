@@ -95,4 +95,29 @@ export class ReceivedApplicationsService {
 
     return toApplicationDto({ ...app, status });
   }
+
+  /**
+   * MC-7 amendment: owner removes an applicant from a call — for a pending, accepted OR rejected
+   * application. Owner-only (404 unknown/not-owner, no existence leak). Removing an accepted one frees
+   * its derived seat (accepted-by-role is a count, no counter to maintain); the MC-8 connection is
+   * left intact. Delete + applicationCount decrement (floored at 0) in one transaction. Distinct from
+   * `decide('rejected')`, which keeps the row and flips status.
+   * ponytail: no applicant notification (no NotifType for "removed"); add one if confusion shows up.
+   */
+  async remove(ownerId: string, applicationId: string): Promise<void> {
+    const app = (await this.prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { id: true, callId: true, call: { select: { authorId: true } } },
+    })) as { callId: string; call: { authorId: string | null } } | null;
+
+    if (!app || app.call.authorId !== ownerId) throw new NotFoundException('Candidature introuvable.');
+
+    await this.prisma.$transaction([
+      this.prisma.application.delete({ where: { id: applicationId } }),
+      this.prisma.projectCall.updateMany({
+        where: { id: app.callId, applicationCount: { gt: 0 } },
+        data: { applicationCount: { decrement: 1 } },
+      }),
+    ]);
+  }
 }

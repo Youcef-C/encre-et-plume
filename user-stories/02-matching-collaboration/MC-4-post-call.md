@@ -38,3 +38,7 @@
 ## Notes
 - Explicit: board layout, self-role toggle, "Genre ▾", "＋ Poster un appel", card contents (directional eyebrow, title, chips, description, author, countdown/applicant count, "Candidater"), the post form fields, and that "Je cherche" in [[CS-1]] can seed a call.
 - Inferred: auto-close job, owner-only edit, follower notification on post.
+
+## Amendment (2026-07-10) — End a call early ("Clôturer l'appel")
+- **Was**: the owner could only **delete** a call, and delete is blocked once an application has been validated/accepted — leaving no way to stop a call early while keeping validated collaborators.
+- **Now (approved)**: expose an owner **"Clôturer l'appel"** action that ends the call early — sets `status = 'closed'` (the backend already derives/permits close-early). A closed call: stops accepting **new** applications and drops off the open board, but **keeps its validated/accepted applicants** and stays visible to the owner. Distinct from delete (delete stays blocked when someone is validated; close-early is always available to the owner). Owner-only, server-side. UI: a "Clôturer l'appel" control in the owner's call view (`CallDetailModal` / received-applicants) alongside edit/delete. Grade against this.

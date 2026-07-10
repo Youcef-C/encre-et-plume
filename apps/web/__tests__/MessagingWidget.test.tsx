@@ -175,12 +175,15 @@ describe('MessagingWidget — launcher', () => {
     expect(await screen.findByRole('button', { name: 'Messages, 1 non lus' })).toBeInTheDocument();
   });
 
-  it('opens the panel with header controls', async () => {
+  it('opens the panel with header controls (accent-red Groupe, no minimize, Fermer)', async () => {
     renderWidget();
     await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
     const dialog = screen.getByRole('dialog', { name: 'Messages' });
-    expect(within(dialog).getByRole('button', { name: '＋ Groupe' })).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: 'Réduire' })).toBeInTheDocument();
+    // MC-9 amendment: "＋ Groupe" is a primary accent-red action.
+    const groupe = within(dialog).getByRole('button', { name: '＋ Groupe' });
+    expect(groupe).toHaveStyle({ background: 'var(--accent)', color: '#fff' });
+    // MC-9 amendment: the minimize "Réduire" (▁) button is removed; only "Fermer" remains.
+    expect(within(dialog).queryByRole('button', { name: 'Réduire' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Fermer' })).toBeInTheDocument();
   });
 });
@@ -301,20 +304,7 @@ describe('MessagingWidget — block from the DM header (MC-10)', () => {
   });
 });
 
-describe('MessagingWidget — minimize / close', () => {
-  it('minimize keeps the open thread; reopening restores it', async () => {
-    renderWidget();
-    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
-    await userEvent.click(await screen.findByText('Léa B.'));
-    await screen.findByText('Démarrez la conversation');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Réduire' }));
-    expect(screen.queryByRole('dialog', { name: 'Messages' })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Messages, 1 non lus' }));
-    expect(await screen.findByText('Démarrez la conversation')).toBeInTheDocument();
-  });
-
+describe('MessagingWidget — close', () => {
   it('close resets to the conversation list and refocuses the FAB', async () => {
     renderWidget();
     const fab = await screen.findByRole('button', { name: 'Messages, 1 non lus' });
