@@ -13,6 +13,13 @@
  * (`aria-label="Voir les membres présents, N en ligne"` — NO "Le Comptoir" substring, so it can't
  * collide with mc11-salon.spec.ts's own `getByRole('button', {name:/Le Comptoir/})` locator).
  *
+ * UI polish (2026-07-10, latest): the collapsed dock is `width: fit-content` (hugs its own text —
+ * no layout assertion depends on this); the "· Connecté" text label was REMOVED (connected state is
+ * the presence dot's colour + a `data-connected` attribute, no text — asserted in `MC13-E1`); and the
+ * roster trigger now renders ONLY while the dock is UNFOLDED (hidden while collapsed — the collapsed
+ * header still shows the count via its own "N en ligne" text). Every interaction with the trigger
+ * calls `ensureExpanded()` first (see helpers below).
+ *
  * Hermeticity (per the MC9-E11 lesson + this suite's own risk — Le Comptoir is one GLOBAL room
  * shared by every spec that opens the dock, e.g. mc11-salon.spec.ts, AND membership is now a
  * PERSISTENT DB row with no TTL/reseed — a join that's never left pollutes every future run's
@@ -131,20 +138,27 @@ async function readTriggerCount(page: Page): Promise<number> {
   return parseInt(match[1], 10);
 }
 
-/** Expands the dock (if collapsed) and clicks "＋ Rejoindre le salon". Assumes not yet a member. */
-async function joinSalon(page: Page): Promise<void> {
+/**
+ * Unfolds the dock (aria-expanded=true) if it's collapsed. The roster trigger only renders while
+ * unfolded — every interaction with `rosterToggle` must call this first.
+ */
+async function ensureExpanded(page: Page): Promise<void> {
   if ((await salonHeader(page).getAttribute('aria-expanded')) !== 'true') {
     await salonHeader(page).click();
   }
+  await expect(salonHeader(page)).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** Unfolds the dock and clicks "＋ Rejoindre le salon". Assumes not yet a member. */
+async function joinSalon(page: Page): Promise<void> {
+  await ensureExpanded(page);
   await salonDock(page).getByRole('button', { name: '＋ Rejoindre le salon' }).click();
   await expect(salonDock(page).getByRole('button', { name: 'Quitter' })).toBeVisible({ timeout: 10_000 });
 }
 
-/** Expands the dock (if collapsed) and clicks "Quitter" — the ONLY way membership ends. */
+/** Unfolds the dock and clicks "Quitter" — the ONLY way membership ends. */
 async function leaveSalon(page: Page): Promise<void> {
-  if ((await salonHeader(page).getAttribute('aria-expanded')) !== 'true') {
-    await salonHeader(page).click();
-  }
+  await ensureExpanded(page);
   await salonDock(page).getByRole('button', { name: 'Quitter' }).click();
   await expect(salonDock(page).getByRole('button', { name: '＋ Rejoindre le salon' })).toBeVisible({ timeout: 10_000 });
 }
@@ -161,6 +175,7 @@ async function leaveSalonApi(page: Page): Promise<void> {
 
 test('MC13-E1: single-user Rejoindre/Quitter toggle — count and the "· vous" row move symmetrically, and re-joining is not stuck', async ({ page }) => {
   await signUpFreshOnPage(page, 'solo', 'MC13 Solo');
+  await ensureExpanded(page); // the roster trigger only renders while the dock is unfolded
   await rosterToggle(page).click();
   await expect(rosterRegion(page)).toBeVisible();
 
@@ -183,6 +198,13 @@ test('MC13-E1: single-user Rejoindre/Quitter toggle — count and the "· vous" 
   const countAfterJoin = await readRosterCount(page);
   await expect(async () => {
     expect(await readDockOnlineCount(page)).toBe(countAfterJoin);
+  }).toPass({ timeout: 10_000 });
+
+  // The "· Connecté" text label was REMOVED — connected state is shown by the presence dot's
+  // colour alone, conveyed to a11y tech via `data-connected` on the presence line, not text.
+  await expect(page.getByText('Connecté', { exact: false })).toHaveCount(0);
+  await expect(async () => {
+    expect(await salonDock(page).locator('[data-connected]').getAttribute('data-connected')).toBe('yes');
   }).toPass({ timeout: 10_000 });
   await page.screenshot({ path: 'e2e/screenshots/mc13-single-user-joined.png' });
 
@@ -217,6 +239,7 @@ test('MC13-E2: an observer (roster open) sees another member\'s Rejoindre/Quitte
     const pageB = await signUpFreshUi(ctxB, 'obsB', nameB);
 
     // A is the observer: opens the roster but never joins itself.
+    await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
     await expect(rosterRegion(pageA)).toBeVisible();
     const countBefore = await readRosterCount(pageA);
@@ -264,6 +287,7 @@ test('MC13-E3: membership persists across a FULL disconnect (context close) — 
     await signUpVerifyAndLogin(pageB, emailB, nameB);
     await loginUi(pageB, emailB);
 
+    await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
     await expect(rosterRegion(pageA)).toBeVisible();
     await joinSalon(pageB);
@@ -288,11 +312,24 @@ test('MC13-E3: membership persists across a FULL disconnect (context close) — 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A) Trigger UI — user-icon button, no "Le Comptoir" in its label, badge matches the count.
+// A) Trigger UI — renders ONLY while the dock is unfolded (the collapsed header shows the count,
+// but not the trigger); its label never says "Le Comptoir"; badge matches the member count.
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('MC13-E4: the roster trigger label never says "Le Comptoir"; its badge matches the member count', async ({ page }) => {
+test('MC13-E4: the roster trigger only renders once the dock is unfolded; its label never says "Le Comptoir"; badge matches the member count', async ({ page }) => {
   await signUpFreshOnPage(page, 'trig', 'MC13 Trig');
+
+  // Collapsed by default: the dock header shows "Le Comptoir" + the count, but the roster trigger
+  // itself is NOT rendered while folded.
+  await expect(salonHeader(page)).toBeVisible({ timeout: 10_000 });
+  expect(await salonHeader(page).getAttribute('aria-expanded')).toBe('false');
+  await expect(rosterToggle(page)).toHaveCount(0);
+  // Relative baseline, not assumed 0 — the shared salon is a persistent DB table with no per-run
+  // reseed, so unrelated long-lived members may already be present (same reasoning as MC13-E1).
+  const countBeforeJoin = await readDockOnlineCount(page);
+
+  // Unfold → the trigger appears.
+  await ensureExpanded(page);
   const toggle = rosterToggle(page);
   await expect(toggle).toBeVisible({ timeout: 10_000 });
   expect(await toggle.getAttribute('aria-expanded')).toBe('false');
@@ -304,16 +341,13 @@ test('MC13-E4: the roster trigger label never says "Le Comptoir"; its badge matc
   const collapsedLabel = await toggle.getAttribute('aria-label');
   expect(collapsedLabel).toMatch(/^Voir les membres présents/);
   expect(collapsedLabel).not.toContain('Le Comptoir');
-  // Relative baseline, not assumed 0 — the shared salon is a persistent DB table with no per-run
-  // reseed, so unrelated long-lived members may already be present (same reasoning as MC13-E1).
-  const countBefore = await readTriggerCount(page);
 
-  await joinSalon(page);
+  await joinSalon(page); // dock already unfolded — its own ensureExpanded is a no-op here
   await expect(async () => {
-    expect(await readTriggerCount(page)).toBe(countBefore + 1);
+    expect(await readTriggerCount(page)).toBe(countBeforeJoin + 1);
   }).toPass({ timeout: 10_000 });
   const badgeText = await toggle.locator('.ep-salon-roster-badge').textContent();
-  expect(badgeText).toBe(String(countBefore + 1));
+  expect(badgeText).toBe(String(countBeforeJoin + 1));
 
   await leaveSalon(page);
 });
@@ -330,6 +364,7 @@ test('MC13-E5: roster row "Voir le profil" navigates to /{slug}', async ({ brows
     const nameB = `MC13 ProfB ${Date.now()}`;
     const pageB = await signUpFreshUi(ctxB, 'profB', nameB);
 
+    await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
     await joinSalon(pageB);
 
@@ -358,6 +393,7 @@ test('MC13-E6: roster row "Envoyer un message" opens a DM on the target', async 
     const nameB = `MC13 DmB ${Date.now()}`;
     const pageB = await signUpFreshUi(ctxB, 'dmB', nameB);
 
+    await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
     await joinSalon(pageB);
 
@@ -384,6 +420,7 @@ test('MC13-E7: roster row "Bloquer" removes the target from the roster', async (
     const nameB = `MC13 BlkB ${Date.now()}`;
     const pageB = await signUpFreshUi(ctxB, 'blkB', nameB);
 
+    await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
     await joinSalon(pageB);
 
@@ -527,9 +564,12 @@ for (const vp of VIEWPORTS) {
     await signUpFreshOnPage(page, vp.tag, `MC13 Resp ${vp.label}`);
     await page.setViewportSize({ width: vp.width, height: vp.height });
 
-    await expect(rosterToggle(page)).toBeVisible({ timeout: 10_000 });
+    // Collapsed: the trigger is not rendered (only the dock header's own count is visible).
+    await expect(salonHeader(page)).toBeVisible({ timeout: 10_000 });
+    await expect(rosterToggle(page)).toHaveCount(0);
     await page.screenshot({ path: `e2e/screenshots/mc13-roster-collapsed-${vp.label}.png` });
 
+    await ensureExpanded(page);
     await rosterToggle(page).click();
     await expect(rosterRegion(page)).toBeVisible();
     await page.screenshot({ path: `e2e/screenshots/mc13-roster-expanded-${vp.label}.png` });
@@ -552,6 +592,8 @@ for (const vp of VIEWPORTS) {
 test('MC13 smoke: logged-in nav — home loads, Comptoir dock + roster trigger + Messages launcher all mount', async ({ page }) => {
   await signUpFreshOnPage(page, 'smoke', 'MC13 Smoke');
   await expect(salonHeader(page)).toBeVisible({ timeout: 10_000 });
+  await expect(rosterToggle(page)).toHaveCount(0); // hidden while the dock is collapsed
+  await ensureExpanded(page);
   await expect(rosterToggle(page)).toBeVisible();
   await expect(msgFab(page)).toBeVisible();
 });

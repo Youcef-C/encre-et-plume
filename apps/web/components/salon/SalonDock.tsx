@@ -374,9 +374,9 @@ export default function SalonDock() {
     <div
       className="ep-salon-dock"
       style={{
-        // Collapsed, the Comptoir is just its header bar — show it as a compact 300px dock; it
+        // Collapsed, the Comptoir hugs its content (just "Le Comptoir" + "N en ligne"); it
         // expands to the full 400 panel when opened.
-        width: expanded ? 400 : 300,
+        width: expanded ? 400 : 'fit-content',
         maxWidth: '100%',
         background: 'var(--card)',
         border: '3px solid var(--ink)',
@@ -451,13 +451,13 @@ export default function SalonDock() {
         </span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <b style={{ fontSize: 14, display: 'block' }}>{SALON_NAME}</b>
-          <span style={{ fontSize: 11, color: '#cabfb2', display: 'block' }}>
-            {/* Green presence dot lights up when connected to the salon realtime; muted while reconnecting. */}
+          <span data-connected={atComptoir ? 'yes' : 'no'} style={{ fontSize: 11, color: '#cabfb2', display: 'block' }}>
+            {/* Green presence dot lights up when connected to the salon realtime; muted while reconnecting.
+                The "Connecté" state is shown by the dot colour alone — no text label. */}
             <span style={{ color: atComptoir ? '#3ecf8e' : '#8a8178' }} aria-hidden="true">
               ●
             </span>{' '}
             {onlineCount} en ligne
-            {atComptoir && ' · Connecté'}
           </span>
         </span>
         {mentionCollapsed && (
@@ -760,17 +760,19 @@ export default function SalonDock() {
     </div>
 
       {/* MC-13 — Comptoir roster: a user-icon button to the right of the dock (outside the thread)
-          toggling the members list. Membership persists across dock collapse, so it renders always. */}
-      <SalonRoster
-        blockedIds={blockedIds}
-        onBlocked={(userId) => {
-          setBlockedIds((prev) => new Set(prev).add(userId));
-          // Blocking a present member drops them from the roster count; re-sync the header count to the
-          // server (identical behavior to the roster) so header === roster stays true.
-          refetchOwnMembership();
-        }}
-        membershipVersion={membershipVersion}
-      />
+          toggling the members list. Shown only when the dock is UNFOLDED (hidden while collapsed). */}
+      {expanded && (
+        <SalonRoster
+          blockedIds={blockedIds}
+          onBlocked={(userId) => {
+            setBlockedIds((prev) => new Set(prev).add(userId));
+            // Blocking a present member drops them from the roster count; re-sync the header count to the
+            // server (identical behavior to the roster) so header === roster stays true.
+            refetchOwnMembership();
+          }}
+          membershipVersion={membershipVersion}
+        />
+      )}
     </div>
   );
 }

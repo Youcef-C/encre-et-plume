@@ -122,17 +122,19 @@ describe('SalonDock', () => {
     expect(screen.queryByText('＋ Rejoindre le salon')).not.toBeInTheDocument();
   });
 
-  it('shows the "· Connecté" indicator in the collapsed bar only once the salon is joined', async () => {
+  it('turns the presence dot green (connected) in the collapsed bar once the salon is joined', async () => {
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    // Always-visible header (dock still folded) surfaces the joined+connected state.
-    expect(await screen.findByText(/en ligne · Connecté/)).toBeInTheDocument();
+    // No text label — the joined+connected state is the dot colour only.
+    const line = await screen.findByText(/144 en ligne/);
+    expect(line.closest('[data-connected]')).toHaveAttribute('data-connected', 'yes');
+    expect(screen.queryByText(/Connecté/)).not.toBeInTheDocument();
   });
 
-  it('does NOT show "· Connecté" for a logged-in non-member', async () => {
+  it('keeps the presence dot muted (not connected) for a logged-in non-member', async () => {
     renderDock(); // default summary → isMember: false
-    await screen.findByText(/144 en ligne/);
-    expect(screen.queryByText(/· Connecté/)).not.toBeInTheDocument();
+    const line = await screen.findByText(/144 en ligne/);
+    expect(line.closest('[data-connected]')).toHaveAttribute('data-connected', 'no');
   });
 
   it('header is a button whose accessible name includes the unread count and toggles aria-expanded', async () => {
@@ -153,10 +155,14 @@ describe('SalonDock', () => {
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
-  it('renders the MC-13 roster user-icon trigger outside the thread, even while collapsed', async () => {
+  it('shows the MC-13 roster user-icon trigger only when the dock is unfolded', async () => {
     renderDock();
-    // The trigger is a sibling of the dock, always present — no need to expand the dock to reach it.
-    // Its name must NOT contain "Le Comptoir" (would collide with the dock header button in mc11).
+    await screen.findByText('Le Comptoir');
+    // Hidden while collapsed.
+    expect(screen.queryByRole('button', { name: /Voir les membres présents/ })).not.toBeInTheDocument();
+    // Unfold the dock → the trigger appears (outside the thread). Its name must NOT contain
+    // "Le Comptoir" (would collide with the dock header button in mc11).
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const trigger = await screen.findByRole('button', { name: /Voir les membres présents/ });
     expect(trigger).not.toHaveAccessibleName(/Le Comptoir/);
   });
@@ -270,7 +276,8 @@ describe('SalonDock', () => {
     renderDock();
     await screen.findByText(/3 en ligne/);
 
-    // Open the roster and block a present member.
+    // Unfold the dock (the roster trigger only renders when unfolded), then open the roster and block.
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     await userEvent.click(await screen.findByRole('button', { name: /Voir les membres présents/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Actions sur Léa B.' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Bloquer Léa B.' }));
@@ -467,9 +474,9 @@ describe('SalonDock', () => {
     messagingValue.connectionState = 'reconnecting';
     vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
     renderDock();
-    // Even a joined member loses "· Connecté" while the realtime link is down.
-    await screen.findByText(/144 en ligne/);
-    expect(screen.queryByText(/· Connecté/)).not.toBeInTheDocument();
+    // Even a joined member's dot goes muted while the realtime link is down.
+    const line = await screen.findByText(/144 en ligne/);
+    expect(line.closest('[data-connected]')).toHaveAttribute('data-connected', 'no');
     await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(await screen.findByText('Reconnexion…')).toBeInTheDocument();
   });
