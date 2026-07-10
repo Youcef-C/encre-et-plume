@@ -109,6 +109,12 @@ async function main() {
     await prisma.project.deleteMany({ where: { ownerId: { in: accountIds } } });
   }
 
+  // 4h. CS-12: drop the dedicated dashboard collection Work + its illustrations (both cascade their
+  // IllustrationCollection membership). 4f already removed the WorkCreator + nulled artistId, so these
+  // deletes are unblocked; removing them keeps the collection fixtures from leaking across runs.
+  await prisma.work.deleteMany({ where: { slug: 'e2e-cs12-carnet' } });
+  await prisma.illustration.deleteMany({ where: { id: { startsWith: 'e2e-cs12-illu' } } });
+
   // 5. Delete accounts
   await prisma.account.deleteMany({
     where: { email: { startsWith: 'qa_e2e_' } },

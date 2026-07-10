@@ -488,8 +488,8 @@ export default function Header() {
             <HeartIcon size={17} />
           </Link>
           <Link
-            href="/tableau-de-bord"
-            aria-current={pathname === '/tableau-de-bord' ? 'page' : undefined}
+            href="/projets"
+            aria-current={pathname === '/projets' ? 'page' : undefined}
             className="ep-pill-btn ep-pill-desktop"
             style={{
               fontSize: 14,

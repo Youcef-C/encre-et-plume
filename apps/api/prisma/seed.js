@@ -434,10 +434,12 @@ const MY_APPLICATIONS = [
 ];
 
 // MC-3 (CS-1 seam): the sender's projects for the invite modal picker (prototype fixtures).
+// CS-12: slug (CS-2 workspace address), step (current production step) and nextReleaseAt (next
+// release) match the prototype "Mes projets" cards. CS-2/CS-5 will own writing step; CS-9 nextReleaseAt.
 const PROJECTS = [
-  { id: 'mc3-proj-lames-de-brume', title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
-  { id: 'mc3-proj-spectres-avril', title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision' },
-  { id: 'mc3-proj-carnet-encre', title: "Carnet d'encre", kind: 'Illustration(s)', genre: null, status: 'en cours' },
+  { id: 'mc3-proj-lames-de-brume', title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'lames-de-brume', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
+  { id: 'mc3-proj-spectres-avril', title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-avril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
+  { id: 'mc3-proj-carnet-encre', title: "Carnet d'encre", kind: 'Illustration(s)', genre: null, status: 'en cours', slug: 'carnet-encre', step: null, nextReleaseAt: null },
 ];
 
 // MC-2: a loginable creator with an EMPTY tag/genre profile — exercises the minimum-data guard
@@ -792,7 +794,7 @@ async function main() {
   const camille = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' } });
   if (camille) {
     for (const p of PROJECTS) {
-      const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null };
+      const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt };
       await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
     }
 

@@ -249,10 +249,10 @@ function InvitationRow({
           </>
         )}
         {item.status === 'accepted' && item.project && (
-          // ponytail: no per-project workspace route yet (CS-1 owns it) — send "Ouvrir" to the
-          // existing project-space surface, same convention as the project_activity notification.
+          // ponytail: no per-project workspace route yet (CS-2 owns it) — send "Ouvrir" to the
+          // "Mes projets" dashboard, same convention as the project_activity notification.
           <Link
-            href="/tableau-de-bord"
+            href="/projets"
             style={{
               fontSize: 12,
               fontWeight: 700,

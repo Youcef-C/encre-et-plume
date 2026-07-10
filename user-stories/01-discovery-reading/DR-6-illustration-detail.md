@@ -13,7 +13,7 @@
 - **Comments section** ([[PUB-2]]): list + composer + "Publier".
 - **Sidebar artist card**: avatar, "🖌 Dessinateur·rice · Lyon", "＋ Suivre" ([[PUB-4]]), "★ Soutenir" ([[MR-1]]), "✉ Proposer une collab" ([[MC-3]]).
 - **Sidebar "Détails"**: Catégorie, Publié, Dimensions (e.g. "2480×3508"), Outils, Licence.
-- **"Plus de cet·te artiste"**: grid of other works by the same artist.
+- **"Plus de cet·te artiste"**: grid of other works by the same artist. **(user-specified 2026-07-10)** show a **max of 4** images; add a **"Voir tout"** link inside the box (same pattern as the collections box's "Voir tout") → redirects to the **catalogue filtered to that artist's illustrations** (the galerie/catalogue scoped to the artist). Cap the `getMoreByArtist` limit at 4.
 - **Admin moderation bar** (révoquer / bannir) ([[AD-4]]) — Admin only.
 - **States**: image loading placeholder; fullscreen view; empty comments state; error on missing illustration (404); personal actions prompt sign-in [[F-1]] when anonymous.
 - **Accessibility**: artwork has alt text/description; fullscreen and action buttons labeled; comment composer labeled; "Plus de cet·te artiste" cards are focusable links.

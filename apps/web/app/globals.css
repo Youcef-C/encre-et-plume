@@ -177,6 +177,49 @@ h1, h2, h3, h4, h5, h6 {
   text-decoration: underline;
 }
 
+/* CS-12: collection-card caret expand pill — accent fill on hover (brand hover convention). */
+.ep-projet-expand {
+  transition: background-color 0.12s, color 0.12s;
+}
+.ep-projet-expand:hover {
+  background-color: var(--accent);
+  color: #fff;
+}
+
+/* CS-12: "Mes projets" cards — default hard offset shadow + a hover lift (base shadow lives here, not
+   inline, so :hover can grow it). Expanded/nested variants keep their inline shadow override. */
+.ep-projet-card {
+  box-shadow: 4px 4px 0 var(--shadow);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.ep-projet-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-projet-card {
+    transition: none;
+  }
+  .ep-projet-card:hover {
+    transform: none;
+  }
+}
+
+/* CS-12: narrow screens (≤520px, covers 375px). Stack the card so the action buttons drop to their own
+   full-width row BELOW the cover+content instead of colliding with the wrapped badge/meta text. The row
+   wraps; the actions column becomes a full-width, left-aligned row underneath. `!important` overrides the
+   inline `flex:none` / `justify-content:flex-end` on the actions div. */
+@media (max-width: 520px) {
+  .ep-projet-card-row {
+    flex-wrap: wrap;
+  }
+  .ep-projet-card-actions {
+    flex: 0 0 100% !important;
+    justify-content: flex-start !important;
+    margin-top: 10px;
+  }
+}
+
 /* Form input */
 .ep-input {
   width: 100%;

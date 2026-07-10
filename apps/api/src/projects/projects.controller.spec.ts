@@ -25,8 +25,13 @@ describe('ProjectsController', () => {
     expect(guards).toEqual([SessionGuard]);
   });
 
-  it('passes the session accountId to the service', async () => {
-    await controller.mine({ accountId: 'acc-me' } as never);
-    expect(service.getMine).toHaveBeenCalledWith('acc-me');
+  it('passes the session accountId + parsed query to the service', async () => {
+    await controller.mine({ accountId: 'acc-me' } as never, { scope: 'all', status: 'en-pause', type: 'manga', q: ' brume ', page: '2' });
+    expect(service.getMine).toHaveBeenCalledWith('acc-me', { scope: 'all', status: 'en-pause', type: 'manga', q: 'brume', page: 2 });
+  });
+
+  it('defaults to the legacy picker query when no params are passed', async () => {
+    await controller.mine({ accountId: 'acc-me' } as never, {});
+    expect(service.getMine).toHaveBeenCalledWith('acc-me', { scope: 'projects', status: 'tous', type: 'tous', q: undefined, page: 1 });
   });
 });

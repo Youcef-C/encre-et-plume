@@ -286,6 +286,9 @@ model Project {
   genre       String? // fr label, e.g. "Seinen" (picker meta line)
   status      String       @default("en cours") // "en cours" | "en révision" | … (picker meta line)
   cover       String? // image URL; null -> halftone placeholder
+  slug        String?      @unique // CS-2 workspace address (GET /projects/{slug}); nullable so legacy rows survive
+  step        String? // CS-12 dashboard: current production step, e.g. "encrage Ch.1" — CS-2/CS-5 own writing it
+  nextReleaseAt DateTime? // CS-12 dashboard: next scheduled release — CS-9 owns writing it
   createdAt   DateTime     @default(now())
   invitations Invitation[]
   calls       ProjectCall[] // MC-4X req6: calls linked to this project

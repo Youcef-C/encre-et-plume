@@ -38,6 +38,11 @@ const SPECS = [
   { key: 'INV_INBOX',   email: 'qa_e2e_inv_inbox@test.com',   slug: 'e2e-inv-inbox' },
   { key: 'INV_FROM_A',  email: 'qa_e2e_inv_from_a@test.com',  slug: 'e2e-inv-from-a' }, // dessinateur → invites to "écrire"
   { key: 'INV_FROM_B',  email: 'qa_e2e_inv_from_b@test.com',  slug: 'e2e-inv-from-b' }, // scenariste → invites to "dessiner"
+  // CS-12 "Mes projets" dashboard fixtures — a dedicated creator who owns 4 projects (one per status)
+  // + one illustration collection, with a collaborator on the "en cours" project. No other spec touches
+  // these, so the dashboard's absolute status/count/member assertions can't be raced by a sibling.
+  { key: 'CS12_OWNER',  email: 'qa_e2e_cs12_owner@test.com',  slug: 'e2e-cs12-owner' },  // scenariste (owner)
+  { key: 'CS12_COLLAB', email: 'qa_e2e_cs12_collab@test.com', slug: 'e2e-cs12-collab' }, // dessinateur (accepted collaborator)
 ];
 
 async function main() {
@@ -318,6 +323,61 @@ async function main() {
     await prisma.notification.create({
       data: { recipientId: inbox, type: 'invitation', sourceUserId: fromA, createdAt: D('2026-07-08T09:00:00.000Z') },
     });
+  }
+
+  // ── CS-12: "Mes projets" dashboard fixtures for the dedicated CS12_OWNER account ──────────────
+  // Owns 4 projects (one per status, the "en cours" one carrying step + a future nextReleaseAt) and
+  // one illustration collection (3 members). CS12_COLLAB is an accepted collaborator on the "en cours"
+  // project so the card's "Avec …" member line renders. Hermetic: reset this owner's projects,
+  // invitations and collection membership first, then recreate deterministically.
+  {
+    const owner = accounts.CS12_OWNER.id;
+    const collab = accounts.CS12_COLLAB.id;
+    const inDays = (n) => new Date(Date.now() + n * 864e5);
+
+    // Profiles carry creatorRoles[0] so the dashboard resolves each member's role glyph.
+    await prisma.profile.upsert({ where: { accountId: owner }, update: { creatorRoles: ['scenariste'] }, create: { accountId: owner, creatorRoles: ['scenariste'] } });
+    await prisma.profile.upsert({ where: { accountId: collab }, update: { creatorRoles: ['dessinateur'] }, create: { accountId: collab, creatorRoles: ['dessinateur'] } });
+
+    // Reset: invitations on/for these accounts, then this owner's projects (invitations FK-restrict).
+    await prisma.invitation.deleteMany({ where: { OR: [{ fromUserId: owner }, { toUserId: owner }, { fromUserId: collab }, { toUserId: collab }] } });
+    await prisma.project.deleteMany({ where: { ownerId: owner } });
+
+    const PROJECTS = [
+      { id: 'e2e-cs12-proj-cours', title: 'E2E CS12 · En cours', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'e2e-cs12-en-cours', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
+      { id: 'e2e-cs12-proj-revision', title: 'E2E CS12 · En révision', kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'e2e-cs12-en-revision', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
+      { id: 'e2e-cs12-proj-pause', title: 'E2E CS12 · En pause', kind: 'Histoire', genre: 'Aventure', status: 'en pause', slug: 'e2e-cs12-en-pause', step: null, nextReleaseAt: null },
+      { id: 'e2e-cs12-proj-publie', title: 'E2E CS12 · Publié', kind: 'Manga', genre: 'Seinen', status: 'publié', slug: 'e2e-cs12-publie', step: null, nextReleaseAt: null },
+    ];
+    for (const p of PROJECTS) {
+      await prisma.project.create({ data: { id: p.id, ownerId: owner, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt } });
+    }
+
+    // Accepted collaborator on the "en cours" project → members[] = [owner(self), collab].
+    await prisma.invitation.create({
+      data: { fromUserId: owner, toUserId: collab, projectId: 'e2e-cs12-proj-cours', status: 'accepted', createdAt: inDays(-6), respondedAt: inDays(-5), message: 'On collabore sur ce projet.' },
+    });
+
+    // Illustration collection Work (format 'Illustration(s)') owned by CS12_OWNER, 3 members.
+    const collectionData = {
+      slug: 'e2e-cs12-carnet', title: 'E2E CS12 · Carnet', format: 'Illustration(s)', genre: 'Art', themes: [],
+      audienceRating: 'Tous publics', meta: '3 illustrations · collection', publishedAt: inDays(-30), synopsis: 'Collection e2e CS-12.',
+    };
+    const collection = await prisma.work.upsert({ where: { slug: 'e2e-cs12-carnet' }, create: collectionData, update: collectionData });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: collection.id, accountId: owner } },
+      create: { workId: collection.id, accountId: owner, role: 'dessinateur', order: 0 },
+      update: {},
+    });
+    const illuIds = ['e2e-cs12-illu-1', 'e2e-cs12-illu-2', 'e2e-cs12-illu-3'];
+    for (const id of illuIds) {
+      const data = { id, title: `E2E CS12 ${id}`, artistId: owner, artistName: 'E2E CS12_OWNER', category: 'personnages', publishedAt: inDays(-30) };
+      await prisma.illustration.upsert({ where: { id }, create: data, update: data });
+    }
+    await prisma.illustrationCollection.deleteMany({ where: { workId: collection.id } });
+    for (let i = 0; i < illuIds.length; i++) {
+      await prisma.illustrationCollection.create({ data: { workId: collection.id, illustrationId: illuIds[i], order: i } });
+    }
   }
 
   await prisma.$disconnect();

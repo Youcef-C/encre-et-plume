@@ -529,6 +529,7 @@ export const getMatchSuggestions = (limit?: number): Promise<MatchSuggestionsRes
 // ─── Collaboration invitations "Proposer une collab" (MC-3) ───────────────────
 import type {
   MyProjectsResponse,
+  MyProjectsQuery,
   CreateInvitationRequest,
   CreateInvitationsResponse,
   InvitationDto,
@@ -537,8 +538,19 @@ import type {
   RespondInvitationRequest,
 } from '@encre-et-plume/shared';
 
-export const getMyProjects = (): Promise<MyProjectsResponse> =>
-  request<MyProjectsResponse>('/projects/mine');
+// No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
+// The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.
+export const getMyProjects = (params?: MyProjectsQuery): Promise<MyProjectsResponse> => {
+  if (!params) return request<MyProjectsResponse>('/projects/mine');
+  const p = new URLSearchParams();
+  if (params.scope) p.set('scope', params.scope);
+  if (params.q) p.set('q', params.q);
+  if (params.status && params.status !== 'tous') p.set('status', params.status);
+  if (params.type && params.type !== 'tous') p.set('type', params.type);
+  if (params.page && params.page > 1) p.set('page', String(params.page));
+  const qs = p.toString();
+  return request<MyProjectsResponse>(`/projects/mine${qs ? `?${qs}` : ''}`);
+};
 
 export const createInvitation = (
   body: CreateInvitationRequest,

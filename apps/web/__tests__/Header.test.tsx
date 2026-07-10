@@ -291,7 +291,7 @@ describe('Header — auth-gated nav items (Projets + Ma liste)', () => {
   it('shows Projets link when logged in', () => {
     renderHeader({ account: mockAccount });
     const link = screen.getByRole('link', { name: /^projets$/i });
-    expect(link).toHaveAttribute('href', '/tableau-de-bord');
+    expect(link).toHaveAttribute('href', '/projets');
   });
 
   it('does not show Projets link when logged out', () => {
@@ -310,8 +310,8 @@ describe('Header — auth-gated nav items (Projets + Ma liste)', () => {
     expect(screen.queryByRole('link', { name: /ma liste/i })).not.toBeInTheDocument();
   });
 
-  it('Projets link has aria-current="page" on /tableau-de-bord', () => {
-    vi.mocked(usePathname).mockReturnValue('/tableau-de-bord');
+  it('Projets link has aria-current="page" on /projets', () => {
+    vi.mocked(usePathname).mockReturnValue('/projets');
     renderHeader({ account: mockAccount });
     expect(screen.getByRole('link', { name: /^projets$/i })).toHaveAttribute('aria-current', 'page');
   });

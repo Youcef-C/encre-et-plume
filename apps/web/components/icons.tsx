@@ -371,3 +371,25 @@ export function ChatIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// A stack of sheets — marks a collection ("a set" of illustrations).
+export function LayersIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 3l9 5-9 5-9-5 9-5z" />
+      <path d="M3 12l9 5 9-5" />
+      <path d="M3 16l9 5 9-5" />
+    </Svg>
+  );
+}
+
+// A single framed image — marks one standalone illustration ("one piece").
+export function ImageIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M20.5 15l-5-5-8 8.5" />
+    </Svg>
+  );
+}
