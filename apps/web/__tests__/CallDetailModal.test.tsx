@@ -39,6 +39,7 @@ const base: CallDetail = {
   isOwner: false,
   hasApplied: false,
   myApplicationId: null,
+  myApplicationStatus: null,
   viewerHasRole: true,
   seekingRoles: ['dessinateur'],
   seats: { dessinateur: 1 },
@@ -171,11 +172,41 @@ describe('CallDetailModal', () => {
     expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
   });
 
+  // MC-14: decided applications surface their real status on the detail pill.
+  it('shows "✓ Acceptée" on the detail pill when the viewer application is accepted', async () => {
+    open({ hasApplied: true, myApplicationId: 'app-3', myApplicationStatus: 'accepted' });
+    expect(await screen.findByText('✓ Acceptée')).toBeInTheDocument();
+    expect(screen.queryByText('Candidature envoyée')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
+  });
+
+  it('shows "✕ Refusée" on the detail pill when the viewer application is rejected', async () => {
+    open({ hasApplied: true, myApplicationId: 'app-3', myApplicationStatus: 'rejected' });
+    expect(await screen.findByText('✕ Refusée')).toBeInTheDocument();
+    expect(screen.queryByText('Candidature envoyée')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
+  });
+
+  it('keeps "Candidature envoyée" on the detail pill while still pending', async () => {
+    open({ hasApplied: true, myApplicationId: 'app-3', myApplicationStatus: 'pending' });
+    expect(await screen.findByText('Candidature envoyée')).toBeInTheDocument();
+  });
+
   it('shows only a Clôturé badge on a closed call', async () => {
     open({ status: 'closed' });
     await screen.findByText('« Lames de Brume »');
     expect(screen.getAllByText('Clôturé').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
+  });
+
+  // MC-14 QA regression: the realistic auto-close trigger IS the accepted applicant's own seat —
+  // accepting the last seat closes the call in the SAME commit. `closed ? <Clôturé> : hasApplied ? …`
+  // checks `closed` FIRST, so the accepted applicant who just caused the auto-close sees only
+  // "Clôturé" instead of their own "✓ Acceptée" status. See qa-report.md defect #1.
+  it('[QA] still shows "✓ Acceptée" when the call auto-closed on the viewer own accepted seat', async () => {
+    open({ status: 'closed', hasApplied: true, myApplicationId: 'app-3', myApplicationStatus: 'accepted' });
+    await screen.findByText('« Lames de Brume »');
+    expect(screen.getByText('✓ Acceptée')).toBeInTheDocument();
   });
 
   it('shows no Candidater action on the owner own call', async () => {

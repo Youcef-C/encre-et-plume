@@ -120,6 +120,7 @@ function toEditCall(app: MyApplicationRow): CallCard {
     isOwner: false,
     hasApplied: true,
     myApplicationId: app.id,
+    myApplicationStatus: app.status,
     viewerHasRole: true,
   };
 }

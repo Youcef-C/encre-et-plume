@@ -5,6 +5,7 @@
 import type { CreatorRole } from './onboarding.js';
 import type { CallPreview } from './partners.js';
 import type { InvitationUserRef } from './invitations.js';
+import type { ApplicationStatus } from './applications.js';
 
 export const CALL_DIRECTIONS = ['writerSeeksIllustrator', 'illustratorSeeksWriter'] as const;
 export type CallDirection = (typeof CALL_DIRECTIONS)[number];
@@ -45,6 +46,7 @@ export interface CallCard extends CallPreview {
   isOwner: boolean; // viewer owns this call ⇒ no "Candidater"
   hasApplied: boolean; // MC-5: viewer already applied ⇒ disabled "Candidature envoyée" (== myApplicationId !== null)
   myApplicationId: string | null; // MC-6: the viewer's own Application id on this call, for withdraw (DELETE /me/applications/:id); null if not applied
+  myApplicationStatus: ApplicationStatus | null; // MC-14: the viewer's own application status on this call ('pending'|'accepted'|'rejected'); null if not applied — drives the applicant-side pill label
   viewerHasRole: boolean; // MC-4X: viewer's creatorRoles contain this call's seekingRole → the FE gate can't drift from the server rule
 }
 

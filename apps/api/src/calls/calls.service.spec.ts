@@ -177,7 +177,7 @@ describe('CallsService.findBoard', () => {
 
   it('sets myApplicationId (and hasApplied) only for calls the viewer applied to (single lookup, no N+1)', async () => {
     prisma.projectCall.findMany.mockResolvedValue([CALL_ROW({ id: 'call-1' }), CALL_ROW({ id: 'call-2' })]);
-    prisma.application.findMany.mockResolvedValue([{ id: 'app-9', callId: 'call-1' }]);
+    prisma.application.findMany.mockResolvedValue([{ id: 'app-9', callId: 'call-1', status: 'pending' }]);
     const res = await service.findBoard({ status: 'all' }, 'viewer');
     expect(prisma.application.findMany).toHaveBeenCalledTimes(1);
     const applied = res.items.find((c) => c.id === 'call-1');
@@ -186,6 +186,15 @@ describe('CallsService.findBoard', () => {
     expect(applied?.hasApplied).toBe(true);
     expect(notApplied?.myApplicationId).toBeNull();
     expect(notApplied?.hasApplied).toBe(false);
+  });
+
+  // MC-14: the viewer's own application status feeds the applicant-side pill (Acceptée/Refusée/envoyée).
+  it('exposes myApplicationStatus from the viewer application (null when not applied)', async () => {
+    prisma.projectCall.findMany.mockResolvedValue([CALL_ROW({ id: 'call-1' }), CALL_ROW({ id: 'call-2' })]);
+    prisma.application.findMany.mockResolvedValue([{ id: 'app-9', callId: 'call-1', status: 'accepted' }]);
+    const res = await service.findBoard({ status: 'all' }, 'viewer');
+    expect(res.items.find((c) => c.id === 'call-1')?.myApplicationStatus).toBe('accepted');
+    expect(res.items.find((c) => c.id === 'call-2')?.myApplicationStatus).toBeNull();
   });
 
   it('skips the applications lookup when the page is empty', async () => {
@@ -418,9 +427,16 @@ describe('CallsService.closeEarly', () => {
     prisma.projectCall.findUnique.mockResolvedValue(CALL_ROW({ authorId: 'acc-owner' }));
     const card = await service.closeEarly('acc-owner', 'call-1');
     expect(prisma.projectCall.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'call-1' }, data: { status: 'closed' } }),
+      expect.objectContaining({ where: { id: 'call-1' }, data: { status: 'closed', closedReason: 'manual' } }),
     );
     expect(card.status).toBe('closed');
+  });
+
+  // MC-14: a manual close carries closedReason 'manual' so reopenIfSeatFreed never reopens it.
+  it('marks the manual close as reason manual (sticky, never auto-reopened)', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(CALL_ROW({ authorId: 'acc-owner' }));
+    await service.closeEarly('acc-owner', 'call-1');
+    expect(prisma.projectCall.update.mock.calls[0][0].data).toEqual({ status: 'closed', closedReason: 'manual' });
   });
 });
 
@@ -588,7 +604,7 @@ describe('CallsService.closeIfFilled (MC-4X §8 — MC-7 accept seam)', () => {
     expect(closed).toBe(true);
     expect(prisma.projectCall.updateMany).toHaveBeenCalledWith({
       where: { id: 'call-1', status: 'open' }, // status guard ⇒ idempotent + race-safe
-      data: { status: 'closed' },
+      data: { status: 'closed', closedReason: 'full' }, // MC-14: auto-close is reopenable
     });
   });
 
@@ -620,6 +636,76 @@ describe('CallsService.closeIfFilled (MC-4X §8 — MC-7 accept seam)', () => {
   it('returns false for an unknown call', async () => {
     prisma.projectCall.findUnique.mockResolvedValue(null);
     expect(await service.closeIfFilled('nope')).toBe(false);
+  });
+});
+
+// ── MC-14: reopenIfSeatFreed — symmetric half of closeIfFilled ────────────────
+describe('CallsService.reopenIfSeatFreed', () => {
+  let service: CallsService;
+  let prisma: {
+    projectCall: { findUnique: jest.Mock; updateMany: jest.Mock };
+    application: { groupBy: jest.Mock };
+  };
+
+  const accepted = (rows: { appliedAs: string; n: number }[]) =>
+    rows.map((r) => ({ callId: 'call-1', appliedAs: r.appliedAs, _count: { _all: r.n } }));
+
+  beforeEach(() => {
+    prisma = {
+      projectCall: {
+        // closed + auto (full) + a free seat by default (2 seats, 1 accepted below)
+        findUnique: jest.fn().mockResolvedValue({ id: 'call-1', status: 'closed', closedReason: 'full', seats: { dessinateur: 2 }, closesAt: null }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      application: { groupBy: jest.fn().mockResolvedValue(accepted([{ appliedAs: 'dessinateur', n: 1 }])) },
+    };
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
+  });
+
+  it('reopens an auto-closed (full) call once a seat frees', async () => {
+    const reopened = await service.reopenIfSeatFreed('call-1');
+    expect(reopened).toBe(true);
+    expect(prisma.projectCall.updateMany).toHaveBeenCalledWith({
+      where: { id: 'call-1', status: 'closed', closedReason: 'full' }, // guard ⇒ race-safe, manual never matches
+      data: { status: 'open', closedReason: null },
+    });
+  });
+
+  it('never reopens a manually closed call', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue({ id: 'call-1', status: 'closed', closedReason: 'manual', seats: { dessinateur: 2 }, closesAt: null });
+    expect(await service.reopenIfSeatFreed('call-1')).toBe(false);
+    expect(prisma.projectCall.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen when the call is still full', async () => {
+    prisma.application.groupBy.mockResolvedValue(accepted([{ appliedAs: 'dessinateur', n: 2 }]));
+    expect(await service.reopenIfSeatFreed('call-1')).toBe(false);
+    expect(prisma.projectCall.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when the call is already open', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue({ id: 'call-1', status: 'open', closedReason: null, seats: { dessinateur: 2 }, closesAt: null });
+    expect(await service.reopenIfSeatFreed('call-1')).toBe(false);
+    expect(prisma.projectCall.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not reopen a call whose deadline has already passed (stays closed)', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue({
+      id: 'call-1', status: 'closed', closedReason: 'full', seats: { dessinateur: 2 },
+      closesAt: new Date(Date.now() - 60_000),
+    });
+    expect(await service.reopenIfSeatFreed('call-1')).toBe(false);
+    expect(prisma.projectCall.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('returns false when the guarded update already ran (idempotent — count 0)', async () => {
+    prisma.projectCall.updateMany.mockResolvedValue({ count: 0 });
+    expect(await service.reopenIfSeatFreed('call-1')).toBe(false);
+  });
+
+  it('returns false for an unknown call', async () => {
+    prisma.projectCall.findUnique.mockResolvedValue(null);
+    expect(await service.reopenIfSeatFreed('nope')).toBe(false);
   });
 });
 
@@ -660,10 +746,10 @@ describe('CallsService.updateCall', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('delegates {status:closed} alone to closeEarly (unchanged close behavior)', async () => {
+  it('delegates {status:closed} alone to closeEarly (manual close, reason manual)', async () => {
     const card = await service.updateCall('acc-owner', 'call-1', { status: 'closed' });
     expect(prisma.projectCall.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'call-1' }, data: { status: 'closed' } }),
+      expect.objectContaining({ where: { id: 'call-1' }, data: { status: 'closed', closedReason: 'manual' } }),
     );
     expect(card.status).toBe('closed');
   });

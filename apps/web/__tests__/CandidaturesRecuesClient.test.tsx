@@ -102,6 +102,7 @@ const callDetail: CallDetail = {
   isOwner: true,
   hasApplied: false,
   myApplicationId: null,
+  myApplicationStatus: null,
   viewerHasRole: false,
   seekingRoles: ['scenariste'],
   seats: { scenariste: 1 },

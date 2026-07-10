@@ -175,6 +175,7 @@ describe('MyApplicationsService.withdraw', () => {
     $transaction: jest.Mock;
   };
   let notifications: { create: jest.Mock };
+  let calls: { resolveApplicationSamples: jest.Mock; reopenIfSeatFreed: jest.Mock };
 
   const APP_ROW = (o: Partial<Record<string, unknown>> = {}) => ({
     id: 'app-1',
@@ -195,10 +196,11 @@ describe('MyApplicationsService.withdraw', () => {
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
+    calls = { resolveApplicationSamples: jest.fn(), reopenIfSeatFreed: jest.fn().mockResolvedValue(false) };
     service = new MyApplicationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
-      { resolveApplicationSamples: jest.fn() } as unknown as CallsService,
+      calls as unknown as CallsService,
     );
   });
 
@@ -259,6 +261,13 @@ describe('MyApplicationsService.withdraw', () => {
     expect(notifications.create).toHaveBeenCalledWith(
       expect.objectContaining({ recipientId: 'acc-owner', type: 'application', refId: 'call-1' }),
     );
+    // MC-14: freeing an accepted seat reopens an auto-closed call.
+    expect(calls.reopenIfSeatFreed).toHaveBeenCalledWith('call-1');
+  });
+
+  it('does NOT reopen the call when withdrawing a pending application (no seat freed)', async () => {
+    await service.withdraw('acc-me', 'app-1');
+    expect(calls.reopenIfSeatFreed).not.toHaveBeenCalled();
   });
 
   it('409s a rejected application (nothing to free — cannot withdraw)', async () => {

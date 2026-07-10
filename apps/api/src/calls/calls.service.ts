@@ -9,6 +9,7 @@ import {
 import type {
   ApplicationDto,
   ApplicationSample,
+  ApplicationStatus,
   CallCard,
   CallDetail,
   CallDirection,
@@ -85,6 +86,12 @@ interface CallRow {
   applicationCount: number;
   status: string;
   createdAt: Date;
+}
+
+/** MC-14: the viewer's own application on a call — id (withdraw) + status (applicant-side pill). */
+interface AppliedEntry {
+  id: string;
+  status: ApplicationStatus;
 }
 
 /** Ready media backing a call asset (sample or document), resolved for display. */
@@ -249,17 +256,17 @@ export class CallsService {
   }
 
   /**
-   * MC-5/MC-6: single lookup of the viewer's applications for this page. Returns callId → the
-   * viewer's own Application id — powers "Candidature envoyée" (hasApplied) AND the MC-6 withdraw
-   * button (myApplicationId).
+   * MC-5/MC-6/MC-14: single lookup of the viewer's applications for this page. Returns callId → the
+   * viewer's own Application { id, status } — powers "Candidature envoyée" (hasApplied), the MC-6
+   * withdraw button (myApplicationId), and the MC-14 applicant-side pill (myApplicationStatus).
    */
-  private async resolveApplied(rows: CallRow[], viewerId: string): Promise<Map<string, string>> {
+  private async resolveApplied(rows: CallRow[], viewerId: string): Promise<Map<string, AppliedEntry>> {
     if (rows.length === 0) return new Map();
     const applied = (await this.prisma.application.findMany({
       where: { applicantId: viewerId, callId: { in: rows.map((r) => r.id) } },
-      select: { id: true, callId: true },
-    })) as { id: string; callId: string }[];
-    return new Map(applied.map((a) => [a.callId, a.id]));
+      select: { id: true, callId: true, status: true },
+    })) as { id: string; callId: string; status: ApplicationStatus }[];
+    return new Map(applied.map((a) => [a.callId, { id: a.id, status: a.status }]));
   }
 
   private buildWhere(query: CallsBoardQueryParsed): Record<string, unknown> {
@@ -429,7 +436,8 @@ export class CallsService {
 
     const updated = (await this.prisma.projectCall.update({
       where: { id },
-      data: { status: 'closed' },
+      // MC-14: an owner manual close is sticky — reopenIfSeatFreed only reopens a 'full' auto-close.
+      data: { status: 'closed', closedReason: 'manual' },
     })) as unknown as CallRow;
 
     const [assetMedia, viewerRoles, acceptedByRole] = await Promise.all([
@@ -816,7 +824,7 @@ export class CallsService {
     viewerId: string,
     assetMedia: Map<string, AssetMedia[]>,
     viewerRoles: string[],
-    myApplicationId: string | null = null,
+    applied: AppliedEntry | null = null,
     acceptedByRole: SeatCounts = {},
   ): CallCard {
     const seats = (row.seats ?? {}) as SeatCounts;
@@ -833,8 +841,10 @@ export class CallsService {
       deadline: row.closesAt ? row.closesAt.toISOString() : null,
       isOwner: !!row.authorId && row.authorId === viewerId,
       // MC-5: owner can never have applied ⇒ create/close paths pass null.
-      hasApplied: myApplicationId !== null,
-      myApplicationId,
+      hasApplied: applied !== null,
+      myApplicationId: applied?.id ?? null,
+      // MC-14: the viewer's own application status drives the applicant-side pill (Acceptée/Refusée/envoyée).
+      myApplicationStatus: applied?.status ?? null,
       // MC-4X req6: viewer holds AT LEAST ONE sought role ⇒ gate open.
       viewerHasRole: row.seekingRoles.some((r) => viewerRoles.includes(r)),
     };
@@ -863,7 +873,36 @@ export class CallsService {
 
     const res = (await this.prisma.projectCall.updateMany({
       where: { id: callId, status: 'open' },
-      data: { status: 'closed' },
+      // MC-14: mark the auto-close as 'full' so a later freed seat can reopen it (vs a sticky manual close).
+      data: { status: 'closed', closedReason: 'full' },
+    })) as { count: number };
+    return res.count > 0;
+  }
+
+  /**
+   * MC-14: symmetric half of closeIfFilled — MC-6 withdraw-accepted and MC-7 remove-accepted call this
+   * after freeing a seat. Reopens ONLY an auto-closed call (closedReason 'full'); a manual/deadline
+   * close (reason 'manual' / null) stays closed. Race-safe via the guarded updateMany (status 'closed'
+   * + reason 'full'). Returns true only when THIS call performed the reopen.
+   */
+  async reopenIfSeatFreed(callId: string): Promise<boolean> {
+    const call = (await this.prisma.projectCall.findUnique({
+      where: { id: callId },
+      select: { id: true, status: true, closedReason: true, seats: true, closesAt: true },
+    })) as { status: string; closedReason: string | null; seats: SeatCounts; closesAt: Date | null } | null;
+    if (!call || call.status !== 'closed' || call.closedReason !== 'full') return false;
+    // A deadline that has already passed keeps the call closed (nothing to reopen into).
+    if (call.closesAt && call.closesAt.getTime() <= Date.now()) return false;
+
+    const seats = (call.seats ?? {}) as SeatCounts;
+    const roles = (Object.keys(seats) as CreatorRole[]).filter((r) => (seats[r] ?? 0) > 0);
+    const accepted = (await this.resolveAcceptedByRole([callId])).get(callId) ?? {};
+    const hasFreeSeat = roles.some((r) => (accepted[r] ?? 0) < (seats[r] ?? 0));
+    if (!hasFreeSeat) return false;
+
+    const res = (await this.prisma.projectCall.updateMany({
+      where: { id: callId, status: 'closed', closedReason: 'full' },
+      data: { status: 'open', closedReason: null },
     })) as { count: number };
     return res.count > 0;
   }

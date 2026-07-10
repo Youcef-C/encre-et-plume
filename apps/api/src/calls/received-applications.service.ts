@@ -1,9 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { ApplicationDto, ReceivedApplicationsResponse, ReceivedCallGroup } from '@encre-et-plume/shared';
+import type { ApplicationDto, CreatorRole, ReceivedApplicationsResponse, ReceivedCallGroup, SeatCounts } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConnectionsService } from '../connections/connections.service';
-import { ACCOUNT_REF_SELECT, toApplicationDto } from './calls.service';
+import { ACCOUNT_REF_SELECT, CallsService, toApplicationDto } from './calls.service';
 
 // application.findMany({ include }) row for list() — the ApplicationDto source plus the minimal call.
 interface ReceivedRow {
@@ -30,6 +30,7 @@ export class ReceivedApplicationsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly connections: ConnectionsService,
+    private readonly calls: CallsService,
   ) {}
 
   async list(ownerId: string): Promise<ReceivedApplicationsResponse> {
@@ -69,24 +70,37 @@ export class ReceivedApplicationsService {
       include: {
         applicant: { select: ACCOUNT_REF_SELECT },
         assets: { orderBy: { position: 'asc' } },
-        call: { select: { authorId: true, title: true } },
+        call: { select: { authorId: true, title: true, seats: true } },
       },
-    })) as (ReceivedRow & { applicantId: string; call: { authorId: string | null; title: string } }) | null;
+    })) as (ReceivedRow & { applicantId: string; call: { authorId: string | null; title: string; seats: SeatCounts } }) | null;
 
     // 404 on unknown OR not-owner — no existence leak (same pattern as MC-6 withdraw).
     if (!app || app.call.authorId !== ownerId) throw new NotFoundException('Candidature introuvable.');
     // Transitions limited to pending → accepted/rejected; a decision is final (no re-open).
     if (app.status !== 'pending') throw new ConflictException('Cette candidature a déjà été traitée.');
 
+    // MC-14 defensive per-role capacity check (accept only): never accept past a role's seat count,
+    // even if the call somehow stayed open. Skipped for historical rows with no appliedAs (unattributable).
+    if (status === 'accepted' && app.appliedAs) {
+      const role = app.appliedAs as CreatorRole;
+      const seatCount = (app.call.seats ?? {})[role] ?? 0;
+      const acceptedInRole = await this.prisma.application.count({
+        where: { callId: app.callId, status: 'accepted', appliedAs: role },
+      });
+      if (acceptedInRole >= seatCount) {
+        throw new ConflictException('Tous les postes pour ce rôle sont déjà pourvus.');
+      }
+    }
+
     await this.prisma.application.update({ where: { id: applicationId }, data: { status } });
 
     // MC-8: an accepted application creates the mutual Connection ("Contacts & connexions").
     if (status === 'accepted') {
       await this.connections.ensureConnected(ownerId, app.applicantId);
-      // MC-13 #10 (auto-close-on-full) DEFERRED — reverted: it broke MC-6/MC-7 "free the seat so the
-      // call can seek again" (freeing a seat must REOPEN, which closeIfFilled alone doesn't do). Needs a
-      // close+reopen design with a manual-vs-auto close flag before re-wiring. CallsService.closeIfFilled
-      // stays as a unit-tested helper; it is intentionally NOT called here.
+      // MC-14: accepting the last sought seat auto-closes the call (closedReason 'full', reopenable).
+      // Idempotent + accept-only; a partial fill leaves it open. The reverted MC-13 #10 naive wire is
+      // replaced by this close + reopenIfSeatFreed (remove/withdraw) symmetric design.
+      await this.calls.closeIfFilled(app.callId);
     }
 
     // F-5: notify the applicant of the decision (both branches).
@@ -111,8 +125,8 @@ export class ReceivedApplicationsService {
   async remove(ownerId: string, applicationId: string): Promise<void> {
     const app = (await this.prisma.application.findUnique({
       where: { id: applicationId },
-      select: { id: true, callId: true, call: { select: { authorId: true } } },
-    })) as { callId: string; call: { authorId: string | null } } | null;
+      select: { id: true, callId: true, status: true, call: { select: { authorId: true } } },
+    })) as { callId: string; status: string; call: { authorId: string | null } } | null;
 
     if (!app || app.call.authorId !== ownerId) throw new NotFoundException('Candidature introuvable.');
 
@@ -123,5 +137,9 @@ export class ReceivedApplicationsService {
         data: { applicationCount: { decrement: 1 } },
       }),
     ]);
+
+    // MC-14: removing an ACCEPTED applicant frees a derived seat → reopen an auto-closed call.
+    // Pending/rejected removals free no seat, so no reopen attempt.
+    if (app.status === 'accepted') await this.calls.reopenIfSeatFreed(app.callId);
   }
 }

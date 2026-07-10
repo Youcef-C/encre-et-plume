@@ -729,6 +729,7 @@ model ProjectCall {
   closesAt         DateTime? // null → FE meta falls back to applicationCount; MC-4: the deadline
   applicationCount Int       @default(0)
   status           String    @default("open") // MC-4 owns transitions
+  closedReason     String? // MC-14: 'full' (auto, reopenable) | 'manual' (owner close/deadline, sticky) | null while open
   createdAt        DateTime  @default(now())
   applications     Application[] // MC-5: applications submitted to this call
   assets           ProjectCallAsset[] // MC-4X: sample images + PDF documents (was single sampleMediaId)

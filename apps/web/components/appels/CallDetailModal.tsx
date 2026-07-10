@@ -13,6 +13,7 @@ import { roleGateHint, ROLE_LABEL } from '../../lib/calls';
 import { formatBytes } from '../../lib/format';
 import { XIcon } from '../icons';
 import PostCallModal from './PostCallModal';
+import StatusBadge from '../candidatures/StatusBadge';
 
 function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivElement | null>) {
   if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -574,22 +575,31 @@ export default function CallDetailModal({
                       Supprimer
                     </button>
                   </>
+                ) : call.hasApplied &&
+                  (call.myApplicationStatus === 'accepted' || call.myApplicationStatus === 'rejected') ? (
+                  // MC-14: a decided (accepted/rejected) application shows its real status even after the
+                  // call auto-closed on the viewer's own accepted seat — hoisted above the `closed` branch
+                  // so "Clôturé" never masks the applicant's own verdict. Pending-on-closed still → Clôturé.
+                  <StatusBadge status={call.myApplicationStatus} />
                 ) : closed ? (
                   <span style={closedBadge}>Clôturé</span>
                 ) : call.hasApplied ? (
-                  <span
-                    style={{
-                      background: 'var(--tone)',
-                      color: 'var(--ink)', // F3-4: ink (was ink2 — the real AA fail)
-                      border: '2px solid var(--ink)',
-                      borderRadius: 6,
-                      padding: '9px 18px',
-                      fontWeight: 700,
-                      fontSize: 14,
-                    }}
-                  >
-                    Candidature envoyée
-                  </span>
+                  // Pending/historic (null status): keep "Candidature envoyée".
+                  (
+                    <span
+                      style={{
+                        background: 'var(--tone)',
+                        color: 'var(--ink)', // F3-4: ink (was ink2 — the real AA fail)
+                        border: '2px solid var(--ink)',
+                        borderRadius: 6,
+                        padding: '9px 18px',
+                        fontWeight: 700,
+                        fontSize: 14,
+                      }}
+                    >
+                      Candidature envoyée
+                    </span>
+                  )
                 ) : call.viewerHasRole ? (
                   <button
                     type="button"

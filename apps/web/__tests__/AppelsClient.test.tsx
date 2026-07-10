@@ -68,6 +68,7 @@ const call = (over: Partial<CallCard> = {}): CallCard => ({
   isOwner: false,
   hasApplied: false,
   myApplicationId: null,
+  myApplicationStatus: null,
   viewerHasRole: true,
   seekingRoles: ['dessinateur'],
   seats: { dessinateur: 1 },

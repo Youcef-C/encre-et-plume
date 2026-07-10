@@ -3,6 +3,7 @@ import { ReceivedApplicationsService } from './received-applications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { ConnectionsService } from '../connections/connections.service';
+import type { CallsService } from './calls.service';
 
 // application.findMany rows for list(): applicant ref + assets + minimal call.
 const APP = (o: Partial<Record<string, unknown>> = {}) => ({
@@ -35,6 +36,7 @@ describe('ReceivedApplicationsService.list', () => {
       prisma as unknown as PrismaService,
       { create: jest.fn() } as unknown as NotificationsService,
       { ensureConnected: jest.fn() } as unknown as ConnectionsService,
+      { closeIfFilled: jest.fn(), reopenIfSeatFreed: jest.fn() } as unknown as CallsService,
     );
   });
 
@@ -102,9 +104,10 @@ describe('ReceivedApplicationsService.list', () => {
 
 describe('ReceivedApplicationsService.decide', () => {
   let service: ReceivedApplicationsService;
-  let prisma: { application: { findUnique: jest.Mock; update: jest.Mock } };
+  let prisma: { application: { findUnique: jest.Mock; update: jest.Mock; count: jest.Mock } };
   let notifications: { create: jest.Mock };
   let connections: { ensureConnected: jest.Mock };
+  let calls: { closeIfFilled: jest.Mock; reopenIfSeatFreed: jest.Mock };
 
   const ROW = (o: Partial<Record<string, unknown>> = {}) => ({
     id: 'app-1',
@@ -123,7 +126,7 @@ describe('ReceivedApplicationsService.decide', () => {
       profile: { creatorRoles: ['scenariste'] },
     },
     assets: [],
-    call: { authorId: 'acc-owner', title: 'Polar nocturne' },
+    call: { authorId: 'acc-owner', title: 'Polar nocturne', seats: { scenariste: 1 } },
     ...o,
   });
 
@@ -132,14 +135,17 @@ describe('ReceivedApplicationsService.decide', () => {
       application: {
         findUnique: jest.fn().mockResolvedValue(ROW()),
         update: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0), // accepted-in-role count for the defensive capacity check
       },
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
     connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
+    calls = { closeIfFilled: jest.fn().mockResolvedValue(false), reopenIfSeatFreed: jest.fn() };
     service = new ReceivedApplicationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
       connections as unknown as ConnectionsService,
+      calls as unknown as CallsService,
     );
   });
 
@@ -191,12 +197,33 @@ describe('ReceivedApplicationsService.decide', () => {
     expect(connections.ensureConnected).not.toHaveBeenCalled();
   });
 
-  // MC-13 #10 (auto-close-on-full) DEFERRED: decide() must NOT auto-close a filled call — freeing a seat
-  // (MC-6 withdraw-accepted / MC-7 remove-accepted) has to REOPEN it, which closeIfFilled alone can't do.
-  it('does NOT auto-close the call on accept (closeIfFilled is not wired into decide)', async () => {
+  // MC-14: auto-close is now wired — accepting calls closeIfFilled after the commit (accept-only).
+  it('calls closeIfFilled(callId) after an accept commit', async () => {
     await service.decide('acc-owner', 'app-1', 'accepted');
-    // no ProjectCall status write happens here — decide only flips the application + connects + notifies
-    expect((prisma.application.update as jest.Mock)).toHaveBeenCalledWith({ where: { id: 'app-1' }, data: { status: 'accepted' } });
+    expect(calls.closeIfFilled).toHaveBeenCalledWith('call-1');
+  });
+
+  it('does NOT call closeIfFilled on a reject', async () => {
+    await service.decide('acc-owner', 'app-1', 'rejected');
+    expect(calls.closeIfFilled).not.toHaveBeenCalled();
+  });
+
+  // MC-14 defensive per-role capacity check: accept is refused (409) when the role is already full.
+  it('409s when the applied role has no free seat left (defensive capacity check)', async () => {
+    prisma.application.count.mockResolvedValue(1); // scenariste seat (count 1) already met by an accepted app
+    await expect(service.decide('acc-owner', 'app-1', 'accepted')).rejects.toThrow(
+      new ConflictException('Tous les postes pour ce rôle sont déjà pourvus.'),
+    );
+    expect(prisma.application.update).not.toHaveBeenCalled();
+    expect(calls.closeIfFilled).not.toHaveBeenCalled();
+  });
+
+  it('skips the capacity check when appliedAs is null (historical row) and accepts', async () => {
+    prisma.application.findUnique.mockResolvedValue(ROW({ appliedAs: null }));
+    prisma.application.count.mockResolvedValue(5); // would block if the check ran — it must not
+    await service.decide('acc-owner', 'app-1', 'accepted');
+    expect(prisma.application.count).not.toHaveBeenCalled();
+    expect(prisma.application.update).toHaveBeenCalledWith({ where: { id: 'app-1' }, data: { status: 'accepted' } });
   });
 });
 
@@ -208,6 +235,7 @@ describe('ReceivedApplicationsService.remove', () => {
     projectCall: { updateMany: jest.Mock };
     $transaction: jest.Mock;
   };
+  let calls: { closeIfFilled: jest.Mock; reopenIfSeatFreed: jest.Mock };
 
   const ROW = (o: Partial<Record<string, unknown>> = {}) => ({
     id: 'app-1',
@@ -226,10 +254,12 @@ describe('ReceivedApplicationsService.remove', () => {
       projectCall: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
+    calls = { closeIfFilled: jest.fn(), reopenIfSeatFreed: jest.fn().mockResolvedValue(false) };
     service = new ReceivedApplicationsService(
       prisma as unknown as PrismaService,
       { create: jest.fn() } as unknown as NotificationsService,
       { ensureConnected: jest.fn() } as unknown as ConnectionsService,
+      calls as unknown as CallsService,
     );
   });
 
@@ -257,4 +287,17 @@ describe('ReceivedApplicationsService.remove', () => {
       });
     },
   );
+
+  // MC-14: removing an ACCEPTED applicant frees a seat → reopen an auto-closed call.
+  it('calls reopenIfSeatFreed(callId) after removing an accepted application', async () => {
+    prisma.application.findUnique.mockResolvedValue(ROW({ status: 'accepted' }));
+    await service.remove('acc-owner', 'app-1');
+    expect(calls.reopenIfSeatFreed).toHaveBeenCalledWith('call-1');
+  });
+
+  it('does NOT call reopenIfSeatFreed when removing a pending application (no seat freed)', async () => {
+    prisma.application.findUnique.mockResolvedValue(ROW({ status: 'pending' }));
+    await service.remove('acc-owner', 'app-1');
+    expect(calls.reopenIfSeatFreed).not.toHaveBeenCalled();
+  });
 });

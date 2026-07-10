@@ -107,6 +107,10 @@ export class MyApplicationsService {
       }),
     ]);
 
+    // MC-14: withdrawing an ACCEPTED application frees a derived seat → reopen an auto-closed call.
+    // Pending withdrawals free no seat (the row wasn't accepted), so no reopen attempt.
+    if (app.status === 'accepted') await this.calls.reopenIfSeatFreed(app.callId);
+
     // F-5: notify the owner a candidate withdrew. Reuse the 'application' type (refId = callId, since
     // the Application row is now gone); a dedicated 'application_withdrawn' type is F-5's upgrade path.
     // Seed calls with authorId null simply skip it.

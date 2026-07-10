@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import type { CallCard } from '@encre-et-plume/shared';
 import { roleGateHint } from '../../lib/calls';
+import StatusBadge from '../candidatures/StatusBadge';
 
 const chip: React.CSSProperties = {
   fontSize: 11,
@@ -203,25 +204,40 @@ export default function CallBoardCard({
               </button>
             )}
 
+          {/* MC-14: when the call auto-closed on the viewer's own accepted seat, showCandidater
+              (`!closed && …`) has already hidden the applied-pill slot below — so surface the decided
+              verdict here, independent of that gate. Pending-on-closed keeps the "Clôturé" meta line. */}
+          {closed &&
+            !call.isOwner &&
+            (call.myApplicationStatus === 'accepted' || call.myApplicationStatus === 'rejected') && (
+              <StatusBadge status={call.myApplicationStatus} />
+            )}
+
           {showCandidater &&
             (call.hasApplied ? (
               // MC-5: already applied — the label carries the state (not color-only). MC-6 owner
               // extension: a "Retirer" affordance (inline confirm) withdraws a pending application
               // and flips the card back to "Candidater".
               <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span
-                  style={{
-                    background: 'var(--tone)',
-                    color: 'var(--ink2)',
-                    border: '2px solid var(--ink)',
-                    borderRadius: 6,
-                    padding: '7px 16px',
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  Candidature envoyée
-                </span>
+                {/* MC-14: once decided, the pill carries the actual status (StatusBadge) instead
+                    of "Candidature envoyée"; pending/historic (null) keeps the sent label. */}
+                {call.myApplicationStatus === 'accepted' || call.myApplicationStatus === 'rejected' ? (
+                  <StatusBadge status={call.myApplicationStatus} />
+                ) : (
+                  <span
+                    style={{
+                      background: 'var(--tone)',
+                      color: 'var(--ink2)',
+                      border: '2px solid var(--ink)',
+                      borderRadius: 6,
+                      padding: '7px 16px',
+                      fontWeight: 700,
+                      fontSize: 13,
+                    }}
+                  >
+                    Candidature envoyée
+                  </span>
+                )}
                 {call.myApplicationId &&
                   onWithdraw &&
                   (confirming ? (
