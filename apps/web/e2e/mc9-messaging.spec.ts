@@ -525,11 +525,6 @@ test.describe('MC-9 composer attachments — Round 2 send path (MSG_A ⇄ MSG_B)
     // a known seeded message renders only once messagesState reaches 'ready'.
     await expect(panel(page).getByText('On se cale un créneau demain ?')).toBeVisible({ timeout: 10_000 });
 
-    // MC9-E10 already left one attachment tile in this same DM's history — count the log's <img>s
-    // rather than assert zero, so this test is independent of run order / prior sends in the thread.
-    const logImages = panel(page).locator('[role="log"] img');
-    const before = await logImages.count();
-
     await panel(page).locator('input[type="file"]').setInputFiles(ATTACHMENT_FIXTURE);
     const chip = panel(page).getByText('avatar-50x50.jpg');
     await expect(chip).toBeVisible({ timeout: 5_000 });
@@ -542,8 +537,12 @@ test.describe('MC-9 composer attachments — Round 2 send path (MSG_A ⇄ MSG_B)
     await panel(page).getByRole('button', { name: 'Envoyer' }).click();
 
     await expect(panel(page).getByText(marker, { exact: true })).toBeVisible({ timeout: 10_000 });
-    // No attachment tile was added by this send — the removed chip never reached the wire.
-    await expect(logImages).toHaveCount(before);
+    // No attachment tile was added by THIS send — the removed chip never reached the wire. Scope the
+    // check to the just-sent message's own bubble (a direct <div> child of the log): a whole-log image
+    // count is racy because MC9-E10's attachment can arrive live in this shared MSG_A↔MSG_B thread
+    // between capture and assert (the actual flake this fixes).
+    const sentBubble = panel(page).locator('[role="log"] > div').filter({ hasText: marker });
+    await expect(sentBubble.locator('img')).toHaveCount(0);
   });
 });
 
