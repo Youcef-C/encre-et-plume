@@ -36,24 +36,28 @@ The mini cards on the board get a richer, Trello-style layout so this data is vi
 ## Endpoints (extend `ProjectsModule`; member-gated writes, non-member read per CS-1)
 
 Labels palette:
+
 - `GET  /projects/:slug/labels` — list.
 - `POST /projects/:slug/labels` `{ name, color }` — create (color ∈ palette, else 400).
 - `PATCH /labels/:id` `{ name?, color? }` — rename/recolor.
 - `DELETE /labels/:id` — remove (cascades off cards).
 
 Card detail:
+
 - `GET /pages/:id` — full detail: `{ …page, description, dueDate, labels[], assignees[],
-  checklist[], comments[] (author summary), linkedFiles[], versionSummary }`. The modal loads this.
+checklist[], comments[] (author summary), linkedFiles[], versionSummary }`. The modal loads this.
 - `PATCH /pages/:id` — extend to accept `description?, dueDate?, labelIds?, assigneeIds?` (plus the
   existing title/fileTags/linkedFileIds/chapterId). Diff `assigneeIds` → notify added **and** removed
   members via `NotificationsService.create({ type: 'project_activity' })`. Best-effort (swallow).
 
 Checklist (nested under the card):
+
 - `POST /pages/:id/checklist` `{ text }` — append (order = max+1).
 - `PATCH /checklist/:itemId` `{ text?, done? }`.
 - `DELETE /checklist/:itemId`.
 
 Comments:
+
 - `POST /pages/:id/comments` `{ body }` — author = session user.
 - `PATCH /comments/:id` `{ body }` — **author only**; sets `editedAt`.
 - `DELETE /comments/:id` — author **or project owner**.
@@ -64,8 +68,10 @@ membership; a card's labels/assignees must belong to the same project. Stage/ver
 ## Frontend
 
 ### Card detail modal (`CardModal`)
+
 Opens on card click. On-brand modal (`3px solid var(--ink)`, hard offset shadow), scrollable
 (`max-height:88vh`), usable at 375px. Sections:
+
 - **Header**: editable title + ✕ (and a members-only Supprimer entry, same guard as the ⋯ menu).
 - **COLONNE** (stage — OnBrandSelect), **TYPE DE PAGE** (Simple / ⇿ Double page), **FICHIERS LIÉS**
   (existing linked-file chips) — from the prototype.
@@ -77,29 +83,34 @@ Opens on card click. On-brand modal (`3px solid var(--ink)`, hard offset shadow)
   `(done/total)` count.
 - **ASSIGNÉ À** — project-member chips; toggle assign/unassign (fires the notification server-side).
 - **COMMENTAIRES** — list (author avatar, name, relative time, body, "modifié" when edited) with
-  edit/delete affordances per the rules; a composer textarea + "Commenter".
+  edit/delete affordances per the rules; a composer textarea + "Commenter". Possibility to tag a project member by using `@name`.
+  It must trigger a mentionned-notification to this user.
 
 Simple fields (title, description, dueDate, labels) debounce-autosave with the Infos "Enregistré ✓"
 pattern. Checklist / comment / assignee actions are immediate POST/PATCH/DELETE with optimistic UI +
 revert on error. Modal reads `GET /pages/:id` on open (loading skeleton).
 
 ### Richer cards (`PageCard`)
+
 Whole card is a button (opens the modal); drag + the ⋯ quick-menu (keyboard move/delete) stay.
 Comfortable layout: **label color bars** on top → **title** + `⎘ vN` badge → file-type tags →
 **meta footer**: due-date pill (accent/overdue styling when past due), **checklist `(x/x)`**, comment
 count, assignee avatar stack. Empty of all extras it stays compact; it grows as data is added.
 
 ### Board filter by label
+
 A label-filter chip row above the columns (auto-apply, no button, on-brand). Selecting labels filters
 the visible cards to those carrying any selected label. Combines with the existing chapter chips.
 
 ### Menu z-index fix
+
 Root cause: the ⋯ menu (`position:absolute; zIndex:20`) sits inside a card that establishes no raised
 stacking context, so sibling cards later in the DOM paint over it. Fix: the card raises its own
 stacking context while its menu/versions popover is open (`position:relative` + a high `zIndex`), and
 the menu closes on outside click / Escape.
 
 ### Icons
+
 Add SVG glyphs to `apps/web/components/icons.tsx`: tag/label, calendar, checklist, comment. No emojis
 (the ✎/⚑ card glyphs already present stay as typographic placeholders per current CS-2).
 

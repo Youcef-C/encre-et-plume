@@ -29,7 +29,9 @@
     - **ASSIGNÉ À** — assign/unassign project members; **both added and removed** assignees get an
       [[F-5]] notification.
     - **COMMENTAIRES** — refetch-on-open list (author, relative time, "modifié" when edited); author
-      edits/deletes own, project owner deletes any; composer + "Commenter".
+      edits/deletes own, project owner deletes any; composer + "Commenter". The composer supports
+      tagging a project member with `@name` (autocomplete from project members); each newly-mentioned
+      member gets an [[F-5]] **mention** notification.
     Simple fields (title/description/deadline/labels) debounce-autosave with the "Enregistré ✓"
     indicator; checklist/comment/assignee actions are immediate with optimistic revert on error.
     Delete-card stays member-gated (the existing ⋯ menu); the menu z-index bug is fixed (the open
@@ -58,11 +60,11 @@
   - **PATCH /pages/{id}** — extended to also accept `description`, `dueDate`, `labelIds`, `assigneeIds`. Diffing `assigneeIds` notifies **both added and removed** members ([[F-5]] `project_activity`).
   - **Labels palette**: **GET/POST /projects/{slug}/labels**, **PATCH/DELETE /labels/{id}** — member-created labels (`name` ≤30 + `color` from a fixed on-brand palette; reject colors outside it). Deleting a label cascades off all cards.
   - **Checklist**: **POST /pages/{id}/checklist**, **PATCH /checklist/{itemId}**, **DELETE /checklist/{itemId}**.
-  - **Comments**: **POST /pages/{id}/comments**; **PATCH /comments/{id}** (author only, sets `editedAt`); **DELETE /comments/{id}** (author or project owner).
+  - **Comments**: **POST /pages/{id}/comments**; **PATCH /comments/{id}** (author only, sets `editedAt`); **DELETE /comments/{id}** (author or project owner). On create (and on edit for newly-added mentions), parse `@name` mentions of project members and notify each mentioned member ([[F-5]] mention).
 - Entities: **Page** `{ id, projectId, chapterId, stage, version, fileTags[], linkedFileIds[], description?, dueDate? }`; **ProjectLabel** `{ id, projectId, name, color }` + **PageLabel** join; **PageAssignee** `{ pageId, userId }` join; **PageChecklistItem** `{ id, pageId, text, done, order }`; **PageComment** `{ id, pageId, authorId, body, createdAt, editedAt? }`; **Project** info fields (see [[CS-1]]).
 - Business rules: stage values constrained to the 6 columns; version increments on new file revision; label `color` ∈ the fixed palette; a card's labels/assignees belong to the same project.
 - Authorization: project members only (labels/checklist/comments/assignees/delete all member-gated); visibility rules from [[CS-1]] gate read access for non-members; comment edit = author only, comment delete = author or project owner.
-- Side effects: stage change to "Corrections" / raising a correction notifies collaborators ([[F-5]], via [[CS-5]]); assigning/unassigning a member on a card notifies that member ([[F-5]]).
+- Side effects: stage change to "Corrections" / raising a correction notifies collaborators ([[F-5]], via [[CS-5]]); assigning/unassigning a member on a card notifies that member ([[F-5]]); `@name`-mentioning a member in a comment notifies that member ([[F-5]]).
 
 ## Dependencies
 
