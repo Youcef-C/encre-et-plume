@@ -3,7 +3,7 @@ import type { ApplicationDto, ReceivedApplicationsResponse, ReceivedCallGroup } 
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConnectionsService } from '../connections/connections.service';
-import { ACCOUNT_REF_SELECT, CallsService, toApplicationDto } from './calls.service';
+import { ACCOUNT_REF_SELECT, toApplicationDto } from './calls.service';
 
 // application.findMany({ include }) row for list() — the ApplicationDto source plus the minimal call.
 interface ReceivedRow {
@@ -30,7 +30,6 @@ export class ReceivedApplicationsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly connections: ConnectionsService,
-    private readonly calls: CallsService,
   ) {}
 
   async list(ownerId: string): Promise<ReceivedApplicationsResponse> {
@@ -84,9 +83,10 @@ export class ReceivedApplicationsService {
     // MC-8: an accepted application creates the mutual Connection ("Contacts & connexions").
     if (status === 'accepted') {
       await this.connections.ensureConnected(ownerId, app.applicantId);
-      // MC-13 #10: when this accept fills the last sought seat, close the call (stops further
-      // applications). Idempotent + race-safe inside closeIfFilled; a partial fill leaves it open.
-      await this.calls.closeIfFilled(app.callId);
+      // MC-13 #10 (auto-close-on-full) DEFERRED — reverted: it broke MC-6/MC-7 "free the seat so the
+      // call can seek again" (freeing a seat must REOPEN, which closeIfFilled alone doesn't do). Needs a
+      // close+reopen design with a manual-vs-auto close flag before re-wiring. CallsService.closeIfFilled
+      // stays as a unit-tested helper; it is intentionally NOT called here.
     }
 
     // F-5: notify the applicant of the decision (both branches).

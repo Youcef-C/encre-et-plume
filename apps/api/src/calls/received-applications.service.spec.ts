@@ -3,9 +3,6 @@ import { ReceivedApplicationsService } from './received-applications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { ConnectionsService } from '../connections/connections.service';
-import type { CallsService } from './calls.service';
-
-const stubCalls = () => ({ closeIfFilled: jest.fn().mockResolvedValue(false) }) as unknown as CallsService;
 
 // application.findMany rows for list(): applicant ref + assets + minimal call.
 const APP = (o: Partial<Record<string, unknown>> = {}) => ({
@@ -38,7 +35,6 @@ describe('ReceivedApplicationsService.list', () => {
       prisma as unknown as PrismaService,
       { create: jest.fn() } as unknown as NotificationsService,
       { ensureConnected: jest.fn() } as unknown as ConnectionsService,
-      stubCalls(),
     );
   });
 
@@ -109,7 +105,6 @@ describe('ReceivedApplicationsService.decide', () => {
   let prisma: { application: { findUnique: jest.Mock; update: jest.Mock } };
   let notifications: { create: jest.Mock };
   let connections: { ensureConnected: jest.Mock };
-  let calls: { closeIfFilled: jest.Mock };
 
   const ROW = (o: Partial<Record<string, unknown>> = {}) => ({
     id: 'app-1',
@@ -141,12 +136,10 @@ describe('ReceivedApplicationsService.decide', () => {
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
     connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
-    calls = { closeIfFilled: jest.fn().mockResolvedValue(false) };
     service = new ReceivedApplicationsService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
       connections as unknown as ConnectionsService,
-      calls as unknown as CallsService,
     );
   });
 
@@ -198,23 +191,12 @@ describe('ReceivedApplicationsService.decide', () => {
     expect(connections.ensureConnected).not.toHaveBeenCalled();
   });
 
-  // MC-13 #10: closeIfFilled is wired on accept only.
-  it('accepts: calls closeIfFilled(callId) after the accept commits — the last seat closes the call', async () => {
-    calls.closeIfFilled.mockResolvedValue(true); // this accept filled the final seat
+  // MC-13 #10 (auto-close-on-full) DEFERRED: decide() must NOT auto-close a filled call — freeing a seat
+  // (MC-6 withdraw-accepted / MC-7 remove-accepted) has to REOPEN it, which closeIfFilled alone can't do.
+  it('does NOT auto-close the call on accept (closeIfFilled is not wired into decide)', async () => {
     await service.decide('acc-owner', 'app-1', 'accepted');
-    expect(calls.closeIfFilled).toHaveBeenCalledWith('call-1');
-  });
-
-  it('accepts a non-final seat: closeIfFilled runs but leaves the call open (returns false)', async () => {
-    calls.closeIfFilled.mockResolvedValue(false); // partial fill
-    const dto = await service.decide('acc-owner', 'app-1', 'accepted');
-    expect(calls.closeIfFilled).toHaveBeenCalledWith('call-1');
-    expect(dto.status).toBe('accepted'); // decision still returned regardless of close outcome
-  });
-
-  it('rejects: never calls closeIfFilled', async () => {
-    await service.decide('acc-owner', 'app-1', 'rejected');
-    expect(calls.closeIfFilled).not.toHaveBeenCalled();
+    // no ProjectCall status write happens here — decide only flips the application + connects + notifies
+    expect((prisma.application.update as jest.Mock)).toHaveBeenCalledWith({ where: { id: 'app-1' }, data: { status: 'accepted' } });
   });
 });
 
@@ -248,7 +230,6 @@ describe('ReceivedApplicationsService.remove', () => {
       prisma as unknown as PrismaService,
       { create: jest.fn() } as unknown as NotificationsService,
       { ensureConnected: jest.fn() } as unknown as ConnectionsService,
-      stubCalls(),
     );
   });
 
