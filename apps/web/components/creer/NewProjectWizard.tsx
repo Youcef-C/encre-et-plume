@@ -1,11 +1,12 @@
 'use client';
 
-// CS-1 — "Nouveau projet" wizard (manga / histoire), a faithful replica of the prototype's
-// data-page="creer" section (proto 1747–1852): a 740px ink-bordered card, header + ✕, a clickable
-// 3-dot step rail (Type · Détails · Soutien), and the drawn footer. The Illustration(s) type routes
-// to the existing /creer/illustration flow; Manga and Histoire walk this wizard (Histoire is the
-// Inferred Roman variant — same wizard, prose synopsis). Submits POST /projects (CreateProjectRequest)
-// and returns to /projets.
+// CS-1 — "Nouveau projet" wizard, a faithful replica of the prototype's data-page="creer" section
+// (proto 1747–1852): a 740px ink-bordered card, header + ✕, a clickable 3-dot step rail
+// (Type · Détails · Soutien), and the drawn footer. All three type cards are single-select:
+// Manga/Histoire walk this wizard and submit POST /projects (returns to /projets); Illustration(s)
+// runs the real publish flow INLINE inside the same shell (the embedded PublishIllustrationForm,
+// split Détails / Soutien) and posts to /illustrations. Deep-link /creer?type=illustration (the
+// Galerie CTA) opens straight on the Illustration Détails step.
 //
 // On-brand substitutions (CLAUDE.md): no emojis — role glyphs use icons.tsx (PenNib/Brush); genre &
 // thèmes use the F-20 GenreChip + GenreSuggestInput (never free text). Induced deviations vs the raw
@@ -37,15 +38,32 @@ import HashtagChipsInput from '../form/HashtagChipsInput';
 import UploadControl from '../UploadControl';
 import { COVER_FRAME_HEIGHT } from '../../lib/cover';
 import SoutienFields, { EMPTY_SOUTIEN, soutienToRequest, type SoutienValue } from './SoutienFields';
+import PublishIllustrationForm, { type PublishIllustrationHandle } from './PublishIllustrationForm';
 
 type Step = 1 | 2 | 3;
+type WizardType = ProjectType | 'illustration';
 type Member = { id: string; name: string; role: CreatorRole | null };
 
-const STEPS: { n: Step; label: string }[] = [
+const MANGA_STEPS: { n: Step; label: string }[] = [
   { n: 1, label: 'Type' },
   { n: 2, label: 'Détails' },
   { n: 3, label: 'Soutien' },
 ];
+// The Illustration branch embeds the real publish flow, split across the SAME Type·Détails·Soutien
+// rail as the manga branch (for consistency): Détails = the illustration form, Soutien = its Soutien
+// fields + the "Publier" submit.
+const ILLUS_STEPS: { n: Step; label: string }[] = [
+  { n: 1, label: 'Type' },
+  { n: 2, label: 'Détails' },
+  { n: 3, label: 'Soutien' },
+];
+
+/** Deep-link support: /creer?type=illustration (Galerie CTA) pre-selects the Illustration branch. */
+function readInitialType(): WizardType {
+  if (typeof window === 'undefined') return 'manga';
+  const t = new URLSearchParams(window.location.search).get('type');
+  return t === 'illustration' || t === 'story' ? t : 'manga';
+}
 
 const VISIBILITIES: { value: ProjectVisibility; label: string }[] = [
   { value: 'prive', label: 'Privé' },
@@ -145,8 +163,16 @@ export default function NewProjectWizard() {
   const router = useRouter();
   const { account } = useSession();
 
-  const [step, setStep] = useState<Step>(1);
-  const [type, setType] = useState<ProjectType>('manga');
+  const initialType = readInitialType();
+  const [step, setStep] = useState<Step>(initialType === 'illustration' ? 2 : 1);
+  const [type, setType] = useState<WizardType>(initialType);
+  const isIllus = type === 'illustration';
+  const steps = isIllus ? ILLUS_STEPS : MANGA_STEPS;
+
+  // Illustration branch: the embedded form owns its submit; the wizard footer's "Publier" triggers it
+  // via this ref and mirrors the form's pending/busy status.
+  const illusRef = useRef<PublishIllustrationHandle>(null);
+  const [illusStatus, setIllusStatus] = useState({ pending: false, uploadBusy: false });
 
   // Step 2
   const [title, setTitle] = useState('');
@@ -156,8 +182,9 @@ export default function NewProjectWizard() {
   const [contest, setContest] = useState<ActiveContest | null>(null);
   const [contestLoading, setContestLoading] = useState(true);
   const [contestId, setContestId] = useState('');
-  const [genre, setGenre] = useState<string>(''); // single F-20 fr label
-  const [themes, setThemes] = useState<string[]>([]); // F-20 fr labels
+  // One F-20 picker (the vocabulary has no demographic/theme split, so two pickers were redundant):
+  // the FIRST chip is the primary genre (→ body.genre / the badge), the rest are themes (→ body.themes).
+  const [genres, setGenres] = useState<string[]>([]); // F-20 fr labels, ordered (genres[0] = primary)
   const [audience, setAudience] = useState<CatalogAudienceRating>('Tous publics');
   const [invites, setInvites] = useState<Member[]>([]);
   const [seeking, setSeeking] = useState<{ scenariste: number; dessinateur: number }>({ scenariste: 0, dessinateur: 0 });
@@ -249,7 +276,8 @@ export default function NewProjectWizard() {
       return;
     }
     if (step === 2) {
-      if (!title.trim()) {
+      // The illustration branch validates its own title on "Publier" (its own form state).
+      if (!isIllus && !title.trim()) {
         setTitleError('Un titre est requis');
         return;
       }
@@ -261,10 +289,10 @@ export default function NewProjectWizard() {
   }
 
   function buildBody(includeSoutien: boolean): CreateProjectRequest {
-    const genreId = genre ? resolveGenreId(genre) : undefined;
-    const themeIds = themes.map((t) => resolveGenreId(t)).filter((id): id is string => !!id);
+    const genreId = genres[0] ? resolveGenreId(genres[0]) : undefined;
+    const themeIds = genres.slice(1).map((t) => resolveGenreId(t)).filter((id): id is string => !!id);
     const body: CreateProjectRequest = {
-      type,
+      type: type as ProjectType, // buildBody only runs for the manga/story branch (illustration posts to /illustrations)
       title: title.trim(),
       format,
       audienceRating: audience,
@@ -326,7 +354,7 @@ export default function NewProjectWizard() {
 
         {/* Step rail */}
         <nav aria-label="Étapes" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '15px 20px', borderBottom: '2px solid var(--border)', background: 'var(--paper)' }}>
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <div key={s.n} style={{ display: 'contents' }}>
               <button
                 type="button"
@@ -354,7 +382,7 @@ export default function NewProjectWizard() {
                 </span>
                 {s.label}
               </button>
-              {i < STEPS.length - 1 && <span aria-hidden style={{ flex: 1, height: 2, background: 'var(--border)', minWidth: 14 }} />}
+              {i < steps.length - 1 && <span aria-hidden style={{ flex: 1, height: 2, background: 'var(--border)', minWidth: 14 }} />}
             </div>
           ))}
         </nav>
@@ -364,12 +392,28 @@ export default function NewProjectWizard() {
           {step === 1 && (
             <>
               <div style={stepHeading}>1 · TYPE DE PROJET</div>
-              <TypeCards type={type} onManga={() => setType('manga')} onStory={() => setType('story')} onIllustration={() => router.push('/creer/illustration')} />
+              <TypeCards type={type} onManga={() => setType('manga')} onStory={() => setType('story')} onIllustration={() => setType('illustration')} />
             </>
           )}
 
-          {/* ── STEP 2 · DÉTAILS ─────────────────────────────────────────── */}
-          {step === 2 && (
+          {/* ── ILLUSTRATION BRANCH · the real publish flow, split Détails / Soutien ──
+             One persistent instance across steps 2↔3 (kept mounted so its state survives the
+             step switch); `section` toggles which part shows. */}
+          {isIllus && step >= 2 && (
+            <>
+              <div style={stepHeading}>{step === 3 ? '3 · SOUTIEN · optionnel' : '2 · DÉTAILS'}</div>
+              <PublishIllustrationForm
+                ref={illusRef}
+                embedded
+                hideSubmit
+                section={step === 3 ? 'soutien' : 'details'}
+                onStatusChange={setIllusStatus}
+              />
+            </>
+          )}
+
+          {/* ── STEP 2 · DÉTAILS (manga / histoire) ──────────────────────── */}
+          {step === 2 && !isIllus && (
             <>
               <div style={stepHeading}>2 · DÉTAILS</div>
 
@@ -446,40 +490,24 @@ export default function NewProjectWizard() {
                 </div>
               </div>
 
-              {/* Genre — single-select F-20 */}
+              {/* Genres — one F-20 multi-select; the first chip is the primary genre (the badge).
+                 Label is a block <div> (like "Public / Âge") so its marginBottom actually applies —
+                 an inline <span> silently drops the vertical margin, which made the gap look off. */}
               <div style={{ marginBottom: 16 }}>
-                <span style={sectionLabel} id="np-genre-label">
-                  Genre
-                </span>
-                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {genre && <GenreChip label={genre} onRemove={() => setGenre('')} />}
-                  <GenreSuggestInput
-                    key={genre}
-                    ariaLabel="Ajouter un genre"
-                    placeholder="＋ Ajouter"
-                    onAdd={(fr) => setGenre(fr)}
-                    onCancel={() => {}}
-                    onRemoveLast={() => setGenre('')}
-                  />
+                <div style={sectionLabel} id="np-genres-label">
+                  Genres <span style={{ fontWeight: 500, color: 'var(--ink2)' }}>· le 1ᵉʳ = genre principal</span>
                 </div>
-              </div>
-
-              {/* Thèmes — multi-select F-20 */}
-              <div style={{ marginBottom: 16 }}>
-                <span style={sectionLabel} id="np-themes-label">
-                  Thèmes <span style={{ fontWeight: 500, color: 'var(--ink2)' }}>· plusieurs</span>
-                </span>
                 <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {themes.map((t) => (
-                    <GenreChip key={t} label={t} onRemove={() => setThemes((cur) => cur.filter((x) => x !== t))} />
+                  {genres.map((g) => (
+                    <GenreChip key={g} label={g} onRemove={() => setGenres((cur) => cur.filter((x) => x !== g))} />
                   ))}
                   <GenreSuggestInput
-                    key={themes.length}
-                    ariaLabel="Ajouter un thème"
+                    key={genres.length}
+                    ariaLabel="Ajouter un genre"
                     placeholder="＋ Ajouter"
-                    onAdd={(fr) => setThemes((cur) => (cur.includes(fr) ? cur : [...cur, fr]))}
+                    onAdd={(fr) => setGenres((cur) => (cur.includes(fr) ? cur : [...cur, fr]))}
                     onCancel={() => {}}
-                    onRemoveLast={() => setThemes((cur) => cur.slice(0, -1))}
+                    onRemoveLast={() => setGenres((cur) => cur.slice(0, -1))}
                   />
                 </div>
               </div>
@@ -523,8 +551,14 @@ export default function NewProjectWizard() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="⌕ Inviter par nom, rôle ou genre…"
                     aria-label="Inviter par nom, rôle ou genre"
-                    style={{ ...inputStyle, border: 'none', borderRadius: 0, borderBottom: query ? '2px solid var(--border)' : 'none', background: 'var(--paper)', fontSize: 13 }}
+                    style={{ ...inputStyle, border: 'none', borderRadius: 0, borderBottom: '2px solid var(--border)', background: 'var(--paper)', fontSize: 13 }}
                   />
+                  {/* Hint under the searchbar: matching partners appear here as you type. */}
+                  {!query.trim() && (
+                    <div style={{ padding: '9px 11px', fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>
+                      Les partenaires correspondants s’afficheront ici.
+                    </div>
+                  )}
                   {query.trim() && (
                     <div>
                       {searchLoading && <div style={{ padding: '9px 11px', fontSize: 13, color: 'var(--ink2)' }}>Recherche…</div>}
@@ -589,8 +623,8 @@ export default function NewProjectWizard() {
             </>
           )}
 
-          {/* ── STEP 3 · SOUTIEN ─────────────────────────────────────────── */}
-          {step === 3 && (
+          {/* ── STEP 3 · SOUTIEN (manga / histoire — includes revenue split) ─ */}
+          {!isIllus && step === 3 && (
             <>
               <div style={stepHeading}>
                 3 · SOUTIEN — PALIERS &amp; PARTAGE DES REVENUS{' '}
@@ -668,19 +702,31 @@ export default function NewProjectWizard() {
             Annuler
           </button>
           <div style={{ flex: 1, minWidth: 8 }} />
-          {step >= 2 && (
+          {!isIllus && step >= 2 && (
             <button type="button" onClick={() => void submit(false)} disabled={busy} style={{ ...footerBtn, opacity: busy ? 0.6 : 1 }}>
               Configurer plus tard
             </button>
           )}
-          {step < 3 && (
+          {/* Continuer advances both branches through Type → Détails → Soutien. On step 3 the manga
+             branch shows "Créer le projet" and the illustration branch's embedded form owns "Publier". */}
+          {(step === 1 || step === 2) && (
             <button type="button" onClick={goNext} style={accentBtn}>
               Continuer →
             </button>
           )}
-          {step === 3 && (
+          {!isIllus && step === 3 && (
             <button type="button" onClick={() => void submit(true)} disabled={busy || !splitValid} style={{ ...accentBtn, opacity: busy || !splitValid ? 0.6 : 1 }}>
               {pending ? 'Création…' : 'Créer le projet'}
+            </button>
+          )}
+          {isIllus && step === 3 && (
+            <button
+              type="button"
+              onClick={() => illusRef.current?.submit()}
+              disabled={illusStatus.pending || illusStatus.uploadBusy}
+              style={{ ...accentBtn, opacity: illusStatus.pending || illusStatus.uploadBusy ? 0.6 : 1 }}
+            >
+              {illusStatus.pending ? 'Publication…' : '✓ Publier'}
             </button>
           )}
         </div>
@@ -750,11 +796,11 @@ function SeekingRow({ icon, label, aria, value, onDec, onInc }: { icon: 'scenari
   );
 }
 
-// Step 1 type cards — a radiogroup replica (proto 1760–1764). Illustration navigates away; Manga and
-// Histoire toggle the wizard type. Roving tabindex + arrow-key selection.
-function TypeCards({ type, onManga, onStory, onIllustration }: { type: ProjectType; onManga: () => void; onStory: () => void; onIllustration: () => void }) {
+// Step 1 type cards — a radiogroup replica (proto 1760–1764). All three are single-select; the branch
+// each opens differs (Illustration → the embedded publish flow). Roving tabindex + arrow-key selection.
+function TypeCards({ type, onManga, onStory, onIllustration }: { type: WizardType; onManga: () => void; onStory: () => void; onIllustration: () => void }) {
   const cards = [
-    { key: 'illustration' as const, title: 'Illustration(s)', desc: "Galerie d'images, sans récit.", selected: false, activate: onIllustration },
+    { key: 'illustration' as const, title: 'Illustration(s)', desc: "Galerie d'images, sans récit.", selected: type === 'illustration', activate: onIllustration },
     { key: 'story' as const, title: 'Histoire (illustrée)', desc: "Texte, avec illustrations d'appui.", selected: type === 'story', activate: onStory },
     { key: 'manga' as const, title: 'Manga', desc: 'Récit dessiné : planches & chapitres.', selected: type === 'manga', activate: onManga },
   ];

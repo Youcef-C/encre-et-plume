@@ -28,19 +28,19 @@ describe('GalerieHeader (DR-5 FE-5)', () => {
     ).toBeInTheDocument();
   });
 
-  it('anonymous: the CTA gates to /connexion?next=/creer/illustration', () => {
+  it('anonymous: the CTA gates to /connexion with the encoded wizard deep-link (CS-1)', () => {
     renderWithSession(null);
     expect(screen.getByRole('link', { name: '＋ Publier une illustration' })).toHaveAttribute(
       'href',
-      '/connexion?next=/creer/illustration',
+      `/connexion?next=${encodeURIComponent('/creer?type=illustration')}`,
     );
   });
 
-  it('signed-in: the CTA links to the CS-3 create-flow stub /creer/illustration', () => {
+  it('signed-in: the CTA deep-links into the wizard Illustration branch (/creer?type=illustration)', () => {
     renderWithSession({ id: 'u1' });
     expect(screen.getByRole('link', { name: '＋ Publier une illustration' })).toHaveAttribute(
       'href',
-      '/creer/illustration',
+      '/creer?type=illustration',
     );
   });
 });

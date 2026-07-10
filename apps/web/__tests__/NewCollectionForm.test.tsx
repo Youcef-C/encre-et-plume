@@ -70,7 +70,7 @@ describe('NewCollectionForm (DR-12 V2)', () => {
     // One funding goal (title + cible €).
     await user.click(screen.getByRole('button', { name: '＋ Ajouter un objectif' }));
     await user.type(screen.getByLabelText('Titre de l’objectif 1'), 'Papier premium');
-    await user.type(screen.getByLabelText('Cible de l’objectif 1 (€)'), '200');
+    await user.type(screen.getByLabelText('Cible de l’objectif 1 (€ / mois)'), '200');
 
     await user.click(screen.getByRole('button', { name: 'Créer la collection' }));
 

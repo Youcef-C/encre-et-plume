@@ -4,7 +4,7 @@
 // A single on-brand page: Titre (required), Illustration drop (F-10), Catégorie, Genres, Description,
 // and the "Ajouter à une collection" multiselect (own collections + inline "＋ Nouvelle collection").
 // CS-3 later replaces this with the full 4-step wizard (crop/planches/hashtags/outils/licence…).
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   GALLERY_CATEGORIES,
@@ -49,8 +49,24 @@ const inputStyle: React.CSSProperties = {
 const field = { marginBottom: 18 };
 const errText: React.CSSProperties = { fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '8px 0 0' };
 
-export default function PublishIllustrationForm() {
+export type PublishIllustrationHandle = { submit: () => void };
+
+// `embedded` = rendered inside the CS-1 "Nouveau projet" wizard shell (the Illustration branch): drop
+// the standalone page's outer frame + <h1> so the wizard's header/step-rail is the single frame.
+// `section` splits the flow across wizard steps for consistency with the manga branch:
+//   'details' = upload · titre · catégorie · genres · hashtags · description · collection · concours
+//   'soutien' = the Soutien fields (revenue split is manga-only — a standalone illustration is single-author)
+//   'all'     = one page (the form's own test) — every section + its own submit
+// `hideSubmit` = the wizard footer owns the "Publier" button and triggers submit() via the ref.
+const PublishIllustrationForm = forwardRef<PublishIllustrationHandle, {
+  embedded?: boolean;
+  section?: 'all' | 'details' | 'soutien';
+  hideSubmit?: boolean;
+  onStatusChange?: (s: { pending: boolean; uploadBusy: boolean }) => void;
+}>(function PublishIllustrationForm({ embedded = false, section = 'all', hideSubmit = false, onStatusChange }, ref) {
   const router = useRouter();
+  const showDetails = section !== 'soutien';
+  const showPublish = section !== 'details'; // Soutien fields live here (with the submit unless hidden)
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<GalleryCategoryKey>(GALLERY_CATEGORY_KEYS[0]);
@@ -132,10 +148,20 @@ export default function PublishIllustrationForm() {
     }
   }
 
-  return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 28px 80px' }}>
-      <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: '0 0 22px' }}>Publier une illustration</h1>
+  useImperativeHandle(ref, () => ({ submit: () => void handleSubmit() }));
 
+  // Report busy/pending up so the wizard footer's "Publier" button can reflect them.
+  useEffect(() => {
+    onStatusChange?.({ pending, uploadBusy });
+  }, [pending, uploadBusy, onStatusChange]);
+
+  return (
+    <div style={embedded ? { padding: 0 } : { maxWidth: 640, margin: '0 auto', padding: '28px 28px 80px' }}>
+      {!embedded && <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: '0 0 22px' }}>Publier une illustration</h1>}
+
+      {/* Kept MOUNTED across wizard steps (hidden, not unmounted) so an in-flight UploadControl upload
+          and its mediaId survive the Détails → Soutien step switch. */}
+      <div style={{ display: showDetails ? undefined : 'none' }}>
       {/* Titre */}
       <div style={field}>
         <label htmlFor="pub-title" style={label}>
@@ -249,8 +275,9 @@ export default function PublishIllustrationForm() {
               minHeight: 44,
               cursor: 'pointer',
               fontFamily: 'inherit',
-              background: 'var(--card)',
-              color: 'var(--ink)',
+              background: 'var(--accent)',
+              color: '#fff',
+              boxShadow: '2px 2px 0 var(--shadow)',
             }}
           >
             ＋ Nouvelle collection
@@ -286,40 +313,6 @@ export default function PublishIllustrationForm() {
         {!contest && <p style={{ fontSize: 12, color: 'var(--ink2)', margin: '6px 0 0' }}>Aucun concours ouvert</p>}
       </div>
 
-      {/* Soutien · optionnel (CS-1 induced) */}
-      <fieldset style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '12px 14px', margin: '0 0 18px' }}>
-        <legend style={{ fontSize: 12, fontWeight: 700, padding: '0 6px' }}>Soutien · optionnel</legend>
-        <SoutienFields value={soutien} onChange={setSoutien} />
-      </fieldset>
-
-      {serverError && (
-        <p role="alert" style={{ ...errText, marginTop: 0, marginBottom: 12 }}>
-          {serverError}
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={() => void handleSubmit()}
-        disabled={pending || uploadBusy}
-        style={{
-          fontSize: 15,
-          fontWeight: 700,
-          background: 'var(--accent)',
-          color: '#fff',
-          border: '3px solid var(--ink)',
-          borderRadius: 8,
-          padding: '12px 22px',
-          minHeight: 44,
-          cursor: 'pointer',
-          boxShadow: '4px 4px 0 var(--shadow)',
-          fontFamily: 'inherit',
-          opacity: pending || uploadBusy ? 0.6 : 1,
-        }}
-      >
-        {pending ? 'Publication…' : 'Publier'}
-      </button>
-
       {newOpen && (
         <NewCollectionForm
           onClose={() => setNewOpen(false)}
@@ -329,6 +322,63 @@ export default function PublishIllustrationForm() {
           }}
         />
       )}
+      </div>
+
+      {showPublish && (
+      <>
+      {/* Soutien · optionnel (CS-1 induced). Embedded, the wizard's step heading titles this section,
+          so drop the fieldset chrome to avoid a duplicate "Soutien · optionnel" heading. */}
+      {embedded ? (
+        <div style={{ marginBottom: 18 }}>
+          <SoutienFields value={soutien} onChange={setSoutien} />
+        </div>
+      ) : (
+        <fieldset style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '12px 14px', margin: '0 0 18px' }}>
+          <legend style={{ fontSize: 12, fontWeight: 700, padding: '0 6px' }}>Soutien · optionnel</legend>
+          <SoutienFields value={soutien} onChange={setSoutien} />
+        </fieldset>
+      )}
+
+      {/* When Details lives on a prior wizard step, surface the required-title error here too. */}
+      {!showDetails && titleError && (
+        <p role="alert" style={{ ...errText, marginTop: 0, marginBottom: 12 }}>
+          {titleError}
+        </p>
+      )}
+
+      {serverError && (
+        <p role="alert" style={{ ...errText, marginTop: 0, marginBottom: 12 }}>
+          {serverError}
+        </p>
+      )}
+
+      {!hideSubmit && (
+        <button
+          type="button"
+          onClick={() => void handleSubmit()}
+          disabled={pending || uploadBusy}
+          style={{
+            fontSize: 15,
+            fontWeight: 700,
+            background: 'var(--accent)',
+            color: '#fff',
+            border: '3px solid var(--ink)',
+            borderRadius: 8,
+            padding: '12px 22px',
+            minHeight: 44,
+            cursor: 'pointer',
+            boxShadow: '4px 4px 0 var(--shadow)',
+            fontFamily: 'inherit',
+            opacity: pending || uploadBusy ? 0.6 : 1,
+          }}
+        >
+          {pending ? 'Publication…' : 'Publier'}
+        </button>
+      )}
+      </>
+      )}
     </div>
   );
-}
+});
+
+export default PublishIllustrationForm;

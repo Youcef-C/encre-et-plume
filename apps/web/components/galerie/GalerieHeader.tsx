@@ -2,19 +2,18 @@
 
 // DR-5 FE-5 — gallery header. Replica of prototype GALERIE lines 596-597: "Galerie" + derived
 // "N illustrations · N artistes" summary (Backend rule "counts derived" — not the prototype's
-// decorative 128/36 literals) + subtitle + "＋ Publier une illustration" CTA. The CTA is the
-// entry point into CS-3 (create flow, not built this round): signed-in -> /creer/illustration
-// (404 acceptable), anonymous -> /connexion?next=… (auth gate), same pattern as HeroCarousel's
-// "Ma liste" gate.
+// decorative 128/36 literals) + subtitle + "＋ Publier une illustration" CTA. CS-1: the CTA now
+// deep-links into the "Nouveau projet" wizard with the Illustration branch pre-selected
+// (/creer?type=illustration); anonymous -> /connexion?next=… (auth gate).
 import Link from 'next/link';
 import type { GallerySummary } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 
-const CREATE_ILLUSTRATION_ROUTE = '/creer/illustration';
+const CREATE_ILLUSTRATION_ROUTE = '/creer?type=illustration';
 
 export default function GalerieHeader({ summary }: { summary: GallerySummary }) {
   const { account } = useSession();
-  const ctaHref = account ? CREATE_ILLUSTRATION_ROUTE : `/connexion?next=${CREATE_ILLUSTRATION_ROUTE}`;
+  const ctaHref = account ? CREATE_ILLUSTRATION_ROUTE : `/connexion?next=${encodeURIComponent(CREATE_ILLUSTRATION_ROUTE)}`;
 
   return (
     <div>

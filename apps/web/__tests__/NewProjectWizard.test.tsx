@@ -25,6 +25,18 @@ vi.mock('../components/UploadControl', () => ({
   default: ({ label }: { label: string }) => <div>{label}</div>,
 }));
 
+// The Illustration branch embeds the real publish flow; stub it here (forwardRef, since the wizard
+// drives its submit via a ref) so the wizard test stays focused on the fork logic.
+vi.mock('../components/creer/PublishIllustrationForm', async () => {
+  const React = await import('react');
+  return {
+    default: React.forwardRef(({ embedded }: { embedded?: boolean }, ref: React.Ref<{ submit: () => void }>) => {
+      React.useImperativeHandle(ref, () => ({ submit: () => {} }));
+      return <div data-testid="inline-publish-form">{embedded ? 'embedded' : 'standalone'} publish form</div>;
+    }),
+  };
+});
+
 import * as api from '../lib/api';
 import NewProjectWizard from '../components/creer/NewProjectWizard';
 
@@ -98,11 +110,33 @@ describe('NewProjectWizard (CS-1)', () => {
     expect(group.getAttribute('style') ?? '').not.toMatch(/grid-template-columns/);
   });
 
-  it('routes the Illustration(s) card to the existing illustration wizard', async () => {
+  it('selects the Illustration(s) card without navigating away', async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    const illus = screen.getByRole('radio', { name: /Illustration/ });
+    await user.click(illus);
+    expect(illus).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: /Manga/ })).toHaveAttribute('aria-checked', 'false');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('advances the Illustration branch INTO the embedded publish flow inline, with a Détails · Soutien rail (no navigation)', async () => {
     const user = userEvent.setup();
     renderWizard();
     await user.click(screen.getByRole('radio', { name: /Illustration/ }));
-    expect(push).toHaveBeenCalledWith('/creer/illustration');
+    // The illustration rail mirrors the manga rail: Type · Détails · Soutien.
+    expect(screen.getByRole('button', { name: /Étape 2 : Détails/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Étape 3 : Soutien/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Continuer/ })); // → Détails
+    expect(screen.getByTestId('inline-publish-form')).toHaveTextContent('embedded publish form');
+    // A second Continuer reaches the Soutien step — the embedded form stays mounted (state preserved),
+    // no manga-title validation blocks it, and nothing is submitted by the wizard.
+    await user.click(screen.getByRole('button', { name: /Continuer/ })); // → Soutien
+    expect(screen.getByTestId('inline-publish-form')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le projet' })).not.toBeInTheDocument();
+    expect(api.createProject).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('blocks Continuer/create with an inline error on an empty title, no API call', async () => {
@@ -114,7 +148,7 @@ describe('NewProjectWizard (CS-1)', () => {
     expect(api.createProject).not.toHaveBeenCalled();
   });
 
-  it('adds a genre (single-select) and a theme (multi) via the F-20 picker', async () => {
+  it('adds multiple genres via the single F-20 picker (first = primary genre, rest = themes)', async () => {
     const user = userEvent.setup();
     renderWizard();
     await user.click(screen.getByRole('button', { name: /Continuer/ }));
@@ -123,7 +157,7 @@ describe('NewProjectWizard (CS-1)', () => {
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('button', { name: 'Retirer Seinen' })).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Ajouter un thème'), 'Action');
+    await user.type(screen.getByLabelText('Ajouter un genre'), 'Action');
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('button', { name: 'Retirer Action' })).toBeInTheDocument();
   });
@@ -189,6 +223,8 @@ describe('NewProjectWizard (CS-1)', () => {
     await user.type(screen.getByLabelText('Titre du projet'), 'Nuit Blanche');
     await user.type(screen.getByLabelText('Ajouter un genre'), 'Seinen');
     await user.keyboard('{Enter}');
+    await user.type(screen.getByLabelText('Ajouter un genre'), 'Action');
+    await user.keyboard('{Enter}');
     await user.click(screen.getByRole('button', { name: /Continuer/ })); // → step 3
 
     await user.click(screen.getByRole('button', { name: 'Créer le projet' }));
@@ -196,7 +232,9 @@ describe('NewProjectWizard (CS-1)', () => {
     const body = createMock().mock.calls[0][0] as CreateProjectRequest;
     expect(body.type).toBe('manga');
     expect(body.title).toBe('Nuit Blanche');
+    // First selected = primary genre; the rest = themes.
     expect(body.genre).toBe(resolveGenreId('Seinen'));
+    expect(body.themes).toEqual([resolveGenreId('Action')]);
     expect(push).toHaveBeenCalledWith('/projets');
   });
 

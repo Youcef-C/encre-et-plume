@@ -66,7 +66,10 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await page.getByRole('combobox', { name: 'Ajouter un genre' }).fill('Seinen');
     await page.getByRole('combobox', { name: 'Ajouter un genre' }).press('Enter');
     await page.getByRole('button', { name: '16+' }).click();
-    await page.getByRole('button', { name: /Plus de scénaristes/ }).click();
+    // NB: intentionally leave "Je recherche" at 0 — a >0 counter seeds a real open ProjectCall
+    // (seedFromProject) that would surface in the GLOBAL MC-1 calls preview and pollute
+    // trouver.spec MC1-E9 when the full suite runs on one seeded DB. The seeking→call side effect
+    // is covered by projects.service.spec; the counter UI is covered by NewProjectWizard.test.tsx.
     await page.getByRole('radio', { name: 'Public' }).click();
     await page.getByRole('button', { name: /Continuer/ }).click(); // → step 3
 
@@ -102,14 +105,28 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await expect(page.getByLabel('Titre du projet')).toBeVisible();
   });
 
-  test('CS1-E5: Illustration(s) card routes to /creer/illustration with contest + Soutien', async ({ page }) => {
+  test('CS1-E5: Illustration(s) is selectable and its publish flow runs INLINE (Détails · Soutien) on /creer', async ({ page }) => {
     await loginAsOwner(page);
     await page.goto('/creer');
     await page.getByRole('radio', { name: /Illustration/ }).click();
-    await expect(page).toHaveURL(/\/creer\/illustration/, { timeout: 10_000 });
+    // No navigation — the branch runs inside the wizard shell.
+    await page.getByRole('button', { name: /Continuer/ }).click();
+    await expect(page).toHaveURL(/\/creer$/);
+    // Détails step: the real illustration form (upload drop + contest link) renders inline.
+    await expect(page.getByText('Déposez l’illustration')).toBeVisible();
     await expect(page.getByLabel('Lier à un concours')).toBeVisible();
-    await expect(page.getByText('Soutien · optionnel')).toBeVisible();
+    // Soutien step: the shared Soutien fields (no revenue split for a standalone illustration).
+    await page.getByRole('button', { name: /Continuer/ }).click();
     await expect(page.getByRole('button', { name: '＋ Ajouter un palier' })).toBeVisible();
+    await expect(page.getByRole('group', { name: /Partage des revenus/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '✓ Publier' })).toBeVisible();
+  });
+
+  test('CS1-E5b: Galerie deep-link /creer?type=illustration lands on the Illustration Détails step', async ({ page }) => {
+    await loginAsOwner(page);
+    await page.goto('/creer?type=illustration');
+    await expect(page).toHaveURL(/\/creer\?type=illustration/);
+    await expect(page.getByText('Déposez l’illustration')).toBeVisible({ timeout: 10_000 });
   });
 
   test('CS1-E6: mobile (375×812) — type cards stack single-column, ✓ badge not clipped, no overflow across step 2', async ({ page }) => {

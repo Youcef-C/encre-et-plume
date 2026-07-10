@@ -36,6 +36,15 @@ async function waitUploadReady(page: Page, submitButtonName: string | RegExp) {
   await expect(page.getByRole('button', { name: submitButtonName })).toBeEnabled({ timeout: 30_000 });
 }
 
+// CS-1: the illustration publish flow now lives inside the /creer wizard's Illustration branch, split
+// across Détails (upload + fields) and Soutien. Publishing = "Continuer →" (Détails → Soutien) then
+// the wizard-footer "✓ Publier" (enabled once the upload is ready).
+async function publishFromWizard(page: Page) {
+  await page.getByRole('button', { name: /Continuer/ }).click();
+  await waitUploadReady(page, '✓ Publier');
+  await page.getByRole('button', { name: '✓ Publier' }).click();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // E1-E5 (round 1 flow, definitions in plan §8) — assign-at-publish, collection page, manage,
 // profile, responsive. Shared state across this serial block: one collection + illustration.
@@ -52,8 +61,8 @@ test.describe('DR-12 E1-E5 — assign at publish, collection page, manage view, 
 
   test('E1: publish an illustration, create a collection inline, land on the illustration detail with the collection chip', async ({ page }) => {
     await loginAsYuki(page);
-    await page.goto('/creer/illustration');
-    await expect(page.getByRole('heading', { name: 'Publier une illustration' })).toBeVisible({ timeout: 10_000 });
+    await page.goto('/creer?type=illustration');
+    await expect(page.getByRole('heading', { name: /Nouveau projet/i })).toBeVisible({ timeout: 10_000 });
 
     await page.getByLabel('Titre', { exact: true }).fill(illustrationTitle);
     await page.locator('input[type="file"]').first().setInputFiles(IMAGE_FIXTURE);
@@ -68,8 +77,7 @@ test.describe('DR-12 E1-E5 — assign at publish, collection page, manage view, 
     // The new collection now shows as a removable chip outside the multiselect trigger.
     await expect(page.getByText(collectionTitle)).toBeVisible();
 
-    await waitUploadReady(page, 'Publier');
-    await page.getByRole('button', { name: 'Publier' }).click();
+    await publishFromWizard(page);
     await expect(page).toHaveURL(/\/illustration\//, { timeout: 15_000 });
     illustrationUrl = page.url();
 
@@ -205,7 +213,7 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
 
     // Create a fresh collection with a unique hashtag (via the publish-flow's inline creator —
     // the POST fires on "Créer la collection", independent of finishing the publish).
-    await page.goto('/creer/illustration');
+    await page.goto('/creer?type=illustration');
     await page.getByRole('button', { name: '＋ Nouvelle collection' }).click();
     const dialog = page.getByRole('dialog', { name: '＋ Nouvelle collection' });
     await dialog.getByLabel('Titre', { exact: true }).fill(hashtagCollectionTitle);
@@ -229,13 +237,12 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
 
   test('E7: a published illustration is hashtag-searchable, and its hashtags can be edited from the illustration edit form', async ({ page }) => {
     await loginAsYuki(page);
-    await page.goto('/creer/illustration');
+    await page.goto('/creer?type=illustration');
     await page.getByLabel('Titre', { exact: true }).fill(hashtagIllustrationTitle);
     await page.locator('input[type="file"]').first().setInputFiles(IMAGE_FIXTURE);
     await page.getByLabel('Hashtags', { exact: true }).fill(`#${uniqueHashtag}`);
     await page.getByLabel('Hashtags', { exact: true }).press(' ');
-    await waitUploadReady(page, 'Publier');
-    await page.getByRole('button', { name: 'Publier' }).click();
+    await publishFromWizard(page);
     await expect(page).toHaveURL(/\/illustration\//, { timeout: 15_000 });
     const detailUrl = page.url();
 
@@ -311,7 +318,7 @@ test.describe('DR-12 E10-E13 — catalogue entry, owner edit, manage-view edit, 
   const editHashtag = `qaedit${ts}`;
   let illustrationUrl = '';
 
-  test('E10: "＋ Poster une œuvre" is creator-only; the "Nouveau projet" fork routes to the publish flow', async ({ page }) => {
+  test('E10: "＋ Poster une œuvre" is creator-only; it navigates to the /creer wizard whose Illustration(s) type routes to the publish flow (CS-1)', async ({ page }) => {
     // Anonymous: no button at all.
     await page.goto('/decouvrir');
     await expect(page.getByRole('heading', { name: 'Catalogue' })).toBeVisible({ timeout: 10_000 });
@@ -324,21 +331,23 @@ test.describe('DR-12 E10-E13 — catalogue entry, owner edit, manage-view edit, 
     await expect(cta).toBeVisible({ timeout: 10_000 });
     await cta.click();
 
-    const dialog = page.getByRole('dialog', { name: 'Nouveau projet' });
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByText('Manga / Roman')).toBeVisible();
-    await expect(dialog.getByText('Bientôt disponible')).toBeVisible();
-    await dialog.getByText('Publier une illustration').click();
-    await expect(page).toHaveURL('/creer/illustration');
+    // CS-1 replaced the two-card dialog with the full "Nouveau projet" wizard page.
+    await expect(page).toHaveURL(/\/creer$/);
+    await expect(page.getByRole('heading', { name: /Nouveau projet/i })).toBeVisible();
+    // The Type step forks: selecting "Illustration(s)" + Continuer enters the publish flow INLINE
+    // (still on /creer, no navigation) — mirrors cs1-nouveau-projet.spec.ts E5.
+    await page.getByRole('radiogroup', { name: /Type de projet/i }).getByRole('radio', { name: /Illustration/ }).click();
+    await page.getByRole('button', { name: /Continuer/ }).click();
+    await expect(page).toHaveURL(/\/creer$/);
+    await expect(page.getByText('Déposez l’illustration')).toBeVisible();
   });
 
   test('E11: owner edits the illustration from its detail page (title/hashtag/tools), then hides it (visibility)', async ({ page, browser }) => {
     await loginAsYuki(page);
-    await page.goto('/creer/illustration');
+    await page.goto('/creer?type=illustration');
     await page.getByLabel('Titre', { exact: true }).fill(`${editTitle} (v1)`);
     await page.locator('input[type="file"]').first().setInputFiles(IMAGE_FIXTURE);
-    await waitUploadReady(page, 'Publier');
-    await page.getByRole('button', { name: 'Publier' }).click();
+    await publishFromWizard(page);
     await expect(page).toHaveURL(/\/illustration\//, { timeout: 15_000 });
     illustrationUrl = page.url();
 

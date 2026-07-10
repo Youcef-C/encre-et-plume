@@ -74,10 +74,11 @@ export default function AddIllustrationsPicker({
     setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
 
-  // Add an illustration that isn't on the platform yet: go to the publish flow with THIS collection
-  // preselected, so the newly published illustration lands as a member.
+  // Add an illustration that isn't on the platform yet: open the "Nouveau projet" wizard on the
+  // Illustration branch with THIS collection preselected, so the newly published illustration lands
+  // as a member (CS-1: the publish flow now lives inside /creer).
   function publishNew() {
-    router.push(`/creer/illustration?collection=${encodeURIComponent(collectionId)}`);
+    router.push(`/creer?type=illustration&collection=${encodeURIComponent(collectionId)}`);
   }
 
   async function confirm() {

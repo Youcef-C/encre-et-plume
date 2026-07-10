@@ -15,18 +15,16 @@ import {
   type CreateCollectionRequest,
   type MediaResponse,
   type MediaVariants,
-  type SoutienTier,
-  type SoutienGoalInput,
 } from '@encre-et-plume/shared';
 import { createCollection, getActiveContest } from '../../lib/api';
 import { XIcon } from '../icons';
 import GenreChip from '../GenreChip';
 import GenreSuggestInput from '../GenreSuggestInput';
 import OnBrandSelect from '../form/OnBrandSelect';
-import OnBrandCheckbox from '../form/OnBrandCheckbox';
 import HashtagChipsInput from '../form/HashtagChipsInput';
 import UploadControl from '../UploadControl';
 import { COVER_FRAME_HEIGHT } from '../../lib/cover';
+import SoutienFields, { EMPTY_SOUTIEN, soutienToRequest, type SoutienValue } from '../creer/SoutienFields';
 
 function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivElement | null>) {
   if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -78,26 +76,8 @@ const footerBtn: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
-const addRowBtn: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  border: '2px solid var(--ink)',
-  borderRadius: 6,
-  padding: '7px 13px',
-  minHeight: 40,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  background: 'var(--card)',
-  color: 'var(--ink)',
-};
 const field = { marginBottom: 14 };
 const errText: React.CSSProperties = { fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '8px 0 0' };
-
-/** €"5,50" | "5.5" → cents; empty/invalid → 0. */
-function eurosToCents(v: string): number {
-  const n = Number.parseFloat(v.replace(',', '.'));
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
 
 export default function NewCollectionForm({
   onClose,
@@ -117,9 +97,7 @@ export default function NewCollectionForm({
   const [coverBusy, setCoverBusy] = useState(false);
   const [contest, setContest] = useState<ActiveContest | null>(null);
   const [contestId, setContestId] = useState('');
-  const [tiers, setTiers] = useState<{ name: string; euros: string }[]>([]);
-  const [allowDonations, setAllowDonations] = useState(false);
-  const [goals, setGoals] = useState<{ title: string; euros: string }[]>([]);
+  const [soutien, setSoutien] = useState<SoutienValue>(EMPTY_SOUTIEN);
 
   const [errors, setErrors] = useState<{ title?: string }>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -156,12 +134,6 @@ export default function NewCollectionForm({
     setServerError(null);
 
     const genreIds = genres.map((g) => resolveGenreId(g)).filter((id): id is string => !!id);
-    const tiersBody: SoutienTier[] = tiers
-      .filter((t) => t.name.trim())
-      .map((t) => ({ name: t.name.trim(), priceCents: eurosToCents(t.euros) }));
-    const goalsBody: SoutienGoalInput[] = goals
-      .filter((g) => g.title.trim())
-      .map((g) => ({ title: g.title.trim(), targetCents: eurosToCents(g.euros) }));
 
     const body: CreateCollectionRequest = {
       title: title.trim(),
@@ -170,9 +142,7 @@ export default function NewCollectionForm({
       ...(hashtags.length ? { hashtags } : {}),
       ...(coverMediaId ? { cover: { mediaId: coverMediaId } } : {}),
       ...(contestId ? { contestId } : {}),
-      ...(tiersBody.length ? { tiers: tiersBody } : {}),
-      ...(allowDonations ? { allowDonations: true } : {}),
-      ...(goalsBody.length ? { goals: goalsBody } : {}),
+      ...soutienToRequest(soutien),
     };
 
     setPending(true);
@@ -344,86 +314,10 @@ export default function NewCollectionForm({
             )}
           </div>
 
-          {/* Soutien · optionnel */}
+          {/* Soutien · optionnel — shared SoutienFields (same style as the illustration soutien block). */}
           <fieldset style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '12px 14px', margin: '0 0 14px' }}>
             <legend style={{ fontSize: 12, fontWeight: 700, padding: '0 6px' }}>Soutien · optionnel</legend>
-
-            <span style={label}>Paliers d’abonnement</span>
-            {tiers.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                <input
-                  aria-label={`Nom du palier ${i + 1}`}
-                  value={t.name}
-                  onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
-                  placeholder="Nom du palier"
-                  style={{ ...inputStyle, flex: 2, minWidth: 120 }}
-                />
-                <input
-                  aria-label={`Prix mensuel du palier ${i + 1} (€)`}
-                  type="number"
-                  min={0}
-                  step="0.5"
-                  value={t.euros}
-                  onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))}
-                  placeholder="€/mois"
-                  style={{ ...inputStyle, flex: 1, minWidth: 90 }}
-                />
-                <button
-                  type="button"
-                  aria-label={`Retirer le palier ${i + 1}`}
-                  onClick={() => setTiers((cur) => cur.filter((_, j) => j !== i))}
-                  style={{ ...addRowBtn, flex: 'none' }}
-                >
-                  <XIcon size={13} />
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={() => setTiers((cur) => [...cur, { name: '', euros: '' }])} style={{ ...addRowBtn, marginBottom: 12 }}>
-              ＋ Ajouter un palier
-            </button>
-
-            <div style={{ marginBottom: 12 }}>
-              <OnBrandCheckbox
-                label="Autoriser les dons uniques"
-                checked={allowDonations}
-                onChange={(e) => setAllowDonations(e.target.checked)}
-                style={{ fontWeight: 700 }}
-              />
-            </div>
-
-            <span style={label}>Objectifs de financement</span>
-            {goals.map((g, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                <input
-                  aria-label={`Titre de l’objectif ${i + 1}`}
-                  value={g.title}
-                  onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
-                  placeholder="Objectif"
-                  style={{ ...inputStyle, flex: 2, minWidth: 120 }}
-                />
-                <input
-                  aria-label={`Cible de l’objectif ${i + 1} (€)`}
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={g.euros}
-                  onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))}
-                  placeholder="Cible €"
-                  style={{ ...inputStyle, flex: 1, minWidth: 90 }}
-                />
-                <button
-                  type="button"
-                  aria-label={`Retirer l’objectif ${i + 1}`}
-                  onClick={() => setGoals((cur) => cur.filter((_, j) => j !== i))}
-                  style={{ ...addRowBtn, flex: 'none' }}
-                >
-                  <XIcon size={13} />
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={() => setGoals((cur) => [...cur, { title: '', euros: '' }])} style={addRowBtn}>
-              ＋ Ajouter un objectif
-            </button>
+            <SoutienFields value={soutien} onChange={setSoutien} />
           </fieldset>
 
           {serverError && (

@@ -81,7 +81,7 @@ describe('AddIllustrationsPicker (DR-12 iter2 FE-11)', () => {
     const user = userEvent.setup();
     render(<AddIllustrationsPicker collectionId="w1" illustrations={addable} onClose={() => {}} onCommitted={() => {}} />);
     await user.click(screen.getByRole('button', { name: '＋ Publier une nouvelle illustration' }));
-    expect(push).toHaveBeenCalledWith('/creer/illustration?collection=w1');
+    expect(push).toHaveBeenCalledWith('/creer?type=illustration&collection=w1');
   });
 
   it('Esc closes the picker', async () => {
