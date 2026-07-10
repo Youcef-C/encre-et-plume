@@ -59,6 +59,14 @@ const SPECS = [
   // ('dessinateur' isn't in SEEKING_TARGET_ROLES, only 'dessinateur·rice' is) plus an ACCEPTED
   // application. No other spec file references this account.
   { key: 'F3_STALE_ROLE', email: 'qa_e2e_f3_stale_role@test.com', slug: 'e2e-f3-stale-role' },
+  // MC-5/MC-6 batch (2026-07-10) — dedicated APPLICANT fixture for calls-batch-fixes.spec.ts's
+  // portfolio-pick apply/edit flows (Items 1 and 3+6). Not shared with any other spec file — this
+  // replaces reusing the shared camille/dr1-camille-roux account, which left residual applications
+  // on seed.js's shared calls and broke mc5-apply-call.spec.ts's MC5-E7/E8 (a real CI regression).
+  // No ProjectCall is seeded here on purpose: the calls-batch spec creates its own throwaway call per
+  // test (owned by a fresh live-signup account, deleted at test end) so it never permanently inflates
+  // the board's total open-call count that appels.spec.ts asserts exactly (e.g. "10 total").
+  { key: 'MC_BATCH_SCENARISTE', email: 'qa_e2e_mc_batch_scenariste@test.com', slug: 'e2e-mc-batch-scenariste' },
 ];
 
 async function main() {
@@ -500,7 +508,12 @@ async function main() {
         authorId: null,
         authorName: 'E2E Fixture',
         genres: ['shonen'],
-        status: 'open',
+        // closed — this call only needs to HOST the accepted application; the accepted-app
+        // precondition doesn't care about call status. Open would make it the newest open call
+        // (createdAt defaults to seed-run time, always after seed.js's fixed old timestamps) and
+        // intrude on the global "newest open calls" band (trouver.spec.ts MC1-E9 is exact about the
+        // top-2 being seed.js's "Seinen urbain"/"Comédie romantique" — a QA finding from CI).
+        status: 'closed',
       },
     });
     await prisma.application.create({
@@ -511,6 +524,29 @@ async function main() {
         status: 'accepted',
         appliedAs: 'scenariste',
       },
+    });
+  }
+
+  // ── MC-5/MC-6 batch (2026-07-10) — dedicated MC_BATCH_SCENARISTE fixture for
+  // calls-batch-fixes.spec.ts's portfolio-pick apply/view/edit flows (Items 1 and 3+6). Not shared
+  // with any other spec file. Idempotent (upsert profile, reset-then-recreate portfolio).
+  {
+    const scenariste = accounts.MC_BATCH_SCENARISTE.id;
+    await prisma.profile.upsert({
+      where: { accountId: scenariste },
+      update: { creatorRoles: ['scenariste'] },
+      create: { accountId: scenariste, creatorRoles: ['scenariste'] },
+    });
+
+    // 2 portfolio pieces so the apply modal's inline picker has something to pick (mirrors the
+    // seeded camille fixture other specs use — this account just isn't shared with them).
+    const scenaristeProfile = await prisma.profile.findUnique({ where: { accountId: scenariste }, select: { id: true } });
+    await prisma.portfolioItem.deleteMany({ where: { profileId: scenaristeProfile.id } });
+    await prisma.portfolioItem.createMany({
+      data: [
+        { profileId: scenaristeProfile.id, image: 'https://example.com/e2e-mc-batch-portfolio-1.jpg', caption: 'Échantillon 1', order: 0 },
+        { profileId: scenaristeProfile.id, image: 'https://example.com/e2e-mc-batch-portfolio-2.jpg', caption: 'Échantillon 2', order: 1 },
+      ],
     });
   }
 

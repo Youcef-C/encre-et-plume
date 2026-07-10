@@ -16,13 +16,19 @@
  *   7. F-3 — a stale/invalid seeking.targetRole no longer blocks a creatorRoles save; the accepted
  *      application's appliedAs stays untouched.
  *
- * Everything below uses FRESH scratch accounts (Date.now()-suffixed emails) signed up via the API +
- * dev-latest email-verify seam (privacy.spec.ts's established pattern) so nothing here depends on,
- * or mutates, the shared seed.js fixtures other spec files assert exact counts against — except
- * item 7, which reads a DEDICATED e2e-seed.js fixture (F3_STALE_ROLE, from `.e2e-accounts.json`)
- * read-only: no runtime SQL (CI's Postgres isn't reachable via a local `psql` shellout — that's what
- * broke `develop`'s e2e job when this test used to reproduce its precondition that way), no mutation
- * of any shared fixture.
+ * Hermeticity (2 rounds of CI regressions fixed this): NOTHING below touches the shared
+ * camille/dr1-camille-roux account or any seed.js ProjectCall. Round 1 found item 7's `psql`
+ * shellout unreachable from CI's Postgres + mutating a shared fixture at runtime — fixed by reading
+ * a DEDICATED e2e-seed.js fixture (F3_STALE_ROLE) read-only instead. Round 2 found items 1 and 3+6
+ * reusing the shared camille account applying to shared seed.js calls ("Récit fantastique" /
+ * "Aventure onirique"), leaving residual applications that broke mc5-apply-call.spec.ts's MC5-E7/E8
+ * (which assert those cards still show "Candidater" for camille) — fixed the same way: a DEDICATED
+ * e2e-seed.js applicant account (MC_BATCH_SCENARISTE, own 2 portfolio pieces) applying to a
+ * throwaway call created LIVE by a fresh signup account and deleted at the end of each test
+ * (`cleanupCall`) — never a permanently-seeded ProjectCall, so it can't inflate the exact open-call
+ * totals `appels.spec.ts` asserts (e.g. "10 total") or intrude on the "newest open calls" band
+ * `trouver.spec.ts`'s MC1-E9 asserts. Items 2/4/6 were already hermetic this way (fresh signup
+ * accounts + a live-created, cleaned-up call each) and are unchanged.
  */
 import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
@@ -31,6 +37,12 @@ import * as path from 'path';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const PASSWORD = 'password123';
 const SAMPLE_FIXTURE = fs.readFileSync(path.join(__dirname, 'fixtures/avatar.jpg'));
+
+// Dedicated e2e-seed.js fixtures (apps/api/prisma/e2e-seed.js) — never the shared camille/dr1-*
+// accounts, never a seed.js ProjectCall. Read once at module load.
+const ACCOUNTS = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '.e2e-accounts.json'), 'utf8'),
+) as Record<string, { email: string; id: string }>;
 
 // Username (max 30 chars, DTO-enforced) is generated independently of the email — slicing a
 // descriptive `emailLocalPart-${Date.now()}` down to 30 chars silently truncates the LAST few
@@ -126,22 +138,37 @@ async function filterSeekingScenariste(page: Page): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1 + 3 (part) — MC-5 max-samples submit + MC-6 view/edit pre-fill (camille, seeded scénariste
-// with 2 portfolio pieces — reusing mc5-apply-call.spec.ts's account; "Récit fantastique"
-// (mc6-call-fantastique) is not touched by any other spec's exact applicantCount assertion).
+// 1 + 3 (part) — MC-5 max-samples submit + MC-6 view/edit pre-fill. Applicant is the DEDICATED
+// e2e-seed fixture MC_BATCH_SCENARISTE (own 2 portfolio pieces, own account — never the shared
+// camille/dr1-camille-roux, which left residual applications on shared seed.js calls and broke
+// mc5-apply-call.spec.ts's MC5-E7/E8, a real CI regression). The call itself is a throwaway created
+// live by a fresh signup account and deleted at the end of each test (`cleanupCall`) — never
+// permanently seeded, so it can't inflate the exact open-call totals appels.spec.ts asserts, and
+// (being deleted well before any other spec runs its own board checks) can't race the "newest open
+// calls" band trouver.spec.ts's MC1-E9 asserts either.
 // ─────────────────────────────────────────────────────────────────────────────
 test.describe('Item 1 — MC-5 apply at MAX samples', () => {
-  const CAMILLE_EMAIL = 'camille.roux@seed.encre-et-plume.local';
-  const CALL_TITLE = 'Récit fantastique';
+  const APPLICANT_EMAIL = ACCOUNTS.MC_BATCH_SCENARISTE.email;
   const MESSAGE = 'QA batch — candidature à 3/3 échantillons.';
 
-  test('applies with 3/3 samples (2 portfolio + 1 upload) — "Envoyer" is enabled AND actually submits', async ({ page }) => {
-    await loginUi(page, CAMILLE_EMAIL);
+  test('applies with 3/3 samples (2 portfolio + 1 upload) — "Envoyer" is enabled AND actually submits', async ({
+    page,
+    browser,
+  }) => {
+    const ts = Date.now();
+    const ownerCtx = await browser.newContext();
+    const ownerPage = await ownerCtx.newPage();
+    await signUpVerifyAndLogin(ownerPage, `qa-mc5max-owner-${ts}@e2e.local`, 'QA MC5 Max Owner');
+    await setCreatorRoles(ownerPage, ['dessinateur']);
+    const title = `QA MC5 Max Samples ${ts}`;
+    const callId = await createCall(ownerPage, title, { scenariste: 1 });
+
+    await loginUi(page, APPLICANT_EMAIL);
     await page.goto('/appels');
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
     await filterSeekingScenariste(page);
 
-    const card = cardByTitle(page, CALL_TITLE);
+    const card = cardByTitle(page, title);
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
 
@@ -169,6 +196,9 @@ test.describe('Item 1 — MC-5 apply at MAX samples', () => {
     await expect(dialog.getByRole('status').filter({ hasText: 'Candidature envoyée !' })).toBeVisible({ timeout: 10_000 });
     await dialog.getByText('Fermer', { exact: true }).click();
     await expect(dialog).toHaveCount(0);
+
+    await cleanupCall(ownerPage, callId);
+    await ownerCtx.close();
   });
 });
 
@@ -177,33 +207,27 @@ test.describe('Item 1 — MC-5 apply at MAX samples', () => {
 // Deliberately uses only 2/3 samples (NOT max) so this proof is independent of item 1's defect above.
 // ─────────────────────────────────────────────────────────────────────────────
 test.describe('Item 3 + 6 — MC-6 view + edit a pending application (pre-filled, no re-upload)', () => {
-  const CAMILLE_EMAIL = 'camille.roux@seed.encre-et-plume.local';
-  // "Aventure onirique" (not "Comédie douce-amère") — the latter is used by appels.spec.ts's own
-  // MC4X-D4 (camille applies there too), which races this file when spec FILES run in parallel
-  // workers (confirmed empirically: a full-suite run hit a real 409 collision). "Aventure onirique"
-  // is only ever touched here by a DIFFERENT applicant (mc1-noe-p) in mc6-mes-candidatures.spec.ts —
-  // no collision (uniqueness is per callId+applicantId).
-  const CALL_TITLE = 'Aventure onirique';
+  const APPLICANT_EMAIL = ACCOUNTS.MC_BATCH_SCENARISTE.email;
   const MESSAGE = 'QA batch — candidature à 2 échantillons (voir/modifier).';
 
   test('applies with 2 samples, then "Voir" shows message+samples and "Modifier" pre-fills + saves without re-upload', async ({
     page,
+    browser,
   }) => {
-    await loginUi(page, CAMILLE_EMAIL);
+    const ts = Date.now();
+    const ownerCtx = await browser.newContext();
+    const ownerPage = await ownerCtx.newPage();
+    await signUpVerifyAndLogin(ownerPage, `qa-mc5view-owner-${ts}@e2e.local`, 'QA MC5 View Owner');
+    await setCreatorRoles(ownerPage, ['dessinateur']);
+    const title = `QA MC5 View Edit ${ts}`;
+    const callId = await createCall(ownerPage, title, { scenariste: 1 });
 
-    // Idempotency for repeated manual QA runs (no reseed between them): withdraw any leftover pending
-    // application this account already has on this call before re-applying.
-    const existing = (await (await page.request.get(`${API}/me/applications`)).json()) as {
-      items: Array<{ id: string; callTitle: string; status: string }>;
-    };
-    const leftover = existing.items.find((a) => a.callTitle === CALL_TITLE && a.status === 'pending');
-    if (leftover) await page.request.delete(`${API}/me/applications/${leftover.id}`);
-
+    await loginUi(page, APPLICANT_EMAIL);
     await page.goto('/appels');
     await expect(page.getByRole('heading', { name: 'Appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
     await filterSeekingScenariste(page);
 
-    const card = cardByTitle(page, CALL_TITLE);
+    const card = cardByTitle(page, title);
     await card.getByRole('button', { name: 'Candidater' }).click();
     const dialog = page.getByRole('dialog', { name: 'Candidater' });
     await dialog.getByAltText('Échantillon 1').click();
@@ -222,7 +246,7 @@ test.describe('Item 3 + 6 — MC-6 view + edit a pending application (pre-filled
 
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
-    const row = page.locator('.ep-candidature-row').filter({ hasText: CALL_TITLE });
+    const row = page.locator('.ep-candidature-row').filter({ hasText: title });
     await expect(row).toBeVisible();
 
     // "Voir" — read-only detail: full message + 2 samples (image links, portfolio + upload).
@@ -235,7 +259,7 @@ test.describe('Item 3 + 6 — MC-6 view + edit a pending application (pre-filled
     await expect(detail).toHaveCount(0);
 
     // "Modifier" — pending only — pre-filled with the existing message AND existing samples.
-    const modifierBtn = row.getByRole('button', { name: `Modifier ma candidature pour « ${CALL_TITLE} »` });
+    const modifierBtn = row.getByRole('button', { name: `Modifier ma candidature pour « ${title} »` });
     await expect(modifierBtn).toBeVisible();
     await modifierBtn.click();
 
@@ -265,6 +289,9 @@ test.describe('Item 3 + 6 — MC-6 view + edit a pending application (pre-filled
     await expect(detail2).toBeVisible();
     await expect(detail2.getByRole('link', { name: /Voir l'échantillon/ })).toHaveCount(1);
     await detail2.getByRole('button', { name: 'Fermer' }).click();
+
+    await cleanupCall(ownerPage, callId);
+    await ownerCtx.close();
   });
 });
 
@@ -563,10 +590,6 @@ test.describe('Item 4 — MC-4 close a call early', () => {
 // exactly what broke `develop`'s e2e job when this test used to reproduce the precondition that way).
 // ─────────────────────────────────────────────────────────────────────────────
 test.describe('Item 7 — F-3 profile creatorRoles save survives a stale invalid seeking.targetRole', () => {
-  const ACCOUNTS = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '.e2e-accounts.json'), 'utf8'),
-  ) as Record<string, { email: string; id: string }>;
-
   test('dedicated fixture already has the legacy precondition — toggle creatorRoles, save, reload; appliedAs unchanged', async ({
     page,
   }) => {
