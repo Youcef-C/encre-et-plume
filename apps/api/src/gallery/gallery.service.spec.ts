@@ -453,7 +453,7 @@ describe('GalleryService', () => {
   });
 
   describe('getMoreByArtist (DR-6 "Plus de cet·te artiste")', () => {
-    it('groups by the source artistName, excludes the current id, only published, capped at 6, ordered by likeCount desc/id asc', async () => {
+    it('groups by the source artistName, excludes the current id, only published, capped at 4, ordered by likeCount desc/id asc', async () => {
       prisma.illustration.findFirst.mockResolvedValue({ artistName: 'Yuki Moreau' });
       prisma.illustration.findMany.mockResolvedValue([ILLUSTRATION_ROW({ id: 'i2' }), ILLUSTRATION_ROW({ id: 'i3' })]);
 
@@ -466,7 +466,7 @@ describe('GalleryService', () => {
       const args = prisma.illustration.findMany.mock.calls[0][0];
       expect(args.where).toEqual({ artistName: 'Yuki Moreau', publishedAt: { not: null }, id: { not: 'i1' } });
       expect(args.orderBy).toEqual([{ likeCount: 'desc' }, { id: 'asc' }]);
-      expect(args.take).toBe(6);
+      expect(args.take).toBe(4); // CS-13/DR-6: "Plus de cet·te artiste" caps at 4
       expect(result.map((c) => c.id)).toEqual(['i2', 'i3']);
     });
 
@@ -491,6 +491,20 @@ describe('GalleryService', () => {
     it('no collection clause when the facet is absent', async () => {
       await service.findIllustrations(EMPTY_QUERY);
       expect(prisma.illustration.findMany.mock.calls[0][0].where.collections).toBeUndefined();
+    });
+  });
+
+  // ── CS-13 (R1): "Voir tout" -> /galerie?artist=<profileSlug> ──────────────────
+  describe('artist filter', () => {
+    it('filters the list to one artist via the artist relation profileSlug', async () => {
+      await service.findIllustrations({ ...EMPTY_QUERY, artist: 'dr1-yuki-moreau' });
+      const where = prisma.illustration.findMany.mock.calls[0][0].where;
+      expect(where.artist).toEqual({ profileSlug: 'dr1-yuki-moreau' });
+    });
+
+    it('no artist clause when the facet is absent', async () => {
+      await service.findIllustrations(EMPTY_QUERY);
+      expect(prisma.illustration.findMany.mock.calls[0][0].where.artist).toBeUndefined();
     });
   });
 
@@ -672,6 +686,57 @@ describe('GalleryService', () => {
       await service.updateIllustration('acc1', 'i1', { title: 'X' });
       expect(redis.del).toHaveBeenCalledWith('work:carnet-d-encre');
       expect(redis.del).toHaveBeenCalledWith('work:autre');
+    });
+
+    // CS-13 (R3): licence constrained to the shared ILLUSTRATION_LICENSES vocabulary.
+    describe('license validation (CS-13/R3)', () => {
+      it.each(['© Tous droits réservés', 'CC BY', 'CC BY-NC'])('accepts the valid licence %s', async (license) => {
+        await service.updateIllustration('acc1', 'i1', { license });
+        expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ license });
+      });
+
+      it('accepts a null/empty licence (stored as null)', async () => {
+        await service.updateIllustration('acc1', 'i1', { license: null });
+        expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ license: null });
+      });
+
+      it('rejects a licence outside the vocabulary with 400 "Licence invalide"', async () => {
+        await expect(service.updateIllustration('acc1', 'i1', { license: 'MIT' })).rejects.toThrow('Licence invalide');
+        expect(prisma.illustration.update).not.toHaveBeenCalled();
+      });
+    });
+
+    // CS-13 (R2): image replace — mirrors publishIllustration's mediaId resolution.
+    describe('image replace (CS-13/R2)', () => {
+      it('resolves a ready owner illustration media into image + width + height', async () => {
+        media.getForOwner.mockResolvedValue({ kind: 'illustration', status: 'ready', width: 2480, height: 3508, variants: { web: 'http://cdn/x.webp' } });
+        await service.updateIllustration('acc1', 'i1', { image: 'm1' });
+        expect(media.getForOwner).toHaveBeenCalledWith('acc1', 'm1');
+        expect(prisma.illustration.update.mock.calls[0][0].data).toEqual({ image: 'http://cdn/x.webp', width: 2480, height: 3508 });
+      });
+
+      it('rejects a media of the wrong kind with 400', async () => {
+        media.getForOwner.mockResolvedValue({ kind: 'avatar', status: 'ready', variants: {} });
+        await expect(service.updateIllustration('acc1', 'i1', { image: 'm1' })).rejects.toThrow('Le média doit être une illustration');
+        expect(prisma.illustration.update).not.toHaveBeenCalled();
+      });
+
+      it('rejects a media that is not ready with 400', async () => {
+        media.getForOwner.mockResolvedValue({ kind: 'illustration', status: 'processing', variants: {} });
+        await expect(service.updateIllustration('acc1', 'i1', { image: 'm1' })).rejects.toThrow("L'illustration n'est pas encore prête");
+        expect(prisma.illustration.update).not.toHaveBeenCalled();
+      });
+
+      it('propagates the ownership rejection from media.getForOwner (403)', async () => {
+        media.getForOwner.mockRejectedValue(new ForbiddenException());
+        await expect(service.updateIllustration('acc1', 'i1', { image: 'notmine' })).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.illustration.update).not.toHaveBeenCalled();
+      });
+
+      it('never touches the media service when no image key is sent (regression)', async () => {
+        await service.updateIllustration('acc1', 'i1', { title: 'X' });
+        expect(media.getForOwner).not.toHaveBeenCalled();
+      });
     });
   });
 

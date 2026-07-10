@@ -14,6 +14,25 @@ vi.mock('../lib/api', async (importOriginal) => {
   return { ...actual, updateIllustration: vi.fn(), deleteIllustration: vi.fn() };
 });
 
+// Stub the F-10 image slot: exposes a button that fires onUploaded with a ready Media so we can
+// assert the modal forwards the new media id as PATCH `image`.
+vi.mock('../components/UploadControl', () => ({
+  default: ({
+    label,
+    onUploaded,
+  }: {
+    label: string;
+    onUploaded: (m: { id: string }) => void;
+  }) => (
+    <div>
+      {label}
+      <button type="button" onClick={() => onUploaded({ id: 'media-new' })}>
+        FAKE_UPLOAD
+      </button>
+    </div>
+  ),
+}));
+
 import * as api from '../lib/api';
 import EditIllustrationForm from '../components/illustration/EditIllustrationForm';
 
@@ -68,17 +87,34 @@ describe('EditIllustrationForm (DR-12 FE-13 · V12)', () => {
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
 
     await waitFor(() =>
+      // CS-13: Licence is now a select seeded to the © default when the detail's licence is null.
       expect(api.updateIllustration).toHaveBeenCalledWith('ill-1', {
         title: 'Crépuscule',
         category: 'personnages',
         description: 'Une aube.',
         hashtags: ['encre'],
         tools: 'Encre · CSP',
-        license: null,
+        license: '© Tous droits réservés',
         visibility: 'public',
       }),
     );
     expect(onSaved).toHaveBeenCalledWith(saved);
+  });
+
+  it('sends the replacement media id as `image` after an upload (CS-13)', async () => {
+    vi.mocked(api.updateIllustration).mockResolvedValue(makeDetail());
+    const user = userEvent.setup();
+    render(<EditIllustrationForm detail={makeDetail()} onSaved={vi.fn()} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'FAKE_UPLOAD' }));
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() =>
+      expect(api.updateIllustration).toHaveBeenCalledWith(
+        'ill-1',
+        expect.objectContaining({ image: 'media-new' }),
+      ),
+    );
   });
 
   it('deletes the illustration via the on-brand confirm MODAL and redirects to /galerie', async () => {

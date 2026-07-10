@@ -43,6 +43,11 @@ const SPECS = [
   // these, so the dashboard's absolute status/count/member assertions can't be raced by a sibling.
   { key: 'CS12_OWNER',  email: 'qa_e2e_cs12_owner@test.com',  slug: 'e2e-cs12-owner' },  // scenariste (owner)
   { key: 'CS12_COLLAB', email: 'qa_e2e_cs12_collab@test.com', slug: 'e2e-cs12-collab' }, // dessinateur (accepted collaborator)
+  // CS-13 "Modifier une illustration" fixtures — a dedicated artist who owns 5 published
+  // illustrations (one is the edit target; the other 4 exercise the "Plus de cet·te artiste" cap +
+  // the "Voir tout" -> /galerie?artist= facet) and a stranger account for the non-owner/404 gating test.
+  { key: 'CS13_OWNER',    email: 'qa_e2e_cs13_owner@test.com',    slug: 'e2e-cs13-owner' },    // dessinateur (owner)
+  { key: 'CS13_STRANGER', email: 'qa_e2e_cs13_stranger@test.com', slug: 'e2e-cs13-stranger' }, // signed-in non-owner
 ];
 
 async function main() {
@@ -377,6 +382,40 @@ async function main() {
     await prisma.illustrationCollection.deleteMany({ where: { workId: collection.id } });
     for (let i = 0; i < illuIds.length; i++) {
       await prisma.illustrationCollection.create({ data: { workId: collection.id, illustrationId: illuIds[i], order: i } });
+    }
+  }
+
+  // ── CS-13: "Modifier une illustration" fixtures for the dedicated CS13_OWNER account ───────────
+  // 5 published, standalone illustrations owned by CS13_OWNER: "e2e-cs13-illu-main" is the edit
+  // target (PATCH-able, incl. a Licence value the test changes); the other 4 exist purely so
+  // "Plus de cet·te artiste" has something to cap at 4 and "Voir tout" -> /galerie?artist=<slug>
+  // has a filterable set. Idempotent (upsert by id).
+  {
+    const owner = accounts.CS13_OWNER.id;
+    await prisma.profile.upsert({
+      where: { accountId: owner },
+      update: { creatorRoles: ['dessinateur'] },
+      create: { accountId: owner, creatorRoles: ['dessinateur'] },
+    });
+    const inDays = (n) => new Date(Date.now() + n * 864e5);
+    // 6 illustrations besides the edit target — proves the "Plus de cet·te artiste" cap actually
+    // caps (4 shown out of 6 available), not just "happens to be ≤4".
+    const cs13Illus = [
+      { id: 'e2e-cs13-illu-main', title: 'E2E CS13 Principale' },
+      { id: 'e2e-cs13-illu-2', title: 'E2E CS13 Autre 2' },
+      { id: 'e2e-cs13-illu-3', title: 'E2E CS13 Autre 3' },
+      { id: 'e2e-cs13-illu-4', title: 'E2E CS13 Autre 4' },
+      { id: 'e2e-cs13-illu-5', title: 'E2E CS13 Autre 5' },
+      { id: 'e2e-cs13-illu-6', title: 'E2E CS13 Autre 6' },
+      { id: 'e2e-cs13-illu-7', title: 'E2E CS13 Autre 7' },
+    ];
+    for (const { id, title } of cs13Illus) {
+      const data = {
+        id, title, artistId: owner, artistName: 'E2E CS13_OWNER', category: 'personnages',
+        description: 'Fixture CS-13.', tools: 'Encre · CSP', license: '© Tous droits réservés',
+        publishedAt: inDays(-20),
+      };
+      await prisma.illustration.upsert({ where: { id }, create: data, update: data });
     }
   }
 

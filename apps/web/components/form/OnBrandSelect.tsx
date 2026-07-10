@@ -162,7 +162,11 @@ export default function OnBrandSelect({
     }
     switch (e.key) {
       case 'Escape':
+        // Popover is open here: consume the Escape so it closes ONLY the listbox and never bubbles
+        // to a surrounding modal (which would close it and discard edits). A closed-popover Escape
+        // is left alone above (early return) so it can still close a parent modal.
         e.preventDefault();
+        e.stopPropagation();
         close();
         break;
       case 'ArrowDown':

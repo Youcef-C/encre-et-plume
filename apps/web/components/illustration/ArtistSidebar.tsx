@@ -202,8 +202,20 @@ export default function ArtistSidebar({
 
       {more.length > 0 && (
         <div style={sidebarCard}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, textTransform: 'uppercase', marginBottom: 12 }}>
-            Plus de cet·te artiste
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, textTransform: 'uppercase' }}>
+              Plus de cet·te artiste
+            </div>
+            {/* CS-13 / DR-6: browse ALL of this artist's illustrations in the Galerie (artist facet). */}
+            {artist.slug && (
+              <Link
+                href={`/galerie?artist=${encodeURIComponent(artist.slug)}`}
+                className="ep-voir-tout"
+                style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}
+              >
+                Voir tout <span aria-hidden="true">→</span>
+              </Link>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
             {more.map((item) => (

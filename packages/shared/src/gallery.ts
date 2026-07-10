@@ -18,6 +18,11 @@ export function galleryCategoryLabel(key: string): string {
   return GALLERY_CATEGORIES.find((c) => c.key === key)?.label ?? key;
 }
 
+// CS-13 (R3): canonical licence vocabulary (prototype line 3534). A PATCH `license` must be one of
+// these (or null). Both FE (OnBrandSelect options) and BE (validation) consume this single source.
+export const ILLUSTRATION_LICENSES = ['© Tous droits réservés', 'CC BY', 'CC BY-NC'] as const;
+export type IllustrationLicense = (typeof ILLUSTRATION_LICENSES)[number];
+
 export const GALLERY_TRIS = ['tendance', 'nouveautes', 'populaires'] as const;
 export type GalleryTri = (typeof GALLERY_TRIS)[number];
 export const GALLERY_PAGE_SIZE = 12;
@@ -31,6 +36,7 @@ export interface GalleryQuery {
   tri: GalleryTri; // default 'tendance'
   page: number; // 1-based, clamped >= 1
   collection?: string; // DR-12: filter to a collection Work id (opaque, no vocabulary check)
+  artist?: string; // CS-13 (R1): Account.profileSlug — filter to one artist's illustrations ("Voir tout")
 }
 
 export interface GalleryIllustrationCard {
@@ -109,8 +115,9 @@ export interface UpdateIllustrationRequest {
   description?: string | null; // ''/null -> null
   hashtags?: string[]; // normalizeHashtags, replace-all (iteration-2 semantics)
   tools?: string | null; // ''/null -> null
-  license?: string | null; // null -> BE display default "© Tous droits réservés"
+  license?: string | null; // null -> BE display default "© Tous droits réservés"; non-null must be in ILLUSTRATION_LICENSES (400 otherwise)
   visibility?: IllustrationVisibility; // 'private' -> publishedAt=null; 'public' -> republish (D21)
+  image?: string; // CS-13 (R2): F-10 Media.id (kind 'illustration', ready, caller-owned) -> replaces Illustration.image + width/height
 }
 
 /** Artist block on the illustration detail response. */

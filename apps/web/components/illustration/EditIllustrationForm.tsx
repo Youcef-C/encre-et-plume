@@ -1,23 +1,19 @@
 'use client';
 
-// DR-12 FE-13 — shared owner edit form for the illustration ITSELF (title, category, description,
-// hashtags, tools, licence, visibility) over PATCH /illustrations/:id (returns IllustrationDetail).
-// On-brand focus-trapped dialog (NewCollectionForm pattern). Reused by the illustration detail page
-// (FE-13) and every member card in the manage-collection view (FE-14) — one component, no duplication.
+// DR-12 FE-13 / CS-13 — owner edit modal for the illustration itself, over PATCH /illustrations/:id
+// (returns IllustrationDetail). On-brand focus-trapped dialog. The fields (incl. the CS-13 F-10
+// image-replace slot) live in the shared IllustrationEditFields so this modal and the full
+// /illustration/:id/modifier page never diverge. This file owns only the dialog chrome + delete flow.
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  GALLERY_CATEGORIES,
-  type ApiError,
-  type GalleryCategoryKey,
-  type IllustrationDetail,
-  type IllustrationVisibility,
-  type UpdateIllustrationRequest,
-} from '@encre-et-plume/shared';
+import type { ApiError, IllustrationDetail } from '@encre-et-plume/shared';
 import { deleteIllustration, updateIllustration } from '../../lib/api';
 import { XIcon } from '../icons';
-import OnBrandSelect from '../form/OnBrandSelect';
-import HashtagChipsInput from '../form/HashtagChipsInput';
+import IllustrationEditFields, {
+  buildUpdateRequest,
+  initialEditValues,
+  type IllustrationEditValues,
+} from './IllustrationEditFields';
 
 function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivElement | null>) {
   if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -40,25 +36,6 @@ function focusTrap(e: React.KeyboardEvent, dialogRef: React.RefObject<HTMLDivEle
   }
 }
 
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  color: 'var(--ink2)',
-  letterSpacing: '.02em',
-  display: 'block',
-  marginBottom: 6,
-};
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  border: '2px solid var(--ink)',
-  borderRadius: 8,
-  padding: '10px 12px',
-  fontSize: 14,
-  fontFamily: 'inherit',
-  background: 'var(--card)',
-  color: 'var(--ink)',
-  boxSizing: 'border-box',
-};
 const footerBtn: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
@@ -69,7 +46,6 @@ const footerBtn: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
-const field = { marginBottom: 14 };
 const errText: React.CSSProperties = { fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '8px 0 0' };
 
 export default function EditIllustrationForm({
@@ -85,15 +61,8 @@ export default function EditIllustrationForm({
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'edit-illustration-title';
 
-  const [title, setTitle] = useState(detail.title);
-  const [category, setCategory] = useState<GalleryCategoryKey>(detail.category);
-  const [description, setDescription] = useState(detail.description ?? '');
-  const [hashtags, setHashtags] = useState<string[]>(detail.hashtags);
-  const [tools, setTools] = useState(detail.tools ?? '');
-  const [license, setLicense] = useState(detail.license ?? '');
-  const [visibility, setVisibility] = useState<IllustrationVisibility>(
-    detail.publishedAt !== null ? 'public' : 'private',
-  );
+  const [values, setValues] = useState<IllustrationEditValues>(() => initialEditValues(detail));
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const [titleError, setTitleError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -108,26 +77,16 @@ export default function EditIllustrationForm({
 
   async function handleSubmit() {
     if (pending) return;
-    if (!title.trim()) {
+    if (!values.title.trim()) {
       setTitleError('Un titre est requis');
       return;
     }
     setTitleError(null);
     setServerError(null);
 
-    const body: UpdateIllustrationRequest = {
-      title: title.trim(),
-      category,
-      description: description.trim() || null,
-      hashtags,
-      tools: tools.trim() || null,
-      license: license.trim() || null,
-      visibility,
-    };
-
     setPending(true);
     try {
-      const updated = await updateIllustration(detail.id, body);
+      const updated = await updateIllustration(detail.id, buildUpdateRequest(values));
       onSaved(updated);
     } catch (err) {
       setServerError((err as ApiError).message ?? 'Une erreur est survenue. Réessayez.');
@@ -204,114 +163,14 @@ export default function EditIllustrationForm({
         </div>
 
         <div style={{ padding: '16px 18px' }}>
-          {/* Titre */}
-          <div style={field}>
-            <label htmlFor="edit-illus-title" style={label}>
-              Titre
-            </label>
-            <input
-              id="edit-illus-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={120}
-              style={inputStyle}
-              aria-invalid={!!titleError}
-              aria-label="Titre"
-            />
-            {titleError && (
-              <p role="alert" style={errText}>
-                {titleError}
-              </p>
-            )}
-          </div>
-
-          {/* Catégorie */}
-          <div style={field}>
-            <label htmlFor="edit-illus-category" style={label}>
-              Catégorie
-            </label>
-            <OnBrandSelect
-              id="edit-illus-category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as GalleryCategoryKey)}
-              aria-label="Catégorie"
-            >
-              {GALLERY_CATEGORIES.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.label}
-                </option>
-              ))}
-            </OnBrandSelect>
-          </div>
-
-          {/* Description */}
-          <div style={field}>
-            <label htmlFor="edit-illus-desc" style={label}>
-              Description
-            </label>
-            <textarea
-              id="edit-illus-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={1000}
-              rows={3}
-              style={{ ...inputStyle, resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Hashtags (F-22) */}
-          <div style={field}>
-            <span style={label}>Hashtags</span>
-            <HashtagChipsInput value={hashtags} onChange={setHashtags} ariaLabel="Hashtags" placeholder="#encre #noir…" />
-          </div>
-
-          {/* Outils */}
-          <div style={field}>
-            <label htmlFor="edit-illus-tools" style={label}>
-              Outils
-            </label>
-            <input
-              id="edit-illus-tools"
-              value={tools}
-              onChange={(e) => setTools(e.target.value)}
-              maxLength={120}
-              placeholder="Encre · CSP"
-              style={inputStyle}
-              aria-label="Outils"
-            />
-          </div>
-
-          {/* Licence */}
-          <div style={field}>
-            <label htmlFor="edit-illus-license" style={label}>
-              Licence
-            </label>
-            <input
-              id="edit-illus-license"
-              value={license}
-              onChange={(e) => setLicense(e.target.value)}
-              maxLength={120}
-              placeholder="© Tous droits réservés"
-              style={inputStyle}
-              aria-label="Licence"
-            />
-          </div>
-
-          {/* Visibilité */}
-          <div style={field}>
-            <label htmlFor="edit-illus-visibility" style={label}>
-              Visibilité
-            </label>
-            <OnBrandSelect
-              id="edit-illus-visibility"
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value as IllustrationVisibility)}
-              aria-label="Visibilité"
-            >
-              <option value="public">Publique</option>
-              <option value="private">Privée</option>
-            </OnBrandSelect>
-          </div>
+          <IllustrationEditFields
+            detail={detail}
+            values={values}
+            onChange={setValues}
+            titleError={titleError}
+            onUploadBusyChange={setUploadBusy}
+            idPrefix="edit-illus"
+          />
 
           {serverError && (
             <p role="alert" style={{ ...errText, marginTop: 0 }}>
@@ -339,8 +198,8 @@ export default function EditIllustrationForm({
             <button
               type="button"
               onClick={() => void handleSubmit()}
-              disabled={pending || deleting}
-              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: pending ? 0.6 : 1 }}
+              disabled={pending || deleting || uploadBusy}
+              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: pending || uploadBusy ? 0.6 : 1 }}
             >
               {pending ? 'Enregistrement…' : 'Enregistrer'}
             </button>

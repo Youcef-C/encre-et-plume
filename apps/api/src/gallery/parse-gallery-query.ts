@@ -39,6 +39,8 @@ export function parseGalleryQuery(raw: RawQuery): GalleryQuery {
     page: clampPage(raw['page']),
     // DR-12: opaque collection Work id (no vocabulary check — validated by the DB join, not here).
     collection: typeof raw['collection'] === 'string' && raw['collection'] !== '' ? raw['collection'] : undefined,
+    // CS-13 (R1): filter to one artist's illustrations by Account.profileSlug (same line as parseCollectionsListQuery).
+    artist: typeof raw['artist'] === 'string' && raw['artist'] !== '' ? raw['artist'].slice(0, 100) : undefined,
   };
 }
 

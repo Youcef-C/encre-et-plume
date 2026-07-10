@@ -2,13 +2,20 @@ import { parseGalleryQuery, parseCollectionsListQuery } from './parse-gallery-qu
 
 describe('parseGalleryQuery', () => {
   it('defaults to no category (Tout), no q, empty genre, empty tags, tri=tendance, page=1 when nothing is provided', () => {
-    expect(parseGalleryQuery({})).toEqual({ q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1, collection: undefined });
+    expect(parseGalleryQuery({})).toEqual({ q: undefined, tags: [], genre: [], category: undefined, tri: 'tendance', page: 1, collection: undefined, artist: undefined });
   });
 
   it('DR-12: passes an opaque collection id through (undefined when absent/empty)', () => {
     expect(parseGalleryQuery({ collection: 'w123' }).collection).toBe('w123');
     expect(parseGalleryQuery({ collection: '' }).collection).toBeUndefined();
     expect(parseGalleryQuery({}).collection).toBeUndefined();
+  });
+
+  it('CS-13 (R1): passes an artist profileSlug through (undefined when absent/empty, length-capped)', () => {
+    expect(parseGalleryQuery({ artist: 'dr1-yuki-moreau' }).artist).toBe('dr1-yuki-moreau');
+    expect(parseGalleryQuery({ artist: '' }).artist).toBeUndefined();
+    expect(parseGalleryQuery({}).artist).toBeUndefined();
+    expect(parseGalleryQuery({ artist: 'a'.repeat(150) }).artist).toBe('a'.repeat(100));
   });
 
   it('F-22: normalizes a tag (strips #, lowercases, trims) and coerces a scalar into an array', () => {

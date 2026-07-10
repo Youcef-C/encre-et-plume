@@ -33,4 +33,10 @@ export class UpdateIllustrationDto implements UpdateIllustrationRequest {
   @IsOptional()
   @IsIn(['public', 'private'])
   visibility?: IllustrationVisibility;
+
+  // CS-13 (R2): F-10 Media.id of a freshly-uploaded replacement image. Ownership/kind/status enforced
+  // in the service (the trust boundary) — shape only here.
+  @IsOptional()
+  @IsString()
+  image?: string;
 }

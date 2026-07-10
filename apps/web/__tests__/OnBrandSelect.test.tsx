@@ -48,6 +48,37 @@ describe('OnBrandSelect', () => {
     expect(trigger).toHaveFocus();
   });
 
+  // D1: Escape closing the OPEN popover must not bubble to a surrounding modal (which would close
+  // it and discard edits); Escape when the popover is CLOSED must still bubble (to close a parent).
+  it('does not propagate Escape to a parent while the popover is open, but does when closed', async () => {
+    const user = userEvent.setup();
+    const onParentEscape = vi.fn();
+    render(
+      <div
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onParentEscape();
+        }}
+      >
+        <OnBrandSelect aria-label="Trier" value="a" onChange={() => {}}>
+          <option value="a">A</option>
+          <option value="b">B</option>
+        </OnBrandSelect>
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox', { name: 'Trier' });
+
+    // Open, then Escape: closes only the popover, parent never sees it.
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(onParentEscape).not.toHaveBeenCalled();
+
+    // Closed, then Escape: bubbles to the parent (must still be able to close a modal).
+    await user.keyboard('{Escape}');
+    expect(onParentEscape).toHaveBeenCalledTimes(1);
+  });
+
   it('is not searchable by default: opening shows no filter input', async () => {
     const user = userEvent.setup();
     render(

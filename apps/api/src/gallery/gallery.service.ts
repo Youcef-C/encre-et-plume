@@ -17,6 +17,7 @@ import type {
 import {
   GALLERY_CATEGORY_KEYS,
   GALLERY_PAGE_SIZE,
+  ILLUSTRATION_LICENSES,
   catalogGenreLabel,
   galleryCategoryLabel,
   hasPlus18Genre,
@@ -32,7 +33,7 @@ const DEFAULT_LICENSE = '© Tous droits réservés';
 // DR-6: role -> French label, same convention as DR-3's Sidebar.tsx ROLE_LABEL map (frontend copy).
 const ROLE_LABELS: Record<string, string> = { dessinateur: 'Dessinateur·rice', scenariste: 'Scénariste' };
 const DEFAULT_ROLE_LABEL = 'Dessinateur·rice';
-const MORE_BY_ARTIST_LIMIT = 6;
+const MORE_BY_ARTIST_LIMIT = 4; // CS-13/DR-6: "Plus de cet·te artiste" caps at 4
 
 /**
  * DR-5 illustration gallery "Galerie". Public, read-only, cached in Redis (fail-open — a cache
@@ -203,9 +204,23 @@ export class GalleryService {
     if (dto.description !== undefined) data['description'] = dto.description?.trim() || null;
     if (dto.hashtags !== undefined) data['hashtags'] = normalizeHashtags(dto.hashtags);
     if (dto.tools !== undefined) data['tools'] = dto.tools?.trim() || null;
-    if (dto.license !== undefined) data['license'] = dto.license?.trim() || null;
+    if (dto.license !== undefined) {
+      const l = dto.license?.trim() || null;
+      // CS-13 (R3): licence constrained to the shared vocabulary (or null to clear).
+      if (l !== null && !(ILLUSTRATION_LICENSES as readonly string[]).includes(l)) throw new BadRequestException('Licence invalide');
+      data['license'] = l;
+    }
     if (dto.visibility !== undefined) {
       data['publishedAt'] = dto.visibility === 'private' ? null : (illu.publishedAt ?? new Date());
+    }
+    // CS-13 (R2): image replace — mirror of publishIllustration's mediaId block (owner-scoped, ready, kind).
+    if (dto.image !== undefined) {
+      const m = await this.media.getForOwner(accountId, dto.image); // enforces ownership (403)
+      if (m.kind !== 'illustration') throw new BadRequestException('Le média doit être une illustration');
+      if (m.status !== 'ready') throw new BadRequestException("L'illustration n'est pas encore prête");
+      data['image'] = (m.variants as { web?: string }).web ?? null;
+      data['width'] = m.width ?? null;
+      data['height'] = m.height ?? null;
     }
 
     await this.prisma.illustration.update({ where: { id }, data });
@@ -299,6 +314,8 @@ function buildWhere(query: GalleryQuery): Record<string, any> {
   if (query.tags.length > 0) where['hashtags'] = { hasEvery: query.tags };
   // DR-12: filter to a collection's members (opaque Work id, validated by the join not the query).
   if (query.collection) where['collections'] = { some: { workId: query.collection } };
+  // CS-13 (R1): filter to one artist's illustrations via the artist relation's profileSlug.
+  if (query.artist) where['artist'] = { profileSlug: query.artist };
   // Round 2: q facet, same OR-on-title-and-secondary-text convention as the catalog's `q`.
   if (query.q) {
     where['OR'] = [

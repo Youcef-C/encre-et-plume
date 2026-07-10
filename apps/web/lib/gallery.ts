@@ -20,7 +20,7 @@ import {
 // DR-12 iter2 (FE-8, D10): the "Collections" chip is an FE view mode, NOT a GalleryCategoryKey — it
 // must never enter the shared category vocabulary (the BE allowlist would drop it, and it can't leak
 // into POST /illustrations). We carry it as `collectionsMode` and serialize it as category=collections.
-export type GalerieFilters = GalleryQuery & { collectionsMode?: boolean; artist?: string };
+export type GalerieFilters = GalleryQuery & { collectionsMode?: boolean };
 
 /** Sentinel URL value for the Collections view mode (kept out of GalleryCategoryKey). */
 export const COLLECTIONS_CHIP_KEY = 'collections' as const;

@@ -114,6 +114,42 @@ describe('ArtistSidebar (DR-6)', () => {
     expect(screen.getByRole('link', { name: /Étude d.encre #7/ })).toHaveAttribute('href', '/illustration/dr5-illus-3');
   });
 
+  // CS-13 / DR-6 — "Voir tout" links to the catalogue filtered to that artist's illustrations.
+  it('renders a "Voir tout" link to /galerie?artist=<slug> when the artist is linked', () => {
+    render(
+      <ArtistSidebar
+        artist={linkedArtist}
+        categoryLabel="Process"
+        publishedAt="2026-06-12T00:00:00.000Z"
+        dimensionsLabel="2480 × 3508"
+        tools="Encre · CSP"
+        license="© Tous droits réservés"
+        more={more}
+        account={null}
+      />,
+    );
+    expect(screen.getByRole('link', { name: /Voir tout/ })).toHaveAttribute(
+      'href',
+      '/galerie?artist=dr1-yuki-moreau',
+    );
+  });
+
+  it('omits "Voir tout" when the artist has no slug', () => {
+    render(
+      <ArtistSidebar
+        artist={{ ...unlinkedArtist }}
+        categoryLabel="Process"
+        publishedAt={null}
+        dimensionsLabel={null}
+        tools={null}
+        license="© Tous droits réservés"
+        more={[{ ...more[0], id: 'x', artistSlug: null }]}
+        account={null}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: /Voir tout/ })).not.toBeInTheDocument();
+  });
+
   it('hides the more-by-artist section entirely when empty', () => {
     render(
       <ArtistSidebar

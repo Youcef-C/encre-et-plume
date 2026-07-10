@@ -47,18 +47,38 @@ export default function GalerieClient() {
     };
   }, [filters.collection]);
 
+  // CS-13 (R1): an `artist` facet (Account.profileSlug) filters the grid to one artist's illustrations
+  // (the DR-6 "Voir tout" target); the heading names them. Fall back to the slug if the profile 404s.
+  const [artistName, setArtistName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!filters.artist) {
+      setArtistName(null);
+      return;
+    }
+    const slug = filters.artist;
+    let cancelled = false;
+    api
+      .getProfile(slug)
+      .then((p) => !cancelled && setArtistName(p.displayName))
+      .catch(() => !cancelled && setArtistName(slug));
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.artist]);
+
   // Any non-default view (search, category, collection, or a changed sort) overrides the "Tendances"
   // feature and relabels the grid "Résultats pour <terms>": title in guillemets, hashtags as #tag,
   // genres + category by their labels, and the sort label when it isn't the default "Tendance".
   const activeTerms = [
     ...(filters.collection && collectionTitle ? [`« ${collectionTitle} »`] : []),
+    ...(filters.artist && artistName ? [`Illustrations de ${artistName}`] : []),
     ...(filters.q ? [`« ${filters.q} »`] : []),
     ...filters.tags.map((t) => `#${t}`),
     ...filters.genre.map((id) => catalogGenreLabel(id)),
     ...(filters.category ? [galleryCategoryLabel(filters.category)] : []),
     ...(filters.tri !== 'tendance' ? [TRI_LABELS[filters.tri]] : []),
   ];
-  const isFiltered = activeTerms.length > 0 || !!filters.collection;
+  const isFiltered = activeTerms.length > 0 || !!filters.collection || !!filters.artist;
 
   // DR-12 iter2 (FE-8): "Collections" view mode — browse collection œuvres. Only q/genre/hashtag
   // facets apply (D11: no sort/category); the heading names them with "Collections" appended.
