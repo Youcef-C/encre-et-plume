@@ -289,6 +289,11 @@ model Project {
   slug        String?      @unique // CS-2 workspace address (GET /projects/{slug}); nullable so legacy rows survive
   step        String? // CS-12 dashboard: current production step, e.g. "encrage Ch.1" — CS-2/CS-5 own writing it
   nextReleaseAt DateTime? // CS-12 dashboard: next scheduled release — CS-9 owns writing it
+  // CS-1: the Project↔Work bridge. `workId` shares the Project's slug value, so /projet/{slug} and
+  // /oeuvre/{slug} resolve to the same pair. Nullable so legacy/seed Projects survive.
+  visibility  String       @default("prive") // 'prive' | 'invitation' | 'public' (workspace/collab)
+  workId      String?      @unique // seeded œuvre (Work) — created in one $transaction with the Project
+  work        Work?        @relation(fields: [workId], references: [id])
   createdAt   DateTime     @default(now())
   invitations Invitation[]
   calls       ProjectCall[] // MC-4X req6: calls linked to this project
@@ -522,6 +527,9 @@ model Work {
   collectionItems IllustrationCollection[] // ordered member illustrations of this collection
   contestId       String? // FK-by-convention link to Contest (validated in service; no Prisma relation)
   soutien         Json? // ponytail: raw Soutien config {tiers,allowDonations,revenueSplit}; MR-1/MR-2/CS-10 normalize into real tables
+
+  // CS-1: back-relation for the Project↔Work bridge (a seeded Work belongs to at most one Project).
+  project Project? // relation owner is Project.workId
 
   @@index([featuredRank])
   @@index([weeklyLikeDelta])
@@ -830,6 +838,9 @@ model Illustration {
   weeklyLikeDelta Int       @default(0) // rolling-7d delta -> "tendance" sort + trending endpoint
   publishedAt     DateTime? // null = not public; non-null = in gallery + "nouveautes" sort key
   createdAt       DateTime  @default(now())
+  // CS-1 (induced): a standalone illustration is also contest-linkable + supportable.
+  contestId       String? // FK-by-convention link to Contest (validated in service; no Prisma relation)
+  soutien         Json? // ponytail: raw {tiers,allowDonations,goals}; goals folded in here (no workId) — MR-1/MR-2 normalize later
 
   collections IllustrationCollection[] // DR-12: collections (Illustration(s) Works) this piece belongs to
 

@@ -158,7 +158,7 @@ test.describe('CS-13 — modal parity + "Plus de cet·te artiste" / "Voir tout"'
     await expect(dialog).not.toBeVisible();
   });
 
-  test('CS13-D1 (defect, documented): pressing Escape while an OnBrandSelect popover is open inside the edit modal closes the ENTIRE modal instead of just the popover', async ({ page }) => {
+  test('CS13-D1 (fixed): pressing Escape while an OnBrandSelect popover is open inside the edit modal closes ONLY the popover, leaving the modal open', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/illustration/${MAIN_ID}`);
     await page.getByRole('button', { name: "Modifier l'illustration" }).click();
@@ -167,9 +167,10 @@ test.describe('CS-13 — modal parity + "Plus de cet·te artiste" / "Voir tout"'
     await dialog.getByLabel('Licence').click();
     await expect(page.getByRole('listbox')).toBeVisible();
     await page.keyboard.press('Escape');
-    // Documents the observed (undesirable) behavior: the whole modal closes, an unsaved edit is
-    // silently discarded. If/when this is fixed, this assertion should flip to `.toBeVisible()`.
-    await expect(dialog).not.toBeVisible();
+    // D1 fix: the popover swallows Escape (stopPropagation) so only the listbox closes — the modal
+    // stays open and no unsaved edit is discarded. A second Escape (popover now closed) may close it.
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(dialog).toBeVisible();
   });
 
   test('CS13-E8 (DR-6 bundled): "Plus de cet·te artiste" shows at most 4 (of 6 available) + "Voir tout" → /galerie?artist=<slug>', async ({ page }) => {

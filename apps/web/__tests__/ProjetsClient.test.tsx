@@ -14,10 +14,11 @@ vi.mock('../lib/api', async (importOriginal) => {
 });
 
 const replace = vi.fn();
+const push = vi.fn();
 let searchParams = new URLSearchParams();
 vi.mock('next/navigation', () => ({
   useSearchParams: () => searchParams,
-  useRouter: () => ({ replace, push: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => ({ replace, push, prefetch: vi.fn() }),
   usePathname: () => '/projets',
 }));
 
@@ -477,15 +478,21 @@ describe('ProjetsClient (CS-12)', () => {
     await screen.findByText('Lames de Brume');
   });
 
-  it('opens the Nouveau projet dialog', async () => {
+  it('navigates to the /creer wizard from "＋ Nouveau projet" (CS-1)', async () => {
     getMine().mockResolvedValue(response([project()]));
     const user = userEvent.setup();
     renderClient();
     await screen.findByText('Lames de Brume');
 
     await user.click(screen.getByRole('button', { name: /Nouveau projet/ }));
-    const dialog = await screen.findByRole('dialog', { name: 'Nouveau projet' });
-    expect(dialog).toBeInTheDocument();
+    expect(push).toHaveBeenCalledWith('/creer');
+  });
+
+  it('renders a "Terminé" badge for a published one-shot project (CS-1 §11)', async () => {
+    getMine().mockResolvedValue(response([project({ status: 'terminé' })]));
+    renderClient();
+    await screen.findByText('Lames de Brume');
+    expect(screen.getAllByText('Terminé').length).toBeGreaterThanOrEqual(1);
   });
 
   it('prompts to sign in when logged out', () => {

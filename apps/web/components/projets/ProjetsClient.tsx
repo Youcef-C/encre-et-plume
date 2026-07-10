@@ -23,7 +23,6 @@ import {
 import { useSession } from '../../lib/session';
 import { getMyProjects, getCollection } from '../../lib/api';
 import { BrushIcon, CaretDownIcon, ImageIcon, LayersIcon, PenNibIcon, SearchIcon } from '../icons';
-import NewProjectDialog from '../catalog/NewProjectDialog';
 
 type Screen = 'loading' | 'ready' | 'error';
 
@@ -521,7 +520,6 @@ export default function ProjetsClient() {
   const [summary, setSummary] = useState<MyProjectsSummary | undefined>(undefined);
   const [screen, setScreen] = useState<Screen>('loading');
   const [retryKey, setRetryKey] = useState(0);
-  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Reflect the active filters/search into the URL (deep-link + back/forward) without a fetch.
   const syncUrl = useCallback(
@@ -636,7 +634,7 @@ export default function ProjetsClient() {
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
           Mes projets
         </h1>
-        <button type="button" onClick={() => setDialogOpen(true)} style={newProjectBtn}>
+        <button type="button" onClick={() => router.push('/creer')} style={newProjectBtn}>
           ＋ Nouveau projet
         </button>
       </div>
@@ -719,7 +717,7 @@ export default function ProjetsClient() {
           ) : (
             <>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Aucun projet — créez-en un</div>
-              <button type="button" onClick={() => setDialogOpen(true)} style={{ ...newProjectBtn, marginLeft: 0 }}>
+              <button type="button" onClick={() => router.push('/creer')} style={{ ...newProjectBtn, marginLeft: 0 }}>
                 ＋ Nouveau projet
               </button>
             </>
@@ -757,8 +755,6 @@ export default function ProjetsClient() {
           )}
         </>
       )}
-
-      {dialogOpen && <NewProjectDialog onClose={() => setDialogOpen(false)} />}
     </div>
   );
 }

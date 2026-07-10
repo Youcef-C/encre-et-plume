@@ -39,7 +39,7 @@ describe('GalleryService', () => {
     account: { findUnique: jest.Mock };
   };
   let redis: { get: jest.Mock; set: jest.Mock; del: jest.Mock; delByPattern: jest.Mock };
-  let collections: { assertCreator: jest.Mock; assertOwnsCollections: jest.Mock; appendMembership: jest.Mock };
+  let collections: { assertCreator: jest.Mock; assertOwnsCollections: jest.Mock; appendMembership: jest.Mock; resolveContestId: jest.Mock };
   let media: { getForOwner: jest.Mock };
 
   beforeEach(() => {
@@ -61,6 +61,7 @@ describe('GalleryService', () => {
       assertCreator: jest.fn().mockResolvedValue(undefined),
       assertOwnsCollections: jest.fn().mockResolvedValue(undefined),
       appendMembership: jest.fn().mockResolvedValue(undefined),
+      resolveContestId: jest.fn(async (id?: string) => id ?? null),
     };
     media = { getForOwner: jest.fn() };
     service = new GalleryService(
@@ -576,6 +577,29 @@ describe('GalleryService', () => {
     it('defaults hashtags to [] when absent', async () => {
       await service.publishIllustration('acc1', REQ);
       expect(prisma.illustration.create.mock.calls[0][0].data.hashtags).toEqual([]);
+    });
+
+    // CS-1 (induced): contest link + raw Soutien on the standalone illustration.
+    it('validates + persists an open contestId (BE-6)', async () => {
+      await service.publishIllustration('acc1', { ...REQ, contestId: 'c1' });
+      expect(collections.resolveContestId).toHaveBeenCalledWith('c1');
+      expect(prisma.illustration.create.mock.calls[0][0].data.contestId).toBe('c1');
+    });
+
+    it('persists a raw Soutien Json when tiers/dons/goals are provided (BE-6)', async () => {
+      await service.publishIllustration('acc1', { ...REQ, tiers: [{ name: 'Bronze', priceCents: 300 }], allowDonations: true, goals: [{ title: 'Impression', targetCents: 5000 }] });
+      expect(prisma.illustration.create.mock.calls[0][0].data.soutien).toEqual({
+        tiers: [{ name: 'Bronze', priceCents: 300 }],
+        allowDonations: true,
+        goals: [{ title: 'Impression', targetCents: 5000 }],
+      });
+    });
+
+    it('leaves contestId/soutien null when the new fields are absent (regression — DR-5/DR-12)', async () => {
+      await service.publishIllustration('acc1', REQ);
+      const data = prisma.illustration.create.mock.calls[0][0].data;
+      expect(data.contestId).toBeNull();
+      expect(data.soutien).toBeUndefined();
     });
   });
 

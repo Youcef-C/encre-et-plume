@@ -227,23 +227,7 @@ describe('DecouvrirClient — "＋ Poster une œuvre" (DR-12 FE-12)', () => {
     expect(screen.queryByRole('button', { name: '＋ Poster une œuvre' })).not.toBeInTheDocument();
   });
 
-  it('renders the button for a creator and opens the "Nouveau projet" fork', async () => {
-    vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
-    const user = userEvent.setup();
-    renderWithSession(creatorAccount);
-
-    const btn = await screen.findByRole('button', { name: '＋ Poster une œuvre' });
-    await user.click(btn);
-
-    const dialog = await screen.findByRole('dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Nouveau projet' })).toBeInTheDocument();
-    // Manga / Roman is disabled with "Bientôt disponible".
-    expect(screen.getByRole('button', { name: /Manga \/ Roman/ })).toBeDisabled();
-    expect(screen.getByText('Bientôt disponible')).toBeInTheDocument();
-  });
-
-  it('routes "Publier une illustration" to /creer/illustration and closes on Escape', async () => {
+  it('renders the button for a creator and navigates to the /creer wizard (CS-1)', async () => {
     vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
@@ -251,17 +235,6 @@ describe('DecouvrirClient — "＋ Poster une œuvre" (DR-12 FE-12)', () => {
     renderWithSession(creatorAccount);
 
     await user.click(await screen.findByRole('button', { name: '＋ Poster une œuvre' }));
-    await user.click(await screen.findByRole('button', { name: /Publier une illustration/ }));
-    expect(push).toHaveBeenCalledWith('/creer/illustration');
-  });
-
-  it('closes the fork on Escape', async () => {
-    vi.mocked(api.getProfile).mockResolvedValue(creatorProfile);
-    const user = userEvent.setup();
-    renderWithSession(creatorAccount);
-    await user.click(await screen.findByRole('button', { name: '＋ Poster une œuvre' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(push).toHaveBeenCalledWith('/creer');
   });
 });

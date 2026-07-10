@@ -86,7 +86,7 @@ export interface GalleryPreview {
 
 // DR-6: illustration detail screen ("/illustration/:id"). Additive — nothing above changes.
 
-import type { CollectionChip } from './collections.js';
+import type { CollectionChip, SoutienGoalInput, SoutienTier } from './collections.js';
 
 /** DR-12: minimal publish endpoint (POST /illustrations) — the interim CS-3 stand-in. */
 export interface PublishIllustrationRequest {
@@ -97,6 +97,11 @@ export interface PublishIllustrationRequest {
   hashtags?: string[]; // F-22 freetext chips -> Illustration.hashtags (normalized server-side)
   description?: string;
   collectionIds?: string[]; // collection Work ids owned by the caller (assign-at-publish)
+  // CS-1 induced additions (illustration branch): optional contest link + raw Soutien config.
+  contestId?: string; // open contest only → Illustration.contestId
+  tiers?: SoutienTier[]; // → Illustration.soutien.tiers (MR-1)
+  allowDonations?: boolean; // → Illustration.soutien.allowDonations (MR-1)
+  goals?: SoutienGoalInput[]; // → Illustration.soutien.goals (MR-2; no workId here so folded into the Json)
 }
 export interface PublishIllustrationResponse {
   id: string;

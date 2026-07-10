@@ -304,12 +304,13 @@ test.describe('CS-12 Mes projets — signed in (e2e-cs12-owner)', () => {
     await expect(page.getByText('Aucun résultat')).toBeVisible({ timeout: 3000 });
   });
 
-  test('CS12-E15: "＋ Nouveau projet" opens NewProjectDialog', async ({ page }) => {
+  test('CS12-E15: "＋ Nouveau projet" navigates to the /creer wizard (CS-1)', async ({ page }) => {
     await loginAsOwner(page);
     await page.goto('/projets');
     await page.getByRole('button', { name: '＋ Nouveau projet' }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByRole('dialog').getByText(/Nouveau projet/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/creer$/);
+    await expect(page.getByRole('heading', { name: /Nouveau projet/i })).toBeVisible();
+    await expect(page.getByRole('radiogroup', { name: /Type de projet/i })).toBeVisible();
   });
 
   // Kept LAST — this is a KNOWN, currently-failing assertion (evidence for the QA report): the expand

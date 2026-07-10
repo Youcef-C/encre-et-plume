@@ -5,12 +5,18 @@ import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { SlugService } from '../slug/slug.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { CollectionsModule } from '../collections/collections.module';
+import { MediaModule } from '../media/media.module';
+import { InvitationsModule } from '../invitations/invitations.module';
+import { CallsModule } from '../calls/calls.module';
 
 /**
  * CS-1 seam: authenticated GET /projects/mine — the sender's projects for MC-3's invite picker.
  * CS-12 folds illustration collections into the dashboard via CollectionsService (CollectionsModule).
+ * CS-1 POST /projects seeds the œuvre (CollectionsService helpers), the cover (MediaService), the
+ * MC-3 invitations (InvitationsService) and the MC-4 call (CallsService).
  */
 @Module({
   imports: [
@@ -18,10 +24,13 @@ import { CollectionsModule } from '../collections/collections.module';
       secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
-    CollectionsModule, // exports CollectionsService → CS-12 dashboard folds collections into /projects/mine
+    CollectionsModule, // exports CollectionsService → dashboard folds collections + CS-1 contest/soutien helpers
+    MediaModule, // CS-1 cover resolution (F-10 presigned upload)
+    InvitationsModule, // CS-1 invite fan-out (MC-3)
+    CallsModule, // CS-1 "Appel à projets" seed (MC-4)
   ],
   controllers: [ProjectsController],
-  providers: [ProjectsService, PrismaService, RedisService, SessionGuard],
+  providers: [ProjectsService, PrismaService, RedisService, SlugService, SessionGuard],
   exports: [ProjectsService],
 })
 export class ProjectsModule {}

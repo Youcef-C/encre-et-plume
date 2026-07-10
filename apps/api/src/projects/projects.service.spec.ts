@@ -1,6 +1,12 @@
+import { BadRequestException } from '@nestjs/common';
 import { ProjectsService, toProjectSummary } from './projects.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CollectionsService } from '../collections/collections.service';
+import { SlugService } from '../slug/slug.service';
+import { MediaService } from '../media/media.service';
+import { InvitationsService } from '../invitations/invitations.service';
+import { CallsService } from '../calls/calls.service';
+import type { CreateProjectRequest } from '@encre-et-plume/shared';
 import type { ParsedMyProjectsQuery } from './parse-my-projects-query';
 
 const PROJECT = (overrides: Partial<Record<string, unknown>> = {}) => ({
@@ -57,6 +63,13 @@ describe('ProjectsService', () => {
   };
   let collections: { getMine: jest.Mock };
 
+  const stubs = () => ({
+    slug: { slugify: jest.fn((s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) },
+    media: { getForOwner: jest.fn() },
+    invitations: { create: jest.fn().mockResolvedValue({ results: [] }) },
+    calls: { seedFromProject: jest.fn().mockResolvedValue(undefined) },
+  });
+
   const build = (projects: unknown[], mine: unknown[] = [], illus: unknown[] = []) => {
     prisma = {
       project: { findMany: jest.fn().mockResolvedValue(projects) },
@@ -64,7 +77,15 @@ describe('ProjectsService', () => {
       illustration: { findMany: jest.fn().mockResolvedValue(illus) },
     };
     collections = { getMine: jest.fn().mockResolvedValue(mine) };
-    service = new ProjectsService(prisma as unknown as PrismaService, collections as unknown as CollectionsService);
+    const s = stubs();
+    service = new ProjectsService(
+      prisma as unknown as PrismaService,
+      collections as unknown as CollectionsService,
+      s.slug as unknown as SlugService,
+      s.media as unknown as MediaService,
+      s.invitations as unknown as InvitationsService,
+      s.calls as unknown as CallsService,
+    );
   };
 
   beforeEach(() => build([PROJECT()]));
@@ -282,5 +303,227 @@ describe('ProjectsService', () => {
     expect(prisma.project.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { ownerId: 'acc-me' } }),
     );
+  });
+
+  // ── CS-1 §11: published one-shot → "terminé" ─────────────────────────────
+  it('a published one-shot (linked Work) reads status "terminé"; unpublished stays stored', async () => {
+    const published = PROJECT({ id: 'p-oneshot', status: 'en cours', work: { format: 'One-shot', publishedAt: new Date() } });
+    const draft = PROJECT({ id: 'p-draft', status: 'en cours', work: { format: 'One-shot', publishedAt: null } });
+    const serie = PROJECT({ id: 'p-serie', status: 'en cours', work: { format: 'Manga', publishedAt: new Date() } });
+    build([published, draft, serie], []);
+    const res = await service.getMine('acc-me', q());
+    expect(res.items.find((i) => i.id === 'p-oneshot')!.status).toBe('terminé');
+    expect(res.items.find((i) => i.id === 'p-draft')!.status).toBe('en cours');
+    expect(res.items.find((i) => i.id === 'p-serie')!.status).toBe('en cours');
+  });
+
+  it('status=publies matches both "publié" and a one-shot "terminé"', async () => {
+    const pub = PROJECT({ id: 'p-pub', status: 'publié' });
+    const done = PROJECT({ id: 'p-done', status: 'en cours', work: { format: 'One-shot', publishedAt: new Date() } });
+    const cours = PROJECT({ id: 'p-cours', status: 'en cours' });
+    build([pub, done, cours], []);
+    const res = await service.getMine('acc-me', q({ status: 'publies' }));
+    expect(res.items.map((i) => i.id).sort()).toEqual(['p-done', 'p-pub']);
+  });
+});
+
+// ── CS-1: POST /projects create (transaction + seeding) ──────────────────────
+describe('ProjectsService.create', () => {
+  let service: ProjectsService;
+  let prisma: Record<string, jest.Mock | Record<string, jest.Mock>>;
+  let collections: { resolveContestId: jest.Mock };
+  let media: { getForOwner: jest.Mock };
+  let invitations: { create: jest.Mock };
+  let calls: { seedFromProject: jest.Mock };
+
+  const OWNER_ACC = { displayName: 'Moi', profile: { creatorRoles: ['dessinateur'] } };
+
+  beforeEach(() => {
+    prisma = {
+      account: { findUnique: jest.fn().mockResolvedValue(OWNER_ACC) },
+      work: {
+        create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'work-1', slug: data.slug })),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      project: {
+        create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'proj-1', slug: data.slug })),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      workCreator: { create: jest.fn().mockResolvedValue({}) },
+      fundingGoal: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+    } as any;
+    collections = { resolveContestId: jest.fn(async (id?: string) => id ?? null) };
+    media = { getForOwner: jest.fn() };
+    invitations = { create: jest.fn().mockResolvedValue({ results: [] }) };
+    calls = { seedFromProject: jest.fn().mockResolvedValue(undefined) };
+    const slug = { slugify: (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') };
+    service = new ProjectsService(
+      prisma as unknown as PrismaService,
+      collections as unknown as CollectionsService,
+      slug as unknown as SlugService,
+      media as unknown as MediaService,
+      invitations as unknown as InvitationsService,
+      calls as unknown as CallsService,
+    );
+  });
+
+  const dto = (o: Partial<CreateProjectRequest> = {}): CreateProjectRequest => ({ type: 'manga', title: 'Lames de Brume', ...o });
+
+  const workData = () => (prisma.work as Record<string, jest.Mock>).create.mock.calls[0][0].data;
+  const projectData = () => (prisma.project as Record<string, jest.Mock>).create.mock.calls[0][0].data;
+
+  it('rejects an empty title', async () => {
+    await expect(service.create('acc-me', dto({ title: '   ' }))).rejects.toThrow(BadRequestException);
+  });
+
+  it('creates Work + Project in one transaction, shares one slug, returns {id,slug,workId,title}', async () => {
+    const res = await service.create('acc-me', dto({ title: 'Lames de Brume' }));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(workData().slug).toBe('lames-de-brume');
+    expect(projectData().slug).toBe('lames-de-brume');
+    expect(projectData().workId).toBe('work-1');
+    expect(res).toEqual({ id: 'proj-1', slug: 'lames-de-brume', workId: 'work-1', title: 'Lames de Brume' });
+  });
+
+  it('suffixes the slug when it collides in Work OR Project', async () => {
+    (prisma.work as Record<string, jest.Mock>).findMany.mockResolvedValue([{ slug: 'lames-de-brume' }]);
+    (prisma.project as Record<string, jest.Mock>).findMany.mockResolvedValue([{ slug: 'lames-de-brume-2' }]);
+    await service.create('acc-me', dto());
+    expect(workData().slug).toBe('lames-de-brume-3');
+  });
+
+  it.each([
+    ['manga', 'serie', 'Manga', 'Manga'],
+    ['story', 'serie', 'Roman', 'Histoire (illustrée)'],
+    ['manga', 'oneshot', 'One-shot', 'Manga'],
+    ['story', 'oneshot', 'One-shot', 'Histoire (illustrée)'],
+  ])('maps type=%s format=%s → Work.format %s, Project.kind %s', async (type, format, wf, kind) => {
+    await service.create('acc-me', dto({ type: type as any, format: format as any }));
+    expect(workData().format).toBe(wf);
+    expect(projectData().kind).toBe(kind);
+  });
+
+  it('maps genre/themes F-20 ids → fr labels; Work.genre defaults, Project.genre null when none', async () => {
+    await service.create('acc-me', dto({ genre: 'seinen', themes: ['action', 'adventure'] }));
+    expect(workData().genre).toBe('Seinen');
+    expect(workData().themes).toEqual(['Action', 'Aventure']);
+    expect(projectData().genre).toBe('Seinen');
+  });
+
+  it('defaults Work.genre and nulls Project.genre when no genre given', async () => {
+    await service.create('acc-me', dto());
+    expect(workData().genre).toBe('Art');
+    expect(projectData().genre).toBeNull();
+  });
+
+  it('rejects an unknown genre id (400)', async () => {
+    await expect(service.create('acc-me', dto({ genre: 'not-a-genre' }))).rejects.toThrow(BadRequestException);
+  });
+
+  it('normalizes hashtags, persists audienceRating, leaves the Work unpublished', async () => {
+    await service.create('acc-me', dto({ hashtags: ['Thriller', 'thriller', 'noir'], audienceRating: '16+' }));
+    expect(workData().hashtags).toEqual(['thriller', 'noir']);
+    expect(workData().audienceRating).toBe('16+');
+    expect(workData().publishedAt).toBeNull();
+  });
+
+  it('adds the owner as the order-0 WorkCreator with the mapped role (first creator role)', async () => {
+    await service.create('acc-me', dto());
+    expect((prisma.workCreator as Record<string, jest.Mock>).create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ workId: 'work-1', accountId: 'acc-me', role: 'dessinateur', order: 0 }) }),
+    );
+  });
+
+  it('defaults the owner WorkCreator role to scenariste when the profile has no creator roles', async () => {
+    (prisma.account as Record<string, jest.Mock>).findUnique.mockResolvedValue({ displayName: 'Moi', profile: { creatorRoles: [] } });
+    await service.create('acc-me', dto());
+    expect((prisma.workCreator as Record<string, jest.Mock>).create.mock.calls[0][0].data.role).toBe('scenariste');
+  });
+
+  it('creates FundingGoal rows for goals[] and stores tiers/dons/split in Work.soutien', async () => {
+    await service.create('acc-me', dto({
+      tiers: [{ name: 'Bronze', priceCents: 300 }],
+      allowDonations: true,
+      goals: [{ title: 'Impression', targetCents: 50000 }],
+      revenueSplit: [{ accountId: 'acc-me', pct: 100 }],
+    }));
+    expect(workData().soutien).toEqual({
+      tiers: [{ name: 'Bronze', priceCents: 300 }],
+      allowDonations: true,
+      revenueSplit: [{ accountId: 'acc-me', pct: 100 }],
+    });
+    expect((prisma.fundingGoal as Record<string, jest.Mock>).create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ workId: 'work-1', title: 'Impression', targetCents: 50000, order: 0 }) }),
+    );
+  });
+
+  it('rejects a revenueSplit that does not total 100 %', async () => {
+    await expect(
+      service.create('acc-me', dto({ revenueSplit: [{ accountId: 'acc-me', pct: 60 }] })),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects a revenueSplit accountId outside owner + invites', async () => {
+    await expect(
+      service.create('acc-me', dto({ invites: ['acc-a'], revenueSplit: [{ accountId: 'stranger', pct: 100 }] })),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('accepts an empty revenueSplit (solo)', async () => {
+    await expect(service.create('acc-me', dto())).resolves.toBeDefined();
+  });
+
+  it('validates contestId via the shared resolver and persists it on the Work', async () => {
+    await service.create('acc-me', dto({ contestId: 'c1' }));
+    expect(collections.resolveContestId).toHaveBeenCalledWith('c1');
+    expect(workData().contestId).toBe('c1');
+  });
+
+  it('propagates a closed/unknown contest 400 from the resolver', async () => {
+    collections.resolveContestId.mockRejectedValue(new BadRequestException('Concours introuvable ou clos'));
+    await expect(service.create('acc-me', dto({ contestId: 'closed' }))).rejects.toThrow(BadRequestException);
+  });
+
+  it('resolves an owned ready cover media → Work.coverImage and Project.cover', async () => {
+    media.getForOwner.mockResolvedValue({ kind: 'cover', status: 'ready', variants: { web: 'https://cdn/x.webp' } });
+    await service.create('acc-me', dto({ cover: { mediaId: 'm1' } }));
+    expect(media.getForOwner).toHaveBeenCalledWith('acc-me', 'm1');
+    expect(workData().coverImage).toBe('https://cdn/x.webp');
+    expect(projectData().cover).toBe('https://cdn/x.webp');
+  });
+
+  it('rejects a cover media of the wrong kind', async () => {
+    media.getForOwner.mockResolvedValue({ kind: 'illustration', status: 'ready', variants: { web: 'x' } });
+    await expect(service.create('acc-me', dto({ cover: { mediaId: 'm1' } }))).rejects.toThrow(BadRequestException);
+  });
+
+  it('fans out MC-3 invitations once with {toUsers, projectId}', async () => {
+    await service.create('acc-me', dto({ invites: ['acc-a', 'acc-b'] }));
+    expect(invitations.create).toHaveBeenCalledTimes(1);
+    expect(invitations.create).toHaveBeenCalledWith('acc-me', { toUsers: ['acc-a', 'acc-b'], projectId: 'proj-1' });
+  });
+
+  it('seeds ONE MC-4 call from seeking counts (seats + genre ids)', async () => {
+    await service.create('acc-me', dto({ seeking: { scenariste: 1, dessinateur: 2 }, genre: 'seinen', themes: ['action'], synopsis: 'Un récit.' }));
+    expect(calls.seedFromProject).toHaveBeenCalledTimes(1);
+    expect(calls.seedFromProject).toHaveBeenCalledWith('acc-me', {
+      projectId: 'proj-1',
+      title: 'Lames de Brume',
+      seats: { scenariste: 1, dessinateur: 2 },
+      genres: ['seinen', 'action'],
+      description: 'Un récit.',
+    });
+  });
+
+  it('seeds no call when all seeking counts are zero/absent', async () => {
+    await service.create('acc-me', dto({ seeking: { scenariste: 0, dessinateur: 0 } }));
+    expect(calls.seedFromProject).not.toHaveBeenCalled();
+  });
+
+  it('a side-effect failure does not roll back / fail the create', async () => {
+    invitations.create.mockRejectedValue(new Error('notif down'));
+    const res = await service.create('acc-me', dto({ invites: ['acc-a'] }));
+    expect(res.id).toBe('proj-1');
   });
 });

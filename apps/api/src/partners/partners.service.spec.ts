@@ -85,6 +85,27 @@ describe('PartnersService', () => {
     ]);
   });
 
+  // CS-1: invite search by displayName.
+  it('filters by q — case-insensitive displayName contains, keeping the tombstone exclusion', async () => {
+    await service.findPartners({ ...base, q: 'yuki' }, 'viewer-1');
+    expect(prisma.profile.findMany.mock.calls[0][0].where.account).toEqual({
+      deletedAt: null,
+      displayName: { contains: 'yuki', mode: 'insensitive' },
+    });
+  });
+
+  it('composes q with the role facet (AND across facets)', async () => {
+    await service.findPartners({ ...base, q: 'lea', role: 'dessinateur' }, 'viewer-1');
+    const where = prisma.profile.findMany.mock.calls[0][0].where;
+    expect(where.account).toMatchObject({ displayName: { contains: 'lea', mode: 'insensitive' } });
+    expect(where.creatorRoles).toEqual({ has: 'dessinateur' });
+  });
+
+  it('applies no q filter for an empty/whitespace q', async () => {
+    await service.findPartners({ ...base, q: '   ' }, 'viewer-1');
+    expect(prisma.profile.findMany.mock.calls[0][0].where.account).toEqual({ deletedAt: null });
+  });
+
   it('narrows by partner role', async () => {
     await service.findPartners({ ...base, role: 'scenariste' }, 'viewer-1');
     expect(prisma.profile.findMany.mock.calls[0][0].where.creatorRoles).toEqual({ has: 'scenariste' });

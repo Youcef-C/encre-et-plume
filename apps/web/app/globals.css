@@ -679,6 +679,19 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ── CS-1 "Nouveau projet" type cards — 3-up on desktop, single column ≤560px so
+   the cards go full-width and the selected-card ✓ badge never clips at ~375px. */
+.ep-type-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .ep-type-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── MC-1 Trouver — partner directory & calls preview reflow ─────────────────
    Desktop: 3-col partner grid + 2-col calls grid. ≤1024px: 2 / (calls stay 2).
    ≤640px: both drop to 1 col. */

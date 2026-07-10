@@ -57,6 +57,7 @@ export interface PartnerCard {
  * (`?genres=josei&genres=seinen`). No viewer-role bias (feedback §1); no location default (empty = all).
  */
 export interface PartnersQuery {
+  q?: string; // CS-1: case-insensitive displayName contains (invite search); AND-composed with facets
   role?: CreatorRole;
   genres?: string[]; // F-20 vocabulary ids (DR-2 precedent); OR within the facet
   locations?: string[]; // mixed continent-name | ISO alpha-2 country code | French région tokens (see locations.ts)

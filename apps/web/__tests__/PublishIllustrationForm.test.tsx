@@ -15,6 +15,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     ...actual,
     getMyCollections: vi.fn(),
     publishIllustration: vi.fn(),
+    getActiveContest: vi.fn(),
   };
 });
 
@@ -34,6 +35,7 @@ describe('PublishIllustrationForm (DR-12 V1)', () => {
     vi.clearAllMocks();
     (api.getMyCollections as ReturnType<typeof vi.fn>).mockResolvedValue(collections);
     (api.publishIllustration as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'ill-9' });
+    (api.getActiveContest as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   });
 
   it('blocks submit with an inline error when the title is empty', async () => {
@@ -80,6 +82,32 @@ describe('PublishIllustrationForm (DR-12 V1)', () => {
     await waitFor(() => expect(api.publishIllustration).toHaveBeenCalledTimes(1));
     const body = (api.publishIllustration as ReturnType<typeof vi.fn>).mock.calls[0][0] as PublishIllustrationRequest;
     expect(body.hashtags).toEqual(['encre', 'noir']);
+  });
+
+  it('omits the induced contest/soutien fields when they are untouched (regression)', async () => {
+    const user = userEvent.setup();
+    render(<PublishIllustrationForm />);
+    await user.type(screen.getByLabelText('Titre'), 'Aube');
+    await user.click(screen.getByRole('button', { name: 'Publier' }));
+    await waitFor(() => expect(api.publishIllustration).toHaveBeenCalledTimes(1));
+    const body = (api.publishIllustration as ReturnType<typeof vi.fn>).mock.calls[0][0] as PublishIllustrationRequest;
+    expect(body.contestId).toBeUndefined();
+    expect(body.tiers).toBeUndefined();
+    expect(body.allowDonations).toBeUndefined();
+    expect(body.goals).toBeUndefined();
+  });
+
+  it('includes a Soutien tier in the publish body when a palier is added (CS-1 induced)', async () => {
+    const user = userEvent.setup();
+    render(<PublishIllustrationForm />);
+    await user.type(screen.getByLabelText('Titre'), 'Aube');
+    await user.click(screen.getByRole('button', { name: '＋ Ajouter un palier' }));
+    await user.type(screen.getByLabelText('Nom du palier 1'), 'Mécène');
+    await user.type(screen.getByLabelText('Prix mensuel du palier 1 (€)'), '5');
+    await user.click(screen.getByRole('button', { name: 'Publier' }));
+    await waitFor(() => expect(api.publishIllustration).toHaveBeenCalledTimes(1));
+    const body = (api.publishIllustration as ReturnType<typeof vi.fn>).mock.calls[0][0] as PublishIllustrationRequest;
+    expect(body.tiers).toEqual([{ name: 'Mécène', priceCents: 500 }]);
   });
 
   it('keeps the form values when the publish request fails', async () => {

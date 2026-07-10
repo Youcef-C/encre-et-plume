@@ -358,6 +358,45 @@ export class CallsService {
   }
 
   /**
+   * CS-1 side effect: seed ONE "Appel à projets" from the create-project wizard's "Je recherche"
+   * counters. Bypasses the public DTO (no required deadline/description) — this is the story-mandated
+   * seed. `seats` are the non-zero seeking counts; `seekingRoles` is derived from them; author roles
+   * come from the owner's profile (may be empty for a non-creator owner — the call still lists the
+   * sought roles). No `closesAt` (open until closed). Best-effort: the caller wraps it so a failure
+   * here never rolls back the created project.
+   */
+  async seedFromProject(
+    ownerId: string,
+    input: { projectId: string; title: string; seats: SeatCounts; genres: string[]; description: string },
+  ): Promise<void> {
+    const seats = normalizeSeats(input.seats); // 400 only if truly empty — caller guards for that
+    const seekingRoles = (Object.keys(seats) as CreatorRole[]).filter((r) => (seats[r] ?? 0) > 0);
+    const [account, viewerRoles] = await Promise.all([
+      this.prisma.account.findUnique({ where: { id: ownerId }, select: { displayName: true } }) as Promise<{ displayName: string } | null>,
+      this.getViewerRoles(ownerId),
+    ]);
+    const authorRoles = [...new Set(viewerRoles)].filter((r) => (CREATOR_ROLES as readonly string[]).includes(r));
+    await this.prisma.projectCall.create({
+      data: {
+        title: input.title,
+        authorRoles,
+        seekingRoles,
+        seats: seats as never,
+        projectId: input.projectId,
+        authorId: ownerId,
+        authorName: account?.displayName ?? '',
+        tags: composeTags(input.genres),
+        description: input.description,
+        genres: input.genres,
+        format: null,
+        scope: null,
+        closesAt: null,
+        status: 'open',
+      },
+    });
+  }
+
+  /**
    * Validate every sample/document media id in ONE findMany (no N+1): each must be owned by the
    * caller, ready, and the right kind. Returns the ordered media-id list (samples first, then
    * documents) for the asset rows. 400 with the existing French messages on any invalid id.

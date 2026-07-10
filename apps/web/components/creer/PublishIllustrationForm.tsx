@@ -10,13 +10,14 @@ import {
   GALLERY_CATEGORIES,
   GALLERY_CATEGORY_KEYS,
   resolveGenreId,
+  type ActiveContest,
   type ApiError,
   type CollectionSummary,
   type GalleryCategoryKey,
   type MediaResponse,
   type PublishIllustrationRequest,
 } from '@encre-et-plume/shared';
-import { getMyCollections, publishIllustration } from '../../lib/api';
+import { getActiveContest, getMyCollections, publishIllustration } from '../../lib/api';
 import GenreChip from '../GenreChip';
 import GenreSuggestInput from '../GenreSuggestInput';
 import OnBrandSelect from '../form/OnBrandSelect';
@@ -24,6 +25,7 @@ import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import HashtagChipsInput from '../form/HashtagChipsInput';
 import UploadControl from '../UploadControl';
 import NewCollectionForm from '../collections/NewCollectionForm';
+import SoutienFields, { EMPTY_SOUTIEN, soutienToRequest, type SoutienValue } from './SoutienFields';
 
 const label: React.CSSProperties = {
   fontSize: 12,
@@ -62,6 +64,11 @@ export default function PublishIllustrationForm() {
   const [collectionIds, setCollectionIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
 
+  // CS-1 induced additions: an optional contest link + a Soutien panel (paliers / dons / objectifs).
+  const [contest, setContest] = useState<ActiveContest | null>(null);
+  const [contestId, setContestId] = useState('');
+  const [soutien, setSoutien] = useState<SoutienValue>(EMPTY_SOUTIEN);
+
   const [titleError, setTitleError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -70,6 +77,9 @@ export default function PublishIllustrationForm() {
     let cancelled = false;
     getMyCollections()
       .then((cs) => !cancelled && setMyCollections(cs))
+      .catch(() => {});
+    getActiveContest()
+      .then((c) => !cancelled && setContest(c))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -108,6 +118,8 @@ export default function PublishIllustrationForm() {
       ...(hashtags.length ? { hashtags } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(collectionIds.length ? { collectionIds } : {}),
+      ...(contestId ? { contestId } : {}),
+      ...soutienToRequest(soutien),
     };
 
     setPending(true);
@@ -257,6 +269,28 @@ export default function PublishIllustrationForm() {
           </div>
         )}
       </div>
+
+      {/* Lier à un concours (CS-1 induced) */}
+      <div style={field}>
+        <label htmlFor="pub-contest" style={label}>
+          Lier à un concours
+        </label>
+        <OnBrandSelect id="pub-contest" value={contestId} onChange={(e) => setContestId(e.target.value)} aria-label="Lier à un concours">
+          <option value="">Aucun concours</option>
+          {contest && (
+            <option value={contest.id}>
+              {contest.category} · {contest.title}
+            </option>
+          )}
+        </OnBrandSelect>
+        {!contest && <p style={{ fontSize: 12, color: 'var(--ink2)', margin: '6px 0 0' }}>Aucun concours ouvert</p>}
+      </div>
+
+      {/* Soutien · optionnel (CS-1 induced) */}
+      <fieldset style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '12px 14px', margin: '0 0 18px' }}>
+        <legend style={{ fontSize: 12, fontWeight: 700, padding: '0 6px' }}>Soutien · optionnel</legend>
+        <SoutienFields value={soutien} onChange={setSoutien} />
+      </fieldset>
 
       {serverError && (
         <p role="alert" style={{ ...errText, marginTop: 0, marginBottom: 12 }}>

@@ -23,5 +23,6 @@ import { BlocksModule } from '../blocks/blocks.module';
   ],
   controllers: [InvitationsController],
   providers: [InvitationsService, PrismaService, RedisService, SessionGuard],
+  exports: [InvitationsService], // CS-1: ProjectsService fans out MC-3 invitations from the wizard
 })
 export class InvitationsModule {}

@@ -787,3 +787,54 @@ describe('CallsService.deleteCall', () => {
     expect(notifications.create).not.toHaveBeenCalled();
   });
 });
+
+// ── CS-1: seedFromProject (create-project wizard "Je recherche" → one Appel à projets) ──
+describe('CallsService.seedFromProject', () => {
+  let service: CallsService;
+  let prisma: {
+    projectCall: { create: jest.Mock };
+    account: { findUnique: jest.Mock };
+    profile: { findUnique: jest.Mock };
+  };
+
+  beforeEach(() => {
+    prisma = {
+      projectCall: { create: jest.fn().mockResolvedValue({ id: 'call-seed' }) },
+      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }) },
+      profile: { findUnique: jest.fn().mockResolvedValue({ creatorRoles: ['scenariste'] }) },
+    };
+    service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
+  });
+
+  it('creates ONE open call: seats, derived seekingRoles, author snapshot, no deadline', async () => {
+    await service.seedFromProject('acc-1', {
+      projectId: 'proj-1',
+      title: 'Lames de Brume',
+      seats: { scenariste: 1, dessinateur: 2 },
+      genres: ['seinen', 'action'],
+      description: 'Un récit.',
+    });
+    const data = prisma.projectCall.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      title: 'Lames de Brume',
+      projectId: 'proj-1',
+      authorId: 'acc-1',
+      authorName: 'Camille R.',
+      authorRoles: ['scenariste'],
+      seekingRoles: ['scenariste', 'dessinateur'],
+      seats: { scenariste: 1, dessinateur: 2 },
+      genres: ['seinen', 'action'],
+      description: 'Un récit.',
+      status: 'open',
+      closesAt: null,
+    });
+  });
+
+  it('still lists sought roles when the owner has no creator roles (authorRoles empty)', async () => {
+    prisma.profile.findUnique.mockResolvedValue({ creatorRoles: [] });
+    await service.seedFromProject('acc-1', { projectId: 'p', title: 'X', seats: { dessinateur: 1 }, genres: [], description: '' });
+    const data = prisma.projectCall.create.mock.calls[0][0].data;
+    expect(data.authorRoles).toEqual([]);
+    expect(data.seekingRoles).toEqual(['dessinateur']);
+  });
+});

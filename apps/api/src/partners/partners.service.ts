@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /** Validated GET /partners input (enums checked by PartnersQueryDto; page/pageSize parsed + clamped). */
 export interface PartnersServiceInput {
+  q?: string; // CS-1: case-insensitive displayName contains (invite search)
   role?: CreatorRole;
   genres?: string[]; // F-20 vocabulary ids (validated against GENRES by the DTO); OR within the facet
   locations?: string[]; // continent-name | ISO country code | French région tokens; OR within the facet; absent → no filter
@@ -83,6 +84,8 @@ export class PartnersService {
     };
     if (input.role) where['creatorRoles'] = { has: input.role };
     if (input.availability) where['availability'] = input.availability;
+    // CS-1 invite search: match the account's displayName (case-insensitive contains), AND with facets.
+    if (input.q?.trim()) where['account'] = { deletedAt: null, displayName: { contains: input.q.trim(), mode: 'insensitive' } };
     // OR within a facet (any selected genre / location), AND across facets — catalog precedent.
     if (input.genres?.length) where['tags'] = { hasSome: input.genres.map((id) => catalogGenreLabel(id)) };
     if (input.locations?.length) {

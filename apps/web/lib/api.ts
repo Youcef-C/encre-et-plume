@@ -536,7 +536,13 @@ import type {
   InvitationsResponse,
   InvitationDirection,
   RespondInvitationRequest,
+  CreateProjectRequest,
+  CreateProjectResponse,
 } from '@encre-et-plume/shared';
+
+// CS-1 — "Nouveau projet" wizard (manga/histoire). The Illustration(s) type routes to publishIllustration.
+export const createProject = (body: CreateProjectRequest): Promise<CreateProjectResponse> =>
+  request<CreateProjectResponse>('/projects', { method: 'POST', body: JSON.stringify(body) });
 
 // No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
 // The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.

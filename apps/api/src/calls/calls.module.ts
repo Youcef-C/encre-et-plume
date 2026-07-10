@@ -34,5 +34,6 @@ import { BlocksModule } from '../blocks/blocks.module';
     RedisService,
     SessionGuard,
   ],
+  exports: [CallsService], // CS-1: ProjectsService seeds an "Appel à projets" from "Je recherche"
 })
 export class CallsModule {}

@@ -15,7 +15,6 @@ import FilterSidebar from './FilterSidebar';
 import ActiveFilters from './ActiveFilters';
 import CatalogGrid, { type CatalogGridState } from './CatalogGrid';
 import CatalogRail from './CatalogRail';
-import NewProjectDialog from './NewProjectDialog';
 
 function useCatalogRail() {
   const [trending, setTrending] = useState<TrendingWork[]>([]);
@@ -52,7 +51,6 @@ export default function DecouvrirClient() {
   // publish flow re-enforces the gate server-side, so this is presentation only.
   const { account } = useSession();
   const [isCreator, setIsCreator] = useState(false);
-  const [projectOpen, setProjectOpen] = useState(false);
 
   useEffect(() => {
     if (!account?.slug) {
@@ -124,7 +122,7 @@ export default function DecouvrirClient() {
           {isCreator && (
             <button
               type="button"
-              onClick={() => setProjectOpen(true)}
+              onClick={() => router.push('/creer')}
               style={{
                 marginLeft: 'auto',
                 fontSize: 14,
@@ -144,8 +142,6 @@ export default function DecouvrirClient() {
             </button>
           )}
         </div>
-
-        {projectOpen && <NewProjectDialog onClose={() => setProjectOpen(false)} />}
 
         <ActiveFilters filters={filters} onChange={navigate} />
 

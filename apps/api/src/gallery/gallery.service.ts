@@ -159,6 +159,13 @@ export class GalleryService {
       height = m.height ?? null;
     }
 
+    // CS-1 (induced): optional open-contest link + raw Soutien config on the standalone illustration.
+    const contestId = await this.collections.resolveContestId(dto.contestId ?? undefined);
+    const soutien =
+      dto.tiers !== undefined || dto.allowDonations !== undefined || dto.goals !== undefined
+        ? { tiers: dto.tiers ?? [], allowDonations: dto.allowDonations ?? false, goals: dto.goals ?? [] }
+        : undefined;
+
     const account = await this.prisma.account.findUnique({ where: { id: accountId }, select: { displayName: true } });
     const created = await this.prisma.illustration.create({
       data: {
@@ -172,6 +179,8 @@ export class GalleryService {
         width,
         height,
         description: dto.description ?? null,
+        contestId: contestId ?? null,
+        soutien: (soutien ?? undefined) as never, // Prisma Json input; MR-1/MR-2 normalize later
         publishedAt: new Date(),
       },
     });

@@ -3,6 +3,8 @@
 // CS-12 extends it further (never renames) for the "Mes projets" dashboard listing.
 
 import type { CreatorRole } from './onboarding.js';
+import type { CatalogAudienceRating } from './catalog.js';
+import type { RevenueSplitEntry, SoutienGoalInput, SoutienTier } from './collections.js';
 
 export interface ProjectSummary {
   id: string;
@@ -67,4 +69,56 @@ export interface MyProjectsResponse {
   page?: number;
   pageSize?: number;
   summary?: MyProjectsSummary; // present when scope='all'
+}
+
+// ── CS-1 · "Nouveau projet" create wizard (POST /projects) ───────────────────
+// Manga/Histoire wizard only — the Illustration(s) type routes to POST /illustrations (DR-5).
+
+export const PROJECT_TYPES = ['manga', 'story'] as const;
+export type ProjectType = (typeof PROJECT_TYPES)[number];
+
+export const PROJECT_FORMATS = ['serie', 'oneshot'] as const;
+export type ProjectFormat = (typeof PROJECT_FORMATS)[number];
+
+export const PROJECT_VISIBILITIES = ['prive', 'invitation', 'public'] as const;
+export type ProjectVisibility = (typeof PROJECT_VISIBILITIES)[number];
+
+/** "Je recherche" per-role counters — >0 seeds an MC-4 "Appel à projets" call. */
+export interface ProjectSeeking {
+  scenariste?: number;
+  dessinateur?: number;
+}
+
+/**
+ * CS-1 create request. Everything beyond `type`/`title` is optional so "Configurer plus tard"
+ * creates immediately with whatever step 2 holds. Œuvre-level fields (synopsis, hashtags, genre,
+ * themes, audienceRating, format, cover) seed the project's Work/œuvre; workspace/collab fields
+ * (visibility, invites, seeking) stay on the Project. Soutien (tiers/allowDonations/goals/
+ * revenueSplit) is stored raw on the Work per the DR-12 precedent (MR-1/MR-2/CS-10 normalize later).
+ */
+export interface CreateProjectRequest {
+  type: ProjectType;
+  title: string;
+  cover?: { mediaId: string }; // F-10 cover media (kind 'cover', ready) → Work.coverImage / Project.cover
+  synopsis?: string;
+  hashtags?: string[]; // F-22 freetext chips, normalized server-side
+  format?: ProjectFormat; // default 'serie'
+  contestId?: string; // open contest only → linked on the Work
+  genre?: string; // F-20 vocabulary id (single)
+  themes?: string[]; // F-20 vocabulary ids (multi)
+  audienceRating?: CatalogAudienceRating; // default 'Tous publics'
+  visibility?: ProjectVisibility; // default 'prive'
+  invites?: string[]; // accountIds → MC-3 invitations
+  seeking?: ProjectSeeking; // >0 → MC-4 call seed
+  tiers?: SoutienTier[];
+  allowDonations?: boolean;
+  goals?: SoutienGoalInput[];
+  revenueSplit?: RevenueSplitEntry[]; // Σ pct === 100 when non-empty; accountIds ⊆ owner+invites
+}
+
+export interface CreateProjectResponse {
+  id: string;
+  slug: string; // shared by /projet/{slug} and /oeuvre/{slug}
+  workId: string;
+  title: string;
 }

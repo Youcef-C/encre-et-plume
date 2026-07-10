@@ -8,7 +8,9 @@ import type {
   CollectionsListResponse,
   CollectionSummary,
   CreateCollectionRequest,
+  RevenueSplitEntry,
   SoutienConfig,
+  SoutienTier,
   UpdateCollectionRequest,
 } from '@encre-et-plume/shared';
 import {
@@ -342,7 +344,8 @@ export class CollectionsService {
     await this.prisma.work.update({ where: { id: workId }, data: { meta: metaLine(count) } });
   }
 
-  private async resolveContestId(contestId?: string): Promise<string | null> {
+  /** Public so CS-1 ProjectsService + GalleryService reuse the one open-contest gate (400 if closed/unknown). */
+  async resolveContestId(contestId?: string): Promise<string | null> {
     if (!contestId) return null;
     const contest = await this.prisma.contest.findUnique({ where: { id: contestId }, select: { active: true } });
     if (!contest?.active) throw new BadRequestException('Concours introuvable ou clos');
@@ -504,8 +507,15 @@ function mapItem(illu: any, order: number): CollectionItemDto {
   };
 }
 
-/** Builds the raw Soutien Json on create when any Soutien field is provided, validating the split. */
-function buildSoutien(dto: CreateCollectionRequest): SoutienConfig | null {
+/**
+ * Builds the raw Soutien Json on create when any Soutien field is provided, validating the split.
+ * Exported (structural param) so CS-1 ProjectsService reuses it for a Work's Soutien Json.
+ */
+export function buildSoutien(dto: {
+  tiers?: SoutienTier[];
+  allowDonations?: boolean;
+  revenueSplit?: RevenueSplitEntry[];
+}): SoutienConfig | null {
   if (dto.tiers === undefined && dto.allowDonations === undefined && dto.revenueSplit === undefined) return null;
   const revenueSplit = dto.revenueSplit ?? [];
   assertSplit(revenueSplit);

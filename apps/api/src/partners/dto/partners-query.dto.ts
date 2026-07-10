@@ -1,4 +1,4 @@
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import type { CreatorRole, PartnerAvailability } from '@encre-et-plume/shared';
 import { CREATOR_ROLES, PARTNER_LOCATION_TOKENS, PARTNER_AVAILABILITY_KEYS, GENRES } from '@encre-et-plume/shared';
@@ -18,6 +18,12 @@ const toArray = ({ value }: { value: unknown }): unknown =>
  * leniently + clamped in the service (bad page → 1, pageSize clamps to max, never a 400).
  */
 export class PartnersQueryDto {
+  // CS-1: invite search — case-insensitive displayName contains, AND-composed with the facets.
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+
   @IsOptional()
   @IsIn([...CREATOR_ROLES])
   role?: CreatorRole;
