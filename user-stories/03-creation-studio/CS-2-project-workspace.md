@@ -13,6 +13,29 @@
   - Production columns: "Scénario ✒ · Nemu · Corrections · PROPRE · Encrage 🖌 · VALIDÉ ✓".
   - Page cards: version badge ("⎘ v3"), file-type tags ("📄 scénario", "🖼 réf", "🖼 nemu", "⇿ Double page"); per-card icons "✎ éditer" / "👁 aperçu" / "⚑ corrections" ([[CS-5]]) / "⋯".
   - "＋ Ajouter une carte" per column. Cards drag between columns to change production stage.
+  - **Card cards ergonomics** (extension 2026-07-11): cards are not forced compact — they grow with
+    their data (Trello-style). A card shows, when present: color-label bars on top; title + "⎘ vN";
+    file-type tags; and a meta footer with a due-date pill (accent/overdue styling when past due), a
+    **checklist `(x/x)`** count, a comment count, and an assignee avatar stack.
+  - **Card detail modal** (extension 2026-07-11 — improves the prototype's `[data-card-modal]`
+    "Nouvelle carte"): clicking a card opens a modal that keeps the prototype's TITRE · COLONNE ·
+    TYPE DE PAGE (Simple / ⇿ Double page) · FICHIERS LIÉS, and adds:
+    - **DESCRIPTION** (textarea).
+    - **ÉTIQUETTES** — user-created project labels (name ≤30 + a color from a fixed on-brand palette,
+      no presets); toggle to apply/remove on the card; create/rename/recolor/delete from the picker;
+      deleting a label removes it from every card.
+    - **ÉCHÉANCE** — a deadline via native `<input type="date">` in an on-brand frame; clearable.
+    - **CHECKLIST** — `OnBrandCheckbox` items (toggle done), add/delete rows, progress bar + `(x/x)`.
+    - **ASSIGNÉ À** — assign/unassign project members; **both added and removed** assignees get an
+      [[F-5]] notification.
+    - **COMMENTAIRES** — refetch-on-open list (author, relative time, "modifié" when edited); author
+      edits/deletes own, project owner deletes any; composer + "Commenter".
+    Simple fields (title/description/deadline/labels) debounce-autosave with the "Enregistré ✓"
+    indicator; checklist/comment/assignee actions are immediate with optimistic revert on error.
+    Delete-card stays member-gated (the existing ⋯ menu); the menu z-index bug is fixed (the open
+    card raises its stacking context) and the menu closes on outside click / Escape.
+  - **Filter by label**: a label-filter chip row above the columns (auto-apply, on-brand) narrows the
+    visible cards; combines with the chapter chips.
 - **CHAPITRES**: per-chapter accordion → see [[CS-7]].
 - **FICHIERS**: → [[CS-3]].
 - **DISCUSSION**: → [[CS-8]].
@@ -30,10 +53,16 @@
 - **POST /projects/{slug}/pages** + **PATCH /pages/{id}** + **DELETE /pages/{id}** — page/card CRUD.
 - **PATCH /pages/{id}/stage** — kanban stage transition (`scenario|nemu|corrections|propre|encrage|valide`).
 - **GET /pages/{id}/versions** — version history for the "⎘ vN" badge.
-- Entities: **Page** `{ id, projectId, chapterId, stage, version, fileTags[], linkedFileIds[] }`; **Project** info fields (see [[CS-1]]).
-- Business rules: stage values constrained to the 6 columns; version increments on new file revision.
-- Authorization: project members only; visibility rules from [[CS-1]] gate read access for non-members.
-- Side effects: stage change to "Corrections" / raising a correction notifies collaborators ([[F-5]], via [[CS-5]]).
+- **Card detail + collaboration data** (extension 2026-07-11):
+  - **GET /pages/{id}** — full card detail (description, dueDate, labels, assignees, checklist, comments with author, linked files, version summary) for the modal.
+  - **PATCH /pages/{id}** — extended to also accept `description`, `dueDate`, `labelIds`, `assigneeIds`. Diffing `assigneeIds` notifies **both added and removed** members ([[F-5]] `project_activity`).
+  - **Labels palette**: **GET/POST /projects/{slug}/labels**, **PATCH/DELETE /labels/{id}** — member-created labels (`name` ≤30 + `color` from a fixed on-brand palette; reject colors outside it). Deleting a label cascades off all cards.
+  - **Checklist**: **POST /pages/{id}/checklist**, **PATCH /checklist/{itemId}**, **DELETE /checklist/{itemId}**.
+  - **Comments**: **POST /pages/{id}/comments**; **PATCH /comments/{id}** (author only, sets `editedAt`); **DELETE /comments/{id}** (author or project owner).
+- Entities: **Page** `{ id, projectId, chapterId, stage, version, fileTags[], linkedFileIds[], description?, dueDate? }`; **ProjectLabel** `{ id, projectId, name, color }` + **PageLabel** join; **PageAssignee** `{ pageId, userId }` join; **PageChecklistItem** `{ id, pageId, text, done, order }`; **PageComment** `{ id, pageId, authorId, body, createdAt, editedAt? }`; **Project** info fields (see [[CS-1]]).
+- Business rules: stage values constrained to the 6 columns; version increments on new file revision; label `color` ∈ the fixed palette; a card's labels/assignees belong to the same project.
+- Authorization: project members only (labels/checklist/comments/assignees/delete all member-gated); visibility rules from [[CS-1]] gate read access for non-members; comment edit = author only, comment delete = author or project owner.
+- Side effects: stage change to "Corrections" / raising a correction notifies collaborators ([[F-5]], via [[CS-5]]); assigning/unassigning a member on a card notifies that member ([[F-5]]).
 
 ## Dependencies
 
@@ -46,3 +75,5 @@
 
 - Explicit: header, tabs, kanban columns, card anatomy, Infos auto-save, reviews. Soutien detail deferred to MR epic.
 - **Cover control reconciliation (2026-07-09)**: the prototype's INFOS view (`data-projview="infos"`) draws only TITRE / SYNOPSIS / HASHTAGS + the collaboration toggle + reviews — it does **not** draw a cover control there. The cover-drop *component* IS drawn in the prototype (the `image-slot` "Déposez la couverture" on the "Œuvre" hero `id="oeuvre-cover"`, and the gallery hero). This story reuses that drop component **inside the INFOS editor** (an **induced deviation** — the INFOS form gains the drawn cover-drop that the prototype places on the public hero), so a creator can add/replace the œuvre cover from the workspace. Covers apply to every œuvre type — Manga, Histoire/Roman, and Illustration collections ([[DR-12]]) — since all are `Work` rows with `coverImage`.
+- **Card modal extension (2026-07-11, induced)**: the prototype draws a card modal (`[data-card-modal]` "Nouvelle carte": TITRE · DESCRIPTION · COLONNE · TYPE DE PAGE · FICHIERS LIÉS · ASSIGNÉ À) but the shipped CS-2 slice built only a lightweight inline "add card". This extension makes **clicking a card open that modal** and **improves it** with color labels, a deadline, a checklist, comments, and (added+removed) assignee notifications — grade the modal against the prototype base **plus** these additions, not the raw prototype. The bigger/richer mini cards and the label-filter row are induced ergonomics (the prototype is desktop-only and doesn't draw them). Design spec: `docs/superpowers/specs/2026-07-11-cs2-card-modal-design.md`.
+- **Deferred (do not flag as gaps)**: realtime websocket push for comments/checklist (intentional refetch-on-open); per-checklist-item due dates / assignment; comment threading & reactions.
