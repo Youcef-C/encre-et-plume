@@ -293,11 +293,13 @@ model Project {
   // CS-1: the Project↔Work bridge. `workId` shares the Project's slug value, so /projet/{slug} and
   // /oeuvre/{slug} resolve to the same pair. Nullable so legacy/seed Projects survive.
   visibility  String       @default("prive") // 'prive' | 'invitation' | 'public' (workspace/collab)
+  collabOpen  Boolean      @default(false) // CS-2 "Demandes de collaboration" toggle (distinct from visibility; MC candidature reads it)
   workId      String?      @unique // seeded œuvre (Work) — created in one $transaction with the Project
   work        Work?        @relation(fields: [workId], references: [id])
   createdAt   DateTime     @default(now())
   invitations Invitation[]
   calls       ProjectCall[] // MC-4X req6: calls linked to this project
+  pages       Page[] // CS-2 kanban board cards (NOT Planche — see Page model)
 
   @@index([ownerId])
 }
@@ -556,6 +558,7 @@ model Chapter {
   premium         Boolean           @default(false) // locked flag; stands in for MR-1/MR-4 access tier
   prose           String? // roman chapter body; paragraphs separated by "\n\n"
   pages           Planche[] // reader pages (chapterId set); DR-3 work-level planches keep chapterId=null
+  boardCards      Page[]            @relation("ChapterBoardCards") // CS-2 kanban cards attached to this chapter (distinct from `pages` above)
   readingProgress ReadingProgress[]
 
   @@index([status, publishAt])
@@ -886,4 +889,46 @@ model SupportTicket {
 
   @@index([accountId])
   @@index([status, createdAt]) // AD-14 staff triage listing
+}
+
+// ── CS-2: project workspace kanban (Espace projet) ───────────────────────────
+// `Page` is a KANBAN BOARD CARD (script→validated art tracking), NOT `Planche`
+// (the published reader page). Distinct concept, distinct table on purpose.
+
+enum PageStage {
+  scenario
+  nemu
+  corrections
+  propre
+  encrage
+  valide
+}
+
+model Page {
+  id            String        @id @default(cuid())
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id])
+  chapterId     String? // null = card not yet attached to a chapter
+  chapter       Chapter?      @relation("ChapterBoardCards", fields: [chapterId], references: [id])
+  title         String // card label, e.g. "Page 7"
+  stage         PageStage     @default(scenario)
+  version       Int           @default(1)
+  fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
+  linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  versions      PageVersion[]
+
+  @@index([projectId, chapterId, stage])
+}
+
+model PageVersion {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  version   Int
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([pageId, version])
 }

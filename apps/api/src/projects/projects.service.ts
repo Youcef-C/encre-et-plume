@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type {
   CreateProjectRequest,
   CreateProjectResponse,
@@ -11,8 +11,16 @@ import type {
   ProjectStatusFilter,
   ProjectSummary,
   ProjectTypeFilter,
+  ProjectVisibility,
+  ProjectWorkspaceResponse,
   RevenueSplitEntry,
   SeatCounts,
+  UpdateProjectInfoRequest,
+  UpdateProjectInfoResponse,
+  WorkspaceMember,
+  WorkspacePage,
+  WorkspaceReview,
+  WorkspaceReviewSummary,
 } from '@encre-et-plume/shared';
 import { GENRES, PROJECTS_PAGE_SIZE, catalogGenreLabel, normalizeHashtags } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -414,10 +422,182 @@ export class ProjectsService {
 
     return { items, total, page: query.page, pageSize: PROJECTS_PAGE_SIZE, summary };
   }
+
+  // ── CS-2: project workspace "Espace projet" ────────────────────────────────
+
+  /**
+   * GET /projects/:slug — the full workspace payload. Members (owner or a WorkCreator on the
+   * linked Work) get the full read; a non-member gets a read-only payload ONLY when the project is
+   * public — private/invitation projects 404 for non-members (no existence leak).
+   */
+  async getWorkspace(accountId: string, slug: string): Promise<ProjectWorkspaceResponse> {
+    const project = await this.prisma.project.findUnique({
+      where: { slug },
+      include: {
+        work: {
+          include: {
+            creators: {
+              orderBy: { order: 'asc' },
+              include: { account: { select: { id: true, displayName: true, avatar: true } } },
+            },
+            chapters: { orderBy: { number: 'asc' } },
+            reviews: { orderBy: { createdAt: 'desc' } },
+          },
+        },
+        pages: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+
+    const isOwner = project.ownerId === accountId;
+    const isMember = isMemberOf(project, accountId);
+    if (!isMember && project.visibility !== 'public') throw new NotFoundException('Projet introuvable');
+
+    const work = project.work;
+    const members: WorkspaceMember[] = work.creators.map((c) => ({
+      accountId: c.accountId,
+      displayName: c.account.displayName,
+      avatar: c.account.avatar,
+      role: c.role,
+    }));
+
+    const allReviews = work.reviews.map(mapWorkspaceReview);
+    return {
+      id: project.id,
+      slug: project.slug ?? slug,
+      workSlug: work.slug,
+      title: work.title,
+      synopsis: work.synopsis ?? '',
+      hashtags: work.hashtags,
+      collabOpen: project.collabOpen,
+      visibility: project.visibility as ProjectVisibility,
+      cover: work.coverImage ?? null,
+      members,
+      chapters: work.chapters.map((c) => ({
+        id: c.id,
+        number: c.number,
+        title: c.title,
+        status: c.status,
+        plancheCount: c.plancheCount,
+      })),
+      pages: project.pages.map((p) => ({
+        id: p.id,
+        chapterId: p.chapterId,
+        title: p.title,
+        stage: p.stage,
+        version: p.version,
+        fileTags: p.fileTags as WorkspacePage['fileTags'],
+        linkedFileIds: p.linkedFileIds,
+      })),
+      reviews: { summary: reviewSummary(allReviews), items: allReviews.slice(0, 20) },
+      viewer: { isMember, isOwner },
+    };
+  }
+
+  /**
+   * PATCH /projects/:slug — debounced field-level auto-save. Members only (owner or WorkCreator);
+   * a non-member who could at least read it (public) gets 403, otherwise 404 (no leak). `title` writes
+   * BOTH Project and Work so cards/catalog (Work) and the dashboard (Project) never drift; `cover`
+   * takes an F-10 media reference (never bytes) and writes the resolved URL to Work.coverImage +
+   * Project.cover.
+   */
+  async updateInfo(accountId: string, slug: string, body: UpdateProjectInfoRequest): Promise<UpdateProjectInfoResponse> {
+    const project = await this.resolveMemberProject(accountId, slug);
+    const work = project.work!; // resolveMemberProject guarantees a linked Work (else it 404s)
+
+    const workUpdate: Record<string, unknown> = {};
+    const projectUpdate: Record<string, unknown> = {};
+
+    if (body.title !== undefined) {
+      const t = body.title.trim();
+      if (!t) throw new BadRequestException('Un titre est requis');
+      workUpdate.title = t;
+      projectUpdate.title = t;
+    }
+    if (body.synopsis !== undefined) workUpdate.synopsis = body.synopsis;
+    if (body.hashtags !== undefined) workUpdate.hashtags = normalizeHashtags(body.hashtags);
+    if (body.collabOpen !== undefined) projectUpdate.collabOpen = body.collabOpen;
+    if (body.cover !== undefined) {
+      const url = body.cover === null ? null : await this.resolveCover(accountId, body.cover.mediaId);
+      workUpdate.coverImage = url;
+      projectUpdate.cover = url;
+    }
+
+    const ops = [];
+    if (Object.keys(workUpdate).length > 0) ops.push(this.prisma.work.update({ where: { id: work.id }, data: workUpdate }));
+    if (Object.keys(projectUpdate).length > 0) ops.push(this.prisma.project.update({ where: { id: project.id }, data: projectUpdate }));
+    if (ops.length > 0) await this.prisma.$transaction(ops);
+
+    return {
+      title: (projectUpdate.title as string) ?? work.title,
+      synopsis: (workUpdate.synopsis as string | undefined) ?? work.synopsis ?? '',
+      hashtags: (workUpdate.hashtags as string[] | undefined) ?? work.hashtags,
+      collabOpen: (projectUpdate.collabOpen as boolean | undefined) ?? project.collabOpen,
+      cover: 'coverImage' in workUpdate ? (workUpdate.coverImage as string | null) : work.coverImage ?? null,
+    };
+  }
+
+  /** Shared by PATCH /projects/:slug (and reused by page routes via the exported helper): resolve a
+   *  project the caller is a member of. Unknown → 404; non-member public → 403; non-member private → 404. */
+  private async resolveMemberProject(accountId: string, slug: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { slug },
+      include: {
+        work: { include: { creators: { select: { accountId: true } } } },
+      },
+    });
+    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!isMemberOf(project, accountId)) {
+      if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
+      throw new NotFoundException('Projet introuvable');
+    }
+    return project;
+  }
 }
 
 function firstRole(roles: string[] | undefined | null): CreatorRole | null {
   return (roles?.[0] as CreatorRole | undefined) ?? null;
+}
+
+/** CS-2 membership: the project owner OR a WorkCreator on the linked Work. Shared by the workspace
+ *  read, the info PATCH, and the page routes (PagesService) — the single membership rule for CS-2. */
+export function isMemberOf(
+  project: { ownerId: string; work: { creators: { accountId: string }[] } | null },
+  accountId: string,
+): boolean {
+  if (project.ownerId === accountId) return true;
+  return project.work?.creators.some((c) => c.accountId === accountId) ?? false;
+}
+
+function mapWorkspaceReview(r: {
+  id: string;
+  authorName: string;
+  storyRating: number;
+  artRating: number;
+  text: string;
+  hidden: boolean;
+  createdAt: Date;
+}): WorkspaceReview {
+  return {
+    id: r.id,
+    authorName: r.authorName,
+    storyRating: r.storyRating,
+    artRating: r.artRating,
+    text: r.hidden ? '' : r.text, // blank hidden review text (moderation) — mirrors DR-3
+    hidden: r.hidden,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** DR-3 review math, mirrored: overall = mean of per-review (story+art)/2; story/art = column means. */
+function reviewSummary(reviews: WorkspaceReview[]): WorkspaceReviewSummary {
+  const mean = (vals: number[]) => (vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
+  return {
+    overall: mean(reviews.map((r) => (r.storyRating + r.artRating) / 2)),
+    story: mean(reviews.map((r) => r.storyRating)),
+    art: mean(reviews.map((r) => r.artRating)),
+    count: reviews.length,
+  };
 }
 
 function strip(row: MyProjectItem & { _createdAt: number }): MyProjectItem {

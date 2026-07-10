@@ -393,3 +393,15 @@ export function ImageIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// CS-2 — file-type tag icon (📄 substitute): a page with a folded corner + text lines.
+export function FileTextIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z" />
+      <polyline points="14 3.5 14 8.5 19 8.5" />
+      <line x1="8.5" y1="13" x2="15.5" y2="13" />
+      <line x1="8.5" y1="16.5" x2="15.5" y2="16.5" />
+    </Svg>
+  );
+}

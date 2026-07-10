@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { getJwtSecret } from '../auth/jwt-secret';
 import { ProjectsController } from './projects.controller';
+import { PagesController } from './pages.controller';
 import { ProjectsService } from './projects.service';
+import { PagesService } from './pages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
@@ -11,6 +13,7 @@ import { CollectionsModule } from '../collections/collections.module';
 import { MediaModule } from '../media/media.module';
 import { InvitationsModule } from '../invitations/invitations.module';
 import { CallsModule } from '../calls/calls.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 /**
  * CS-1 seam: authenticated GET /projects/mine — the sender's projects for MC-3's invite picker.
@@ -25,12 +28,13 @@ import { CallsModule } from '../calls/calls.module';
       signOptions: { expiresIn: '7d' },
     }),
     CollectionsModule, // exports CollectionsService → dashboard folds collections + CS-1 contest/soutien helpers
-    MediaModule, // CS-1 cover resolution (F-10 presigned upload)
+    MediaModule, // CS-1/CS-2 cover resolution (F-10 presigned upload)
     InvitationsModule, // CS-1 invite fan-out (MC-3)
     CallsModule, // CS-1 "Appel à projets" seed (MC-4)
+    NotificationsModule, // CS-2 stage→corrections notify (F-5)
   ],
-  controllers: [ProjectsController],
-  providers: [ProjectsService, PrismaService, RedisService, SlugService, SessionGuard],
+  controllers: [ProjectsController, PagesController],
+  providers: [ProjectsService, PagesService, PrismaService, RedisService, SlugService, SessionGuard],
   exports: [ProjectsService],
 })
 export class ProjectsModule {}

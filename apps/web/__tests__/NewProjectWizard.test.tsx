@@ -216,7 +216,7 @@ describe('NewProjectWizard (CS-1)', () => {
     await waitFor(() => expect(create).toBeEnabled());
   });
 
-  it('submits the mapped CreateProjectRequest and routes to /projets on success', async () => {
+  it('submits the mapped CreateProjectRequest and routes to the new workspace on success', async () => {
     const user = userEvent.setup();
     renderWizard();
     await user.click(screen.getByRole('button', { name: /Continuer/ }));
@@ -235,7 +235,7 @@ describe('NewProjectWizard (CS-1)', () => {
     // First selected = primary genre; the rest = themes.
     expect(body.genre).toBe(resolveGenreId('Seinen'));
     expect(body.themes).toEqual([resolveGenreId('Action')]);
-    expect(push).toHaveBeenCalledWith('/projets');
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche');
   });
 
   it('"Configurer plus tard" submits from step 2 with the current values', async () => {

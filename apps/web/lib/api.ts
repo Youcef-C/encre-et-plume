@@ -565,11 +565,57 @@ import type {
   RespondInvitationRequest,
   CreateProjectRequest,
   CreateProjectResponse,
+  ProjectWorkspaceResponse,
+  UpdateProjectInfoRequest,
+  UpdateProjectInfoResponse,
+  CreatePageRequest,
+  UpdatePageRequest,
+  UpdatePageStageRequest,
+  WorkspacePage,
+  PageStage,
+  PageVersionItem,
 } from '@encre-et-plume/shared';
 
 // CS-1 — "Nouveau projet" wizard (manga/histoire). The Illustration(s) type routes to publishIllustration.
 export const createProject = (body: CreateProjectRequest): Promise<CreateProjectResponse> =>
   request<CreateProjectResponse>('/projects', { method: 'POST', body: JSON.stringify(body) });
+
+// ─── CS-2 · project workspace "Espace projet" ────────────────────────────────
+export const getProjectWorkspace = (slug: string): Promise<ProjectWorkspaceResponse> =>
+  request<ProjectWorkspaceResponse>(`/projects/${encodeURIComponent(slug)}`);
+
+export const updateProjectInfo = (
+  slug: string,
+  body: UpdateProjectInfoRequest,
+): Promise<UpdateProjectInfoResponse> =>
+  request<UpdateProjectInfoResponse>(`/projects/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const createPage = (slug: string, body: CreatePageRequest): Promise<WorkspacePage> =>
+  request<WorkspacePage>(`/projects/${encodeURIComponent(slug)}/pages`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updatePage = (id: string, body: UpdatePageRequest): Promise<WorkspacePage> =>
+  request<WorkspacePage>(`/pages/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deletePage = (id: string): Promise<void> =>
+  request<void>(`/pages/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const updatePageStage = (id: string, stage: PageStage): Promise<WorkspacePage> =>
+  request<WorkspacePage>(`/pages/${encodeURIComponent(id)}/stage`, {
+    method: 'PATCH',
+    body: JSON.stringify({ stage } satisfies UpdatePageStageRequest),
+  });
+
+export const getPageVersions = (id: string): Promise<PageVersionItem[]> =>
+  request<PageVersionItem[]>(`/pages/${encodeURIComponent(id)}/versions`);
 
 // No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
 // The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.

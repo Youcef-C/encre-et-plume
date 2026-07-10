@@ -364,7 +364,10 @@ async function main() {
     await prisma.profile.upsert({ where: { accountId: collab }, update: { creatorRoles: ['dessinateur'] }, create: { accountId: collab, creatorRoles: ['dessinateur'] } });
 
     // Reset: invitations on/for these accounts, then this owner's projects (invitations FK-restrict).
+    // CS-2: Page rows (kanban cards, e.g. from cs2-espace-projet.spec.ts creating projects as this
+    // owner) FK-restrict Project deletion too — drop them first (PageVersion cascades via schema).
     await prisma.invitation.deleteMany({ where: { OR: [{ fromUserId: owner }, { toUserId: owner }, { fromUserId: collab }, { toUserId: collab }] } });
+    await prisma.page.deleteMany({ where: { project: { ownerId: owner } } });
     await prisma.project.deleteMany({ where: { ownerId: owner } });
 
     const PROJECTS = [

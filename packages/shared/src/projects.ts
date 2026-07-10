@@ -122,3 +122,114 @@ export interface CreateProjectResponse {
   workId: string;
   title: string;
 }
+
+// ── CS-2 · project workspace "Espace projet" ────────────────────────────────
+// The kanban's 6 production columns (script → validated art). Stage values are
+// constrained to exactly this set server-side.
+export const PAGE_STAGES = ['scenario', 'nemu', 'corrections', 'propre', 'encrage', 'valide'] as const;
+export type PageStage = (typeof PAGE_STAGES)[number];
+
+/** File-type tag chips on a board card. */
+export const PAGE_FILE_TAGS = ['scenario', 'ref', 'nemu', 'double'] as const;
+export type PageFileTag = (typeof PAGE_FILE_TAGS)[number];
+
+/** A kanban board card (CS-2 `Page`) — NOT the reader `Planche`. */
+export interface WorkspacePage {
+  id: string;
+  chapterId: string | null;
+  title: string;
+  stage: PageStage;
+  version: number;
+  fileTags: PageFileTag[];
+  linkedFileIds: string[];
+}
+
+export interface WorkspaceMember {
+  accountId: string;
+  displayName: string;
+  avatar: string | null;
+  role: string; // WorkCreator.role, e.g. "scenariste" | "dessinateur"
+}
+
+export interface WorkspaceChapter {
+  id: string;
+  number: number;
+  title: string | null;
+  status: string;
+  plancheCount: number;
+}
+
+export interface WorkspaceReview {
+  id: string;
+  authorName: string;
+  storyRating: number;
+  artRating: number;
+  text: string; // '' when hidden
+  hidden: boolean;
+  createdAt: string;
+}
+
+export interface WorkspaceReviewSummary {
+  overall: number;
+  story: number;
+  art: number;
+  count: number;
+}
+
+/** GET /projects/{slug} — the full workspace payload the FE binds to. */
+export interface ProjectWorkspaceResponse {
+  id: string;
+  slug: string;
+  workSlug: string;
+  title: string;
+  synopsis: string;
+  hashtags: string[];
+  collabOpen: boolean;
+  visibility: ProjectVisibility;
+  cover: string | null; // resolved URL; null → FE halftone placeholder
+  members: WorkspaceMember[];
+  chapters: WorkspaceChapter[];
+  pages: WorkspacePage[];
+  reviews: { summary: WorkspaceReviewSummary; items: WorkspaceReview[] };
+  viewer: { isMember: boolean; isOwner: boolean };
+}
+
+/** PATCH /projects/{slug} — debounced field-level auto-save sends deltas (all optional). */
+export interface UpdateProjectInfoRequest {
+  title?: string;
+  synopsis?: string;
+  hashtags?: string[];
+  collabOpen?: boolean;
+  cover?: { mediaId: string } | null; // F-10 media reference — never bytes; null clears the cover
+}
+
+export interface UpdateProjectInfoResponse {
+  title: string;
+  synopsis: string;
+  hashtags: string[];
+  collabOpen: boolean;
+  cover: string | null;
+}
+
+export interface CreatePageRequest {
+  chapterId?: string | null;
+  title?: string;
+  stage?: PageStage;
+}
+
+export interface UpdatePageRequest {
+  title?: string;
+  chapterId?: string | null;
+  fileTags?: PageFileTag[];
+  linkedFileIds?: string[];
+}
+
+export interface UpdatePageStageRequest {
+  stage: PageStage;
+}
+
+export interface PageVersionItem {
+  version: number;
+  note: string | null;
+  createdAt: string;
+}

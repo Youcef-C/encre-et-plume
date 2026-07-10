@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ProjectsService, toProjectSummary } from './projects.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CollectionsService } from '../collections/collections.service';
@@ -525,5 +525,175 @@ describe('ProjectsService.create', () => {
     invitations.create.mockRejectedValue(new Error('notif down'));
     const res = await service.create('acc-me', dto({ invites: ['acc-a'] }));
     expect(res.id).toBe('proj-1');
+  });
+});
+
+// ── CS-2: GET /projects/:slug workspace + PATCH info ──────────────────────────
+describe('ProjectsService workspace (CS-2)', () => {
+  let service: ProjectsService;
+  let prisma: any;
+  let media: { getForOwner: jest.Mock };
+
+  // Owner acc-me + workCreator acc-yuki; a linked Work with chapters, creators, reviews.
+  const WORKSPACE = (o: Record<string, unknown> = {}) => ({
+    id: 'proj-1',
+    ownerId: 'acc-me',
+    slug: 'lames-de-brume',
+    cover: null,
+    visibility: 'prive',
+    collabOpen: false,
+    workId: 'work-1',
+    work: {
+      id: 'work-1',
+      slug: 'lames-de-brume',
+      title: 'Lames de Brume',
+      synopsis: 'Un récit.',
+      hashtags: ['thriller'],
+      coverImage: null,
+      creators: [
+        { accountId: 'acc-me', role: 'scenariste', order: 0, account: { id: 'acc-me', displayName: 'Moi', avatar: null } },
+        { accountId: 'acc-yuki', role: 'dessinateur', order: 1, account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg' } },
+      ],
+      chapters: [
+        { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3 },
+        { id: 'ch-1', number: 1, title: null, status: 'draft', plancheCount: 0 },
+      ],
+      reviews: [
+        { id: 'r1', authorName: 'Lea', storyRating: 4, artRating: 5, text: 'super', hidden: false, createdAt: new Date('2024-03-02') },
+        { id: 'r2', authorName: 'Hugo', storyRating: 2, artRating: 3, text: 'secret', hidden: true, createdAt: new Date('2024-03-01') },
+      ],
+    },
+    pages: [
+      { id: 'page-1', chapterId: 'ch-0', title: 'Page 1', stage: 'scenario', version: 1, fileTags: ['scenario'], linkedFileIds: [] },
+    ],
+    ...o,
+  });
+
+  const build = (row: unknown = WORKSPACE()) => {
+    prisma = {
+      project: {
+        findUnique: jest.fn().mockResolvedValue(row),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      work: { update: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((ops: unknown) =>
+        Array.isArray(ops) ? Promise.all(ops as Promise<unknown>[]) : (ops as (tx: unknown) => Promise<unknown>)(prisma),
+      ),
+    };
+    media = { getForOwner: jest.fn() };
+    const stub = () => ({}) as never;
+    service = new ProjectsService(
+      prisma as unknown as PrismaService,
+      stub() as unknown as CollectionsService,
+      stub() as unknown as SlugService,
+      media as unknown as MediaService,
+      stub() as unknown as InvitationsService,
+      stub() as unknown as CallsService,
+    );
+  };
+
+  beforeEach(() => build());
+
+  // ── getWorkspace ───────────────────────────────────────────────────────────
+  describe('getWorkspace', () => {
+    it('returns the full payload for a member: ordered members/chapters, pages, review summary, hidden text blanked', async () => {
+      const res = await service.getWorkspace('acc-me', 'lames-de-brume');
+      expect(res.title).toBe('Lames de Brume');
+      expect(res.workSlug).toBe('lames-de-brume');
+      expect(res.members.map((m) => m.accountId)).toEqual(['acc-me', 'acc-yuki']);
+      expect(res.chapters.map((c) => c.number)).toEqual([0, 1]);
+      expect(res.pages).toHaveLength(1);
+      // summary over all reviews: story (4+2)/2=3, art (5+3)/2=4, overall ((4.5)+(2.5))/2=3.5, count 2
+      expect(res.reviews.summary).toEqual({ overall: 3.5, story: 3, art: 4, count: 2 });
+      const hidden = res.reviews.items.find((r) => r.hidden)!;
+      expect(hidden.text).toBe('');
+      expect(res.viewer).toEqual({ isMember: true, isOwner: true });
+    });
+
+    it('a non-owner member sees isMember:true, isOwner:false', async () => {
+      const res = await service.getWorkspace('acc-yuki', 'lames-de-brume');
+      expect(res.viewer).toEqual({ isMember: true, isOwner: false });
+    });
+
+    it('a non-member on a PUBLIC project gets a read-only payload (isMember:false)', async () => {
+      build(WORKSPACE({ visibility: 'public' }));
+      const res = await service.getWorkspace('stranger', 'lames-de-brume');
+      expect(res.viewer).toEqual({ isMember: false, isOwner: false });
+    });
+
+    it('a non-member on a PRIVE project gets 404 (no existence leak)', async () => {
+      await expect(service.getWorkspace('stranger', 'lames-de-brume')).rejects.toThrow(NotFoundException);
+    });
+
+    it('a non-member on an INVITATION project gets 404', async () => {
+      build(WORKSPACE({ visibility: 'invitation' }));
+      await expect(service.getWorkspace('stranger', 'lames-de-brume')).rejects.toThrow(NotFoundException);
+    });
+
+    it('unknown slug → 404', async () => {
+      build(null);
+      await expect(service.getWorkspace('acc-me', 'nope')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── updateInfo ─────────────────────────────────────────────────────────────
+  describe('updateInfo', () => {
+    it('writes title to BOTH Project and Work', async () => {
+      const res = await service.updateInfo('acc-me', 'lames-de-brume', { title: '  Nouveau titre  ' });
+      expect(prisma.work.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: 'Nouveau titre' }) }));
+      expect(prisma.project.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: 'Nouveau titre' }) }));
+      expect(res.title).toBe('Nouveau titre');
+    });
+
+    it('rejects an empty title (400 "Un titre est requis")', async () => {
+      await expect(service.updateInfo('acc-me', 'lames-de-brume', { title: '   ' })).rejects.toThrow('Un titre est requis');
+    });
+
+    it('writes synopsis to Work', async () => {
+      await service.updateInfo('acc-me', 'lames-de-brume', { synopsis: 'Nouvelle intrigue.' });
+      expect(prisma.work.update).toHaveBeenCalledWith(expect.objectContaining({ data: { synopsis: 'Nouvelle intrigue.' } }));
+    });
+
+    it('normalizes hashtags → Work.hashtags', async () => {
+      const res = await service.updateInfo('acc-me', 'lames-de-brume', { hashtags: ['#Noir', 'noir', 'Thriller'] });
+      expect(prisma.work.update).toHaveBeenCalledWith(expect.objectContaining({ data: { hashtags: ['noir', 'thriller'] } }));
+      expect(res.hashtags).toEqual(['noir', 'thriller']);
+    });
+
+    it('writes collabOpen → Project.collabOpen', async () => {
+      const res = await service.updateInfo('acc-me', 'lames-de-brume', { collabOpen: true });
+      expect(prisma.project.update).toHaveBeenCalledWith(expect.objectContaining({ data: { collabOpen: true } }));
+      expect(res.collabOpen).toBe(true);
+    });
+
+    it('validates a cover media (kind/ready/owner) and writes the URL to Work.coverImage AND Project.cover', async () => {
+      media.getForOwner.mockResolvedValue({ kind: 'cover', status: 'ready', variants: { web: 'https://cdn/c.webp' } });
+      const res = await service.updateInfo('acc-me', 'lames-de-brume', { cover: { mediaId: 'm1' } });
+      expect(media.getForOwner).toHaveBeenCalledWith('acc-me', 'm1');
+      expect(prisma.work.update).toHaveBeenCalledWith(expect.objectContaining({ data: { coverImage: 'https://cdn/c.webp' } }));
+      expect(prisma.project.update).toHaveBeenCalledWith(expect.objectContaining({ data: { cover: 'https://cdn/c.webp' } }));
+      expect(res.cover).toBe('https://cdn/c.webp');
+    });
+
+    it('rejects a cover media of the wrong kind (400)', async () => {
+      media.getForOwner.mockResolvedValue({ kind: 'illustration', status: 'ready', variants: { web: 'x' } });
+      await expect(service.updateInfo('acc-me', 'lames-de-brume', { cover: { mediaId: 'm1' } })).rejects.toThrow(BadRequestException);
+    });
+
+    it('cover:null clears both Work.coverImage and Project.cover', async () => {
+      const res = await service.updateInfo('acc-me', 'lames-de-brume', { cover: null });
+      expect(prisma.work.update).toHaveBeenCalledWith(expect.objectContaining({ data: { coverImage: null } }));
+      expect(prisma.project.update).toHaveBeenCalledWith(expect.objectContaining({ data: { cover: null } }));
+      expect(res.cover).toBeNull();
+    });
+
+    it('403 for a non-member on a public project', async () => {
+      build(WORKSPACE({ visibility: 'public' }));
+      await expect(service.updateInfo('stranger', 'lames-de-brume', { title: 'x' })).rejects.toThrow(ForbiddenException);
+    });
+
+    it('404 for a non-member on a non-public project (no leak)', async () => {
+      await expect(service.updateInfo('stranger', 'lames-de-brume', { title: 'x' })).rejects.toThrow(NotFoundException);
+    });
   });
 });

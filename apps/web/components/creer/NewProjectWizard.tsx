@@ -329,8 +329,8 @@ export default function NewProjectWizard() {
     setServerError(null);
     setPending(true);
     try {
-      await createProject(buildBody(includeSoutien));
-      router.push('/projets');
+      const created = await createProject(buildBody(includeSoutien));
+      router.push(`/projet/${created.slug}`);
     } catch (err) {
       setServerError((err as ApiError).message ?? 'Une erreur est survenue. Réessayez.');
       setPending(false);
