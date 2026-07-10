@@ -90,6 +90,20 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
         <span style={{ fontSize: 13, color: 'var(--ink2)' }}>
           appliquées à la page publique &amp; au catalogue
         </span>
+        {/* Transient auto-save readout — kept separate from the static banner below. */}
+        <span
+          aria-live="polite"
+          style={{
+            marginLeft: 'auto',
+            fontSize: 12,
+            fontWeight: 500,
+            color: saveState === 'error' ? 'var(--accent)' : 'var(--ink2)',
+          }}
+        >
+          {saveState === 'saving' && 'Enregistrement…'}
+          {saveState === 'saved' && 'Enregistré ✓'}
+          {saveState === 'error' && "L'enregistrement a échoué. Réessayez."}
+        </span>
       </div>
 
       <div style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -251,9 +265,8 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
           )}
         </div>
 
-        {/* Auto-save indicator (proto's green ✓ banner doubles as the state readout). */}
+        {/* Static info banner (proto line 1312) — does not change with save state. */}
         <div
-          aria-live="polite"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -264,13 +277,9 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
             background: 'var(--paper)',
           }}
         >
-          {saveState !== 'error' && <span style={{ fontSize: 16, color: '#1f8a5b' }}>✓</span>}
-          <div style={{ fontSize: 13, color: saveState === 'error' ? 'var(--accent)' : 'var(--ink2)' }}>
-            {saveState === 'saving' && 'Enregistrement…'}
-            {saveState === 'saved' && 'Enregistré ✓'}
-            {saveState === 'error' && "L'enregistrement a échoué. Réessayez."}
-            {saveState === 'idle' &&
-              "Les modifications sont enregistrées et appliquées automatiquement à la page de l'œuvre."}
+          <span style={{ fontSize: 16, color: '#1f8a5b' }}>✓</span>
+          <div style={{ fontSize: 13, color: 'var(--ink2)' }}>
+            Les modifications sont enregistrées et appliquées automatiquement à la page de l&apos;œuvre.
           </div>
         </div>
 
