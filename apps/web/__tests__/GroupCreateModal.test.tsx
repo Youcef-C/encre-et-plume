@@ -34,6 +34,7 @@ const createdConv: ConversationItem = {
   lastMessageAt: '2026-07-08T10:00:00.000Z',
   status: 'open',
   requestedBy: null,
+  createdBy: 'me-1',
 };
 
 beforeEach(() => {

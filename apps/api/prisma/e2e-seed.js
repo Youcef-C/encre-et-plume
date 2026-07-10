@@ -48,6 +48,12 @@ const SPECS = [
   // the "Voir tout" -> /galerie?artist= facet) and a stranger account for the non-owner/404 gating test.
   { key: 'CS13_OWNER',    email: 'qa_e2e_cs13_owner@test.com',    slug: 'e2e-cs13-owner' },    // dessinateur (owner)
   { key: 'CS13_STRANGER', email: 'qa_e2e_cs13_stranger@test.com', slug: 'e2e-cs13-stranger' }, // signed-in non-owner
+  // MC-12 dedicated group-management fixtures — no other spec file references these, so this
+  // suite's absolute member-count/createdBy-transfer assertions can't be disturbed by a sibling.
+  { key: 'MC12_A', email: 'qa_e2e_mc12_a@test.com', slug: 'e2e-mc12-a' }, // group creator
+  { key: 'MC12_B', email: 'qa_e2e_mc12_b@test.com', slug: 'e2e-mc12-b' }, // earliest-joined member (ownership transfer target)
+  { key: 'MC12_C', email: 'qa_e2e_mc12_c@test.com', slug: 'e2e-mc12-c' }, // kicked member
+  { key: 'MC12_D', email: 'qa_e2e_mc12_d@test.com', slug: 'e2e-mc12-d' }, // added-later member
 ];
 
 async function main() {
@@ -417,6 +423,52 @@ async function main() {
       };
       await prisma.illustration.upsert({ where: { id }, create: data, update: data });
     }
+  }
+
+  // ── MC-12: dedicated group-management fixtures for MC12_A (creator) ⇄ B/C/D ───────────────
+  // Reset first (hermetic across re-runs): wipe any conversation/connection/project any of these 4
+  // accounts touch, then re-establish accepted connections A⇄B, A⇄C, A⇄D (so "＋ Groupe"/"Ajouter"
+  // contact pickers list them) and one PROJECT-LINKED group conversation (simulating the CS-8 project
+  // chat shape directly, since CS-8 itself isn't implemented yet) for the standalone-only 409 e2e check.
+  {
+    const a = accounts.MC12_A.id;
+    const b = accounts.MC12_B.id;
+    const c = accounts.MC12_C.id;
+    const d = accounts.MC12_D.id;
+    const ids = [a, b, c, d];
+
+    const mc12Parts = await prisma.conversationParticipant.findMany({
+      where: { accountId: { in: ids } },
+      select: { conversationId: true },
+    });
+    const mc12ConvIds = [...new Set(mc12Parts.map((p) => p.conversationId))];
+    if (mc12ConvIds.length > 0) {
+      await prisma.conversation.deleteMany({ where: { id: { in: mc12ConvIds } } });
+    }
+    await prisma.connection.deleteMany({
+      where: { OR: [{ requesterId: { in: ids } }, { addresseeId: { in: ids } }] },
+    });
+    await prisma.project.deleteMany({ where: { ownerId: a, title: 'MC12 Projet fixture' } });
+
+    for (const other of [b, c, d]) {
+      await prisma.connection.create({
+        data: { requesterId: a, addresseeId: other, status: 'accepted', respondedAt: new Date() },
+      });
+    }
+
+    const mc12Project = await prisma.project.create({
+      data: { ownerId: a, title: 'MC12 Projet fixture', kind: 'Manga' },
+    });
+    const mc12ProjectGroup = await prisma.conversation.create({
+      data: {
+        type: 'group',
+        name: 'MC12 Projet fixture · Discussion',
+        projectId: mc12Project.id,
+        createdBy: a,
+        participants: { create: [{ accountId: a }, { accountId: b }] },
+      },
+    });
+    accounts.MC12_PROJECT_GROUP = { email: '', id: mc12ProjectGroup.id };
   }
 
   await prisma.$disconnect();

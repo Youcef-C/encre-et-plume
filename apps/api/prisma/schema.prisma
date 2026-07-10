@@ -38,6 +38,7 @@ enum NotifType {
   application_rejected // MC-7: owner rejected an applicant
   connection_request // MC-8: someone sent a connection request
   connection_accepted // MC-8: the recipient accepted the connection request
+  group_removed // MC-12: the group creator removed you from a group
 }
 
 // ── DR-1 Work/Chapter/Announcement enums ───────────────────────────────────────
@@ -363,6 +364,7 @@ model Conversation {
   dmKey         String?                   @unique // dm only: "minId:maxId" — DB backstop, one DM per pair
   status        String                    @default("open") // 'open' | 'requested' | 'declined' — DM request lifecycle; groups/salon always 'open'
   requestedBy   String? // accountId of the requester while status != 'open'
+  createdBy     String? // MC-12: group owner accountId; null for dm/salon (every group has one)
   createdAt     DateTime                  @default(now())
   lastMessageAt DateTime                  @default(now()) // list ordering key (bumped on each send)
   participants  ConversationParticipant[]

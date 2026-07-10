@@ -13,7 +13,8 @@ export type NotifType =
   | 'application_accepted' // MC-7: the call owner accepted the applicant's candidature
   | 'application_rejected' // MC-7: the call owner did not retain the applicant's candidature
   | 'connection_request' // MC-8: someone sent a connection request ("souhaite se connecter")
-  | 'connection_accepted'; // MC-8: the recipient accepted the connection request
+  | 'connection_accepted' // MC-8: the recipient accepted the connection request
+  | 'group_removed'; // MC-12: the group creator removed you from a group
 
 export type NotifArea = 'messages' | 'demandes' | 'signalements' | 'autres';
 

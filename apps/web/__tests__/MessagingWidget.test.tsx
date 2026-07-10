@@ -78,6 +78,7 @@ const groupConv: ConversationItem = {
   lastMessageAt: '2026-07-08T10:00:00.000Z',
   status: 'open',
   requestedBy: null,
+  createdBy: 'me-1',
 };
 
 const dmConv: ConversationItem = {
@@ -94,6 +95,7 @@ const dmConv: ConversationItem = {
   lastMessageAt: '2026-07-08T09:00:00.000Z',
   status: 'open',
   requestedBy: null,
+  createdBy: null,
 };
 
 // MC-9 delta: an incoming DM request (I am the recipient — requestedBy is the other party).
@@ -111,6 +113,7 @@ const incomingRequest: ConversationItem = {
   lastMessageAt: '2026-07-09T09:00:00.000Z',
   status: 'requested',
   requestedBy: 'u-noa',
+  createdBy: null,
 };
 
 // MC-9 delta: an outgoing request I sent (in the main list, shows "Demande envoyée").
@@ -128,6 +131,7 @@ const outgoingRequest: ConversationItem = {
   lastMessageAt: '2026-07-09T08:00:00.000Z',
   status: 'requested',
   requestedBy: 'me-1',
+  createdBy: null,
 };
 
 const emptyPage: MessagesPage = { items: [], nextCursor: null };

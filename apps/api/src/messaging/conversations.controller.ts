@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   ConversationItem,
   ConversationsResponse,
@@ -12,6 +12,7 @@ import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { RespondRequestDto } from './dto/respond-request.dto';
+import { AddParticipantDto } from './dto/add-participant.dto';
 
 function parseLimit(raw: unknown): number | undefined {
   const n = Number(raw);
@@ -78,5 +79,28 @@ export class ConversationsController {
   @Post(':id/read')
   read(@Req() req: AuthRequest, @Param('id') id: string): Promise<MarkReadResponse> {
     return this.service.markRead(req.accountId, id);
+  }
+
+  // MC-12: group management. Creator-only add/kick + open-to-all leave are enforced server-side in the
+  // service (createdBy + membership resolved from the DB, never a client claim).
+  @Post(':id/participants')
+  addParticipant(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: AddParticipantDto,
+  ): Promise<ConversationItem> {
+    return this.service.addParticipant(req.accountId, id, dto);
+  }
+
+  // One route: the literal 'me' path is a leave (any member), any other id is a kick (creator only).
+  // Default 200: kick returns the updated ConversationItem, leave returns an empty body (void).
+  @Delete(':id/participants/:accountId')
+  async removeParticipant(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('accountId') targetId: string,
+  ): Promise<ConversationItem | void> {
+    if (targetId === 'me') return this.service.leaveConversation(req.accountId, id);
+    return this.service.removeParticipant(req.accountId, id, targetId);
   }
 }

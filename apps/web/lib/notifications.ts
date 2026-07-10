@@ -20,6 +20,8 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   connection_accepted: (n) => `${n} a accepté votre demande de connexion`,
   // F-14: system notification (e.g. export ready)
   system:           ()  => 'Notification système',
+  // MC-12: the group creator removed you from a group
+  group_removed:    (n) => `${n} vous a retiré·e d'un groupe`,
 };
 
 // Icon component per notification type (SVG icon set — no emojis in the UI)
@@ -38,6 +40,8 @@ export const NOTIF_ICON: Record<NotifType, ComponentType<{ size?: number; style?
   connection_request:  UserIcon,
   connection_accepted: CheckIcon,
   system:           CircleDotIcon,
+  // MC-12: kicked from a group
+  group_removed:    UserIcon,
 };
 
 // ponytail: closest existing route per type until target surfaces are built (MC-7, MC-9, etc.)
@@ -58,6 +62,9 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   connection_accepted: '/contacts',
   // F-14: system (export ready) → parametres for download link
   system:           '/parametres',
+  // ponytail: MC-12 — the group no longer exists for the removed user, so there's no target
+  // surface; route home. Change when a "left groups" archive surface exists.
+  group_removed:    '/',
 };
 
 export function notificationHref(type: NotifType, _refId: string | null): string {

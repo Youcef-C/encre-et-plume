@@ -689,6 +689,22 @@ export const createConversation = (body: CreateConversationRequest): Promise<Con
 export const markConversationRead = (conversationId: string): Promise<MarkReadResponse> =>
   request<MarkReadResponse>(`/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'POST' });
 
+// ─── MC-12 group management (standalone groups) ─────────────────────────────────
+export const addGroupParticipant = (conversationId: string, accountId: string): Promise<ConversationItem> =>
+  request<ConversationItem>(`/conversations/${encodeURIComponent(conversationId)}/participants`, {
+    method: 'POST',
+    body: JSON.stringify({ accountId }),
+  });
+
+export const removeGroupParticipant = (conversationId: string, accountId: string): Promise<ConversationItem> =>
+  request<ConversationItem>(
+    `/conversations/${encodeURIComponent(conversationId)}/participants/${encodeURIComponent(accountId)}`,
+    { method: 'DELETE' },
+  );
+
+export const leaveGroup = (conversationId: string): Promise<void> =>
+  request<void>(`/conversations/${encodeURIComponent(conversationId)}/participants/me`, { method: 'DELETE' });
+
 // ─── Salon "Le Comptoir" (MC-11) ────────────────────────────────────────────────
 import type {
   SalonSummary,

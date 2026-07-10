@@ -11,7 +11,16 @@ import {
 import type { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { WS_EVENTS } from '@encre-et-plume/shared';
-import type { WsMessageNew, WsConversationRead, WsConversationUpdated, WsTypingClient, WsSalonMessage } from '@encre-et-plume/shared';
+import type {
+  WsMessageNew,
+  WsConversationRead,
+  WsConversationUpdated,
+  WsTypingClient,
+  WsSalonMessage,
+  WsParticipantAdded,
+  WsParticipantRemoved,
+  WsConversationDeleted,
+} from '@encre-et-plume/shared';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionStore } from '../security/session-store.service';
@@ -194,6 +203,24 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
   emitConversationUpdated(recipientIds: string[], payload: WsConversationUpdated): void {
     if (recipientIds.length === 0) return;
     this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.conversationUpdated, payload);
+  }
+
+  /** MC-12: a member was added to a group → every participant (incl. the new one) refetches. */
+  emitParticipantAdded(recipientIds: string[], payload: WsParticipantAdded): void {
+    if (recipientIds.length === 0) return;
+    this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.participantAdded, payload);
+  }
+
+  /** MC-12: a member was removed/left a group → every (former) participant refetches; createdBy reflects any owner transfer. */
+  emitParticipantRemoved(recipientIds: string[], payload: WsParticipantRemoved): void {
+    if (recipientIds.length === 0) return;
+    this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.participantRemoved, payload);
+  }
+
+  /** MC-12: the last member left → the group is gone; every former participant drops it. */
+  emitConversationDeleted(recipientIds: string[], payload: WsConversationDeleted): void {
+    if (recipientIds.length === 0) return;
+    this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.conversationDeleted, payload);
   }
 
   /**

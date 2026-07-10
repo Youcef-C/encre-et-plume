@@ -30,6 +30,12 @@ export interface ConversationItem {
   lastMessageAt: string; // ISO — list ordering key
   status: ConversationStatus; // groups/salon always 'open'; DM requests may be 'requested'
   requestedBy: string | null; // accountId of the requester while status === 'requested', else null
+  createdBy: string | null; // MC-12: group owner accountId; null for dm/salon
+}
+
+/** MC-12: POST /conversations/:id/participants body. */
+export interface AddParticipantRequest {
+  accountId: string;
 }
 
 export interface ConversationsResponse {
@@ -92,9 +98,27 @@ export const WS_EVENTS = {
   salonPresence: 'salon:presence',
   // MC-9 delta: a DM request was accepted/declined → both participants refetch their lists.
   conversationUpdated: 'conversation:updated',
+  // MC-12: group membership changes fan out to every (former) participant's user room.
+  participantAdded: 'participant:added',
+  participantRemoved: 'participant:removed',
+  conversationDeleted: 'conversation:deleted',
 } as const;
 
 export interface WsConversationUpdated {
+  conversationId: string;
+}
+
+// MC-12 group-management realtime payloads.
+export interface WsParticipantAdded {
+  conversationId: string;
+  participant: ConversationParticipantDto;
+}
+export interface WsParticipantRemoved {
+  conversationId: string;
+  userId: string; // the removed/leaving member
+  createdBy: string | null; // post-change owner (reflects an owner-leave transfer)
+}
+export interface WsConversationDeleted {
   conversationId: string;
 }
 

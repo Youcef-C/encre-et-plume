@@ -6,6 +6,7 @@
 // line, "Lu"), and the composer. Deviations D1 (minimize ▁), D2 (search field), D5 (MailIcon vs ✉)
 // per plan. On-brand: SVG icons, tokens, no emojis. State + realtime live in lib/messaging.tsx.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { ConversationItem, ConversationParticipantDto } from '@encre-et-plume/shared';
 import {
   UPLOAD_ALLOWED_CONTENT_TYPES,
@@ -16,8 +17,9 @@ import {
 import { useSession } from '../../lib/session';
 import { useMessaging, type ThreadMessage } from '../../lib/messaging';
 import { getMediaSignedUrl, getPresence, requestUpload, finalizeMedia, getMedia, getMyBlocks, deleteBlock } from '../../lib/api';
-import { MailIcon, XIcon, ChevronLeftIcon, PlusIcon } from '../icons';
+import { MailIcon, XIcon, ChevronLeftIcon, PlusIcon, GearIcon } from '../icons';
 import GroupCreateModal from './GroupCreateModal';
+import GroupMembersPanel from './GroupMembersPanel';
 import OverflowMenu, { MenuItem } from '../OverflowMenu';
 import BlockConfirmModal from '../blocks/BlockConfirmModal';
 
@@ -229,8 +231,18 @@ function ChatThread({
   const others = otherParticipants(conv, myId);
   const [presenceOnline, setPresenceOnline] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
+  // MC-12: the "Gérer le groupe" members sub-view (standalone groups only).
+  const [showMembers, setShowMembers] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dmOther = conv.type === 'dm' ? others[0] ?? null : null;
+  // MC-12: management (add/kick/leave) applies to STANDALONE groups only (projectId === null);
+  // project-linked groups are managed via their project surface (out of scope).
+  const isStandaloneGroup = conv.type === 'group' && conv.projectId === null;
+
+  // Reset the sub-view when switching conversations (ChatThread is reused, not remounted).
+  useEffect(() => {
+    setShowMembers(false);
+  }, [conv.id]);
   // MC-10 round 2 (F10) — reflect an existing block in the header (kind='block').
   const isBlocked = dmOther ? blockedIds.has(dmOther.userId) : false;
 
@@ -276,6 +288,11 @@ function ChatThread({
         ? 'en ligne'
         : 'hors ligne';
 
+  // MC-12: the members sub-view swaps the thread body inside the same frame (list→thread pattern).
+  if (showMembers && isStandaloneGroup) {
+    return <GroupMembersPanel conv={conv} myId={myId} onBack={() => setShowMembers(false)} />;
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'min(460px, 60dvh)' }}>
       {/* Thread header */}
@@ -288,13 +305,43 @@ function ChatThread({
         >
           <ChevronLeftIcon size={20} />
         </button>
-        {conv.type === 'group' ? <GroupChip size={32} /> : <span aria-hidden="true" style={{ ...singleDisc(others[0]?.avatarUrl ?? null), width: 32, height: 32 }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <b style={{ fontSize: 13, color: 'var(--ink)' }}>{conv.name}</b>
-          <div style={{ fontSize: 11, color: conv.type === 'dm' && presenceOnline ? '#1f8a5b' : 'var(--ink2)', fontWeight: conv.type === 'dm' && presenceOnline ? 700 : 400 }}>
-            {subtitle}
-          </div>
-        </div>
+        {/* MC-12: a DM header links avatar + name to the other party's public profile. */}
+        {dmOther ? (
+          <Link
+            href={`/${dmOther.slug}`}
+            aria-label={`Voir le profil de ${conv.name}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
+          >
+            <span aria-hidden="true" style={{ ...singleDisc(dmOther.avatarUrl), width: 32, height: 32 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b style={{ display: 'block', fontSize: 13, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.name}</b>
+              <span style={{ display: 'block', fontSize: 11, color: presenceOnline ? '#1f8a5b' : 'var(--ink2)', fontWeight: presenceOnline ? 700 : 400 }}>
+                {subtitle}
+              </span>
+            </span>
+          </Link>
+        ) : (
+          <>
+            {conv.type === 'group' ? <GroupChip size={32} /> : <span aria-hidden="true" style={{ ...singleDisc(others[0]?.avatarUrl ?? null), width: 32, height: 32 }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b style={{ fontSize: 13, color: 'var(--ink)' }}>{conv.name}</b>
+              <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{subtitle}</div>
+            </div>
+          </>
+        )}
+        {/* MC-12: standalone-group management affordance (project-linked groups excluded). Compact
+           black icon button (settings) instead of a wide text button. */}
+        {isStandaloneGroup && (
+          <button
+            type="button"
+            onClick={() => setShowMembers(true)}
+            aria-label="Gérer le groupe"
+            title="Gérer le groupe"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, minHeight: 44, border: '2px solid var(--ink)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--ink)', color: '#fff', flex: 'none' }}
+          >
+            <GearIcon size={18} />
+          </button>
+        )}
         {/* MC-10 — block / unblock the other party (DM only). */}
         {dmOther && (
           <OverflowMenu

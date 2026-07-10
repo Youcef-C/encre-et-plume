@@ -17,11 +17,14 @@ import { io, type Socket } from 'socket.io-client';
 import {
   WS_EVENTS,
   type ConversationItem,
+  type ConversationParticipantDto,
   type ConversationRequestAction,
   type MessageDto,
   type WsMessageNew,
   type WsConversationRead,
   type WsConversationUpdated,
+  type WsParticipantRemoved,
+  type WsConversationDeleted,
   type WsTypingServer,
 } from '@encre-et-plume/shared';
 import * as api from './api';
@@ -75,6 +78,10 @@ interface MessagingCtx {
   retryMessage: (message: ThreadMessage) => void;
   emitTyping: (conversationId: string, isTyping: boolean) => void;
   addConversation: (conversation: ConversationItem) => void;
+  // MC-12: group management (standalone groups) — optimistic with rollback on error (rethrows).
+  addParticipant: (conversationId: string, participant: ConversationParticipantDto) => Promise<void>;
+  removeParticipant: (conversationId: string, accountId: string) => Promise<void>;
+  leaveGroup: (conversationId: string) => Promise<void>;
 }
 
 const noop = () => {};
@@ -108,6 +115,9 @@ export const MessagingContext = createContext<MessagingCtx>({
   retryMessage: noop,
   emitTyping: noop,
   addConversation: noop,
+  addParticipant: async () => {},
+  removeParticipant: async () => {},
+  leaveGroup: async () => {},
 });
 
 export const useMessaging = () => useContext(MessagingContext);
@@ -159,8 +169,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   // Latest values for use inside stable socket handlers without re-subscribing.
   const activeIdRef = useRef<string | null>(null);
   const panelStateRef = useRef<PanelState>('closed');
+  const conversationsRef = useRef<ConversationItem[]>([]);
   activeIdRef.current = activeConversationId;
   panelStateRef.current = panelState;
+  conversationsRef.current = conversations;
 
   // Per-(conversation:user) typing expiry timers.
   const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -301,6 +313,32 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       reloadConversations();
     });
 
+    // MC-12: a member was added to a group I'm in → refetch so the member list + createdBy refresh.
+    socket.on(WS_EVENTS.participantAdded, () => {
+      reloadConversations();
+    });
+
+    // MC-12: a member was removed (kicked) or left. If it was me being removed from the open thread,
+    // close it; the createdBy on the payload lets creator controls flip live after an owner transfer.
+    socket.on(WS_EVENTS.participantRemoved, (payload: WsParticipantRemoved) => {
+      if (payload.userId === myId && activeIdRef.current === payload.conversationId) {
+        setActiveConversationId(null);
+        setActiveMessages([]);
+        setMessagesState('idle');
+      }
+      reloadConversations();
+    });
+
+    // MC-12: the last member left → the group is gone. Drop it locally + close the thread if active.
+    socket.on(WS_EVENTS.conversationDeleted, (payload: WsConversationDeleted) => {
+      if (activeIdRef.current === payload.conversationId) {
+        setActiveConversationId(null);
+        setActiveMessages([]);
+        setMessagesState('idle');
+      }
+      setConversations((prev) => prev.filter((c) => c.id !== payload.conversationId));
+    });
+
     const timers = typingTimers.current;
     return () => {
       Object.values(timers).forEach(clearTimeout);
@@ -366,6 +404,82 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev],
     );
   }, []);
+
+  // MC-12: creator adds a member. Optimistic insert (the panel supplies the participant DTO from the
+  // contacts list), reconcile with the server's authoritative item, roll back that conv on failure.
+  const addParticipant = useCallback(
+    async (conversationId: string, participant: ConversationParticipantDto) => {
+      const prev = conversationsRef.current.find((c) => c.id === conversationId);
+      setConversations((cur) =>
+        cur.map((c) =>
+          c.id === conversationId && !c.participants.some((p) => p.userId === participant.userId)
+            ? { ...c, participants: [...c.participants, participant] }
+            : c,
+        ),
+      );
+      try {
+        const updated = await api.addGroupParticipant(conversationId, participant.userId);
+        setConversations((cur) => cur.map((c) => (c.id === conversationId ? updated : c)));
+      } catch (e) {
+        if (prev) {
+          setConversations((cur) => cur.map((c) => (c.id === conversationId ? prev : c)));
+        }
+        throw e;
+      }
+    },
+    [],
+  );
+
+  // MC-12: creator kicks a member. Optimistic removal of the row, rollback on failure.
+  const removeParticipant = useCallback(
+    async (conversationId: string, accountId: string) => {
+      const prev = conversationsRef.current.find((c) => c.id === conversationId);
+      setConversations((cur) =>
+        cur.map((c) =>
+          c.id === conversationId
+            ? { ...c, participants: c.participants.filter((p) => p.userId !== accountId) }
+            : c,
+        ),
+      );
+      try {
+        const updated = await api.removeGroupParticipant(conversationId, accountId);
+        setConversations((cur) => cur.map((c) => (c.id === conversationId ? updated : c)));
+      } catch (e) {
+        if (prev) {
+          setConversations((cur) => cur.map((c) => (c.id === conversationId ? prev : c)));
+        }
+        throw e;
+      }
+    },
+    [],
+  );
+
+  // MC-12: any member leaves. Optimistically drop the conversation + close the thread; restore on error.
+  const leaveGroup = useCallback(
+    async (conversationId: string) => {
+      const idx = conversationsRef.current.findIndex((c) => c.id === conversationId);
+      const prev = idx >= 0 ? conversationsRef.current[idx] : null;
+      setConversations((cur) => cur.filter((c) => c.id !== conversationId));
+      if (activeIdRef.current === conversationId) {
+        setActiveConversationId(null);
+        setActiveMessages([]);
+        setMessagesState('idle');
+      }
+      try {
+        await api.leaveGroup(conversationId);
+      } catch (e) {
+        if (prev) {
+          setConversations((cur) =>
+            cur.some((c) => c.id === conversationId)
+              ? cur
+              : [...cur.slice(0, idx), prev, ...cur.slice(idx)],
+          );
+        }
+        throw e;
+      }
+    },
+    [],
+  );
 
   const openDm = useCallback(
     async (userId: string) => {
@@ -521,6 +635,9 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         retryMessage,
         emitTyping,
         addConversation,
+        addParticipant,
+        removeParticipant,
+        leaveGroup,
       }}
     >
       {children}

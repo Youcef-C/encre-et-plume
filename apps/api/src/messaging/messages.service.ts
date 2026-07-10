@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  AddParticipantRequest,
   ConversationItem,
   ConversationRequestAction,
   ConversationsResponse,
@@ -71,6 +74,7 @@ interface ConvRow {
   projectId: string | null;
   status: 'open' | 'requested' | 'declined';
   requestedBy: string | null;
+  createdBy: string | null; // MC-12: group owner; null for dm/salon
   lastMessageAt: Date;
   participants: PartRow[];
   messages: MsgRow[];
@@ -455,6 +459,149 @@ export class MessagesService {
     return this.toItem(updated, accountId, 0);
   }
 
+  // ── MC-12: group management (add / kick / leave) ────────────────────────────
+
+  /**
+   * loadForMember (existing 404 no-leak) + group-only gate + standalone-only gate. dm/salon → 400.
+   * MC-12 manages STANDALONE groups only; a project-linked group (projectId != null) has its membership
+   * governed by CS-8/MC-3/CS-10 → 409.
+   */
+  private async loadGroupForMember(conversationId: string, accountId: string): Promise<ConvRow> {
+    const conv = await this.loadForMember(conversationId, accountId); // 404: unknown OR non-member
+    if (conv.type !== 'group') throw new BadRequestException('Réservé aux conversations de groupe.');
+    if (conv.projectId !== null) throw new ConflictException('Ce groupe est géré par son projet.');
+    return conv;
+  }
+
+  /**
+   * POST /conversations/:id/participants — creator adds a member. Creator resolved from the DB row
+   * (never a client claim); non-creator → 403. Idempotent: an already-member target is a no-op.
+   */
+  async addParticipant(
+    accountId: string,
+    conversationId: string,
+    dto: AddParticipantRequest,
+  ): Promise<ConversationItem> {
+    const conv = await this.loadGroupForMember(conversationId, accountId);
+    if (conv.createdBy !== accountId) {
+      throw new ForbiddenException('Seul·e le·la créateur·rice du groupe peut ajouter des membres.');
+    }
+    const target = await this.prisma.account.findFirst({
+      where: { id: dto.accountId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException('Ce membre est introuvable.');
+
+    // Idempotent: already a member → no-op, return the current item (no create, no emit).
+    if (conv.participants.some((p) => p.accountId === dto.accountId)) {
+      return this.toItem(conv, accountId, 0);
+    }
+
+    await this.prisma.conversationParticipant.create({
+      data: { conversationId, accountId: dto.accountId },
+    });
+    const reloaded = await this.loadForMember(conversationId, accountId);
+    const added = reloaded.participants.find((p) => p.accountId === dto.accountId);
+    const allIds = reloaded.participants.map((p) => p.accountId);
+    if (added) {
+      this.gateway.emitParticipantAdded(allIds, {
+        conversationId,
+        participant: {
+          userId: added.account.id,
+          slug: added.account.profileSlug,
+          name: added.account.displayName,
+          avatarUrl: added.account.avatar,
+        },
+      });
+    }
+    return this.toItem(reloaded, accountId, 0);
+  }
+
+  /**
+   * DELETE /conversations/:id/participants/:accountId — creator kicks another member. Cannot target
+   * the owner (they use leave). Emits participant:removed + a persistent group_removed notification.
+   */
+  async removeParticipant(
+    accountId: string,
+    conversationId: string,
+    targetId: string,
+  ): Promise<ConversationItem> {
+    const conv = await this.loadGroupForMember(conversationId, accountId);
+    if (conv.createdBy !== accountId) {
+      throw new ForbiddenException('Seul·e le·la créateur·rice du groupe peut retirer des membres.');
+    }
+    // Covers the creator self-targeting too (createdBy === accountId).
+    if (targetId === conv.createdBy) {
+      throw new BadRequestException('Le·la créateur·rice utilise « Quitter le groupe ».');
+    }
+    if (!conv.participants.some((p) => p.accountId === targetId)) {
+      throw new NotFoundException('Ce membre ne fait pas partie du groupe.');
+    }
+
+    await this.prisma.conversationParticipant.delete({
+      where: { conversationId_accountId: { conversationId, accountId: targetId } },
+    });
+
+    const allIds = conv.participants.map((p) => p.accountId); // incl. the removed member
+    this.gateway.emitParticipantRemoved(allIds, {
+      conversationId,
+      userId: targetId,
+      createdBy: conv.createdBy,
+    });
+
+    // Being kicked deserves a persistent notification regardless of presence (F-5 queue seam).
+    await this.queue.enqueue(
+      'notifications-fanout',
+      'group_removed',
+      { recipientId: targetId, type: 'group_removed', refId: conversationId, sourceUserId: accountId },
+      { idempotencyKey: `group-removed-${conversationId}-${targetId}-${Date.now()}` },
+    );
+
+    const reloaded = await this.loadForMember(conversationId, accountId);
+    return this.toItem(reloaded, accountId, 0);
+  }
+
+  /**
+   * DELETE /conversations/:id/participants/me — any member leaves. Atomic: delete own row, then if the
+   * leaver was the owner reassign createdBy to the earliest-joined remaining member (same tie-break as
+   * the backfill), or delete the conversation (cascades participants + messages) when none remain. WS
+   * is emitted ONLY after commit.
+   */
+  async leaveConversation(accountId: string, conversationId: string): Promise<void> {
+    const conv = await this.loadGroupForMember(conversationId, accountId);
+    const allPreviousIds = conv.participants.map((p) => p.accountId); // incl. the leaver
+
+    let deleted = false;
+    let newCreatedBy: string | null = conv.createdBy;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.conversationParticipant.delete({
+        where: { conversationId_accountId: { conversationId, accountId } },
+      });
+      const remaining = await tx.conversationParticipant.findMany({
+        where: { conversationId },
+        orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }], // SAME ordering as the backfill
+        select: { accountId: true },
+      });
+      if (remaining.length === 0) {
+        await tx.conversation.delete({ where: { id: conversationId } });
+        deleted = true;
+      } else if (conv.createdBy === accountId) {
+        newCreatedBy = remaining[0]!.accountId;
+        await tx.conversation.update({ where: { id: conversationId }, data: { createdBy: newCreatedBy } });
+      }
+    });
+
+    if (deleted) {
+      this.gateway.emitConversationDeleted(allPreviousIds, { conversationId });
+    } else {
+      this.gateway.emitParticipantRemoved(allPreviousIds, {
+        conversationId,
+        userId: accountId,
+        createdBy: newCreatedBy,
+      });
+    }
+  }
+
   private async createGroup(accountId: string, name: string, participantIds: string[]): Promise<ConversationItem> {
     const trimmed = (name ?? '').trim();
     if (trimmed.length === 0) throw new BadRequestException('Le nom du groupe est requis.');
@@ -479,6 +626,7 @@ export class MessagesService {
       data: {
         type: 'group',
         name: trimmed,
+        createdBy: accountId, // MC-12: the creator owns the group
         participants: { create: [accountId, ...validOthers].map((id) => ({ accountId: id })) },
       },
       include: CONV_INCLUDE,
@@ -518,6 +666,7 @@ export class MessagesService {
       // 'declined' rows are never returned by any route, so the client-facing type stays 'open'|'requested'.
       status: conv.status === 'requested' ? 'requested' : 'open',
       requestedBy: conv.status === 'requested' ? conv.requestedBy : null,
+      createdBy: conv.createdBy, // MC-12: group owner; null for dm/salon
     };
   }
 

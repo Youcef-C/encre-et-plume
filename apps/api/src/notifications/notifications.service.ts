@@ -29,6 +29,8 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   // application. The acceptance notif is informational → 'autres' (must not inflate the actionable badge).
   connection_request: 'demandes',
   connection_accepted: 'autres',
+  // MC-12: kicked from a group — informational, not an actionable request.
+  group_removed: 'autres',
 };
 
 /**
