@@ -10,6 +10,7 @@ const base: CallCard = {
   title: '« Lames de Brume »',
   tags: ['Seinen', 'Thriller', '~120 planches'],
   authorName: 'Camille R.',
+  authorAvatar: null,
   closesInDays: 12,
   applicationCount: 0,
   direction: 'writerSeeksIllustrator',

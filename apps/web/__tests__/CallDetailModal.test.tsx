@@ -29,6 +29,7 @@ const base: CallDetail = {
   title: '« Lames de Brume »',
   tags: ['Seinen', 'Thriller'],
   authorName: 'Camille R.',
+  authorAvatar: null,
   closesInDays: 12,
   applicationCount: 3,
   direction: 'writerSeeksIllustrator',

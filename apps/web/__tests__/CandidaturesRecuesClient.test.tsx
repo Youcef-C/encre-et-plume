@@ -92,6 +92,7 @@ const callDetail: CallDetail = {
   title: 'Polar nocturne',
   tags: ['Seinen'],
   authorName: 'Testeur Appels',
+  authorAvatar: null,
   closesInDays: 10,
   applicationCount: 3,
   direction: 'writerSeeksIllustrator',

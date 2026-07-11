@@ -207,15 +207,16 @@ export class CallsService {
       this.prisma.projectCall.count({ where }),
     ]);
 
-    const [assetMedia, appliedIds, viewerRoles, acceptedByRole] = await Promise.all([
+    const [assetMedia, appliedIds, viewerRoles, acceptedByRole, authorAvatars] = await Promise.all([
       this.loadCallAssetMedia(rows.map((r) => r.id)),
       this.resolveApplied(rows, viewerId),
       this.getViewerRoles(viewerId),
       this.resolveAcceptedByRole(rows.map((r) => r.id)),
+      this.loadAuthorAvatars(rows),
     ]);
     return {
       items: rows.map((r) =>
-        this.mapCard(r, viewerId, assetMedia, viewerRoles, appliedIds.get(r.id) ?? null, acceptedByRole.get(r.id) ?? {}),
+        this.mapCard(r, viewerId, assetMedia, viewerRoles, appliedIds.get(r.id) ?? null, acceptedByRole.get(r.id) ?? {}, authorAvatars),
       ),
       page,
       pageSize,
@@ -360,8 +361,11 @@ export class CallsService {
       { delayMs: Math.max(0, closesAt.getTime() - Date.now()), idempotencyKey: `close-call-${row.id}` },
     );
 
-    const assetMedia = await this.loadCallAssetMedia([row.id]);
-    return this.mapCard(row, viewerId, assetMedia, viewerRoles);
+    const [assetMedia, authorAvatars] = await Promise.all([
+      this.loadCallAssetMedia([row.id]),
+      this.loadAuthorAvatars([row]),
+    ]);
+    return this.mapCard(row, viewerId, assetMedia, viewerRoles, null, {}, authorAvatars);
   }
 
   /**
@@ -440,12 +444,13 @@ export class CallsService {
       data: { status: 'closed', closedReason: 'manual' },
     })) as unknown as CallRow;
 
-    const [assetMedia, viewerRoles, acceptedByRole] = await Promise.all([
+    const [assetMedia, viewerRoles, acceptedByRole, authorAvatars] = await Promise.all([
       this.loadCallAssetMedia([updated.id]),
       this.getViewerRoles(viewerId),
       this.resolveAcceptedByRole([updated.id]),
+      this.loadAuthorAvatars([updated]),
     ]);
-    return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole.get(updated.id) ?? {});
+    return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole.get(updated.id) ?? {}, authorAvatars);
   }
 
   // ── MC-7 round 3: owner field edit (PATCH /calls/:id — same route as close-early) ────────────
@@ -520,11 +525,12 @@ export class CallsService {
       );
     }
 
-    const [assetMedia, viewerRoles] = await Promise.all([
+    const [assetMedia, viewerRoles, authorAvatars] = await Promise.all([
       this.loadCallAssetMedia([id]),
       this.getViewerRoles(viewerId),
+      this.loadAuthorAvatars([updated]),
     ]);
-    return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole);
+    return this.mapCard(updated, viewerId, assetMedia, viewerRoles, null, acceptedByRole, authorAvatars);
   }
 
   // ── MC-7 round 3: owner delete (DELETE /calls/:id) ───────────────────────────
@@ -712,12 +718,13 @@ export class CallsService {
     const row = (await this.prisma.projectCall.findUnique({ where: { id } })) as unknown as CallRow | null;
     if (!row) throw new NotFoundException('Appel introuvable.');
 
-    const [assetMedia, appliedIds, viewerRoles, team, acceptedByRole] = await Promise.all([
+    const [assetMedia, appliedIds, viewerRoles, team, acceptedByRole, authorAvatars] = await Promise.all([
       this.loadCallAssetMedia([id]),
       this.resolveApplied([row], viewerId),
       this.getViewerRoles(viewerId),
       this.buildTeam(row),
       this.resolveAcceptedByRole([id]),
+      this.loadAuthorAvatars([row]),
     ]);
     const assets = assetMedia.get(id) ?? [];
 
@@ -728,7 +735,7 @@ export class CallsService {
       .filter((a) => a.kind === 'call_document' && a.variants?.orig)
       .map((a) => ({ mediaId: '', url: a.variants!.orig as string, size: a.size ?? 0 }));
 
-    const card = this.mapCard(row, viewerId, assetMedia, viewerRoles, appliedIds.get(id) ?? null, acceptedByRole.get(id) ?? {});
+    const card = this.mapCard(row, viewerId, assetMedia, viewerRoles, appliedIds.get(id) ?? null, acceptedByRole.get(id) ?? {}, authorAvatars);
     return {
       ...card,
       createdAt: row.createdAt.toISOString(),
@@ -819,6 +826,17 @@ export class CallsService {
     return s?.variants?.thumb ?? null;
   }
 
+  /** Poster avatars keyed by authorId — the calls table denormalizes authorName but not the avatar. */
+  private async loadAuthorAvatars(rows: { authorId: string | null }[]): Promise<Map<string, string | null>> {
+    const ids = [...new Set(rows.map((r) => r.authorId).filter((v): v is string => !!v))];
+    if (ids.length === 0) return new Map();
+    const accounts = await this.prisma.account.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, avatar: true },
+    });
+    return new Map(accounts.map((a) => [a.id, a.avatar]));
+  }
+
   private mapCard(
     row: CallRow,
     viewerId: string,
@@ -826,10 +844,12 @@ export class CallsService {
     viewerRoles: string[],
     applied: AppliedEntry | null = null,
     acceptedByRole: SeatCounts = {},
+    authorAvatars: Map<string, string | null> = new Map(),
   ): CallCard {
     const seats = (row.seats ?? {}) as SeatCounts;
     return {
       ...mapPreview(row),
+      authorAvatar: row.authorId ? authorAvatars.get(row.authorId) ?? null : null,
       direction: directionOf(row.authorRoles[0] ?? 'scenariste'),
       seekingRoles: row.seekingRoles as CreatorRole[],
       seats,

@@ -222,6 +222,16 @@ export default function Header() {
   const { account, loading, logout } = useSession();
   const { effectiveRole, setSimulatedRole } = useEffectiveRole();
   const pathname = usePathname();
+  // Remember the page we navigated FROM (client-side nav leaves document.referrer stale), so the
+  // /contact bug-report can attach the previous page instead of the contact page itself.
+  const prevPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    if (prev && prev !== pathname && prev !== '/contact') {
+      sessionStorage.setItem('ep:prevPath', prev);
+    }
+    prevPathRef.current = pathname;
+  }, [pathname]);
   const unreadCount = useUnreadCount();
   const { counts } = useUnreadCounts();
   const [menuOpen, setMenuOpen] = useState(false);

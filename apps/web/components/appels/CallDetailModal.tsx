@@ -282,10 +282,28 @@ export default function CallDetailModal({
 
             {/* Meta line */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13, color: 'var(--ink2)' }}>
-              <span
-                aria-hidden="true"
-                style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--tone)', border: '2px solid var(--ink)', flex: 'none' }}
-              />
+              {call.authorAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={call.authorAvatar}
+                  alt=""
+                  width={24}
+                  height={24}
+                  style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid var(--ink)', objectFit: 'cover', flex: 'none' }}
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px',
+                    border: '2px solid var(--ink)',
+                    flex: 'none',
+                  }}
+                />
+              )}
               <span>{call.authorName}</span>
               <span aria-hidden="true">·</span>
               <span>Publié le {fmtDate(call.createdAt)}</span>
@@ -302,14 +320,26 @@ export default function CallDetailModal({
             {/* Postes — §8: accepted vs sought per role. */}
             <div style={sectionHeading}>Postes</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {CREATOR_ROLES.filter((r) => (call.seats[r] ?? 0) > 0).map((r) => (
-                <span
-                  key={r}
-                  style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 10px', background: 'var(--card)' }}
-                >
-                  {ROLE_LABEL[r]} : {call.acceptedByRole[r] ?? 0}/{call.seats[r]}
-                </span>
-              ))}
+              {CREATOR_ROLES.filter((r) => (call.seats[r] ?? 0) > 0).map((r) => {
+                const filled = (call.acceptedByRole[r] ?? 0) >= (call.seats[r] ?? 0);
+                return (
+                  <span
+                    key={r}
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      // Solid tag: green once every seat for the role is filled, red while seats remain.
+                      border: '2px solid var(--ink)',
+                      color: '#fff',
+                      background: filled ? '#1f8a5b' : 'var(--accent)',
+                      borderRadius: 6,
+                      padding: '5px 10px',
+                    }}
+                  >
+                    {ROLE_LABEL[r]} : {call.acceptedByRole[r] ?? 0}/{call.seats[r]}
+                  </span>
+                );
+              })}
             </div>
 
             {/* Description */}
@@ -559,7 +589,7 @@ export default function CallDetailModal({
                           setCloseError(null);
                           setCloseConfirming(true);
                         }}
-                        style={{ ...footerBtn, background: 'var(--card)' }}
+                        style={{ ...footerBtn, background: 'var(--accent)', color: '#fff' }}
                       >
                         Clôturer l&apos;appel
                       </button>

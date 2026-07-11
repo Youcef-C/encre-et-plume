@@ -151,10 +151,28 @@ export default function CallBoardCard({
             color: 'var(--ink2)',
           }}
         >
-          <span
-            aria-hidden="true"
-            style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--tone)', border: '2px solid var(--ink)', flex: 'none' }}
-          />
+          {call.authorAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={call.authorAvatar}
+              alt=""
+              width={24}
+              height={24}
+              style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid var(--ink)', objectFit: 'cover', flex: 'none' }}
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px',
+                border: '2px solid var(--ink)',
+                flex: 'none',
+              }}
+            />
+          )}
           <span>{call.authorName}</span>
           <span aria-hidden="true">·</span>
           {closed ? (

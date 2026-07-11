@@ -58,6 +58,7 @@ const call = (over: Partial<CallCard> = {}): CallCard => ({
   title: '« Lames de Brume »',
   tags: ['Seinen'],
   authorName: 'Camille R.',
+  authorAvatar: null,
   closesInDays: 12,
   applicationCount: 0,
   direction: 'writerSeeksIllustrator',

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function ContactPage() {
   return (
-    <main style={{ padding: '48px 24px 72px', background: 'var(--paper)', minHeight: '60vh' }}>
+    <main style={{ padding: '48px 24px 72px', minHeight: '60vh' }}>
       <div style={{ maxWidth: 720, margin: '0 auto 28px' }}>
         <h1 style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', margin: '0 0 8px' }}>Aide &amp; contact</h1>
         <p style={{ margin: 0, fontSize: 15, color: 'var(--ink2)' }}>

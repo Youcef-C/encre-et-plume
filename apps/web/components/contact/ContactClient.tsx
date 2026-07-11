@@ -53,8 +53,12 @@ export default function ContactClient() {
 
   useEffect(() => {
     if (category === 'bug') {
-      // Current/last page URL (referrer when arriving from another page), UA, F-9 id.
-      const url = document.referrer || window.location.href;
+      // The page the user came from (tracked by Header across client-side navs, since
+      // document.referrer stays stale on SPA navigation); fall back to referrer/current URL.
+      const prevPath = sessionStorage.getItem('ep:prevPath');
+      const url = prevPath
+        ? window.location.origin + prevPath
+        : document.referrer || window.location.href;
       const requestId = getLastRequestId();
       setBugContext({
         url,

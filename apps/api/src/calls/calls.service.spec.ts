@@ -86,11 +86,13 @@ describe('CallsService.findBoard', () => {
     media: { findMany: jest.Mock };
     application: { findMany: jest.Mock; groupBy: jest.Mock };
     profile: { findUnique: jest.Mock };
+    account: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
     prisma = {
       projectCall: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+      account: { findMany: jest.fn().mockResolvedValue([]) },
       projectCallAsset: { findMany: jest.fn().mockResolvedValue([]) },
       media: { findMany: jest.fn().mockResolvedValue([]) },
       application: { findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
@@ -210,7 +212,7 @@ describe('CallsService.createCall', () => {
     projectCall: { create: jest.Mock };
     projectCallAsset: { createMany: jest.Mock; findMany: jest.Mock };
     media: { findMany: jest.Mock };
-    account: { findUnique: jest.Mock };
+    account: { findUnique: jest.Mock; findMany: jest.Mock };
     profile: { findUnique: jest.Mock };
     project: { findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -228,7 +230,7 @@ describe('CallsService.createCall', () => {
       projectCall,
       projectCallAsset,
       media: { findMany: jest.fn().mockResolvedValue([]) },
-      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }) },
+      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }), findMany: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue({ creatorRoles: ['scenariste'] }) },
       project: { findUnique: jest.fn().mockResolvedValue({ ownerId: 'acc-1' }) },
       // interactive transaction: run the callback with the tx client (same mocked models)
@@ -397,6 +399,7 @@ describe('CallsService.closeEarly', () => {
     media: { findMany: jest.Mock };
     profile: { findUnique: jest.Mock };
     application: { groupBy: jest.Mock };
+    account: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
@@ -405,6 +408,7 @@ describe('CallsService.closeEarly', () => {
         findUnique: jest.fn(),
         update: jest.fn().mockImplementation(({ data }) => ({ ...CALL_ROW(), ...data })),
       },
+      account: { findMany: jest.fn().mockResolvedValue([]) },
       projectCallAsset: { findMany: jest.fn().mockResolvedValue([]) },
       media: { findMany: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -448,7 +452,7 @@ describe('CallsService.findDetail', () => {
     media: { findMany: jest.Mock };
     application: { findMany: jest.Mock; groupBy: jest.Mock };
     profile: { findUnique: jest.Mock };
-    account: { findUnique: jest.Mock };
+    account: { findUnique: jest.Mock; findMany: jest.Mock };
     invitation: { findMany: jest.Mock };
   };
 
@@ -469,7 +473,7 @@ describe('CallsService.findDetail', () => {
       // status:'accepted' query in buildTeam selects { applicant }, so accepted rows carry `applicant`.
       application: { findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue({ creatorRoles: ['dessinateur'] }) },
-      account: { findUnique: jest.fn().mockResolvedValue(ref('acc-owner', 'Camille R.', 'scenariste')) },
+      account: { findUnique: jest.fn().mockResolvedValue(ref('acc-owner', 'Camille R.', 'scenariste')), findMany: jest.fn().mockResolvedValue([]) },
       invitation: { findMany: jest.fn().mockResolvedValue([]) },
     };
     service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());
@@ -719,6 +723,7 @@ describe('CallsService.updateCall', () => {
     media: { findMany: jest.Mock };
     profile: { findUnique: jest.Mock };
     application: { groupBy: jest.Mock };
+    account: { findMany: jest.Mock };
   };
 
   beforeEach(() => {
@@ -728,6 +733,7 @@ describe('CallsService.updateCall', () => {
         findUnique: jest.fn().mockResolvedValue(CALL_ROW({ authorId: 'acc-owner' })),
         update: jest.fn().mockImplementation(({ data }) => ({ ...CALL_ROW({ authorId: 'acc-owner' }), ...data })),
       },
+      account: { findMany: jest.fn().mockResolvedValue([]) },
       projectCallAsset: { findMany: jest.fn().mockResolvedValue([]) },
       media: { findMany: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -879,14 +885,14 @@ describe('CallsService.seedFromProject', () => {
   let service: CallsService;
   let prisma: {
     projectCall: { create: jest.Mock };
-    account: { findUnique: jest.Mock };
+    account: { findUnique: jest.Mock; findMany: jest.Mock };
     profile: { findUnique: jest.Mock };
   };
 
   beforeEach(() => {
     prisma = {
       projectCall: { create: jest.fn().mockResolvedValue({ id: 'call-seed' }) },
-      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }) },
+      account: { findUnique: jest.fn().mockResolvedValue({ displayName: 'Camille R.' }), findMany: jest.fn().mockResolvedValue([]) },
       profile: { findUnique: jest.fn().mockResolvedValue({ creatorRoles: ['scenariste'] }) },
     };
     service = new CallsService(prisma as unknown as PrismaService, {} as unknown as QueueService, {} as unknown as NotificationsService, noBlocks());

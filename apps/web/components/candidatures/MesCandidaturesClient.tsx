@@ -106,6 +106,7 @@ function toEditCall(app: MyApplicationRow): CallCard {
     title: app.callTitle,
     tags: [],
     authorName: app.ownerName,
+    authorAvatar: null,
     closesInDays: null,
     applicationCount: 0,
     direction: app.callDirection,

@@ -34,6 +34,7 @@ export type SeatCounts = Partial<Record<CreatorRole, number>>;
 
 /** Board card — strict superset of the MC-1 CallPreview (CallsPreview keeps working). */
 export interface CallCard extends CallPreview {
+  authorAvatar: string | null; // poster's avatar URL; null → on-brand halftone placeholder
   direction: CallDirection; // derived from authorRoles[0] (writer vs illustrator) — MC-6 mapping
   seekingRoles: CreatorRole[]; // MC-4X req6: the role(s) this call seeks (1..2, = seats keys). Drives the gate hint + heading
   seats: SeatCounts; // MC-4X §8: how many of each role the author seeks
