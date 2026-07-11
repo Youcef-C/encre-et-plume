@@ -31,6 +31,8 @@ const AREA_BY_TYPE: Record<NotifType, NotifArea> = {
   connection_accepted: 'autres',
   // MC-12: kicked from a group — informational, not an actionable request.
   group_removed: 'autres',
+  // CS-2: @name mention in a card comment — informational.
+  mention: 'autres',
 };
 
 /**
@@ -48,6 +50,7 @@ type NotifRow = {
   id: string;
   type: string;
   refId: string | null;
+  message: string | null;
   createdAt: Date;
   readAt: Date | null;
   sourceUser: SourceUserRow;
@@ -77,6 +80,8 @@ export class NotificationsService {
     type: NotifType;
     refId?: string | null;
     sourceUserId?: string | null;
+    /** CS-2: per-notification copy override (else the FE resolves from the type map). */
+    message?: string | null;
   }): Promise<NotificationItem | null> {
     // F-15: skip if recipient opted out of in-app for this type
     const allowed = await this.preferences.isInAppAllowed(input.recipientId, input.type);
@@ -87,6 +92,7 @@ export class NotificationsService {
         recipientId: input.recipientId,
         type: input.type,
         refId: input.refId ?? null,
+        message: input.message ?? null,
         sourceUserId: input.sourceUserId ?? null,
       },
       include: {
@@ -176,6 +182,7 @@ export class NotificationsService {
       type: row.type as NotifType,
       area: AREA_BY_TYPE[row.type as NotifType],
       refId: row.refId,
+      message: row.message ?? null,
       sourceUser: row.sourceUser
         ? {
             displayName: row.sourceUser.displayName,

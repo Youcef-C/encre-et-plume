@@ -133,6 +133,69 @@ export type PageStage = (typeof PAGE_STAGES)[number];
 export const PAGE_FILE_TAGS = ['scenario', 'ref', 'nemu', 'double'] as const;
 export type PageFileTag = (typeof PAGE_FILE_TAGS)[number];
 
+// ── CS-2 card-modal extension: fixed on-brand label palette ──────────────────
+// User-created project labels pick a colour from THIS set only; the server rejects
+// any other value (400 «Couleur invalide»).
+export const LABEL_COLORS = [
+  '#e8261c', // rouge (accent)
+  '#e07a1f', // orange
+  '#d9a521', // ocre
+  '#7a8c3c', // olive
+  '#2e7d5b', // vert
+  '#2c6e8a', // canard
+  '#3f5aa8', // bleu
+  '#7d4fa0', // violet
+  '#b0486e', // rose
+] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+/** FE swatch aria-labels, keyed by hex. */
+export const LABEL_COLOR_NAMES: Record<LabelColor, string> = {
+  '#e8261c': 'rouge',
+  '#e07a1f': 'orange',
+  '#d9a521': 'ocre',
+  '#7a8c3c': 'olive',
+  '#2e7d5b': 'vert',
+  '#2c6e8a': 'canard',
+  '#3f5aa8': 'bleu',
+  '#7d4fa0': 'violet',
+  '#b0486e': 'rose',
+};
+
+export interface ProjectLabelItem {
+  id: string;
+  name: string;
+  color: string;
+}
+export interface CreateLabelRequest {
+  name: string;
+  color: string;
+} // POST /projects/:slug/labels
+export interface UpdateLabelRequest {
+  name?: string;
+  color?: string;
+} // PATCH /labels/:id
+
+export interface PageAssigneeRef {
+  accountId: string;
+  displayName: string;
+  avatar: string | null;
+}
+export interface PageChecklistItemDto {
+  id: string;
+  text: string;
+  done: boolean;
+  order: number;
+}
+export interface PageCommentItem {
+  id: string;
+  authorId: string; // FE compares with session account id for Modifier/Supprimer
+  authorName: string;
+  authorAvatar: string | null;
+  body: string;
+  createdAt: string; // ISO
+  editedAt: string | null; // set → FE shows "modifié"
+}
+
 /** A kanban board card (CS-2 `Page`) — NOT the reader `Planche`. */
 export interface WorkspacePage {
   id: string;
@@ -142,6 +205,13 @@ export interface WorkspacePage {
   version: number;
   fileTags: PageFileTag[];
   linkedFileIds: string[];
+  // CS-2 card-modal extension (server always computes these — additive for consumers):
+  dueDate: string | null; // 'YYYY-MM-DD'
+  labels: ProjectLabelItem[];
+  assignees: PageAssigneeRef[];
+  checklistDone: number;
+  checklistTotal: number;
+  commentCount: number;
 }
 
 export interface WorkspaceMember {
@@ -190,6 +260,7 @@ export interface ProjectWorkspaceResponse {
   members: WorkspaceMember[];
   chapters: WorkspaceChapter[];
   pages: WorkspacePage[];
+  labels: ProjectLabelItem[]; // CS-2: the project's label palette (filter row + modal picker)
   reviews: { summary: WorkspaceReviewSummary; items: WorkspaceReview[] };
   viewer: { isMember: boolean; isOwner: boolean };
 }
@@ -222,6 +293,11 @@ export interface UpdatePageRequest {
   chapterId?: string | null;
   fileTags?: PageFileTag[];
   linkedFileIds?: string[];
+  // CS-2 card-modal extension (all optional; null clears where nullable):
+  description?: string | null;
+  dueDate?: string | null; // 'YYYY-MM-DD'
+  labelIds?: string[]; // full replacement set
+  assigneeIds?: string[]; // full replacement set — server diffs + notifies
 }
 
 export interface UpdatePageStageRequest {
@@ -233,3 +309,24 @@ export interface PageVersionItem {
   note: string | null;
   createdAt: string;
 }
+
+/** GET /pages/:id — full card detail for the modal. */
+export interface PageDetailResponse extends WorkspacePage {
+  description: string | null;
+  checklist: PageChecklistItemDto[]; // order asc
+  comments: PageCommentItem[]; // createdAt asc
+}
+
+export interface CreateChecklistItemRequest {
+  text: string;
+} // POST /pages/:id/checklist
+export interface UpdateChecklistItemRequest {
+  text?: string;
+  done?: boolean;
+} // PATCH /checklist/:itemId
+export interface CreatePageCommentRequest {
+  body: string;
+} // POST /pages/:id/comments
+export interface UpdatePageCommentRequest {
+  body: string;
+} // PATCH /comments/:id

@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
-import type { PageVersionItem, WorkspacePage } from '@encre-et-plume/shared';
+import type { PageDetailResponse, PageVersionItem, WorkspacePage } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { PagesService } from './pages.service';
 import { UpdatePageDto, UpdatePageStageDto } from './dto/page.dto';
@@ -32,5 +32,11 @@ export class PagesController {
   @Get(':id/versions')
   versions(@Req() req: AuthRequest, @Param('id') id: string): Promise<PageVersionItem[]> {
     return this.pages.getVersions(req.accountId, id);
+  }
+
+  // Declared AFTER :id/versions — distinct segment counts, no route conflict.
+  @Get(':id')
+  detail(@Req() req: AuthRequest, @Param('id') id: string): Promise<PageDetailResponse> {
+    return this.pages.getDetail(req.accountId, id);
   }
 }

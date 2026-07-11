@@ -22,6 +22,9 @@ const PAGE = (o: Record<string, unknown> = {}) => ({
   version: 1,
   fileTags: [],
   linkedFileIds: [],
+  description: null,
+  dueDate: null,
+  assignees: [],
   project: PROJECT(),
   ...o,
 });
@@ -47,6 +50,9 @@ describe('PagesService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       chapter: { findUnique: jest.fn().mockResolvedValue({ id: 'ch-1', workId: 'work-1' }) },
+      projectLabel: { findMany: jest.fn().mockResolvedValue([]) },
+      pageLabel: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
+      pageAssignee: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
       $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
@@ -127,6 +133,140 @@ describe('PagesService', () => {
 
     it('403 non-member', async () => {
       await expect(service.updatePage('stranger', 'page-1', { title: 'x' })).rejects.toThrow(ForbiddenException);
+    });
+
+    // ── CS-2 card-modal extension ─────────────────────────────────────────────
+    it('writes description and dueDate (Date at UTC midnight)', async () => {
+      await service.updatePage('acc-me', 'page-1', { description: 'À encrer', dueDate: '2026-08-15' });
+      const data = prisma.page.update.mock.calls[0][0].data;
+      expect(data.description).toBe('À encrer');
+      expect((data.dueDate as Date).toISOString()).toBe('2026-08-15T00:00:00.000Z');
+    });
+
+    it('clears description and dueDate when null', async () => {
+      await service.updatePage('acc-me', 'page-1', { description: null, dueDate: null });
+      const data = prisma.page.update.mock.calls[0][0].data;
+      expect(data.description).toBeNull();
+      expect(data.dueDate).toBeNull();
+    });
+
+    it('rejects a calendar-invalid date (400)', async () => {
+      await expect(service.updatePage('acc-me', 'page-1', { dueDate: '2026-13-45' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('replaces the label set when every id belongs to the project', async () => {
+      prisma.projectLabel.findMany.mockResolvedValue([
+        { id: 'lab-1', projectId: 'proj-1' },
+        { id: 'lab-2', projectId: 'proj-1' },
+      ]);
+      await service.updatePage('acc-me', 'page-1', { labelIds: ['lab-1', 'lab-2'] });
+      expect(prisma.pageLabel.deleteMany).toHaveBeenCalledWith({ where: { pageId: 'page-1' } });
+      expect(prisma.pageLabel.createMany).toHaveBeenCalledWith({
+        data: [{ pageId: 'page-1', labelId: 'lab-1' }, { pageId: 'page-1', labelId: 'lab-2' }],
+      });
+    });
+
+    it('rejects a labelId from another project (400 «Étiquette invalide»)', async () => {
+      prisma.projectLabel.findMany.mockResolvedValue([{ id: 'lab-x', projectId: 'other' }]);
+      await expect(service.updatePage('acc-me', 'page-1', { labelIds: ['lab-x'] })).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects an assigneeId who is not a project member (400 «Membre invalide»)', async () => {
+      await expect(service.updatePage('acc-me', 'page-1', { assigneeIds: ['stranger'] })).rejects.toThrow(BadRequestException);
+    });
+
+    it('replaces the assignee set + notifies added and removed members (actor excluded)', async () => {
+      // old = {acc-yuki}; new = {acc-me}; actor = acc-me → acc-yuki removed, acc-me added-but-actor(skip)
+      prisma.page.findUnique.mockResolvedValue(PAGE({ assignees: [{ userId: 'acc-yuki' }] }));
+      await service.updatePage('acc-me', 'page-1', { assigneeIds: ['acc-me'] });
+      expect(prisma.pageAssignee.deleteMany).toHaveBeenCalledWith({ where: { pageId: 'page-1' } });
+      // acc-yuki removed → one "retiré·e" notification; acc-me is the actor → skipped
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: 'acc-yuki',
+          type: 'project_activity',
+          refId: 'proj-1',
+          sourceUserId: 'acc-me',
+          message: 'Vous avez été retiré·e de « Page 1 »',
+        }),
+      );
+    });
+
+    it('notifies a newly-added member with the "assigné·e" message', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ assignees: [] }));
+      await service.updatePage('acc-me', 'page-1', { assigneeIds: ['acc-yuki'] });
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'acc-yuki', message: 'Vous avez été assigné·e à « Page 1 »' }),
+      );
+    });
+
+    it('does not notify when the assignee set is unchanged', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ assignees: [{ userId: 'acc-yuki' }] }));
+      await service.updatePage('acc-me', 'page-1', { assigneeIds: ['acc-yuki'] });
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('swallows an assignee-notification failure', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ assignees: [] }));
+      notifications.create.mockRejectedValue(new Error('notif down'));
+      await expect(service.updatePage('acc-me', 'page-1', { assigneeIds: ['acc-yuki'] })).resolves.toBeDefined();
+    });
+  });
+
+  // ── getDetail (GET /pages/:id) ───────────────────────────────────────────────
+  describe('getDetail', () => {
+    const DETAIL = (o: Record<string, unknown> = {}) => ({
+      ...PAGE(),
+      description: 'desc',
+      dueDate: new Date('2026-08-15T00:00:00.000Z'),
+      labels: [{ label: { id: 'lab-1', name: 'À revoir', color: '#e8261c' } }],
+      assignees: [{ user: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg' } }],
+      checklistItems: [
+        { id: 'ci-1', text: 'Crayonné', done: true, order: 0 },
+        { id: 'ci-2', text: 'Encrage', done: false, order: 1 },
+      ],
+      comments: [
+        { id: 'cm-1', authorId: 'acc-me', body: 'go', createdAt: new Date('2026-08-01'), editedAt: null, author: { id: 'acc-me', displayName: 'Moi', avatar: null } },
+      ],
+      _count: { comments: 1 },
+      project: { ownerId: 'acc-me', visibility: 'prive', work: { creators: [{ accountId: 'acc-me' }, { accountId: 'acc-yuki' }] } },
+      ...o,
+    });
+
+    it('returns the full detail shape for a member (dueDate YYYY-MM-DD, ordered checklist/comments)', async () => {
+      prisma.page.findUnique.mockResolvedValue(DETAIL());
+      const res = await service.getDetail('acc-me', 'page-1');
+      expect(res.description).toBe('desc');
+      expect(res.dueDate).toBe('2026-08-15');
+      expect(res.labels).toEqual([{ id: 'lab-1', name: 'À revoir', color: '#e8261c' }]);
+      expect(res.assignees).toEqual([{ accountId: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg' }]);
+      expect(res.checklist).toEqual([
+        { id: 'ci-1', text: 'Crayonné', done: true, order: 0 },
+        { id: 'ci-2', text: 'Encrage', done: false, order: 1 },
+      ]);
+      expect(res.checklistDone).toBe(1);
+      expect(res.checklistTotal).toBe(2);
+      expect(res.commentCount).toBe(1);
+      expect(res.comments).toEqual([
+        { id: 'cm-1', authorId: 'acc-me', authorName: 'Moi', authorAvatar: null, body: 'go', createdAt: '2026-08-01T00:00:00.000Z', editedAt: null },
+      ]);
+    });
+
+    it('a non-member on a PUBLIC project can read', async () => {
+      prisma.page.findUnique.mockResolvedValue(DETAIL({ project: { ownerId: 'acc-me', visibility: 'public', work: { creators: [{ accountId: 'acc-me' }] } } }));
+      const res = await service.getDetail('stranger', 'page-1');
+      expect(res.id).toBe('page-1');
+    });
+
+    it('a non-member on a non-public project gets 404 «Carte introuvable» (no leak)', async () => {
+      prisma.page.findUnique.mockResolvedValue(DETAIL({ project: { ownerId: 'acc-me', visibility: 'prive', work: { creators: [{ accountId: 'acc-me' }] } } }));
+      await expect(service.getDetail('stranger', 'page-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('404 unknown page id', async () => {
+      prisma.page.findUnique.mockResolvedValue(null);
+      await expect(service.getDetail('acc-me', 'nope')).rejects.toThrow(NotFoundException);
     });
   });
 

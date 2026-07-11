@@ -1,5 +1,5 @@
 import type { ComponentType, CSSProperties } from 'react';
-import type { NotifType } from '@encre-et-plume/shared';
+import type { NotifType, NotificationItem } from '@encre-et-plume/shared';
 import { CheckIcon, CircleDotIcon, FlagIcon, HeartIcon, MailIcon, PenIcon, UserIcon, WarningIcon, XIcon } from '../components/icons';
 
 // French label composer per notification type (single source of truth on web)
@@ -22,6 +22,8 @@ export const NOTIF_LABEL: Record<NotifType, (name: string) => string> = {
   system:           ()  => 'Notification système',
   // MC-12: the group creator removed you from a group
   group_removed:    (n) => `${n} vous a retiré·e d'un groupe`,
+  // CS-2: mentioned via @name in a card comment (fallback when message override is absent)
+  mention:          (n) => `${n} vous a mentionné·e dans un commentaire`,
 };
 
 // Icon component per notification type (SVG icon set — no emojis in the UI)
@@ -42,6 +44,8 @@ export const NOTIF_ICON: Record<NotifType, ComponentType<{ size?: number; style?
   system:           CircleDotIcon,
   // MC-12: kicked from a group
   group_removed:    UserIcon,
+  // CS-2: comment mention
+  mention:          PenIcon,
 };
 
 // ponytail: closest existing route per type until target surfaces are built (MC-7, MC-9, etc.)
@@ -65,10 +69,19 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   // ponytail: MC-12 — the group no longer exists for the removed user, so there's no target
   // surface; route home. Change when a "left groups" archive surface exists.
   group_removed:    '/',
+  // CS-2: mention lives in a project card — route to the projects surface (same as project_activity)
+  mention:          '/projets',
 };
 
 export function notificationHref(type: NotifType, _refId: string | null): string {
   return NOTIF_HREF[type];
+}
+
+// CS-2 (B6/F7): prefer the server's per-notification copy override; fall back to the per-type map.
+export function notificationLabel(item: NotificationItem): string {
+  if (item.message) return item.message;
+  const sourceName = item.sourceUser?.displayName ?? 'Quelqu\'un';
+  return NOTIF_LABEL[item.type](sourceName);
 }
 
 // Simple French relative time (no Intl.RelativeTimeFormat needed)

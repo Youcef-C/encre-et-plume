@@ -617,6 +617,71 @@ export const updatePageStage = (id: string, stage: PageStage): Promise<Workspace
 export const getPageVersions = (id: string): Promise<PageVersionItem[]> =>
   request<PageVersionItem[]>(`/pages/${encodeURIComponent(id)}/versions`);
 
+// ─── CS-2 card-modal extension: detail, labels, checklist, comments ────────────
+import type {
+  PageDetailResponse,
+  ProjectLabelItem,
+  CreateLabelRequest,
+  UpdateLabelRequest,
+  PageChecklistItemDto,
+  CreateChecklistItemRequest,
+  UpdateChecklistItemRequest,
+  PageCommentItem,
+  CreatePageCommentRequest,
+  UpdatePageCommentRequest,
+} from '@encre-et-plume/shared';
+
+export const getPageDetail = (id: string): Promise<PageDetailResponse> =>
+  request<PageDetailResponse>(`/pages/${encodeURIComponent(id)}`);
+
+export const getProjectLabels = (slug: string): Promise<ProjectLabelItem[]> =>
+  request<ProjectLabelItem[]>(`/projects/${encodeURIComponent(slug)}/labels`);
+
+export const createProjectLabel = (slug: string, body: CreateLabelRequest): Promise<ProjectLabelItem> =>
+  request<ProjectLabelItem>(`/projects/${encodeURIComponent(slug)}/labels`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateProjectLabel = (id: string, body: UpdateLabelRequest): Promise<ProjectLabelItem> =>
+  request<ProjectLabelItem>(`/labels/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteProjectLabel = (id: string): Promise<void> =>
+  request<void>(`/labels/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const addChecklistItem = (pageId: string, body: CreateChecklistItemRequest): Promise<PageChecklistItemDto> =>
+  request<PageChecklistItemDto>(`/pages/${encodeURIComponent(pageId)}/checklist`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateChecklistItem = (itemId: string, body: UpdateChecklistItemRequest): Promise<PageChecklistItemDto> =>
+  request<PageChecklistItemDto>(`/checklist/${encodeURIComponent(itemId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteChecklistItem = (itemId: string): Promise<void> =>
+  request<void>(`/checklist/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+
+export const addPageComment = (pageId: string, body: CreatePageCommentRequest): Promise<PageCommentItem> =>
+  request<PageCommentItem>(`/pages/${encodeURIComponent(pageId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updatePageComment = (id: string, body: UpdatePageCommentRequest): Promise<PageCommentItem> =>
+  request<PageCommentItem>(`/comments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deletePageComment = (id: string): Promise<void> =>
+  request<void>(`/comments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 // No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
 // The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.
 export const getMyProjects = (params?: MyProjectsQuery): Promise<MyProjectsResponse> => {

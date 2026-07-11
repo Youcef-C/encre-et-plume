@@ -6,6 +6,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import type { ProjectWorkspaceResponse } from '@encre-et-plume/shared';
+import { useSession } from '../../lib/session';
 import { PenNibIcon, BrushIcon } from '../icons';
 import KanbanBoard from './KanbanBoard';
 import InfosPanel from './InfosPanel';
@@ -57,6 +58,7 @@ export default function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const [title, setTitle] = useState(workspace.title);
   const isMember = workspace.viewer.isMember;
+  const { account } = useSession();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function onTabKeyDown(e: React.KeyboardEvent, index: number) {
@@ -234,6 +236,10 @@ export default function ProjectWorkspace({
               chapters={workspace.chapters}
               initialPages={workspace.pages}
               readOnly={!isMember}
+              members={workspace.members}
+              labels={workspace.labels}
+              isOwner={workspace.viewer.isOwner}
+              viewerId={account?.id ?? null}
             />
           )}
           {tab === 'infos' && (

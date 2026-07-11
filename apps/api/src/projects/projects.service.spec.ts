@@ -566,6 +566,7 @@ describe('ProjectsService workspace (CS-2)', () => {
     pages: [
       { id: 'page-1', chapterId: 'ch-0', title: 'Page 1', stage: 'scenario', version: 1, fileTags: ['scenario'], linkedFileIds: [] },
     ],
+    labels: [{ id: 'lab-1', name: 'À revoir', color: '#e8261c', createdAt: new Date('2024-01-01') }],
     ...o,
   });
 
@@ -608,6 +609,8 @@ describe('ProjectsService workspace (CS-2)', () => {
       const hidden = res.reviews.items.find((r) => r.hidden)!;
       expect(hidden.text).toBe('');
       expect(res.viewer).toEqual({ isMember: true, isOwner: true });
+      // CS-2 card-modal: the project label palette rides along for the filter row + modal picker.
+      expect(res.labels).toEqual([{ id: 'lab-1', name: 'À revoir', color: '#e8261c' }]);
     });
 
     it('a non-owner member sees isMember:true, isOwner:false', async () => {

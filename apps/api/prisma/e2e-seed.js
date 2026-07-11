@@ -407,6 +407,44 @@ async function main() {
     }
   }
 
+  // ── CS-2 card-modal extension: 2-member workspace fixture (ASSIGNÉ À / @mention e2e) ───────────
+  // No "Gérer le groupe" UI (CS-10) exists yet to add a real second member to a freshly-created
+  // project, so cs2-card-modal.spec.ts needs a seeded project that already has 2 real WorkCreators
+  // to exercise assignee add/remove + @mention against a genuine project member (not the owner
+  // themself — the server excludes the actor from its own notification). Reuses CS12_OWNER (scénariste)
+  // / CS12_COLLAB (dessinateur) — both already have profiles from the CS-12 block above. Hermetic:
+  // reset this fixture's pages/labels/notifications first, then upsert the Work + Project + both
+  // WorkCreator rows (idempotent by slug/composite key, safe to rerun).
+  {
+    const owner = accounts.CS12_OWNER.id;
+    const collab = accounts.CS12_COLLAB.id;
+    const workData = {
+      slug: 'e2e-cs2-multi', title: 'E2E CS2 · Multi-membre', format: 'Manga', genre: 'Seinen',
+      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+    };
+    const work = await prisma.work.upsert({ where: { slug: 'e2e-cs2-multi' }, create: workData, update: workData });
+    await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
+    await prisma.projectLabel.deleteMany({ where: { project: { workId: work.id } } });
+    const projectData = {
+      ownerId: owner, title: 'E2E CS2 · Multi-membre', kind: 'Manga', genre: 'Seinen', status: 'en cours',
+      slug: 'e2e-cs2-multi', workId: work.id, visibility: 'prive',
+    };
+    const project = await prisma.project.upsert({ where: { slug: 'e2e-cs2-multi' }, create: projectData, update: projectData });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: owner } },
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
+      update: {},
+    });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: collab } },
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
+      update: {},
+    });
+    await prisma.notification.deleteMany({
+      where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
+    });
+  }
+
   // ── CS-13: "Modifier une illustration" fixtures for the dedicated CS13_OWNER account ───────────
   // 5 published, standalone illustrations owned by CS13_OWNER: "e2e-cs13-illu-main" is the edit
   // target (PATCH-able, incl. a Licence value the test changes); the other 4 exist purely so

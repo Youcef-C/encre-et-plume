@@ -20,7 +20,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
   return {
     id: 'p1', slug: 'nuit-blanche', workSlug: 'nuit-blanche', title: 'Nuit Blanche',
     synopsis: 'Un synopsis.', hashtags: ['seinen'], collabOpen: false, visibility: 'public', cover: null,
-    members: [], chapters: [], pages: [],
+    members: [], chapters: [], pages: [], labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
     viewer: { isMember: true, isOwner: true }, ...over,
   };

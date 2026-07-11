@@ -39,6 +39,7 @@ enum NotifType {
   connection_request // MC-8: someone sent a connection request
   connection_accepted // MC-8: the recipient accepted the connection request
   group_removed // MC-12: the group creator removed you from a group
+  mention // CS-2: mentioned via @name in a card comment
 }
 
 // ── DR-1 Work/Chapter/Announcement enums ───────────────────────────────────────
@@ -148,6 +149,8 @@ model Account {
   messagesSent            Message[]                @relation("MessagesSent") // MC-9: messages this account sent
   blocksMade              UserBlock[]              @relation("BlocksMade") // MC-10: block/mute rows this account created
   blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
+  pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
+  pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -259,6 +262,7 @@ model Notification {
   recipient    Account   @relation("NotifRecipient", fields: [recipientId], references: [id])
   type         NotifType
   refId        String?
+  message      String? // CS-2: per-notification copy override (else FE resolves from the type map)
   sourceUserId String?
   sourceUser   Account?  @relation("NotifSource", fields: [sourceUserId], references: [id])
   createdAt    DateTime  @default(now())
@@ -300,6 +304,7 @@ model Project {
   invitations Invitation[]
   calls       ProjectCall[] // MC-4X req6: calls linked to this project
   pages       Page[] // CS-2 kanban board cards (NOT Planche — see Page model)
+  labels      ProjectLabel[] // CS-2 card-modal: user-created label palette
 
   @@index([ownerId])
 }
@@ -915,9 +920,15 @@ model Page {
   version       Int           @default(1)
   fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
   linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
+  description   String? // CS-2 card-modal: free-text card description
+  dueDate       DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   versions      PageVersion[]
+  labels        PageLabel[] // CS-2 card-modal: applied labels
+  assignees     PageAssignee[] // CS-2 card-modal: assigned members
+  checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
+  comments      PageComment[] // CS-2 card-modal: comments
 
   @@index([projectId, chapterId, stage])
 }
@@ -931,4 +942,61 @@ model PageVersion {
   createdAt DateTime @default(now())
 
   @@index([pageId, version])
+}
+
+// ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────
+
+model ProjectLabel {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String // ≤30, trimmed (validated in the DTO/service)
+  color     String // hex ∈ LABEL_COLORS (validated in the service)
+  createdAt DateTime    @default(now())
+  pages     PageLabel[]
+
+  @@index([projectId])
+}
+
+model PageLabel {
+  pageId  String
+  page    Page         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  labelId String
+  label   ProjectLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, labelId])
+}
+
+model PageAssignee {
+  pageId     String
+  page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  userId     String
+  user       Account  @relation("PageAssignee", fields: [userId], references: [id])
+  assignedAt DateTime @default(now())
+
+  @@id([pageId, userId])
+}
+
+model PageChecklistItem {
+  id     String  @id @default(cuid())
+  pageId String
+  page   Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  text   String
+  done   Boolean @default(false)
+  order  Int
+
+  @@index([pageId, order])
+}
+
+model PageComment {
+  id        String    @id @default(cuid())
+  pageId    String
+  page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    Account   @relation("PageCommentAuthor", fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+
+  @@index([pageId, createdAt])
 }

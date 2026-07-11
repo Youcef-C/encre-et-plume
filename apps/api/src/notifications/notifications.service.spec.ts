@@ -143,6 +143,42 @@ describe('NotificationsService', () => {
       }
     });
 
+    it('maps mention type to autres area (CS-2)', async () => {
+      const row = makeRow({ type: 'mention' });
+      prisma.notification.create.mockResolvedValue(row);
+
+      const item = await service.create({ recipientId: ACCOUNT_A, type: 'mention' });
+
+      expect(item!.area).toBe('autres');
+    });
+
+    it('persists and returns a per-notification message override (CS-2)', async () => {
+      const row = makeRow({ type: 'mention', message: 'Vous avez été mentionné·e sur « Page 7 »' });
+      prisma.notification.create.mockResolvedValue(row);
+
+      const item = await service.create({
+        recipientId: ACCOUNT_A,
+        type: 'mention',
+        message: 'Vous avez été mentionné·e sur « Page 7 »',
+      });
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ message: 'Vous avez été mentionné·e sur « Page 7 »' }),
+        }),
+      );
+      expect(item!.message).toBe('Vous avez été mentionné·e sur « Page 7 »');
+    });
+
+    it('defaults message to null when not provided (CS-2, additive)', async () => {
+      const row = makeRow();
+      prisma.notification.create.mockResolvedValue(row);
+
+      const item = await service.create({ recipientId: ACCOUNT_A, type: 'message' });
+
+      expect(item!.message).toBeNull();
+    });
+
     // ── F-15 preference gating ───────────────────────────────────────────
 
     it('returns null without creating when recipient opted-out of in-app for that type (BE-6, F-15)', async () => {

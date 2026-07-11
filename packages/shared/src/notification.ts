@@ -14,7 +14,8 @@ export type NotifType =
   | 'application_rejected' // MC-7: the call owner did not retain the applicant's candidature
   | 'connection_request' // MC-8: someone sent a connection request ("souhaite se connecter")
   | 'connection_accepted' // MC-8: the recipient accepted the connection request
-  | 'group_removed'; // MC-12: the group creator removed you from a group
+  | 'group_removed' // MC-12: the group creator removed you from a group
+  | 'mention'; // CS-2: mentioned via @name in a card comment
 
 export type NotifArea = 'messages' | 'demandes' | 'signalements' | 'autres';
 
@@ -33,6 +34,8 @@ export interface NotificationItem {
   area: NotifArea;
   refId: string | null;
   sourceUser: NotificationSource | null;
+  /** CS-2: per-notification copy override; null → FE resolves copy from the type map. */
+  message: string | null;
   /** ISO 8601 string. */
   createdAt: string;
   /** null = unread. ISO 8601 string when read. */

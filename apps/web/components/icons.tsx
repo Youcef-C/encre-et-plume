@@ -405,3 +405,27 @@ export function FileTextIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// CS-2 card modal — deadline (ÉCHÉANCE) glyph: a month grid with a torn-off header.
+export function CalendarIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" />
+      <line x1="3.5" y1="9.5" x2="20.5" y2="9.5" />
+      <line x1="8" y1="3" x2="8" y2="6.5" />
+      <line x1="16" y1="3" x2="16" y2="6.5" />
+    </Svg>
+  );
+}
+
+// CS-2 card modal — checklist glyph: a checkmark next to two task lines.
+export function ChecklistIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="3.5 8 5.5 10 9 6" />
+      <polyline points="3.5 16 5.5 18 9 14" />
+      <line x1="12" y1="8" x2="20.5" y2="8" />
+      <line x1="12" y1="16" x2="20.5" y2="16" />
+    </Svg>
+  );
+}

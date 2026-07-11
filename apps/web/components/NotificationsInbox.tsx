@@ -9,7 +9,7 @@ import {
   markAllNotificationsRead,
 } from '../lib/api';
 import { useUnreadCounts } from '../lib/unread';
-import { NOTIF_LABEL, NOTIF_ICON, notificationHref, relativeTime } from '../lib/notifications';
+import { NOTIF_ICON, notificationHref, notificationLabel, relativeTime } from '../lib/notifications';
 import { MailIcon } from './icons';
 
 // ─── Type filter buckets (FU-2) ──────────────────────────────────────────────
@@ -67,8 +67,7 @@ function NotifItem({
 }) {
   const router = useRouter();
   const isUnread = item.readAt === null;
-  const sourceName = item.sourceUser?.displayName ?? 'Quelqu\'un';
-  const label = NOTIF_LABEL[item.type](sourceName);
+  const label = notificationLabel(item);
   const href = notificationHref(item.type, item.refId);
 
   async function handleClick() {

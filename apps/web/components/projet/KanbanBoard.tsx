@@ -3,13 +3,21 @@
 // CS-2 TABLEAU — the production kanban. Replica of prototype data-projview="tableau"
 // (chapter chip row + 6 production columns + page cards). Native HTML5 drag & drop (no dep);
 // optimistic stage moves revert on error. The "⋯" card menu is the keyboard path for moving cards.
-import { useId, useRef, useState } from 'react';
+// CS-2 card-modal extension: whole card opens the CardModal; cards grow Trello-style with label
+// bars / due pill / checklist (x/x) / comment count / assignee stack; a label-filter chip row above
+// the columns narrows the board (auto-apply, combines with chapters).
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   PAGE_STAGES,
+  LABEL_COLORS,
+  LABEL_COLOR_NAMES,
   type PageStage,
   type PageFileTag,
   type WorkspaceChapter,
+  type WorkspaceMember,
   type WorkspacePage,
+  type ProjectLabelItem,
   type PageVersionItem,
 } from '@encre-et-plume/shared';
 import {
@@ -18,8 +26,13 @@ import {
   EyeIcon,
   ImageIcon,
   FileTextIcon,
+  CalendarIcon,
+  ChecklistIcon,
+  ChatIcon,
 } from '../icons';
-import { createPage, deletePage, updatePageStage, getPageVersions } from '../../lib/api';
+import { createPage, deletePage, updatePageStage, getPageVersions, createProjectLabel, deleteProjectLabel } from '../../lib/api';
+import CardModal from './CardModal';
+import ConfirmDialog from './ConfirmDialog';
 
 // Column metadata — labels, the ✒/🖌 icon substitutions, and the accent columns (Corrections, VALIDÉ).
 const STAGE_META: Record<
@@ -42,6 +55,16 @@ const FILE_TAG_META: Record<PageFileTag, { label: string; icon?: 'doc' | 'img'; 
     double: { label: 'Double', accent: true },
   };
 
+const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split('-');
+  const mi = Number(m) - 1;
+  return `${Number(d)} ${MONTHS_FR[mi] ?? ''}`.trim();
+}
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function chapterChipLabel(c: WorkspaceChapter): string {
   return c.number === 0 ? 'Prologue' : `Ch. ${c.number}`;
 }
@@ -51,10 +74,28 @@ export interface KanbanBoardProps {
   chapters: WorkspaceChapter[];
   initialPages: WorkspacePage[];
   readOnly?: boolean;
+  members?: WorkspaceMember[];
+  labels?: ProjectLabelItem[];
+  isOwner?: boolean;
+  viewerId?: string | null;
 }
 
-export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: KanbanBoardProps) {
+export default function KanbanBoard({
+  slug,
+  chapters,
+  initialPages,
+  readOnly,
+  members = [],
+  labels: initialLabels = [],
+  isOwner = false,
+  viewerId = null,
+}: KanbanBoardProps) {
   const [pages, setPages] = useState<WorkspacePage[]>(initialPages);
+  const [labels, setLabels] = useState<ProjectLabelItem[]>(initialLabels);
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
+  const [labelToDelete, setLabelToDelete] = useState<ProjectLabelItem | null>(null);
+  const [openPageId, setOpenPageId] = useState<string | null>(null);
   // null = "Toutes" / unassigned view is implicit; we default to the first chapter when one exists.
   const [selectedChapter, setSelectedChapter] = useState<string | null>(
     chapters[0]?.id ?? null,
@@ -63,9 +104,18 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
   const [dropStage, setDropStage] = useState<PageStage | null>(null);
   const [error, setError] = useState(false);
 
-  const scopedPages = pages.filter((p) =>
-    selectedChapter === null ? p.chapterId === null : p.chapterId === selectedChapter,
-  );
+  const scopedPages = pages
+    .filter((p) => (selectedChapter === null ? p.chapterId === null : p.chapterId === selectedChapter))
+    .filter((p) =>
+      selectedLabelIds.length === 0
+        ? true
+        : p.labels.some((l) => selectedLabelIds.includes(l.id)),
+    )
+    .filter((p) =>
+      selectedAssigneeIds.length === 0
+        ? true
+        : p.assignees.some((a) => selectedAssigneeIds.includes(a.accountId)),
+    );
 
   async function moveCard(id: string, stage: PageStage) {
     const prev = pages;
@@ -101,6 +151,37 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
       setPages(prev);
       setError(true);
     }
+  }
+
+  // Reconcile the palette AND every card's label bars when a label is created/renamed/recolored/deleted.
+  function handleLabelsChange(next: ProjectLabelItem[]) {
+    setLabels(next);
+    const byId = new Map(next.map((l) => [l.id, l]));
+    setPages((ps) =>
+      ps.map((p) => ({
+        ...p,
+        labels: p.labels.map((l) => byId.get(l.id)).filter((l): l is ProjectLabelItem => !!l),
+      })),
+    );
+    setSelectedLabelIds((ids) => ids.filter((id) => byId.has(id)));
+  }
+
+  function toggleLabelFilter(id: string) {
+    setSelectedLabelIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
+
+  function toggleAssigneeFilter(id: string) {
+    setSelectedAssigneeIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
+
+  async function confirmDeleteLabel(l: ProjectLabelItem) {
+    try {
+      await deleteProjectLabel(l.id);
+      handleLabelsChange(labels.filter((x) => x.id !== l.id));
+    } catch {
+      /* leave the palette as-is on error */
+    }
+    setLabelToDelete(null);
   }
 
   const selectedLabel = (() => {
@@ -176,6 +257,150 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
         </span>
       </div>
 
+      {/* Combined filter bar (CS-2 card-modal extension) — étiquettes (+ create) & assigné·e/Moi,
+          auto-apply, all filters combine (AND across dimensions, OR within). */}
+      {(labels.length > 0 || members.length > 0 || !readOnly) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '9px 18px',
+            borderBottom: '2px solid var(--border)',
+            fontSize: 13,
+            fontWeight: 700,
+            flexWrap: 'wrap',
+            background: 'var(--paper)',
+          }}
+        >
+          <span style={{ color: 'var(--ink2)' }}>Filtres :</span>
+
+          {labels.length > 0 && <span style={{ color: 'var(--ink2)', fontWeight: 500 }}>Étiquettes</span>}
+          {labels.map((l) => {
+            const active = selectedLabelIds.includes(l.id);
+            return (
+              <span
+                key={l.id}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  border: '2px solid var(--ink)',
+                  borderRadius: 5,
+                  minHeight: 30,
+                  overflow: 'hidden',
+                  background: active ? l.color : 'var(--card)',
+                  color: active ? '#fff' : 'var(--ink)',
+                }}
+              >
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleLabelFilter(l.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'inherit',
+                    padding: '4px 6px 4px 10px',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ width: 12, height: 12, borderRadius: 3, background: l.color, border: '1.5px solid var(--ink)' }}
+                  />
+                  {l.name}
+                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    aria-label={`Supprimer l'étiquette ${l.name}`}
+                    onClick={() => setLabelToDelete(l)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      padding: '0 8px',
+                      height: '100%',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            );
+          })}
+
+          {!readOnly && (
+            <LabelCreatePopover slug={slug} onCreated={(created) => setLabels((ls) => [...ls, created])} />
+          )}
+
+          {/* Assigné·e group — centered in the filter bar (auto margins push it to the middle). */}
+          {members.length > 0 && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 auto' }}>
+              <span aria-hidden="true" style={{ width: 2, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+              <span style={{ color: 'var(--ink2)', fontWeight: 500 }}>Assigné·e</span>
+              {members.map((m) => {
+                const active = selectedAssigneeIds.includes(m.accountId);
+                const label = m.accountId === viewerId ? 'Moi' : m.displayName;
+                return (
+                  <button
+                    key={m.accountId}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleAssigneeFilter(m.accountId)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      border: '2px solid var(--ink)',
+                      borderRadius: 20,
+                      padding: '4px 11px 4px 5px',
+                      cursor: 'pointer',
+                      minHeight: 30,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      fontFamily: 'inherit',
+                      background: active ? 'var(--accent)' : 'var(--card)',
+                      color: active ? '#fff' : 'var(--ink)',
+                    }}
+                  >
+                    {m.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.avatar} alt="" width={20} height={20} style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--ink)', objectFit: 'cover', display: 'block' }} />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--ink)', background: active ? '#fff' : 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px', display: 'block' }}
+                      />
+                    )}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {labelToDelete && (
+        <ConfirmDialog
+          title="Supprimer l'étiquette ?"
+          message={`« ${labelToDelete.name} » sera retirée de toutes les cartes.`}
+          confirmLabel="Supprimer"
+          onConfirm={() => void confirmDeleteLabel(labelToDelete)}
+          onCancel={() => setLabelToDelete(null)}
+        />
+      )}
+
       {error && (
         <div
           role="alert"
@@ -211,6 +436,7 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
             readOnly={readOnly}
             isDropTarget={dropStage === stage}
             dragId={dragId}
+            onOpenCard={setOpenPageId}
             onDragStartCard={setDragId}
             onDragEndCard={() => {
               setDragId(null);
@@ -231,6 +457,25 @@ export default function KanbanBoard({ slug, chapters, initialPages, readOnly }: 
           />
         ))}
       </div>
+
+      {openPageId && (
+        <CardModal
+          pageId={openPageId}
+          slug={slug}
+          members={members}
+          labels={labels}
+          viewerId={viewerId}
+          isOwner={isOwner}
+          readOnly={readOnly}
+          onClose={() => setOpenPageId(null)}
+          onPageChange={(page) => setPages((ps) => ps.map((p) => (p.id === page.id ? { ...p, ...page } : p)))}
+          onDeleted={(id) => {
+            setPages((ps) => ps.filter((p) => p.id !== id));
+            setOpenPageId(null);
+          }}
+          onLabelsChange={handleLabelsChange}
+        />
+      )}
     </div>
   );
 }
@@ -253,6 +498,7 @@ function Column({
   readOnly,
   isDropTarget,
   dragId,
+  onOpenCard,
   onDragStartCard,
   onDragEndCard,
   onDropTargetEnter,
@@ -267,6 +513,7 @@ function Column({
   readOnly?: boolean;
   isDropTarget: boolean;
   dragId: string | null;
+  onOpenCard: (id: string) => void;
   onDragStartCard: (id: string) => void;
   onDragEndCard: () => void;
   onDropTargetEnter: () => void;
@@ -335,6 +582,7 @@ function Column({
             card={card}
             readOnly={readOnly}
             dragging={dragId === card.id}
+            onOpen={() => onOpenCard(card.id)}
             onDragStart={() => onDragStartCard(card.id)}
             onDragEnd={onDragEndCard}
             onMove={(to) => onMoveCard(card.id, to)}
@@ -387,6 +635,7 @@ function PageCard({
   card,
   readOnly,
   dragging,
+  onOpen,
   onDragStart,
   onDragEnd,
   onMove,
@@ -395,16 +644,34 @@ function PageCard({
   card: WorkspacePage;
   readOnly?: boolean;
   dragging: boolean;
+  onOpen: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onMove: (to: PageStage) => void;
   onRemove: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [versions, setVersions] = useState<PageVersionItem[] | null>(null);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Outside-click / Escape close for the popovers. The ⋯ menu is rendered in a portal (below) so it
+  // escapes the board's `overflow-x:auto` clipping — the outside check covers both the card and the
+  // portalled menu.
+  useEffect(() => {
+    if (!menuOpen && !versionsOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (cardRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setMenuOpen(false);
+      setVersionsOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [menuOpen, versionsOpen]);
 
   async function openVersions() {
     setVersionsOpen((v) => !v);
@@ -417,9 +684,27 @@ function PageCard({
     }
   }
 
+  const overdue = card.dueDate !== null && card.dueDate < todayStr();
+
   return (
     <div
+      ref={cardRef}
+      role="button"
+      tabIndex={0}
+      aria-label={`Ouvrir ${card.title}`}
       draggable={!readOnly}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          setMenuOpen(false);
+          setVersionsOpen(false);
+          return;
+        }
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
       onDragStart={
         readOnly
           ? undefined
@@ -431,20 +716,40 @@ function PageCard({
       }
       onDragEnd={readOnly ? undefined : onDragEnd}
       style={{
+        position: 'relative',
+        zIndex: menuOpen || versionsOpen ? 30 : undefined,
         border: '2px solid var(--ink)',
         borderRadius: 6,
         padding: 8,
         background: 'var(--card)',
         boxShadow: '2px 2px 0 var(--shadow)',
         opacity: dragging ? 0.5 : 1,
-        cursor: readOnly ? 'default' : 'grab',
+        cursor: readOnly ? 'pointer' : 'grab',
       }}
     >
+      {/* Label color bars */}
+      {card.labels.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+          {card.labels.map((l) => (
+            <span
+              key={l.id}
+              title={l.name}
+              style={{ height: 6, minWidth: 28, flex: '1 1 28px', maxWidth: 56, borderRadius: 3, background: l.color, border: '1px solid var(--ink)' }}
+            >
+              <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>{l.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
         <b>{card.title}</b>
         <button
           type="button"
-          onClick={openVersions}
+          onClick={(e) => {
+            e.stopPropagation();
+            void openVersions();
+          }}
           title="Versions"
           aria-label={`Versions de ${card.title}`}
           style={{
@@ -466,6 +771,7 @@ function PageCard({
 
       {versionsOpen && (
         <ul
+          onClick={(e) => e.stopPropagation()}
           style={{
             listStyle: 'none',
             margin: '7px 0 0',
@@ -521,12 +827,88 @@ function PageCard({
         </div>
       )}
 
+      {/* Meta footer — due pill / checklist (x/x) / comment count / assignee stack */}
+      {(card.dueDate || card.checklistTotal > 0 || card.commentCount > 0 || card.assignees.length > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap', fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
+          {card.dueDate && (
+            <span
+              title="Échéance"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                border: '1.5px solid var(--ink)',
+                borderRadius: 4,
+                padding: '1px 6px',
+                background: overdue ? 'var(--accent)' : 'var(--paper)',
+                color: overdue ? '#fff' : 'var(--ink)',
+              }}
+            >
+              <CalendarIcon size={11} />
+              {formatShortDate(card.dueDate)}
+            </span>
+          )}
+          {card.checklistTotal > 0 && (
+            <span title="Checklist" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <ChecklistIcon size={12} />({card.checklistDone}/{card.checklistTotal})
+            </span>
+          )}
+          {card.commentCount > 0 && (
+            <span title="Commentaires" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <ChatIcon size={12} />
+              {card.commentCount}
+            </span>
+          )}
+          {card.assignees.length > 0 && (
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}
+              title={card.assignees.map((a) => a.displayName).join(', ')}
+            >
+              {card.assignees.slice(0, 4).map((a, i) =>
+                a.avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={a.accountId}
+                    src={a.avatar}
+                    alt=""
+                    width={20}
+                    height={20}
+                    style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--ink)', objectFit: 'cover', marginLeft: i === 0 ? 0 : -7, display: 'block' }}
+                  />
+                ) : (
+                  <span
+                    key={a.accountId}
+                    aria-hidden="true"
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      border: '2px solid var(--ink)',
+                      background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px',
+                      marginLeft: i === 0 ? 0 : -7,
+                      display: 'block',
+                    }}
+                  />
+                ),
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Action row — ✎/👁/⚑ are CS-4/CS-5 placeholders (no-op); ⋯ opens the real move+delete menu. */}
       <div style={{ display: 'flex', gap: 4, marginTop: 7, position: 'relative' }}>
-        <button type="button" title="Éditer" aria-label="Éditer" disabled={readOnly} style={iconBtnStyle}>
+        <button
+          type="button"
+          title="Éditer"
+          aria-label="Éditer"
+          disabled={readOnly}
+          onClick={(e) => e.stopPropagation()}
+          style={iconBtnStyle}
+        >
           <span aria-hidden="true">✎</span>
         </button>
-        <button type="button" title="Aperçu" aria-label="Aperçu" style={iconBtnStyle}>
+        <button type="button" title="Aperçu" aria-label="Aperçu" onClick={(e) => e.stopPropagation()} style={iconBtnStyle}>
           <EyeIcon size={12} />
         </button>
         <button
@@ -534,6 +916,7 @@ function PageCard({
           title="Corrections"
           aria-label="Corrections"
           disabled={readOnly}
+          onClick={(e) => e.stopPropagation()}
           style={iconBtnStyle}
         >
           <span aria-hidden="true">⚑</span>
@@ -545,7 +928,10 @@ function PageCard({
             aria-label="Menu"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuPos({ top: r.bottom + 4, left: Math.max(8, r.right - 190) });
               setMenuOpen((o) => !o);
               setConfirmDelete(false);
             }}
@@ -555,19 +941,19 @@ function PageCard({
           </button>
         )}
 
-        {menuOpen && (
+        {menuOpen && menuPos && typeof document !== 'undefined' && createPortal(
           <div
             ref={menuRef}
             role="menu"
+            onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
               if (e.key === 'Escape') setMenuOpen(false);
             }}
             style={{
-              position: 'absolute',
-              top: '100%',
-              right: 0,
-              marginTop: 4,
-              zIndex: 20,
+              position: 'fixed',
+              top: menuPos.top,
+              left: menuPos.left,
+              zIndex: 60,
               minWidth: 180,
               border: '2px solid var(--ink)',
               borderRadius: 8,
@@ -604,40 +990,34 @@ function PageCard({
               </button>
             ))}
             <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-            {confirmDelete ? (
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '2px 4px' }}>
-                <span style={{ fontSize: 11, color: 'var(--ink2)' }}>Supprimer ?</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onRemove();
-                    setMenuOpen(false);
-                  }}
-                  style={{ ...menuItemStyle, color: '#c0392b', width: 'auto', flex: 1 }}
-                >
-                  Confirmer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  style={{ ...menuItemStyle, width: 'auto', flex: 1 }}
-                >
-                  Annuler
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => setConfirmDelete(true)}
-                style={{ ...menuItemStyle, color: '#c0392b' }}
-              >
-                Supprimer la carte
-              </button>
-            )}
-          </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setConfirmDelete(true);
+                setMenuOpen(false);
+              }}
+              style={{ ...menuItemStyle, color: '#c0392b' }}
+            >
+              Supprimer la carte
+            </button>
+          </div>,
+          document.body,
         )}
       </div>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Supprimer la carte ?"
+          message={`« ${card.title} » sera définitivement supprimée.`}
+          confirmLabel="Supprimer"
+          onConfirm={() => {
+            onRemove();
+            setConfirmDelete(false);
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
@@ -655,3 +1035,138 @@ const menuItemStyle: React.CSSProperties = {
   fontFamily: 'inherit',
   width: '100%',
 };
+
+// Inline "create an étiquette" control living in the filter bar (user refinement).
+function LabelCreatePopover({ slug, onCreated }: { slug: string; onCreated: (l: ProjectLabelItem) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState<string>(LABEL_COLORS[0]);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  async function create() {
+    const n = name.trim();
+    if (!n) return;
+    try {
+      const created = await createProjectLabel(slug, { name: n, color });
+      onCreated(created);
+      setName('');
+      setColor(LABEL_COLORS[0]);
+      setOpen(false);
+    } catch {
+      /* keep the form open on error */
+    }
+  }
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        aria-label="Créer une étiquette"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          border: '2px dashed var(--ink)',
+          borderRadius: 5,
+          padding: '4px 10px',
+          cursor: 'pointer',
+          minHeight: 30,
+          fontWeight: 700,
+          fontSize: 13,
+          fontFamily: 'inherit',
+          background: 'var(--card)',
+          color: 'var(--ink)',
+        }}
+      >
+        ＋ Étiquette
+      </button>
+      {open && (
+        <div
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            zIndex: 40,
+            width: 240,
+            background: 'var(--card)',
+            border: '2px solid var(--ink)',
+            borderRadius: 8,
+            boxShadow: '4px 4px 0 var(--shadow)',
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          <input
+            aria-label="Nom de l'étiquette"
+            placeholder="Nom de l'étiquette"
+            value={name}
+            maxLength={30}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void create();
+              }
+            }}
+            style={{
+              width: '100%',
+              border: '2px solid var(--ink)',
+              borderRadius: 8,
+              padding: '7px 10px',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              background: 'var(--card)',
+              color: 'var(--ink)',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {LABEL_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={LABEL_COLOR_NAMES[c]}
+                aria-pressed={color === c}
+                onClick={() => setColor(c)}
+                style={{ width: 24, height: 24, borderRadius: 6, background: c, border: color === c ? '3px solid var(--ink)' : '2px solid var(--ink2)', cursor: 'pointer' }}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => void create()}
+            style={{
+              alignSelf: 'flex-start',
+              fontSize: 13,
+              fontWeight: 700,
+              border: '2px solid var(--ink)',
+              borderRadius: 7,
+              padding: '7px 14px',
+              cursor: 'pointer',
+              background: 'var(--accent)',
+              color: '#fff',
+              fontFamily: 'inherit',
+              minHeight: 36,
+            }}
+          >
+            Créer
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

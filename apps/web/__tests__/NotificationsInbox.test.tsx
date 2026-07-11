@@ -46,6 +46,7 @@ const unreadItem: NotificationItem = {
   area: 'messages',
   refId: null,
   sourceUser: { displayName: 'Camille Roux', slug: 'camille', avatar: null },
+  message: null,
   createdAt: now,
   readAt: null,
 };
@@ -56,6 +57,7 @@ const readItem: NotificationItem = {
   area: 'autres',
   refId: null,
   sourceUser: { displayName: 'Sora V.', slug: 'sora', avatar: null },
+  message: null,
   createdAt: now,
   readAt: new Date().toISOString(),
 };

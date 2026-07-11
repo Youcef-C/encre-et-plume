@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import type {
   CreatePageRequest,
   PageFileTag,
@@ -44,6 +44,27 @@ export class UpdatePageDto implements UpdatePageRequest {
   @IsArray()
   @IsString({ each: true })
   linkedFileIds?: string[];
+
+  // CS-2 card-modal extension. @IsOptional short-circuits validators on null → null clears.
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  description?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date invalide' })
+  dueDate?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  labelIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  assigneeIds?: string[];
 }
 
 export class UpdatePageStageDto implements UpdatePageStageRequest {

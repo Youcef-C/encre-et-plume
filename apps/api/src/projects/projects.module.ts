@@ -3,8 +3,10 @@ import { JwtModule } from '@nestjs/jwt';
 import { getJwtSecret } from '../auth/jwt-secret';
 import { ProjectsController } from './projects.controller';
 import { PagesController } from './pages.controller';
+import { CardCollabController } from './card-collab.controller';
 import { ProjectsService } from './projects.service';
 import { PagesService } from './pages.service';
+import { CardCollabService } from './card-collab.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
@@ -33,8 +35,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CallsModule, // CS-1 "Appel à projets" seed (MC-4)
     NotificationsModule, // CS-2 stage→corrections notify (F-5)
   ],
-  controllers: [ProjectsController, PagesController],
-  providers: [ProjectsService, PagesService, PrismaService, RedisService, SlugService, SessionGuard],
+  controllers: [ProjectsController, PagesController, CardCollabController],
+  providers: [ProjectsService, PagesService, CardCollabService, PrismaService, RedisService, SlugService, SessionGuard],
   exports: [ProjectsService],
 })
 export class ProjectsModule {}

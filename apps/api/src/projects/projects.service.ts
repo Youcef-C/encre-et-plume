@@ -18,12 +18,12 @@ import type {
   UpdateProjectInfoRequest,
   UpdateProjectInfoResponse,
   WorkspaceMember,
-  WorkspacePage,
   WorkspaceReview,
   WorkspaceReviewSummary,
 } from '@encre-et-plume/shared';
 import { GENRES, PROJECTS_PAGE_SIZE, catalogGenreLabel, normalizeHashtags } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { WORKSPACE_PAGE_INCLUDE, toWorkspacePage } from './pages.service';
 import { CollectionsService, buildSoutien } from '../collections/collections.service';
 import { SlugService } from '../slug/slug.service';
 import { MediaService } from '../media/media.service';
@@ -444,7 +444,8 @@ export class ProjectsService {
             reviews: { orderBy: { createdAt: 'desc' } },
           },
         },
-        pages: { orderBy: { createdAt: 'asc' } },
+        pages: { orderBy: { createdAt: 'asc' }, include: WORKSPACE_PAGE_INCLUDE },
+        labels: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!project || !project.work) throw new NotFoundException('Projet introuvable');
@@ -480,15 +481,8 @@ export class ProjectsService {
         status: c.status,
         plancheCount: c.plancheCount,
       })),
-      pages: project.pages.map((p) => ({
-        id: p.id,
-        chapterId: p.chapterId,
-        title: p.title,
-        stage: p.stage,
-        version: p.version,
-        fileTags: p.fileTags as WorkspacePage['fileTags'],
-        linkedFileIds: p.linkedFileIds,
-      })),
+      pages: project.pages.map((p) => toWorkspacePage(p as never)),
+      labels: project.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
       reviews: { summary: reviewSummary(allReviews), items: allReviews.slice(0, 20) },
       viewer: { isMember, isOwner },
     };

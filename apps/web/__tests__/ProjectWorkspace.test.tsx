@@ -33,6 +33,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
     ],
     chapters: [{ id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0 }],
     pages: [],
+    labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
     viewer: { isMember: true, isOwner: true },
     ...over,
@@ -52,8 +53,10 @@ describe('ProjectWorkspace', () => {
     const back = screen.getByRole('link', { name: /Projets/ });
     expect(back).toHaveAttribute('href', '/projets');
     expect(screen.getByText('Nuit Blanche')).toBeInTheDocument();
-    expect(screen.getByText('Camille')).toBeInTheDocument();
-    expect(screen.getByText('Yuki')).toBeInTheDocument();
+    // Member names show in the header (span); the assignee-filter chips also carry them, so scope
+    // the assertion to the header span rendering.
+    expect(screen.getByText('Camille', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText('Yuki', { selector: 'span' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Gérer le groupe' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditeur' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
