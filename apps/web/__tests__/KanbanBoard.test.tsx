@@ -248,8 +248,8 @@ describe('KanbanBoard', () => {
         chapters={chapters}
         initialPages={[mine, other]}
         members={[
-          { accountId: 'me', displayName: 'Yuki', avatar: null, role: 'scenariste' },
-          { accountId: 'u2', displayName: 'Léo', avatar: null, role: 'dessinateur' },
+          { accountId: 'me', displayName: 'Yuki', avatar: null, roles: ['scenariste'] },
+          { accountId: 'u2', displayName: 'Léo', avatar: null, roles: ['dessinateur'] },
         ]}
         viewerId="me"
       />,

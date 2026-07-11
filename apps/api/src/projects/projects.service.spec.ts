@@ -551,8 +551,8 @@ describe('ProjectsService workspace (CS-2)', () => {
       hashtags: ['thriller'],
       coverImage: null,
       creators: [
-        { accountId: 'acc-me', role: 'scenariste', order: 0, account: { id: 'acc-me', displayName: 'Moi', avatar: null } },
-        { accountId: 'acc-yuki', role: 'dessinateur', order: 1, account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg' } },
+        { accountId: 'acc-me', role: 'scenariste', order: 0, account: { id: 'acc-me', displayName: 'Moi', avatar: null, profile: { creatorRoles: ['scenariste', 'dessinateur'] } } },
+        { accountId: 'acc-yuki', role: 'dessinateur', order: 1, account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg', profile: { creatorRoles: ['dessinateur'] } } },
       ],
       chapters: [
         { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3 },
@@ -602,6 +602,8 @@ describe('ProjectsService workspace (CS-2)', () => {
       expect(res.title).toBe('Lames de Brume');
       expect(res.workSlug).toBe('lames-de-brume');
       expect(res.members.map((m) => m.accountId)).toEqual(['acc-me', 'acc-yuki']);
+      // Both profile roles → both icons for acc-me; single role for acc-yuki.
+      expect(res.members.map((m) => m.roles)).toEqual([['scenariste', 'dessinateur'], ['dessinateur']]);
       expect(res.chapters.map((c) => c.number)).toEqual([0, 1]);
       expect(res.pages).toHaveLength(1);
       // summary over all reviews: story (4+2)/2=3, art (5+3)/2=4, overall ((4.5)+(2.5))/2=3.5, count 2

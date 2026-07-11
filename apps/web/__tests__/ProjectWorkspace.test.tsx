@@ -5,7 +5,7 @@ import type { ProjectWorkspaceResponse } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getPageVersions: vi.fn(), createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn() };
+  return { ...actual, getPageVersions: vi.fn(), createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn(), getMyProjects: vi.fn() };
 });
 vi.mock('../components/UploadControl', () => ({ default: ({ label }: { label: string }) => <div>{label}</div> }));
 vi.mock('next/link', () => ({
@@ -14,6 +14,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+import * as api from '../lib/api';
 import ProjectWorkspace, { type WorkspaceTab } from '../components/projet/ProjectWorkspace';
 
 function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWorkspaceResponse {
@@ -28,8 +29,8 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
     visibility: 'public',
     cover: null,
     members: [
-      { accountId: 'u1', displayName: 'Camille', avatar: null, role: 'scenariste' },
-      { accountId: 'u2', displayName: 'Yuki', avatar: null, role: 'dessinateur' },
+      { accountId: 'u1', displayName: 'Camille', avatar: null, roles: ['scenariste', 'dessinateur'] },
+      { accountId: 'u2', displayName: 'Yuki', avatar: null, roles: ['dessinateur'] },
     ],
     chapters: [{ id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0 }],
     pages: [],
@@ -60,6 +61,30 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Gérer le groupe' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditeur' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
+  });
+
+  it('renders one icon per active profile role (both for a dual-role member, one otherwise)', () => {
+    renderWs();
+    const camille = screen.getByText('Camille', { selector: 'span' }).parentElement!;
+    const yuki = screen.getByText('Yuki', { selector: 'span' }).parentElement!;
+    expect(camille.querySelectorAll('svg')).toHaveLength(2);
+    expect(yuki.querySelectorAll('svg')).toHaveLength(1);
+  });
+
+  it('opens the project switcher and lists the viewer’s other manga/roman projects (illustrations excluded)', async () => {
+    (api.getMyProjects as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [
+        { id: 'p1', title: 'Nuit Blanche', slug: 'nuit-blanche', type: 'Manga', kind: 'project' },
+        { id: 'p2', title: 'Autre Roman', slug: 'autre-roman', type: 'Histoire', kind: 'project' },
+        { id: 'c1', title: 'Ma Collection', slug: 'ma-collection', type: 'Illustration(s)', kind: 'illustration' },
+      ],
+    });
+    renderWs();
+    await userEvent.click(screen.getByRole('button', { name: 'Changer de projet' }));
+    expect(api.getMyProjects).toHaveBeenCalled();
+    const link = await screen.findByRole('menuitem', { name: /Autre Roman/ });
+    expect(link).toHaveAttribute('href', '/projet/autre-roman');
+    expect(screen.queryByText('Ma Collection')).not.toBeInTheDocument();
   });
 
   it('renders 6 tabs as an ARIA tablist with the active tab selected', () => {

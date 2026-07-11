@@ -3,11 +3,12 @@
 // CS-2 — the "Espace projet" shell: replica of prototype data-page="projet" (header + 6-tab bar).
 // Tabs are an ARIA tablist, deep-linkable via ?tab=. Header action buttons render per the replica but
 // no-op this story (their target screens are future stories: CS-10 / CS-4 / CS-6/CS-9).
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { ProjectWorkspaceResponse } from '@encre-et-plume/shared';
+import type { ProjectWorkspaceResponse, MyProjectItem } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
-import { PenNibIcon, BrushIcon } from '../icons';
+import { getMyProjects } from '../../lib/api';
+import { PenNibIcon, BrushIcon, CaretDownIcon } from '../icons';
 import KanbanBoard from './KanbanBoard';
 import InfosPanel from './InfosPanel';
 import PlaceholderPanel from './PlaceholderPanel';
@@ -35,12 +36,130 @@ export function isWorkspaceTab(v: string | null | undefined): v is WorkspaceTab 
   return !!v && (WORKSPACE_TABS as readonly string[]).includes(v);
 }
 
-function RoleIcon({ role }: { role: string }) {
-  if (role === 'dessinateur' || role === 'dessinatrice')
-    return <BrushIcon size={12} style={{ display: 'inline', marginLeft: 3 }} />;
-  if (role === 'scenariste')
-    return <PenNibIcon size={12} style={{ display: 'inline', marginLeft: 3 }} />;
-  return null;
+// One icon per active profile role — both pen ✒ and brush 🖌 when the user is scénariste AND
+// dessinateur. Order is set server-side (scenariste first).
+function RoleIcons({ roles }: { roles: string[] }) {
+  return (
+    <>
+      {roles.map((role) => {
+        if (role === 'dessinateur' || role === 'dessinatrice')
+          return <BrushIcon key={role} size={12} style={{ display: 'inline', marginLeft: 3 }} />;
+        if (role === 'scenariste')
+          return <PenNibIcon key={role} size={12} style={{ display: 'inline', marginLeft: 3 }} />;
+        return null;
+      })}
+    </>
+  );
+}
+
+/**
+ * Project title + a caret that opens a switcher listing the viewer's other manga/roman projects
+ * (illustration collections excluded). Clicking one navigates straight to its workspace.
+ */
+function ProjectSwitcher({ currentSlug, title }: { currentSlug: string; title: string }) {
+  const [open, setOpen] = useState(false);
+  const [projects, setProjects] = useState<MyProjectItem[] | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || projects !== null) return;
+    getMyProjects()
+      // Only navigable manga/roman projects (kind 'project' with a slug) — not collections/illustrations.
+      .then((res) => setProjects(res.items.filter((p) => p.kind === 'project' && !!p.slug)))
+      .catch(() => setProjects([]));
+  }, [open, projects]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('pointerdown', onDocDown);
+    return () => document.removeEventListener('pointerdown', onDocDown);
+  }, [open]);
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, textTransform: 'uppercase' }}>
+        {title}
+      </span>
+      <button
+        type="button"
+        aria-label="Changer de projet"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 26,
+          height: 26,
+          border: '2px solid var(--ink)',
+          borderRadius: 6,
+          background: 'var(--card)',
+          cursor: 'pointer',
+          color: 'var(--ink)',
+        }}
+      >
+        <CaretDownIcon size={13} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            marginTop: 6,
+            zIndex: 40,
+            minWidth: 240,
+            maxHeight: 340,
+            overflowY: 'auto',
+            border: '2px solid var(--ink)',
+            borderRadius: 8,
+            background: 'var(--card)',
+            boxShadow: '4px 4px 0 var(--shadow)',
+            padding: 6,
+          }}
+        >
+          {projects === null && (
+            <div style={{ fontSize: 12, color: 'var(--ink2)', padding: '6px 8px' }}>Chargement…</div>
+          )}
+          {projects?.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--ink2)', padding: '6px 8px' }}>Aucun autre projet</div>
+          )}
+          {projects?.map((p) => {
+            const active = p.slug === currentSlug;
+            return (
+              <Link
+                key={p.slug}
+                href={`/projet/${p.slug}`}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                style={{
+                  display: 'block',
+                  padding: '7px 9px',
+                  borderRadius: 5,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                  color: 'var(--ink)',
+                  background: active ? 'var(--accent-soft)' : 'transparent',
+                }}
+              >
+                {p.title}
+                {p.type && (
+                  <span style={{ fontWeight: 500, color: 'var(--ink2)', marginLeft: 6 }}>· {p.type}</span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export interface ProjectWorkspaceProps {
@@ -102,11 +221,7 @@ export default function ProjectWorkspace({
           >
             ‹ Projets
           </Link>
-          <span
-            style={{ fontFamily: 'var(--font-display)', fontSize: 24, textTransform: 'uppercase' }}
-          >
-            {title}
-          </span>
+          <ProjectSwitcher currentSlug={slug} title={title} />
           {/* Overlapping avatar stack */}
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {workspace.members.slice(0, 4).map((m, i) =>
@@ -150,7 +265,7 @@ export default function ProjectWorkspace({
               <span key={m.accountId}>
                 {i > 0 && <span>{workspace.members.length === 2 ? ' & ' : ' · '}</span>}
                 <span>{m.displayName}</span>
-                <RoleIcon role={m.role} />
+                <RoleIcons roles={m.roles} />
               </span>
             ))}
           </span>

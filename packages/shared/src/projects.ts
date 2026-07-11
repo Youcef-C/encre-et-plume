@@ -218,7 +218,7 @@ export interface WorkspaceMember {
   accountId: string;
   displayName: string;
   avatar: string | null;
-  role: string; // WorkCreator.role, e.g. "scenariste" | "dessinateur"
+  roles: string[]; // member's active profile creatorRoles (scenariste/dessinateur) → one icon each
 }
 
 export interface WorkspaceChapter {

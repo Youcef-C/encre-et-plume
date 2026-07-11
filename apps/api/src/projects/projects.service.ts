@@ -40,6 +40,19 @@ function mapFormat(type: 'manga' | 'story', format: 'serie' | 'oneshot'): string
   return type === 'manga' ? 'Manga' : 'Roman';
 }
 
+/** Canonical order for the two role icons (pen ✒ then brush 🖌). */
+const ICON_ROLES = ['scenariste', 'dessinateur'] as const;
+
+/**
+ * A member's role icons from their profile creatorRoles (both when both are active), in canonical
+ * order. Falls back to their per-project WorkCreator role when the profile declares neither.
+ */
+function iconRoles(creatorRoles: string[] | null | undefined, workRole: string): string[] {
+  const active = ICON_ROLES.filter((r) => creatorRoles?.includes(r));
+  if (active.length > 0) return active;
+  return ICON_ROLES.includes(workRole as (typeof ICON_ROLES)[number]) ? [workRole] : [];
+}
+
 /** Owner's first membership role (CS-10 seam) — first creator role, else 'scenariste'. */
 function firstCreatorRole(roles?: string[] | null): string {
   return roles?.find((r) => r === 'scenariste' || r === 'dessinateur') ?? 'scenariste';
@@ -438,7 +451,11 @@ export class ProjectsService {
           include: {
             creators: {
               orderBy: { order: 'asc' },
-              include: { account: { select: { id: true, displayName: true, avatar: true } } },
+              include: {
+                account: {
+                  select: { id: true, displayName: true, avatar: true, profile: { select: { creatorRoles: true } } },
+                },
+              },
             },
             chapters: { orderBy: { number: 'asc' } },
             reviews: { orderBy: { createdAt: 'desc' } },
@@ -459,7 +476,9 @@ export class ProjectsService {
       accountId: c.accountId,
       displayName: c.account.displayName,
       avatar: c.account.avatar,
-      role: c.role,
+      // Show every active profile role (both icons if the user is scénariste AND dessinateur);
+      // fall back to this member's WorkCreator role when the profile declares none.
+      roles: iconRoles(c.account.profile?.creatorRoles, c.role),
     }));
 
     const allReviews = work.reviews.map(mapWorkspaceReview);

@@ -27,8 +27,8 @@ import * as api from '../lib/api';
 import CardModal from '../components/projet/CardModal';
 
 const members: WorkspaceMember[] = [
-  { accountId: 'me', displayName: 'Yuki Moreau', avatar: null, role: 'scenariste' },
-  { accountId: 'u2', displayName: 'Léo Dupont', avatar: null, role: 'dessinateur' },
+  { accountId: 'me', displayName: 'Yuki Moreau', avatar: null, roles: ['scenariste'] },
+  { accountId: 'u2', displayName: 'Léo Dupont', avatar: null, roles: ['dessinateur'] },
 ];
 
 const rouge: ProjectLabelItem = { id: 'lb1', name: 'Urgent', color: '#e8261c' };
