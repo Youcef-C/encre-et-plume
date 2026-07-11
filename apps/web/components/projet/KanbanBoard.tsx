@@ -419,13 +419,16 @@ export default function KanbanBoard({
         </div>
       )}
 
-      {/* 6 production columns (proto 1345–1352). Horizontally scrollable below desktop. */}
+      {/* 6 production columns (proto 1345–1352). Horizontally scrollable below desktop.
+          Greyish-white board surface so the white cards read against it (a11y) — no per-column lanes. */}
       <div
         style={{
           display: 'flex',
           gap: 10,
           padding: '16px 18px',
           overflowX: 'auto',
+          background: 'var(--board)',
+          borderRadius: 8,
         }}
       >
         {PAGE_STAGES.map((stage) => (
@@ -551,10 +554,9 @@ function Column({
       style={{
         flex: '1 0 220px',
         minWidth: 220,
-        borderRadius: 8,
-        // Tinted lane (deeper than paper) so near-white cards keep a legible contrast (a11y).
-        padding: 8,
-        background: isDropTarget ? 'var(--accent-soft)' : 'var(--lane)',
+        borderRadius: 6,
+        padding: isDropTarget ? 4 : 0,
+        background: isDropTarget ? 'var(--accent-soft)' : 'transparent',
         transition: 'background 0.1s',
       }}
     >
