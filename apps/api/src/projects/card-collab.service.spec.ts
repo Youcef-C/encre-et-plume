@@ -219,6 +219,17 @@ describe('CardCollabService', () => {
       expect(notifications.create.mock.calls[0][0].recipientId).toBe('acc-yuki');
     });
 
+    it('does not fire on a prefix collision or an email-style @ (tightened matching)', async () => {
+      // "@Yukion" has Yuki as a prefix; "vince@Yuki.fr" has @ after a word char — neither is a mention.
+      await service.addComment('acc-me', 'page-1', { body: 'salut @Yukion et vince@Yuki.fr' });
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('matches a mention terminated by punctuation', async () => {
+      await service.addComment('acc-me', 'page-1', { body: 'merci @Yuki !' });
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+    });
+
     it('swallows a mention-notification failure (never fails the comment)', async () => {
       notifications.create.mockRejectedValue(new Error('notif down'));
       await expect(service.addComment('acc-me', 'page-1', { body: '@Yuki' })).resolves.toBeDefined();

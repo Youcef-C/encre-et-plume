@@ -551,9 +551,10 @@ function Column({
       style={{
         flex: '1 0 220px',
         minWidth: 220,
-        borderRadius: 6,
-        padding: isDropTarget ? 4 : 0,
-        background: isDropTarget ? 'var(--accent-soft)' : 'transparent',
+        borderRadius: 8,
+        // Tinted lane (deeper than paper) so near-white cards keep a legible contrast (a11y).
+        padding: 8,
+        background: isDropTarget ? 'var(--accent-soft)' : 'var(--lane)',
         transition: 'background 0.1s',
       }}
     >

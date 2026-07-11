@@ -229,9 +229,10 @@ export class CardCollabService {
 
   /**
    * F-5 mention side effect (best-effort — never fails the comment write). A member is "mentioned"
-   * iff the body contains `@` + their displayName (case-insensitive substring; the FE composer inserts
-   * the exact `@DisplayName`). On edit we only notify mentions that are NEW (not already in oldBody).
-   * The author never notifies themselves.
+   * iff the body contains `@` + their displayName as a whole token (case-insensitive): the `@` must
+   * start the token (not preceded by a word char or another `@`, so `email@alice` doesn't count) and
+   * the name must not be a prefix of a longer word (so `@Ali` doesn't fire for a longer `@Alice`).
+   * On edit we only notify mentions that are NEW (not already in oldBody). Author never self-notifies.
    */
   private async notifyMentions(
     actorId: string,
@@ -244,12 +245,9 @@ export class CardCollabService {
     const memberIds = projectMemberIds(project).filter((id) => id !== actorId);
     if (memberIds.length === 0) return;
     const members = await this.prisma.account.findMany({ where: { id: { in: memberIds } }, select: { id: true, displayName: true } });
-    const newLower = newBody.toLowerCase();
-    const oldLower = oldBody.toLowerCase();
     for (const m of members) {
       if (m.id === actorId) continue; // never notify the author (defensive: query already excludes them)
-      const token = `@${m.displayName.toLowerCase()}`;
-      if (newLower.includes(token) && !oldLower.includes(token)) {
+      if (isMentioned(newBody, m.displayName) && !isMentioned(oldBody, m.displayName)) {
         try {
           await this.notifications.create({
             recipientId: m.id,
@@ -264,6 +262,16 @@ export class CardCollabService {
       }
     }
   }
+}
+
+/**
+ * True iff `body` mentions `@displayName` as a whole token. The `@` must not follow a word char or
+ * another `@` (rules out `email@alice`), and the name must not be immediately followed by a word char
+ * (rules out `@Ali` matching inside `@Alice`). Case-insensitive; the name is regex-escaped.
+ */
+function isMentioned(body: string, displayName: string): boolean {
+  const name = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w@])@${name}(?!\\w)`, 'i').test(body);
 }
 
 function projectMemberIds(project: ProjectShape): string[] {

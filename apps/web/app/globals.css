@@ -9,6 +9,8 @@
 :root {
   --paper: #f1ece1;
   --card: #fffefb;
+  /* Kanban lane bg — deeper than paper so near-white cards keep a legible contrast (a11y). */
+  --lane: #e6ddcc;
   --ink: #16130f;
   --ink2: #6f655a;
   --border: #16130f;
@@ -27,6 +29,8 @@
   color-scheme: dark;
   --paper: #1d1813;
   --card: #26211b;
+  /* Lane sits below paper in dark so the lighter cards lift off it. */
+  --lane: #14100c;
   --ink: #f1ece1;
   --ink2: #b0a596;
   --border: #43392f;
@@ -45,6 +49,7 @@
     color-scheme: dark;
     --paper: #1d1813;
     --card: #26211b;
+    --lane: #14100c;
     --ink: #f1ece1;
     --ink2: #b0a596;
     --border: #43392f;
