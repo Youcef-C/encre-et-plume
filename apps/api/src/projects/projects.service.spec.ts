@@ -98,14 +98,37 @@ describe('ProjectsService', () => {
       orderBy: { createdAt: 'desc' },
     });
     expect(collections.getMine).not.toHaveBeenCalled();
-    expect(res).toEqual({ items: [{ id: 'proj-1', title: 'Lames de Brume', meta: 'Manga · Seinen · en cours', cover: null }] });
+    expect(res).toEqual({
+      items: [
+        {
+          id: 'proj-1',
+          title: 'Lames de Brume',
+          meta: 'Manga · Seinen · en cours',
+          cover: null,
+          // Additive fields so the CS-2 workspace switcher lists all owner manga/roman projects.
+          slug: 'lames-de-brume',
+          kind: 'project',
+          type: 'Manga',
+          status: 'en cours',
+        },
+      ],
+    });
   });
 
   it('legacy: scope=projects behaves like the no-arg call', async () => {
     const res = await service.getMine('acc-me', q({ scope: 'projects' }));
     expect(collections.getMine).not.toHaveBeenCalled();
     expect(res.summary).toBeUndefined();
-    expect(res.items[0]).toEqual({ id: 'proj-1', title: 'Lames de Brume', meta: 'Manga · Seinen · en cours', cover: null });
+    expect(res.items[0]).toEqual({
+      id: 'proj-1',
+      title: 'Lames de Brume',
+      meta: 'Manga · Seinen · en cours',
+      cover: null,
+      slug: 'lames-de-brume',
+      kind: 'project',
+      type: 'Manga',
+      status: 'en cours',
+    });
   });
 
   // ── dashboard path (scope=all) ───────────────────────────────────────────

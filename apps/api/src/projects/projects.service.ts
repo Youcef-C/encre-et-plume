@@ -301,13 +301,23 @@ export class ProjectsService {
     return this.dashboard(accountId, query);
   }
 
-  // ponytail: unchanged single query — MC-3/MC-4 picker path, tiny owner-scoped list.
+  // ponytail: single owner-scoped query — MC-3/MC-4 picker path. Additively carries slug/kind/type so
+  // the CS-2 workspace project switcher can list ALL of the owner's manga/roman projects (every Project
+  // row is a manga/roman — illustrations/collections are separate models — so no type filtering here).
   private async legacyPicker(accountId: string): Promise<MyProjectsResponse> {
     const rows = await this.prisma.project.findMany({
       where: { ownerId: accountId },
       orderBy: { createdAt: 'desc' },
     });
-    return { items: rows.map(toProjectSummary) };
+    return {
+      items: rows.map((p) => ({
+        ...toProjectSummary(p),
+        slug: p.slug,
+        kind: 'project' as const,
+        type: p.kind, // display label, e.g. "Manga" / "Histoire"
+        status: p.status,
+      })),
+    };
   }
 
   private async dashboard(accountId: string, query: ParsedMyProjectsQuery): Promise<MyProjectsResponse> {

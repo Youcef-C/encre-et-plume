@@ -96,6 +96,24 @@ body > main {
   flex: 1;
 }
 
+/* Every button gets a hover affordance. Many buttons are inline-styled and inline styles can't
+   declare :hover, so this baseline covers them; components with their own hover (ep-btn-*, style-hover)
+   just stack a barely-visible brightness on top. Disabled buttons are excluded. */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+  transition: filter 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+button:not(:disabled):hover,
+[role='button']:not([aria-disabled='true']):hover {
+  filter: brightness(0.93);
+}
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    transition: none;
+  }
+}
+
 /* Dark mode: solid very-dark background, no halftone dots */
 :root[data-theme="dark"] body {
   background-color: #161310;
