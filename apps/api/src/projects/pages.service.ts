@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type {
+  AssetType,
   CreatePageRequest,
   PageDetailResponse,
   PageStage,
-  PageVersionItem,
   UpdatePageRequest,
   UpdatePageStageRequest,
   WorkspacePage,
@@ -21,6 +21,9 @@ export const WORKSPACE_PAGE_INCLUDE = {
   labels: { include: { label: true } },
   assignees: { include: { user: { select: { id: true, displayName: true, avatar: true } } } },
   checklistItems: { select: { done: true } },
+  // CS-3 assets linked to this card → derived linkedFiles (badge/chips/sections). One join on the
+  // already-indexed Asset.linkedPageId; no N+1.
+  assets: { select: { id: true, type: true, filename: true, currentVersion: true } },
   _count: { select: { comments: true } },
 } as const;
 
@@ -30,13 +33,13 @@ type PageRow = {
   chapterId: string | null;
   title: string;
   stage: PageStage;
-  version: number;
   fileTags: string[];
   linkedFileIds: string[];
   dueDate?: Date | null;
   labels?: { label: { id: string; name: string; color: string } }[];
   assignees?: { user: { id: string; displayName: string; avatar: string | null } }[];
   checklistItems?: { done: boolean }[];
+  assets?: { id: string; type: AssetType; filename: string; currentVersion: number }[];
   _count?: { comments: number };
 };
 
@@ -52,9 +55,9 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     chapterId: p.chapterId,
     title: p.title,
     stage: p.stage,
-    version: p.version,
     fileTags: p.fileTags as WorkspacePage['fileTags'],
     linkedFileIds: p.linkedFileIds,
+    linkedFiles: (p.assets ?? []).map((a) => ({ assetId: a.id, type: a.type, filename: a.filename, version: a.currentVersion })),
     dueDate: toDateOnly(p.dueDate),
     labels: (p.labels ?? []).map((l) => ({ id: l.label.id, name: l.label.name, color: l.label.color })),
     assignees: (p.assignees ?? []).map((a) => ({ accountId: a.user.id, displayName: a.user.displayName, avatar: a.user.avatar })),
@@ -67,8 +70,9 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
 /**
  * CS-2 kanban card CRUD + stage transitions. Every route resolves page → project → membership
  * (owner or WorkCreator on the linked Work): unknown id → 404, non-member → 403. Card = `Page`
- * (board card), never `Planche` (reader page). Version bumps on a new file revision; a
- * stage→corrections transition fires the F-5 `project_activity` notification to the other members.
+ * (board card), never `Planche` (reader page). Per-file versioning is owned by CS-3 (Asset); the
+ * card badge is a derived rollup of `linkedFiles`. A stage→corrections transition fires the F-5
+ * `project_activity` notification to the other members.
  */
 @Injectable()
 export class PagesService {
@@ -95,13 +99,9 @@ export class PagesService {
       ? body.title.trim()
       : `Page ${(await this.prisma.page.count({ where: { projectId: project.id, chapterId } })) + 1}`;
 
-    const page = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.page.create({
-        data: { projectId: project.id, chapterId, title, stage, fileTags: [], linkedFileIds: [] },
-        include: WORKSPACE_PAGE_INCLUDE,
-      });
-      await tx.pageVersion.create({ data: { pageId: created.id, version: 1, note: 'Création' } });
-      return created;
+    const page = await this.prisma.page.create({
+      data: { projectId: project.id, chapterId, title, stage, fileTags: [], linkedFileIds: [] },
+      include: WORKSPACE_PAGE_INCLUDE,
     });
     return toWorkspacePage(page as PageRow);
   }
@@ -129,15 +129,8 @@ export class PagesService {
       assigneeDiff = diffAssignees(page.assignees.map((a) => a.userId), body.assigneeIds, accountId);
     }
 
-    // Version rule: a new/changed linked-file set is "a new file revision" → bump + history row.
-    let bumped: number | null = null;
-    if (body.linkedFileIds !== undefined) {
-      data.linkedFileIds = body.linkedFileIds;
-      if (!sameSet(body.linkedFileIds, page.linkedFileIds)) {
-        bumped = page.version + 1;
-        data.version = bumped;
-      }
-    }
+    // linkedFileIds is NOT writable here — CS-3's link endpoints own the link state (and the
+    // per-file version chain). A page PATCH never touches it (would drift from Asset.linkedPageId).
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (body.labelIds !== undefined) {
@@ -152,11 +145,7 @@ export class PagesService {
           await tx.pageAssignee.createMany({ data: body.assigneeIds.map((userId) => ({ pageId, userId })) });
         }
       }
-      const row = await tx.page.update({ where: { id: pageId }, data, include: WORKSPACE_PAGE_INCLUDE });
-      if (bumped !== null) {
-        await tx.pageVersion.create({ data: { pageId, version: bumped, note: 'Nouvelle révision de fichier' } });
-      }
-      return row;
+      return tx.page.update({ where: { id: pageId }, data, include: WORKSPACE_PAGE_INCLUDE });
     });
 
     // F-5 side effect (best-effort — never fails the request): tell each added/removed member.
@@ -180,6 +169,7 @@ export class PagesService {
           orderBy: { createdAt: 'asc' },
           include: { author: { select: { id: true, displayName: true, avatar: true } } },
         },
+        assets: { select: { id: true, type: true, filename: true, currentVersion: true } },
         _count: { select: { comments: true } },
       },
     });
@@ -214,10 +204,7 @@ export class PagesService {
 
   async deletePage(accountId: string, pageId: string): Promise<void> {
     await this.loadMemberPage(accountId, pageId);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.pageVersion.deleteMany({ where: { pageId } });
-      await tx.page.delete({ where: { id: pageId } });
-    });
+    await this.prisma.page.delete({ where: { id: pageId } });
   }
 
   async updateStage(accountId: string, pageId: string, body: UpdatePageStageRequest): Promise<WorkspacePage> {
@@ -251,15 +238,6 @@ export class PagesService {
     return toWorkspacePage(updated as PageRow);
   }
 
-  async getVersions(accountId: string, pageId: string): Promise<PageVersionItem[]> {
-    await this.loadMemberPage(accountId, pageId);
-    const rows = await this.prisma.pageVersion.findMany({
-      where: { pageId },
-      orderBy: { version: 'desc' },
-    });
-    return rows.map((r) => ({ version: r.version, note: r.note, createdAt: r.createdAt.toISOString() }));
-  }
-
   // ── helpers ────────────────────────────────────────────────────────────────
 
   /** Load a page with its project membership context; 404 unknown, 403 non-member. Public so the
@@ -277,7 +255,6 @@ export class PagesService {
     return page as typeof page & {
       title: string;
       stage: PageStage;
-      version: number;
       linkedFileIds: string[];
       assignees: { userId: string }[];
       project: { ownerId: string; workId: string; work: { creators: { accountId: string }[] } };
@@ -339,13 +316,6 @@ export class PagesService {
     const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId }, select: { workId: true } });
     if (!chapter || chapter.workId !== workId) throw new BadRequestException('Chapitre invalide');
   }
-}
-
-/** Order-insensitive equality for two id arrays. */
-function sameSet(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const setB = new Set(b);
-  return a.every((x) => setB.has(x));
 }
 
 /** Added/removed members between the old and new assignee sets, excluding the actor from both. */

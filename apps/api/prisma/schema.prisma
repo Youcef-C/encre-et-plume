@@ -920,14 +920,12 @@ model Page {
   chapter       Chapter?      @relation("ChapterBoardCards", fields: [chapterId], references: [id])
   title         String // card label, e.g. "Page 7"
   stage         PageStage     @default(scenario)
-  version       Int           @default(1)
   fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
   linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
   description   String? // CS-2 card-modal: free-text card description
   dueDate       DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-  versions      PageVersion[]
   labels        PageLabel[] // CS-2 card-modal: applied labels
   assignees     PageAssignee[] // CS-2 card-modal: assigned members
   checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
@@ -935,17 +933,6 @@ model Page {
   assets        Asset[]       @relation("PageAssets") // CS-3 assets linked to this card
 
   @@index([projectId, chapterId, stage])
-}
-
-model PageVersion {
-  id        String   @id @default(cuid())
-  pageId    String
-  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  version   Int
-  note      String?
-  createdAt DateTime @default(now())
-
-  @@index([pageId, version])
 }
 
 // ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────

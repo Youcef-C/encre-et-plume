@@ -16,20 +16,34 @@ import {
   listProjectAssets,
   createProjectAsset,
   createProjectAssetFromUrl,
+  deleteAsset,
 } from '../../lib/api';
 import { DRAWING_SOURCE_EXTENSIONS } from '@encre-et-plume/shared';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import OnBrandSelect from '../form/OnBrandSelect';
-import { DownloadIcon, EyeIcon, FileTextIcon } from '../icons';
+import { DownloadIcon, EyeIcon, FileTextIcon, TrashIcon } from '../icons';
 import LinkCardModal from './LinkCardModal';
 import AssetVersionsModal from './AssetVersionsModal';
 import AssetPreviewOverlay from './AssetPreviewOverlay';
+import ConfirmDialog from './ConfirmDialog';
 
 const TYPE_TABS: { label: string; type: AssetType | null }[] = [
   { label: 'Tout', type: null },
   { label: 'Dessins', type: 'dessin' },
   { label: 'Textes', type: 'texte' },
   { label: 'Scénarios', type: 'scenario' },
+  { label: 'Pages', type: 'page' },
+  { label: 'Références', type: 'ref' },
+];
+
+// Import "Type" selector — "Automatique" (empty) sends no type (server derives, D-H).
+const IMPORT_TYPES: { label: string; value: AssetType | '' }[] = [
+  { label: 'Automatique', value: '' },
+  { label: 'Scénario', value: 'scenario' },
+  { label: 'Dessin', value: 'dessin' },
+  { label: 'Page', value: 'page' },
+  { label: 'Référence', value: 'ref' },
+  { label: 'Texte', value: 'texte' },
 ];
 
 // Drop-zone `accept`: image/document MIME types + every drawing-source extension (kept in the shared
@@ -94,6 +108,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
 
   // Upload + URL import
   const [uploads, setUploads] = useState<UploadRow[]>([]);
+  const [importType, setImportType] = useState<AssetType | ''>('');
   const [dragOver, setDragOver] = useState(false);
   const [urlOpen, setUrlOpen] = useState(false);
   const [urlValue, setUrlValue] = useState('');
@@ -106,6 +121,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
   const [linkTarget, setLinkTarget] = useState<AssetItem | null>(null);
   const [versionsTarget, setVersionsTarget] = useState<AssetItem | null>(null);
   const [previewTarget, setPreviewTarget] = useState<AssetItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AssetItem | null>(null);
 
   const hasFilters = type !== null || !!pageId || search.trim() !== '' || sort !== 'recent';
 
@@ -168,7 +184,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           setUploads((rows) => rows.map((r) => (r.id === rowId ? { ...r, progress } : r))),
         );
         setUploads((rows) => rows.map((r) => (r.id === rowId ? { ...r, status: 'processing' } : r)));
-        await createProjectAsset(slug, { mediaId, filename: file.name });
+        await createProjectAsset(slug, { mediaId, filename: file.name, ...(importType ? { type: importType } : {}) });
         setUploads((rows) => rows.filter((r) => r.id !== rowId));
         refresh();
       } catch (e) {
@@ -176,7 +192,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
         setUploads((rows) => rows.map((r) => (r.id === rowId ? { ...r, status: 'error', message } : r)));
       }
     },
-    [slug, refresh],
+    [slug, refresh, importType],
   );
 
   const addFiles = useCallback(
@@ -216,7 +232,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
     setUrlBusy(true);
     setUrlError(null);
     try {
-      await createProjectAssetFromUrl(slug, { url });
+      await createProjectAssetFromUrl(slug, { url, ...(importType ? { type: importType } : {}) });
       setUrlValue('');
       setUrlOpen(false);
       refresh();
@@ -230,6 +246,21 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
 
   function onAssetUpdated(updated: AssetItem) {
     setData((d) => (d ? { ...d, items: d.items.map((it) => (it.id === updated.id ? updated : it)) } : d));
+  }
+
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  async function confirmDeleteAsset() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteError(null);
+    try {
+      await deleteAsset(target.id);
+      setDeleteTarget(null);
+      refresh();
+    } catch (e) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : null;
+      setDeleteError(msg ?? 'Échec de la suppression. Réessayez.');
+    }
   }
 
   const items = data?.items ?? [];
@@ -395,6 +426,23 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
             Cloud
           </button>
         </div>
+        {/* F6 — optional declared type; "Automatique" lets the server derive it. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}>Type</span>
+          <div style={{ minWidth: 170, textAlign: 'left' }}>
+            <OnBrandSelect
+              aria-label="Type de fichier"
+              value={importType}
+              onChange={(e) => setImportType(e.target.value as AssetType | '')}
+            >
+              {IMPORT_TYPES.map((t) => (
+                <option key={t.label} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </OnBrandSelect>
+          </div>
+        </div>
         {urlOpen && (
           <form onSubmit={submitUrl} style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
             <input
@@ -481,6 +529,10 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
                 onPreview={() => setPreviewTarget(a)}
                 onLink={() => setLinkTarget(a)}
                 onVersions={() => setVersionsTarget(a)}
+                onDelete={() => {
+                  setDeleteError(null);
+                  setDeleteTarget(a);
+                }}
               />
             ))}
           </div>
@@ -532,6 +584,22 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           onClose={() => setPreviewTarget(null)}
         />
       )}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Supprimer le fichier ?"
+          message={
+            deleteError
+              ? deleteError
+              : `« ${deleteTarget.filename} » et tout son historique de versions seront supprimés.`
+          }
+          confirmLabel="Supprimer"
+          onConfirm={() => void confirmDeleteAsset()}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -542,12 +610,14 @@ function AssetCard({
   onPreview,
   onLink,
   onVersions,
+  onDelete,
 }: {
   asset: AssetItem;
   readOnly: boolean;
   onPreview: () => void;
   onLink: () => void;
   onVersions: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div data-asset-card style={card}>
@@ -559,7 +629,9 @@ function AssetCard({
           <FileTextIcon size={30} style={{ color: 'var(--ink2)' }} />
         )}
       </div>
-      <div style={{ padding: 9 }}>
+      {/* Flex column so the action row can pin to the card bottom (marginTop:auto) — cards in a grid
+          row share the same height (CSS grid stretch), so their buttons line up. */}
+      <div style={{ padding: 9, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {asset.filename}
         </div>
@@ -576,14 +648,31 @@ function AssetCard({
             {asset.linkedPage.title}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onPreview} disabled={!asset.previewable} style={cardAction} aria-label={`Aperçu de ${asset.filename}`}>
+        {/* Bottom-pinned real on-brand buttons, equal height, ≥44px effective tap target. */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={onPreview}
+            disabled={!asset.previewable}
+            style={{ ...cardActionBtn, opacity: asset.previewable ? 1 : 0.5 }}
+            aria-label={`Aperçu de ${asset.filename}`}
+          >
             <EyeIcon size={13} /> Aperçu
           </button>
           {!readOnly && (
-            <button type="button" onClick={onLink} aria-label={`Lier ${asset.filename} à une carte`} style={cardAction}>
-              ＋ Lier à une carte
-            </button>
+            <>
+              <button type="button" onClick={onLink} aria-label={`Lier ${asset.filename} à une carte`} style={cardActionBtn}>
+                ＋ Lier à une carte
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label={`Supprimer ${asset.filename}`}
+                style={{ ...cardActionBtn, color: '#c0392b', borderColor: '#c0392b' }}
+              >
+                <TrashIcon size={13} /> Supprimer
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -697,6 +786,8 @@ const card: React.CSSProperties = {
   borderRadius: 8,
   overflow: 'hidden',
   boxShadow: '4px 4px 0 var(--shadow)',
+  display: 'flex',
+  flexDirection: 'column',
 };
 
 const thumbBand: React.CSSProperties = {
@@ -717,7 +808,7 @@ const versionBadgeBtn: React.CSSProperties = {
   borderRadius: 4,
   padding: '0 6px',
   background: 'var(--card)',
-  color: 'var(--ink)',
+  color: '#000',
   cursor: 'pointer',
   minHeight: 20,
 };
@@ -738,19 +829,23 @@ const linkedChip: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-const cardAction: React.CSSProperties = {
+// F10 — real on-brand grid-card action button, bottom-pinned, equal height across cards.
+const cardActionBtn: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
   gap: 4,
+  flex: '1 1 auto',
   fontSize: 11,
   fontWeight: 700,
-  color: 'var(--accent)',
-  background: 'transparent',
-  border: 'none',
+  color: 'var(--ink)',
+  background: 'var(--card)',
+  border: '2px solid var(--ink)',
+  borderRadius: 6,
   cursor: 'pointer',
   fontFamily: 'inherit',
-  padding: 0,
-  minHeight: 30,
+  padding: '6px 8px',
+  minHeight: 36,
 };
 
 const uploadRow: React.CSSProperties = {

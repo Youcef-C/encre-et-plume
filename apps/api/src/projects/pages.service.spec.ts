@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PagesService } from './pages.service';
+import { PagesService, toWorkspacePage } from './pages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -19,7 +19,6 @@ const PAGE = (o: Record<string, unknown> = {}) => ({
   chapterId: null,
   title: 'Page 1',
   stage: 'scenario',
-  version: 1,
   fileTags: [],
   linkedFileIds: [],
   description: null,
@@ -44,11 +43,6 @@ describe('PagesService', () => {
         delete: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(0),
       },
-      pageVersion: {
-        create: jest.fn().mockResolvedValue({}),
-        deleteMany: jest.fn().mockResolvedValue({}),
-        findMany: jest.fn().mockResolvedValue([]),
-      },
       chapter: { findUnique: jest.fn().mockResolvedValue({ id: 'ch-1', workId: 'work-1' }) },
       projectLabel: { findMany: jest.fn().mockResolvedValue([]) },
       pageLabel: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
@@ -66,17 +60,13 @@ describe('PagesService', () => {
 
   // ── createPage ─────────────────────────────────────────────────────────────
   describe('createPage', () => {
-    it('creates a card with a v1 PageVersion row in one transaction; defaults title "Page N", stage scenario', async () => {
+    it('creates a card in a single page.create; defaults title "Page N", stage scenario, empty linkedFiles', async () => {
       prisma.page.count.mockResolvedValue(6); // 6 existing → new is "Page 7"
       const res = await service.createPage('acc-me', 'lames-de-brume', {});
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       const created = prisma.page.create.mock.calls[0][0].data;
       expect(created).toMatchObject({ projectId: 'proj-1', title: 'Page 7', stage: 'scenario' });
-      expect(prisma.pageVersion.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ version: 1, note: 'Création' }) }),
-      );
       expect(res.stage).toBe('scenario');
-      expect(res.version).toBe(1);
+      expect(res.linkedFiles).toEqual([]);
     });
 
     it('uses the caller stage/title/chapterId when supplied', async () => {
@@ -110,20 +100,13 @@ describe('PagesService', () => {
       await expect(service.updatePage('acc-me', 'page-1', { fileTags: ['scenario', 'bad'] as never })).rejects.toThrow(BadRequestException);
     });
 
-    it('bumps version + appends a PageVersion when linkedFileIds changes', async () => {
-      prisma.page.findUnique.mockResolvedValue(PAGE({ version: 3, linkedFileIds: ['a'] }));
-      await service.updatePage('acc-me', 'page-1', { linkedFileIds: ['a', 'b'] });
-      expect(prisma.page.update.mock.calls[0][0].data).toMatchObject({ version: 4, linkedFileIds: ['a', 'b'] });
-      expect(prisma.pageVersion.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ version: 4, note: 'Nouvelle révision de fichier' }) }),
-      );
-    });
-
-    it('does NOT bump version when linkedFileIds is unchanged', async () => {
-      prisma.page.findUnique.mockResolvedValue(PAGE({ version: 3, linkedFileIds: ['a', 'b'] }));
-      await service.updatePage('acc-me', 'page-1', { linkedFileIds: ['a', 'b'], title: 'Renommée' });
-      expect(prisma.page.update.mock.calls[0][0].data.version).toBeUndefined();
-      expect(prisma.pageVersion.create).not.toHaveBeenCalled();
+    it('never writes linkedFileIds or version (link state is owned by CS-3 now)', async () => {
+      // linkedFileIds is gone from the DTO; a stray value must be ignored, never persisted.
+      await service.updatePage('acc-me', 'page-1', { linkedFileIds: ['a', 'b'], title: 'Renommée' } as never);
+      const data = prisma.page.update.mock.calls[0][0].data;
+      expect(data.linkedFileIds).toBeUndefined();
+      expect(data.version).toBeUndefined();
+      expect(data.title).toBe('Renommée');
     });
 
     it('404 unknown page id', async () => {
@@ -229,6 +212,7 @@ describe('PagesService', () => {
       comments: [
         { id: 'cm-1', authorId: 'acc-me', body: 'go', createdAt: new Date('2026-08-01'), editedAt: null, author: { id: 'acc-me', displayName: 'Moi', avatar: null } },
       ],
+      assets: [{ id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 }],
       _count: { comments: 1 },
       project: { ownerId: 'acc-me', visibility: 'prive', work: { creators: [{ accountId: 'acc-me' }, { accountId: 'acc-yuki' }] } },
       ...o,
@@ -248,6 +232,7 @@ describe('PagesService', () => {
       expect(res.checklistDone).toBe(1);
       expect(res.checklistTotal).toBe(2);
       expect(res.commentCount).toBe(1);
+      expect(res.linkedFiles).toEqual([{ assetId: 'as-1', type: 'scenario', filename: 'scenario.txt', version: 3 }]);
       expect(res.comments).toEqual([
         { id: 'cm-1', authorId: 'acc-me', authorName: 'Moi', authorAvatar: null, body: 'go', createdAt: '2026-08-01T00:00:00.000Z', editedAt: null },
       ]);
@@ -272,9 +257,8 @@ describe('PagesService', () => {
 
   // ── deletePage ─────────────────────────────────────────────────────────────
   describe('deletePage', () => {
-    it('deletes the page and its versions in one transaction', async () => {
+    it('deletes the page', async () => {
       await service.deletePage('acc-me', 'page-1');
-      expect(prisma.pageVersion.deleteMany).toHaveBeenCalledWith({ where: { pageId: 'page-1' } });
       expect(prisma.page.delete).toHaveBeenCalledWith({ where: { id: 'page-1' } });
     });
 
@@ -326,25 +310,25 @@ describe('PagesService', () => {
     });
   });
 
-  // ── getVersions ────────────────────────────────────────────────────────────
-  describe('getVersions', () => {
-    it('returns PageVersion rows newest-first, member-gated', async () => {
-      prisma.pageVersion.findMany.mockResolvedValue([
-        { version: 2, note: 'Nouvelle révision de fichier', createdAt: new Date('2024-02-01') },
-        { version: 1, note: 'Création', createdAt: new Date('2024-01-01') },
-      ]);
-      const res = await service.getVersions('acc-me', 'page-1');
-      expect(prisma.pageVersion.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { pageId: 'page-1' }, orderBy: { version: 'desc' } }),
-      );
-      expect(res).toEqual([
-        { version: 2, note: 'Nouvelle révision de fichier', createdAt: '2024-02-01T00:00:00.000Z' },
-        { version: 1, note: 'Création', createdAt: '2024-01-01T00:00:00.000Z' },
+  // ── toWorkspacePage · derived linkedFiles (D-F) ──────────────────────────────
+  describe('toWorkspacePage linkedFiles', () => {
+    it('maps the included assets relation to linkedFiles (version = currentVersion)', () => {
+      const res = toWorkspacePage({
+        ...PAGE(),
+        assets: [
+          { id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 },
+          { id: 'as-2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 },
+        ],
+      } as never);
+      expect(res.linkedFiles).toEqual([
+        { assetId: 'as-1', type: 'scenario', filename: 'scenario.txt', version: 3 },
+        { assetId: 'as-2', type: 'dessin', filename: 'nemu.png', version: 2 },
       ]);
     });
 
-    it('403 non-member', async () => {
-      await expect(service.getVersions('stranger', 'page-1')).rejects.toThrow(ForbiddenException);
+    it('is [] when the assets relation is absent or empty', () => {
+      expect(toWorkspacePage(PAGE() as never).linkedFiles).toEqual([]);
+      expect(toWorkspacePage({ ...PAGE(), assets: [] } as never).linkedFiles).toEqual([]);
     });
   });
 });

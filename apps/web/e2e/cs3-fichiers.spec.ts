@@ -81,7 +81,7 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
 
     // Dashed drop zone + accepted-types hint + 4 source buttons (Tablette/Cloud disabled stubs, D7)
     await expect(page.getByText('Glissez vos fichiers ici')).toBeVisible();
-    await expect(page.getByText('images (.png .jpg .psd) · textes (.txt .docx) · scénarios')).toBeVisible();
+    await expect(page.getByText('images (.png .jpg) · dessin (.psd .clip .kra .procreate …) · textes (.txt .docx) · scénarios')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Parcourir…' })).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Tablette' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Lien · URL' })).toBeEnabled();

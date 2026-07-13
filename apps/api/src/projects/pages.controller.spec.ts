@@ -6,14 +6,13 @@ import { SessionGuard } from '../auth/guards/session.guard';
 
 describe('PagesController', () => {
   let controller: PagesController;
-  let pages: { updatePage: jest.Mock; deletePage: jest.Mock; updateStage: jest.Mock; getVersions: jest.Mock; getDetail: jest.Mock };
+  let pages: { updatePage: jest.Mock; deletePage: jest.Mock; updateStage: jest.Mock; getDetail: jest.Mock };
 
   beforeEach(async () => {
     pages = {
       updatePage: jest.fn().mockResolvedValue({ id: 'page-1' }),
       deletePage: jest.fn().mockResolvedValue(undefined),
       updateStage: jest.fn().mockResolvedValue({ id: 'page-1' }),
-      getVersions: jest.fn().mockResolvedValue([]),
       getDetail: jest.fn().mockResolvedValue({ id: 'page-1' }),
     };
     const module: TestingModule = await Test.createTestingModule({
@@ -44,11 +43,6 @@ describe('PagesController', () => {
   it('PATCH :id/stage → updateStage(accountId, id, body)', async () => {
     await controller.stage({ accountId: 'acc-me' } as never, 'page-1', { stage: 'corrections' } as never);
     expect(pages.updateStage).toHaveBeenCalledWith('acc-me', 'page-1', { stage: 'corrections' });
-  });
-
-  it('GET :id/versions → getVersions(accountId, id)', async () => {
-    await controller.versions({ accountId: 'acc-me' } as never, 'page-1');
-    expect(pages.getVersions).toHaveBeenCalledWith('acc-me', 'page-1');
   });
 
   it('GET :id → getDetail(accountId, id)', async () => {

@@ -12,6 +12,7 @@ vi.mock('../lib/api', () => ({
   listProjectAssets: vi.fn(),
   createProjectAsset: vi.fn(),
   createProjectAssetFromUrl: vi.fn(),
+  deleteAsset: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -26,9 +27,9 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     chapterId: 'c1',
     title: 'Page',
     stage: 'scenario',
-    version: 1,
     fileTags: [],
     linkedFileIds: [],
+    linkedFiles: [],
     dueDate: null,
     labels: [],
     assignees: [],
@@ -293,5 +294,96 @@ describe('FichiersPanel', () => {
     const ok = new File(['x'], 'ok.png', { type: 'image/png' });
     await userEvent.upload(screen.getByLabelText('Importer des fichiers'), ok);
     expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  });
+
+  // ── F6 · declared import type ────────────────────────────────────────────────
+  it('defaults the Type selector to Automatique and sends no type on import', async () => {
+    vi.mocked(api.createProjectAsset).mockResolvedValue({ ...dessin, id: 'a2', filename: 'ok.png' });
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    expect(screen.getByRole('combobox', { name: 'Type de fichier' })).toHaveTextContent('Automatique');
+    const ok = new File(['x'], 'ok.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), ok);
+    await waitFor(() =>
+      expect(api.createProjectAsset).toHaveBeenCalledWith('lames-de-brume', { mediaId: 'm3', filename: 'ok.png' }),
+    );
+  });
+
+  it('threads a declared "Référence" type into createProjectAsset', async () => {
+    vi.mocked(api.createProjectAsset).mockResolvedValue({ ...dessin, id: 'a2', type: 'ref', filename: 'moodboard.png' });
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type de fichier' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Référence' }));
+    const ok = new File(['x'], 'moodboard.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), ok);
+    await waitFor(() =>
+      expect(api.createProjectAsset).toHaveBeenCalledWith('lames-de-brume', {
+        mediaId: 'm3',
+        filename: 'moodboard.png',
+        type: 'ref',
+      }),
+    );
+  });
+
+  it('exposes Pages and Références filter tabs', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('button', { name: 'Références' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+        'lames-de-brume',
+        expect.objectContaining({ type: 'ref' }),
+      ),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Pages' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+        'lames-de-brume',
+        expect.objectContaining({ type: 'page' }),
+      ),
+    );
+  });
+
+  // ── F9 · delete asset ────────────────────────────────────────────────────────
+  it('deletes a grid card after confirming, then refetches', async () => {
+    vi.mocked(api.deleteAsset).mockResolvedValue(undefined);
+    renderPanel();
+    const name = await screen.findByText('ruelle-nemu.png');
+    const card = name.closest('[data-asset-card]') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Supprimer ruelle-nemu.png' }));
+    const dialog = await screen.findByRole('alertdialog', { name: /Supprimer le fichier/ });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => expect(api.deleteAsset).toHaveBeenCalledWith('a1'));
+    // refetch: listProjectAssets called again after the delete (initial + refresh).
+    await waitFor(() => expect(vi.mocked(api.listProjectAssets).mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('cancelling the delete keeps the card and calls nothing', async () => {
+    renderPanel();
+    const name = await screen.findByText('ruelle-nemu.png');
+    const card = name.closest('[data-asset-card]') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Supprimer ruelle-nemu.png' }));
+    const dialog = await screen.findByRole('alertdialog', { name: /Supprimer le fichier/ });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+    expect(api.deleteAsset).not.toHaveBeenCalled();
+    expect(screen.getByText('ruelle-nemu.png')).toBeInTheDocument();
+  });
+
+  // ── F10 · grid card actions are real buttons ────────────────────────────────
+  it('renders the grid card actions as real buttons (Aperçu / Lier / Supprimer)', async () => {
+    renderPanel();
+    const name = await screen.findByText('ruelle-nemu.png');
+    const card = name.closest('[data-asset-card]') as HTMLElement;
+    expect(within(card).getByRole('button', { name: /Aperçu de ruelle-nemu.png/ })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Lier ruelle-nemu.png à une carte' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Supprimer ruelle-nemu.png' })).toBeInTheDocument();
+  });
+
+  it('readOnly hides the Type selector and Supprimer', async () => {
+    renderPanel({ readOnly: true });
+    await screen.findByText('ruelle-nemu.png');
+    expect(screen.queryByRole('combobox', { name: 'Type de fichier' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Supprimer ruelle-nemu.png' })).not.toBeInTheDocument();
   });
 });

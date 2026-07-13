@@ -40,10 +40,12 @@ export interface CreateAssetRequest {
   mediaId: string;
   filename: string;
   note?: string;
+  type?: AssetType; // optional user-declared type; absent → server derives (D-H)
 } // POST /projects/:slug/assets
 export interface CreateAssetFromUrlRequest {
   url: string;
   filename?: string;
+  type?: AssetType; // optional user-declared type (D-H)
 } // POST /projects/:slug/assets/from-url
 export interface AddAssetVersionRequest {
   mediaId: string;
@@ -51,7 +53,8 @@ export interface AddAssetVersionRequest {
 } // POST /projects/:slug/assets/:id/versions
 export interface LinkAssetRequest {
   pageId: string;
-} // POST /assets/:id/link
+  type?: AssetType; // section-scoped re-type on link (D-I); absent → keep current type
+} // POST /assets/:id/link · DELETE /assets/:id/link → AssetItem · DELETE /assets/:id → 204
 
 export interface AssetVersionItem {
   version: number;

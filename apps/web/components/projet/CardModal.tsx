@@ -20,14 +20,22 @@ import {
   type PageCommentItem,
   type ProjectLabelItem,
   type UpdatePageRequest,
+  type AssetItem,
+  type AssetType,
+  type PageLinkedFileRef,
 } from '@encre-et-plume/shared';
-import { CalendarIcon, TagIcon } from '../icons';
+import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon } from '../icons';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
 import ConfirmDialog from './ConfirmDialog';
+import AssetPreviewOverlay from './AssetPreviewOverlay';
+import AssetVersionsModal from './AssetVersionsModal';
+import LinkAssetPicker from './LinkAssetPicker';
 import { relativeTime } from '../../lib/notifications';
 import {
   getPageDetail,
+  listProjectAssets,
+  unlinkAssetFromPage,
   updatePage,
   updatePageStage,
   deletePage,
@@ -52,6 +60,22 @@ const STAGE_LABELS: Record<PageStage, string> = {
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+// FICHIERS per-type sections (D-A): each maps to CS-3 asset type(s). `page` reads as "planche finale".
+// `canonical` is the section's re-type target when an out-of-section asset is linked here (D-I).
+const FICHIERS_SECTIONS: { label: string; hint?: string; types: AssetType[]; canonical: AssetType; icon: 'doc' | 'img' }[] = [
+  { label: 'SCÉNARIO', types: ['scenario', 'texte'], canonical: 'scenario', icon: 'doc' },
+  { label: 'DESSIN', hint: '(nemu/encrage)', types: ['dessin'], canonical: 'dessin', icon: 'img' },
+  { label: 'PAGE', hint: '(planche finale)', types: ['page'], canonical: 'page', icon: 'img' },
+  { label: 'RÉFÉRENCES', types: ['ref'], canonical: 'ref', icon: 'img' },
+];
+
+const toRef = (a: AssetItem): PageLinkedFileRef => ({
+  assetId: a.id,
+  type: a.type,
+  filename: a.filename,
+  version: a.currentVersion,
+});
 
 export interface CardModalProps {
   pageId: string;
@@ -99,6 +123,13 @@ export default function CardModal({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // FICHIERS block — independent load (its own skeleton/error; the rest of the modal doesn't wait).
+  const [assets, setAssets] = useState<AssetItem[] | null>(null);
+  const [assetsError, setAssetsError] = useState(false);
+  const [previewTarget, setPreviewTarget] = useState<AssetItem | null>(null);
+  const [versionsTarget, setVersionsTarget] = useState<AssetItem | null>(null);
+  const [linkPicker, setLinkPicker] = useState<{ types: AssetType[]; canonical: AssetType; label: string } | null>(null);
+
   const pendingRef = useRef<UpdatePageRequest>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -125,6 +156,23 @@ export default function CardModal({
       alive = false;
     };
   }, [pageId]);
+
+  // FICHIERS: one fetch on open, grouped client-side by section (D-B). A card never nears the page size.
+  useEffect(() => {
+    let alive = true;
+    setAssets(null);
+    setAssetsError(false);
+    listProjectAssets(slug, { pageId })
+      .then((res) => {
+        if (alive) setAssets(res.items);
+      })
+      .catch(() => {
+        if (alive) setAssetsError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [slug, pageId]);
 
   // Focus management: move focus in on open, return it to the opener on close.
   useEffect(() => {
@@ -285,6 +333,29 @@ export default function CardModal({
   const memberOnly = !readOnly;
   const isDouble = detail.fileTags.includes('double');
 
+  // Merge an asset (linked or re-versioned) into the FICHIERS state AND bubble the page so the board's
+  // derived badge/chips re-render (D-D/D-E). De-dupe by id (a re-link replaces the same asset).
+  function applyAssets(next: AssetItem[]) {
+    if (!detail) return;
+    setAssets(next);
+    emit({ ...detail, linkedFiles: next.map(toRef), linkedFileIds: next.map((a) => a.id) });
+  }
+  function upsertAsset(updated: AssetItem) {
+    const base = assets ?? [];
+    applyAssets(base.some((a) => a.id === updated.id) ? base.map((a) => (a.id === updated.id ? updated : a)) : [...base, updated]);
+  }
+  // Detach a file from this card (F7). No confirm (non-destructive, D-K) — the file stays in Fichiers.
+  async function unlinkAsset(a: AssetItem) {
+    const base = assets ?? [];
+    const prev = base;
+    applyAssets(base.filter((x) => x.id !== a.id)); // optimistic — drop the row + re-derive the badge
+    try {
+      await unlinkAssetFromPage(a.id);
+    } catch {
+      applyAssets(prev); // restore on failure
+    }
+  }
+
   return (
     <Overlay onBackdrop={onClose}>
       <Panel panelRef={panelRef} titleId={titleId} onKeyDown={onKeyDown}>
@@ -360,20 +431,111 @@ export default function CardModal({
           </div>
         </div>
 
-        {/* FICHIERS LIÉS (read-only this round — CS-3 owns files) */}
-        <Section label="FICHIERS LIÉS">
-          {detail.linkedFileIds.length === 0 ? (
-            <div style={mutedText}>Aucun fichier lié</div>
-          ) : (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {detail.linkedFileIds.map((id) => (
-                <span key={id} style={chipStyle}>
-                  {id}
-                </span>
+        {/* FICHIERS (par type) — Scénario / Dessin / Page / Références, wired to CS-3 assets. */}
+        <div style={{ marginTop: 16 }}>
+          <div style={sectionLabel}>FICHIERS</div>
+          {assetsError ? (
+            <div role="alert" style={errText}>
+              Impossible de charger les fichiers.
+            </div>
+          ) : assets === null ? (
+            <div role="status" aria-label="Chargement des fichiers…" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[36, 36].map((h, i) => (
+                <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: h, background: 'var(--tone)', opacity: 0.35, borderRadius: 8 }} />
               ))}
             </div>
+          ) : (
+            // 2×2 grid on desktop, collapses to a single column below ~440px (no media query needed).
+            // `align-items: start` keeps a file-heavy section from stretching its empty neighbour.
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, alignItems: 'start' }}>
+              {FICHIERS_SECTIONS.map((sec) => {
+                const files = assets.filter((a) => sec.types.includes(a.type));
+                return (
+                  <div key={sec.label} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                        {sec.label}
+                      </span>
+                      {sec.hint && <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 500 }}>{sec.hint}</span>}
+                      {memberOnly && (
+                        <button
+                          type="button"
+                          aria-label={`Lier un fichier (${sec.label})`}
+                          title="Lier · remplacer un fichier"
+                          onClick={() => setLinkPicker({ types: sec.types, canonical: sec.canonical, label: sec.label })}
+                          style={{ ...plusBtn, marginLeft: 'auto' }}
+                        >
+                          ＋ Lier
+                        </button>
+                      )}
+                    </div>
+                    {files.length === 0 ? (
+                      <span style={mutedText}>Aucun fichier</span>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {files.map((a) => (
+                          // Two-line card: name + version on top, actions below — stays clean even in a
+                          // narrow 2×2 grid column (no messy mid-row wrapping).
+                          <div
+                            key={a.id}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 6,
+                              border: '2px solid var(--ink)',
+                              borderRadius: 8,
+                              padding: '7px 9px',
+                              minWidth: 0,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                              <span style={{ flex: 'none', display: 'inline-flex' }}>
+                                {sec.icon === 'doc' ? <FileTextIcon size={14} /> : <ImageIcon size={14} />}
+                              </span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {a.filename}
+                              </span>
+                              <span style={{ ...chipStyle, flex: 'none', padding: '1px 7px', fontSize: 11, color: '#000' }}>v{a.currentVersion}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', alignItems: 'stretch', minWidth: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewTarget(a)}
+                                aria-label={`Aperçu de ${a.filename}`}
+                                disabled={!a.previewable}
+                                style={{ ...rowBtn, opacity: a.previewable ? 1 : 0.5 }}
+                              >
+                                <EyeIcon size={12} /> Aperçu
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVersionsTarget(a)}
+                                aria-label={`Historique des versions de ${a.filename}`}
+                                style={rowBtn}
+                              >
+                                Historique
+                              </button>
+                              {memberOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => void unlinkAsset(a)}
+                                  aria-label={`Retirer ${a.filename} de la carte`}
+                                  style={{ ...rowBtn, color: '#fff', background: 'var(--accent)', borderColor: 'var(--accent)' }}
+                                >
+                                  Retirer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
-        </Section>
+        </div>
 
         {/* DESCRIPTION */}
         <Section label="DESCRIPTION">
@@ -534,6 +696,40 @@ export default function CardModal({
           confirmLabel="Supprimer"
           onConfirm={() => void onDelete()}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {previewTarget && (
+        <AssetPreviewOverlay
+          assetId={previewTarget.id}
+          filename={previewTarget.filename}
+          version={previewTarget.currentVersion}
+          onClose={() => setPreviewTarget(null)}
+        />
+      )}
+      {versionsTarget && (
+        <AssetVersionsModal
+          slug={slug}
+          asset={versionsTarget}
+          readOnly={readOnly}
+          onClose={() => setVersionsTarget(null)}
+          onUpdated={(updated) => {
+            upsertAsset(updated);
+            setVersionsTarget(updated);
+          }}
+        />
+      )}
+      {linkPicker && (
+        <LinkAssetPicker
+          slug={slug}
+          pageId={pageId}
+          types={linkPicker.types}
+          canonicalType={linkPicker.canonical}
+          sectionLabel={linkPicker.label}
+          onClose={() => setLinkPicker(null)}
+          onLinked={(a) => {
+            upsertAsset(a);
+            setLinkPicker(null);
+          }}
         />
       )}
     </Overlay>
@@ -1313,6 +1509,49 @@ const tinyBtn: React.CSSProperties = {
   color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 28,
+};
+
+// Per-file row action (Aperçu / Historique / Retirer) — share the row width, single line, and
+// clip (never overflow) when the section column is narrow.
+const rowBtn: React.CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 3,
+  fontSize: 11,
+  fontWeight: 700,
+  border: '1.5px solid var(--ink)',
+  borderRadius: 5,
+  padding: '4px 5px',
+  cursor: 'pointer',
+  background: 'var(--card)',
+  color: 'var(--ink)',
+  fontFamily: 'inherit',
+  minHeight: 28,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+};
+
+// Compact red (accent) "＋ Lier" affordance next to each FICHIERS section label — opens the link picker.
+const plusBtn: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 3,
+  minHeight: 24,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1,
+  border: '1.5px solid var(--ink)',
+  borderRadius: 5,
+  cursor: 'pointer',
+  background: 'var(--accent)',
+  color: '#fff',
+  fontFamily: 'inherit',
+  padding: '3px 8px',
 };
 
 const linkBtn: React.CSSProperties = {

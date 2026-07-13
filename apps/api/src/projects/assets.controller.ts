@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   AssetItem,
   AssetListResponse,
@@ -76,5 +76,16 @@ export class AssetRootController {
   @Post(':id/link')
   link(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: LinkAssetDto): Promise<AssetItem> {
     return this.assets.linkToPage(req.accountId, id, dto);
+  }
+
+  @Delete(':id/link')
+  unlink(@Req() req: AuthRequest, @Param('id') id: string): Promise<AssetItem> {
+    return this.assets.unlinkFromPage(req.accountId, id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  remove(@Req() req: AuthRequest, @Param('id') id: string): Promise<void> {
+    return this.assets.deleteAsset(req.accountId, id);
   }
 }

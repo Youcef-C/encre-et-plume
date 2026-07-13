@@ -46,7 +46,7 @@ const ASSET = (o: Record<string, unknown> = {}) => ({
 describe('AssetsService', () => {
   let service: AssetsService;
   let prisma: any;
-  let media: { signedUrl: jest.Mock; ingestAsset: jest.Mock };
+  let media: { signedUrl: jest.Mock; ingestAsset: jest.Mock; deleteMediaById: jest.Mock };
   let s3: { presignGet: jest.Mock; getObjectBuffer: jest.Mock; publicUrl: jest.Mock };
 
   beforeEach(() => {
@@ -62,6 +62,7 @@ describe('AssetsService', () => {
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve(ASSET({ ...data, id: 'asset-new', updatedAt: new Date() }))),
         update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve(ASSET({ ...data }))),
+        delete: jest.fn().mockResolvedValue({}),
       },
       assetVersion: {
         create: jest.fn().mockResolvedValue({}),
@@ -80,6 +81,7 @@ describe('AssetsService', () => {
     media = {
       signedUrl: jest.fn().mockResolvedValue({ url: 'https://signed/download', expiresIn: 300 }),
       ingestAsset: jest.fn().mockResolvedValue({ id: 'media-ingested', size: 5, contentType: 'image/png' }),
+      deleteMediaById: jest.fn().mockResolvedValue(undefined),
     };
     s3 = {
       presignGet: jest.fn().mockResolvedValue('https://signed/variant'),
@@ -185,6 +187,31 @@ describe('AssetsService', () => {
     it('403 for a non-member on a public project', async () => {
       prisma.project.findUnique.mockResolvedValue(PROJECT({ visibility: 'public' }));
       await expect(service.createAsset('stranger', 'x', { mediaId: 'media-1', filename: 'a.png' })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    // B7 (iter 2): user-declared type overrides derivation so page/ref assets are creatable.
+    it('stores a declared type (ref) instead of the derived one', async () => {
+      await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: 'planche.png', type: 'ref' });
+      expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('ref'); // derivation would give dessin
+    });
+
+    it('stores a declared type (page)', async () => {
+      await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: 'planche.png', type: 'page' });
+      expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('page');
+    });
+
+    it('falls back to derivation when no type is declared (byte-for-byte)', async () => {
+      await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: 'planche.png' });
+      expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('dessin');
+    });
+
+    it('ignores a declared type on same-filename re-import (asset keeps its type)', async () => {
+      prisma.asset.findUnique.mockImplementation(({ where }: any) =>
+        where.projectId_filename ? Promise.resolve(ASSET({ id: 'asset-1', filename: 'planche.png', currentVersion: 1, mediaId: 'old' })) : Promise.resolve(ASSET({ currentVersion: 2, mediaId: 'media-1' })),
+      );
+      await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: 'planche.png', type: 'page' });
+      expect(prisma.asset.create).not.toHaveBeenCalled();
+      expect(prisma.asset.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: 'page' }) }));
     });
   });
 
@@ -338,6 +365,165 @@ describe('AssetsService', () => {
       const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
       // Tag left untouched (not re-written) → the chip stays on the old card.
       expect(oldUpdate[0].data.fileTags).toBeUndefined();
+    });
+
+    // B8 (iter 2): section-scoped link re-types the asset.
+    it('re-types the asset when a type is supplied (＋ Lier from PAGE → type page)', async () => {
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'page' });
+      expect(prisma.asset.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ linkedPageId: 'page-1', type: 'page' }) }),
+      );
+    });
+
+    it('does not write a type when none is supplied (regression: byte-for-byte)', async () => {
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
+      const assetUpdate = prisma.asset.update.mock.calls.find((c: any) => c[0].where.id === 'asset-1');
+      expect(assetUpdate[0].data.type).toBeUndefined();
+    });
+
+    it('adds the new type chip on re-type (ref → ref fileTag)', async () => {
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.fileTags).toContain('ref');
+    });
+
+    // Same-page re-classification: prune the old chip iff it was the last of its type, add the new.
+    it('same-page re-classification prunes the old type chip and adds the new one', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
+      prisma.asset.count.mockResolvedValue(0); // no other scenario asset linked to page-1
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
+      expect(pageUpdate[0].data.fileTags).toContain('ref');
+    });
+
+    it('same-page re-classification keeps the old chip when another asset of that type remains', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1', 'asset-2'], fileTags: ['scenario'] });
+      prisma.asset.count.mockResolvedValue(1); // asset-2 still scenario on page-1
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.fileTags).toContain('scenario');
+      expect(pageUpdate[0].data.fileTags).toContain('ref');
+    });
+
+    it('cross-page re-link prunes the OLD page chip using the old type even when re-typed', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-old' }), project: PROJECT() });
+      prisma.page.findUnique.mockImplementation(({ where }: any) =>
+        where.id === 'page-old'
+          ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] })
+          : Promise.resolve({ id: 'page-1', projectId: 'proj-1', linkedFileIds: [], fileTags: [] }),
+      );
+      prisma.asset.count.mockResolvedValue(0);
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
+      const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
+      expect(oldUpdate[0].data.fileTags).not.toContain('scenario');
+      const newUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(newUpdate[0].data.fileTags).toContain('ref');
+    });
+  });
+
+  // ── unlinkFromPage (B9) ───────────────────────────────────────────────────
+  describe('unlinkFromPage', () => {
+    beforeEach(() => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
+    });
+
+    it('clears linkedPageId and removes the id from the page linkedFileIds', async () => {
+      await service.unlinkFromPage('acc-me', 'asset-1');
+      expect(prisma.asset.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ linkedPageId: null }) }));
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.linkedFileIds).not.toContain('asset-1');
+    });
+
+    it('prunes the fileTag chip when it was the last linked asset of that type', async () => {
+      prisma.asset.count.mockResolvedValue(0);
+      await service.unlinkFromPage('acc-me', 'asset-1');
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
+    });
+
+    it('keeps the fileTag chip when another linked asset of that type remains', async () => {
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1', 'asset-2'], fileTags: ['scenario'] });
+      prisma.asset.count.mockResolvedValue(1);
+      await service.unlinkFromPage('acc-me', 'asset-1');
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.fileTags).toBeUndefined();
+    });
+
+    it('is an idempotent no-op when the asset is not linked', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ linkedPageId: null }), project: PROJECT() });
+      await service.unlinkFromPage('acc-me', 'asset-1');
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it('404 for an unknown asset', async () => {
+      prisma.asset.findUnique.mockResolvedValue(null);
+      await expect(service.unlinkFromPage('acc-me', 'ghost')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('403 for a non-member on a public project', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'public' }) });
+      await expect(service.unlinkFromPage('stranger', 'asset-1')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('404 for a non-member on a private project', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'prive' }) });
+      await expect(service.unlinkFromPage('stranger', 'asset-1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ── deleteAsset (B10) ─────────────────────────────────────────────────────
+  describe('deleteAsset', () => {
+    beforeEach(() => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ linkedPageId: null }), project: PROJECT() });
+      prisma.assetVersion.findMany.mockResolvedValue([{ mediaId: 'media-1' }, { mediaId: 'media-2' }, { mediaId: 'media-1' }]);
+    });
+
+    it('deletes the asset (version chain cascades)', async () => {
+      await service.deleteAsset('acc-me', 'asset-1');
+      expect(prisma.asset.delete).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'asset-1' } }));
+    });
+
+    it('deletes each DISTINCT version media blob via MediaService', async () => {
+      await service.deleteAsset('acc-me', 'asset-1');
+      expect(media.deleteMediaById).toHaveBeenCalledTimes(2); // media-1, media-2 (deduped)
+      expect(media.deleteMediaById).toHaveBeenCalledWith('media-1');
+      expect(media.deleteMediaById).toHaveBeenCalledWith('media-2');
+    });
+
+    it('detaches the asset from its linked page first (linkedFileIds + fileTags)', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
+      prisma.asset.count.mockResolvedValue(0);
+      await service.deleteAsset('acc-me', 'asset-1');
+      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
+      expect(pageUpdate[0].data.linkedFileIds).not.toContain('asset-1');
+      expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
+      expect(prisma.asset.delete).toHaveBeenCalled();
+    });
+
+    it('does not fail the request when a blob delete rejects', async () => {
+      media.deleteMediaById.mockRejectedValue(new Error('S3 down'));
+      await expect(service.deleteAsset('acc-me', 'asset-1')).resolves.toBeUndefined();
+      expect(prisma.asset.delete).toHaveBeenCalled();
+    });
+
+    it('404 for an unknown asset', async () => {
+      prisma.asset.findUnique.mockResolvedValue(null);
+      await expect(service.deleteAsset('acc-me', 'ghost')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('403 for a non-member on a public project', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'public' }) });
+      await expect(service.deleteAsset('stranger', 'asset-1')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('404 for a non-member on a private project', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'prive' }) });
+      await expect(service.deleteAsset('stranger', 'asset-1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

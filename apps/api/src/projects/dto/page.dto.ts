@@ -40,11 +40,6 @@ export class UpdatePageDto implements UpdatePageRequest {
   @IsIn([...PAGE_FILE_TAGS], { each: true })
   fileTags?: PageFileTag[];
 
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  linkedFileIds?: string[];
-
   // CS-2 card-modal extension. @IsOptional short-circuits validators on null → null clears.
   @IsOptional()
   @IsString()

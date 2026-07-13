@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { PageDetailResponse, WorkspaceMember, ProjectLabelItem } from '@encre-et-plume/shared';
+import type { PageDetailResponse, WorkspaceMember, ProjectLabelItem, AssetItem, AssetListResponse } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
   return {
     ...actual,
     getPageDetail: vi.fn(),
+    listProjectAssets: vi.fn(),
+    getAssetVersions: vi.fn(),
+    getAssetPreview: vi.fn(),
+    linkAssetToPage: vi.fn(),
+    unlinkAssetFromPage: vi.fn(),
     updatePage: vi.fn(),
     updatePageStage: vi.fn(),
     deletePage: vi.fn(),
@@ -39,9 +44,9 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
     chapterId: 'c1',
     title: 'Page 7',
     stage: 'scenario',
-    version: 3,
     fileTags: [],
     linkedFileIds: [],
+    linkedFiles: [],
     dueDate: null,
     labels: [],
     assignees: [],
@@ -55,8 +60,28 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
   };
 }
 
-function mount(over: Partial<PageDetailResponse> = {}, props: Partial<React.ComponentProps<typeof CardModal>> = {}) {
+function asset(over: Partial<AssetItem> = {}): AssetItem {
+  return {
+    id: 'a1',
+    type: 'scenario',
+    filename: 'scenario.txt',
+    currentVersion: 3,
+    size: 1024,
+    thumbnailUrl: null,
+    previewable: true,
+    linkedPage: { id: 'pg7', title: 'Page 7' },
+    updatedAt: '2026-07-10T10:00:00.000Z',
+    ...over,
+  };
+}
+
+function assetList(items: AssetItem[]): AssetListResponse {
+  return { items, total: items.length, page: 1, pageSize: 24, totalPages: 1 };
+}
+
+function mount(over: Partial<PageDetailResponse> = {}, props: Partial<React.ComponentProps<typeof CardModal>> = {}, assets: AssetItem[] = []) {
   (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail(over));
+  (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(assetList(assets));
   const onClose = vi.fn();
   const onPageChange = vi.fn();
   const onDeleted = vi.fn();
@@ -80,7 +105,11 @@ function mount(over: Partial<PageDetailResponse> = {}, props: Partial<React.Comp
 }
 
 describe('CardModal', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: no linked files (the FICHIERS block fetches on open in every render).
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(assetList([]));
+  });
 
   it('shows a loading skeleton then the detail sections', async () => {
     mount();
@@ -229,6 +258,113 @@ describe('CardModal', () => {
     expect(screen.queryByRole('button', { name: 'Ajouter' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Supprimer la carte' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('TITRE')).toHaveAttribute('readonly');
+  });
+
+  // ── FICHIERS (par type) — CS-2 post-CS-3 ──────────────────────────────────────
+
+  it('renders the four FICHIERS sections and groups linked files by type', async () => {
+    mount({}, {}, [
+      asset({ id: 'a1', type: 'texte', filename: 'dialogue.txt', currentVersion: 1 }),
+      asset({ id: 'a2', type: 'page', filename: 'planche.png', currentVersion: 4 }),
+    ]);
+    await screen.findByLabelText('TITRE');
+    // Four section headings (label carries the story parentheticals).
+    expect(await screen.findByText('SCÉNARIO')).toBeInTheDocument();
+    expect(screen.getByText('DESSIN')).toBeInTheDocument();
+    expect(screen.getByText('PAGE')).toBeInTheDocument();
+    expect(screen.getByText('RÉFÉRENCES')).toBeInTheDocument();
+    // texte → Scénario section; page → Page section, with per-file versions.
+    expect(await screen.findByText('dialogue.txt')).toBeInTheDocument();
+    expect(screen.getByText('planche.png')).toBeInTheDocument();
+    expect(screen.getByText('v1')).toBeInTheDocument();
+    expect(screen.getByText('v4')).toBeInTheDocument();
+  });
+
+  it('opens the Aperçu overlay for a linked file', async () => {
+    (api.getAssetPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
+      mode: 'image', url: 'blob:x', downloadUrl: 'd', filename: 'scenario.txt', version: 3,
+    });
+    mount({}, {}, [asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })]);
+    await screen.findByText('scenario.txt');
+    await userEvent.click(screen.getByRole('button', { name: /Aperçu de scenario.txt/ }));
+    expect(await screen.findByRole('button', { name: /Fermer l’aperçu/ })).toBeInTheDocument();
+    expect(api.getAssetPreview).toHaveBeenCalledWith('a1');
+  });
+
+  it('opens the per-file version history (AssetVersionsModal)', async () => {
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { version: 3, mediaId: 'm3', size: 10, note: 'Révision', authorId: 'u1', authorName: 'Yuki', createdAt: '2026-07-10', thumbnailUrl: null },
+    ]);
+    mount({}, {}, [asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })]);
+    await screen.findByText('scenario.txt');
+    await userEvent.click(screen.getByRole('button', { name: /Historique des versions de scenario.txt/ }));
+    expect(await screen.findByRole('dialog', { name: 'Versions' })).toBeInTheDocument();
+    expect(api.getAssetVersions).toHaveBeenCalledWith('a1');
+  });
+
+  it('shows a "＋ Lier" affordance next to each section label and opens the picker', async () => {
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(assetList([]));
+    mount();
+    await screen.findByLabelText('TITRE');
+    const linkButtons = await screen.findAllByRole('button', { name: /^Lier un fichier \(/ });
+    expect(linkButtons.length).toBe(4); // one per section (Scénario / Dessin / Page / Références)
+    expect(screen.getByRole('button', { name: 'Lier un fichier (PAGE)' })).toBeInTheDocument();
+    // F8: the compact affordance is labelled "＋ Lier" (verbatim visible text).
+    expect(linkButtons[0]).toHaveTextContent('＋ Lier');
+    await userEvent.click(linkButtons[0]);
+    const picker = await screen.findByRole('dialog', { name: 'Lier · remplacer' });
+    // The import link lives inside the Lier/remplacer modal, pointing at the Fichiers tab.
+    expect(within(picker).getByRole('link', { name: /Importer depuis Fichiers/ })).toHaveAttribute(
+      'href',
+      '/projet/nuit-blanche?tab=fichiers',
+    );
+  });
+
+  // ── F7 · Retirer (unlink) ─────────────────────────────────────────────────────
+  it('Retirer unlinks a file, removes the row and bubbles the page without it', async () => {
+    (api.unlinkAssetFromPage as ReturnType<typeof vi.fn>).mockResolvedValue(
+      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', linkedPage: null }),
+    );
+    const { onPageChange } = mount({}, {}, [
+      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 }),
+    ]);
+    await screen.findByText('scenario.txt');
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer scenario.txt de la carte' }));
+    expect(api.unlinkAssetFromPage).toHaveBeenCalledWith('a1');
+    await waitFor(() => expect(screen.queryByText('scenario.txt')).not.toBeInTheDocument());
+    // The last page bubble drops the file from linkedFiles/linkedFileIds.
+    const last = (onPageChange as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
+    expect(last.linkedFiles).toEqual([]);
+    expect(last.linkedFileIds).toEqual([]);
+  });
+
+  it('read-only viewers get no Retirer', async () => {
+    (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail());
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
+      assetList([asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })]),
+    );
+    render(
+      <CardModal pageId="pg7" slug="s" members={members} labels={[rouge]} viewerId={null} isOwner={false}
+        readOnly onClose={() => {}} onPageChange={() => {}} onDeleted={() => {}} onLabelsChange={() => {}} />,
+    );
+    await screen.findByText('scenario.txt');
+    expect(screen.queryByRole('button', { name: /Retirer scenario.txt/ })).not.toBeInTheDocument();
+  });
+
+  it('read-only viewers get Aperçu + history but no link affordance', async () => {
+    (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail());
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
+      assetList([asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })]),
+    );
+    render(
+      <CardModal pageId="pg7" slug="s" members={members} labels={[rouge]} viewerId={null} isOwner={false}
+        readOnly onClose={() => {}} onPageChange={() => {}} onDeleted={() => {}} onLabelsChange={() => {}} />,
+    );
+    await screen.findByText('scenario.txt');
+    expect(screen.getByRole('button', { name: /Aperçu de scenario.txt/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Historique des versions de scenario.txt/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '＋ Lier un fichier' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Lier · remplacer' })).not.toBeInTheDocument();
   });
 });
 

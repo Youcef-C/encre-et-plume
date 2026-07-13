@@ -5,7 +5,7 @@ import type { ProjectWorkspaceResponse } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, getPageVersions: vi.fn(), createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn(), getMyProjects: vi.fn() };
+  return { ...actual, createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn(), getMyProjects: vi.fn() };
 });
 vi.mock('../components/UploadControl', () => ({ default: ({ label }: { label: string }) => <div>{label}</div> }));
 vi.mock('next/link', () => ({

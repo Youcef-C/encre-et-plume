@@ -102,8 +102,7 @@ async function main() {
 
   // 4g. MC-3: Invitations FK-restrict Account deletion (fromUserId/toUserId) and Project deletion
   // (projectId). Drop invitations touching a seeded account, then the Projects those accounts own.
-  // CS-2: Page rows (kanban cards) FK-restrict Project deletion too — drop them first (PageVersion
-  // cascades via onDelete: Cascade in the schema).
+  // CS-2: Page rows (kanban cards) FK-restrict Project deletion too — drop them first.
   if (accountIds.length > 0) {
     await prisma.invitation.deleteMany({
       where: { OR: [{ fromUserId: { in: accountIds } }, { toUserId: { in: accountIds } }] },

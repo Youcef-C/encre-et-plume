@@ -573,7 +573,6 @@ import type {
   UpdatePageStageRequest,
   WorkspacePage,
   PageStage,
-  PageVersionItem,
 } from '@encre-et-plume/shared';
 
 // CS-1 — "Nouveau projet" wizard (manga/histoire). The Illustration(s) type routes to publishIllustration.
@@ -613,9 +612,6 @@ export const updatePageStage = (id: string, stage: PageStage): Promise<Workspace
     method: 'PATCH',
     body: JSON.stringify({ stage } satisfies UpdatePageStageRequest),
   });
-
-export const getPageVersions = (id: string): Promise<PageVersionItem[]> =>
-  request<PageVersionItem[]>(`/pages/${encodeURIComponent(id)}/versions`);
 
 // ─── CS-2 card-modal extension: detail, labels, checklist, comments ────────────
 import type {
@@ -742,6 +738,14 @@ export const linkAssetToPage = (assetId: string, body: LinkAssetRequest): Promis
     method: 'POST',
     body: JSON.stringify(body),
   });
+
+// Detach an asset from its linked card (member-gated). Returns the refreshed AssetItem (linkedPage null).
+export const unlinkAssetFromPage = (assetId: string): Promise<AssetItem> =>
+  request<AssetItem>(`/assets/${encodeURIComponent(assetId)}/link`, { method: 'DELETE' });
+
+// Hard-delete an asset + its whole version chain (member-gated). 204, no body.
+export const deleteAsset = (assetId: string): Promise<void> =>
+  request<void>(`/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
 
 // No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
 // The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.

@@ -75,8 +75,13 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
     await expect(modal.getByLabel('TITRE')).toHaveValue('Page 1');
     await expect(modal.getByText('COLONNE')).toBeVisible();
     await expect(modal.getByText('TYPE DE PAGE')).toBeVisible();
-    await expect(modal.getByText('FICHIERS LIÉS')).toBeVisible();
-    await expect(modal.getByText('Aucun fichier lié')).toBeVisible();
+    // CS-2 (post-CS-3, iter 2): the flat "FICHIERS LIÉS" chip list is now four per-type sections.
+    await expect(modal.getByText('FICHIERS', { exact: true })).toBeVisible();
+    for (const label of ['SCÉNARIO', 'DESSIN', 'PAGE', 'RÉFÉRENCES']) {
+      await expect(modal.getByText(label, { exact: true })).toBeVisible();
+    }
+    await expect(modal.getByText('Aucun fichier').first()).toBeVisible();
+    await expect(modal.getByRole('button', { name: /Lier un fichier \(SCÉNARIO\)/ })).toBeVisible();
     await expect(modal.getByText('DESCRIPTION')).toBeVisible();
     await expect(modal.getByText('ÉTIQUETTES')).toBeVisible();
     await expect(modal.getByText('ÉCHÉANCE')).toBeVisible();

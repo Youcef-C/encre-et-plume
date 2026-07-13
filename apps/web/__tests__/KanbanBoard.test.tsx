@@ -10,8 +10,8 @@ vi.mock('../lib/api', async (importOriginal) => {
     createPage: vi.fn(),
     deletePage: vi.fn(),
     updatePageStage: vi.fn(),
-    getPageVersions: vi.fn(),
     getPageDetail: vi.fn(),
+    listProjectAssets: vi.fn(),
     updatePage: vi.fn(),
     createProjectLabel: vi.fn(),
     deleteProjectLabel: vi.fn(),
@@ -33,9 +33,9 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     chapterId: 'c1',
     title: 'Page',
     stage: 'scenario',
-    version: 1,
     fileTags: [],
     linkedFileIds: [],
+    linkedFiles: [],
     dueDate: null,
     labels: [],
     assignees: [],
@@ -49,8 +49,17 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
 const rouge: ProjectLabelItem = { id: 'lb1', name: 'Urgent', color: '#e8261c' };
 const bleu: ProjectLabelItem = { id: 'lb2', name: 'Idée', color: '#3f5aa8' };
 
-const page7 = makePage({ id: 'pg7', chapterId: 'c1', title: 'Page 7', version: 3, fileTags: ['scenario', 'ref', 'double'] });
-const page6 = makePage({ id: 'pg6', chapterId: 'c2', title: 'Page 6', stage: 'nemu', version: 2, fileTags: ['nemu'] });
+const page7 = makePage({
+  id: 'pg7',
+  chapterId: 'c1',
+  title: 'Page 7',
+  fileTags: ['scenario', 'ref', 'double'],
+  linkedFiles: [
+    { assetId: 'a1', type: 'scenario', filename: 'scenario.txt', version: 3 },
+    { assetId: 'a2', type: 'ref', filename: 'ref.png', version: 1 },
+  ],
+});
+const page6 = makePage({ id: 'pg6', chapterId: 'c2', title: 'Page 6', stage: 'nemu', fileTags: ['nemu'] });
 
 function renderBoard(pages: WorkspacePage[] = [page7, page6], readOnly = false, labels: ProjectLabelItem[] = []) {
   render(
@@ -90,15 +99,39 @@ describe('KanbanBoard', () => {
     );
   });
 
-  it('renders card anatomy: version badge, tag chips, and 4 action buttons', () => {
+  it('renders card anatomy: derived version badge, per-file chips, and 4 action buttons', () => {
     renderBoard();
-    expect(screen.getByRole('button', { name: 'Versions de Page 7' })).toHaveTextContent('v3');
-    expect(screen.getByText('scénario')).toBeInTheDocument();
-    expect(screen.getByText('réf')).toBeInTheDocument();
+    // Badge = max linked-file version (3, 1) → v3; not interactive (no popover).
+    const badge = screen.getByText('⎘ v3');
+    expect(badge.tagName).toBe('SPAN');
+    // Per-file chips carry the file's own version.
+    expect(screen.getByText('scénario v3')).toBeInTheDocument();
+    expect(screen.getByText('réf v1')).toBeInTheDocument();
+    // manual scenario/ref fileTags are hidden (covered by a linked file); Double page still shows.
+    expect(screen.getByText('Double')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Aperçu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Corrections' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
+  });
+
+  it('shows no version badge when the card has no linked files', () => {
+    renderBoard([makePage({ id: 'bare', chapterId: 'c1', title: 'Nue' })]);
+    expect(screen.queryByText(/⎘ v/)).not.toBeInTheDocument();
+  });
+
+  it('shows a manual nemu fileTag only until a dessin file is linked', () => {
+    const p = makePage({
+      id: 'n',
+      chapterId: 'c1',
+      title: 'Nemu carte',
+      fileTags: ['nemu'],
+      linkedFiles: [{ assetId: 'd1', type: 'dessin', filename: 'nemu.png', version: 2 }],
+    });
+    renderBoard([p]);
+    // The dessin chip carries the version; the bare "nemu" tag chip is hidden.
+    expect(screen.getByText('dessin v2')).toBeInTheDocument();
+    expect(screen.queryByText('nemu')).not.toBeInTheDocument();
   });
 
   it('adds a card in the clicked column with that stage', async () => {
@@ -155,17 +188,6 @@ describe('KanbanBoard', () => {
     expect(screen.getAllByText('Aucune carte').length).toBeGreaterThanOrEqual(5);
   });
 
-  it('fetches versions when the badge is clicked', async () => {
-    (api.getPageVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { version: 3, note: 'Nouvelle révision de fichier', createdAt: '2026-07-01' },
-      { version: 1, note: 'Création', createdAt: '2026-06-01' },
-    ]);
-    renderBoard();
-    await userEvent.click(screen.getByRole('button', { name: 'Versions de Page 7' }));
-    expect(api.getPageVersions).toHaveBeenCalledWith('pg7');
-    expect(await screen.findByText(/Création/)).toBeInTheDocument();
-  });
-
   it('read-only viewers get no add / menu controls', () => {
     renderBoard([page7], true);
     expect(screen.queryByRole('button', { name: '＋ Ajouter une carte' })).not.toBeInTheDocument();
@@ -174,17 +196,15 @@ describe('KanbanBoard', () => {
 
   // ── CS-2 card-modal extension ────────────────────────────────────────────────
 
-  it('opens the CardModal when a card is clicked (and drag/⋯/⎘ do not)', async () => {
+  it('opens the CardModal when a card is clicked', async () => {
     (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...page7,
       description: 'desc',
       checklist: [],
       comments: [],
     });
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 24, totalPages: 0 });
     renderBoard();
-    // Clicking the version badge must NOT open the modal.
-    await userEvent.click(screen.getByRole('button', { name: 'Versions de Page 7' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     // Clicking the card body opens it.
     await userEvent.click(screen.getByRole('button', { name: 'Ouvrir Page 7' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();

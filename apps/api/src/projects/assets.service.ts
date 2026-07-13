@@ -10,6 +10,7 @@ import type {
   CreateAssetRequest,
   LinkAssetRequest,
 } from '@encre-et-plume/shared';
+import type { Prisma } from '@prisma/client';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import {
@@ -108,7 +109,7 @@ export class AssetsService {
       return this.appendVersion(accountId, existing as { id: string; currentVersion: number }, media, body.note);
     }
 
-    const type = deriveAssetType(media.contentType, filename);
+    const type = body.type ?? deriveAssetType(media.contentType, filename); // B7: declared type overrides derivation
     const created = await this.prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({
         data: { projectId: project.id, type: type as never, filename, currentVersion: 1, size: media.size, mediaId: media.id },
@@ -122,13 +123,13 @@ export class AssetsService {
   }
 
   // ── B3: import from a URL (SSRF-guarded server-side fetch) ────────────────
-  async createFromUrl(accountId: string, slug: string, body: { url: string; filename?: string }): Promise<AssetItem> {
+  async createFromUrl(accountId: string, slug: string, body: { url: string; filename?: string; type?: AssetType }): Promise<AssetItem> {
     // Gate BEFORE fetching — never fetch on behalf of a non-member.
     await this.resolveMemberProject(accountId, slug);
     const { buffer, contentType } = await this.fetchGuarded(body.url);
     const media = await this.media.ingestAsset(accountId, buffer, contentType);
     const filename = (body.filename ?? lastPathSegment(body.url)).trim() || 'fichier';
-    return this.createAsset(accountId, slug, { mediaId: media.id, filename });
+    return this.createAsset(accountId, slug, { mediaId: media.id, filename, type: body.type });
   }
 
   /** D14: http(s) only; DNS-resolve + IP-range check every hop; ≤3 redirects; hard byte cap; allowlist. */
@@ -228,7 +229,7 @@ export class AssetsService {
     );
   }
 
-  // ── B9: link asset → card (one card max; re-link replaces) ────────────────
+  // ── B9: link asset → card (one card max; re-link replaces; B8: optional re-type) ──
   async linkToPage(accountId: string, assetId: string, body: LinkAssetRequest): Promise<AssetItem> {
     const asset = await this.loadMemberAsset(accountId, assetId);
     const page = await this.prisma.page.findUnique({
@@ -237,35 +238,82 @@ export class AssetsService {
     });
     if (!page || page.projectId !== asset.projectId) throw new BadRequestException('Carte invalide');
 
+    const oldType = asset.type;
+    const nextType = body.type ?? oldType; // B8: section-scoped link re-types the asset
+
     await this.prisma.$transaction(async (tx) => {
-      // Re-link: drop the assetId from the previously linked page (D12).
+      // Link + optional re-type FIRST, so type-based prune counts already reflect the new type.
+      await tx.asset.update({
+        where: { id: assetId },
+        data: { linkedPageId: body.pageId, ...(nextType !== oldType ? { type: nextType } : {}) },
+      });
+
+      // Re-link across cards (D12): detach from the previously linked page, pruning by the OLD type.
       if (asset.linkedPageId && asset.linkedPageId !== body.pageId) {
-        const old = await tx.page.findUnique({
-          where: { id: asset.linkedPageId },
-          select: { linkedFileIds: true, fileTags: true },
-        });
-        if (old) {
-          const remaining = (old.linkedFileIds as string[]).filter((x) => x !== assetId);
-          const data: Record<string, unknown> = { linkedFileIds: remaining };
-          // Prune the file-type chip from the old card iff no remaining linked asset of this
-          // type still justifies it (exact inverse of the new-page "add if absent" logic below).
-          if (PAGE_TAG_SET.has(asset.type) && (old.fileTags as string[]).includes(asset.type)) {
-            const stillJustified = await tx.asset.count({ where: { id: { in: remaining }, type: asset.type } });
-            if (stillJustified === 0) data.fileTags = (old.fileTags as string[]).filter((t) => t !== asset.type);
-          }
-          await tx.page.update({ where: { id: asset.linkedPageId }, data });
-        }
+        await this.detachFromPage(tx, asset.linkedPageId, assetId, oldType);
       }
-      await tx.asset.update({ where: { id: assetId }, data: { linkedPageId: body.pageId } });
+
+      // Target-card fileTags: on same-page re-classification prune the old chip; then add the new chip.
+      let fileTags = page.fileTags;
+      if (
+        asset.linkedPageId === body.pageId &&
+        nextType !== oldType &&
+        PAGE_TAG_SET.has(oldType) &&
+        fileTags.includes(oldType)
+      ) {
+        // asset.type is now nextType → this count only sees OTHER linked assets of the old type.
+        const stillJustified = await tx.asset.count({ where: { id: { in: page.linkedFileIds }, type: oldType } });
+        if (stillJustified === 0) fileTags = fileTags.filter((t) => t !== oldType);
+      }
+      if (PAGE_TAG_SET.has(nextType) && !fileTags.includes(nextType)) {
+        fileTags = [...fileTags, nextType];
+      }
+
       const linkedFileIds = page.linkedFileIds.includes(assetId) ? page.linkedFileIds : [...page.linkedFileIds, assetId];
       const data: Record<string, unknown> = { linkedFileIds };
-      // Surface a same-named CS-2 file-type chip when the asset type maps 1:1 (scenario/ref).
-      if (PAGE_TAG_SET.has(asset.type) && !page.fileTags.includes(asset.type)) {
-        data.fileTags = [...page.fileTags, asset.type];
-      }
+      if (fileTags !== page.fileTags) data.fileTags = fileTags;
       await tx.page.update({ where: { id: body.pageId }, data });
     });
     return this.getAssetItem(assetId);
+  }
+
+  // ── B9: unlink asset from its card (idempotent) ───────────────────────────
+  async unlinkFromPage(accountId: string, assetId: string): Promise<AssetItem> {
+    const asset = await this.loadMemberAsset(accountId, assetId);
+    if (!asset.linkedPageId) return this.getAssetItem(assetId); // idempotent no-op
+    const pageId = asset.linkedPageId;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.asset.update({ where: { id: assetId }, data: { linkedPageId: null } });
+      await this.detachFromPage(tx, pageId, assetId, asset.type);
+    });
+    return this.getAssetItem(assetId);
+  }
+
+  // ── B10: delete an asset + its version chain + F-10 blobs ─────────────────
+  async deleteAsset(accountId: string, assetId: string): Promise<void> {
+    const asset = await this.loadMemberAsset(accountId, assetId);
+    const versions = await this.prisma.assetVersion.findMany({ where: { assetId }, select: { mediaId: true } });
+    const mediaIds = [...new Set(versions.map((v) => (v as { mediaId: string }).mediaId))];
+    await this.prisma.$transaction(async (tx) => {
+      if (asset.linkedPageId) await this.detachFromPage(tx, asset.linkedPageId, assetId, asset.type);
+      await tx.asset.delete({ where: { id: assetId } }); // AssetVersion chain cascades (onDelete: Cascade)
+    });
+    // D-J: best-effort immediate blob cleanup — never fail the request on an S3/Media hiccup.
+    for (const id of mediaIds) await this.media.deleteMediaById(id).catch(() => {});
+  }
+
+  /** Detach `assetId` from `pageId`: drop it from linkedFileIds and prune the `oldType` file-tag chip
+   *  iff no remaining linked asset still justifies it. Shared by re-link / unlink / delete. */
+  private async detachFromPage(tx: Prisma.TransactionClient, pageId: string, assetId: string, oldType: AssetType): Promise<void> {
+    const old = await tx.page.findUnique({ where: { id: pageId }, select: { linkedFileIds: true, fileTags: true } });
+    if (!old) return;
+    const remaining = (old.linkedFileIds as string[]).filter((x) => x !== assetId);
+    const data: Record<string, unknown> = { linkedFileIds: remaining };
+    if (PAGE_TAG_SET.has(oldType) && (old.fileTags as string[]).includes(oldType)) {
+      const stillJustified = await tx.asset.count({ where: { id: { in: remaining }, type: oldType } });
+      if (stillJustified === 0) data.fileTags = (old.fileTags as string[]).filter((t) => t !== oldType);
+    }
+    await tx.page.update({ where: { id: pageId }, data });
   }
 
   // ── B4: paginated, filterable list ────────────────────────────────────────

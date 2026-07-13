@@ -5,6 +5,7 @@
 import type { CreatorRole } from './onboarding.js';
 import type { CatalogAudienceRating } from './catalog.js';
 import type { RevenueSplitEntry, SoutienGoalInput, SoutienTier } from './collections.js';
+import type { AssetType } from './assets.js';
 
 export interface ProjectSummary {
   id: string;
@@ -196,15 +197,25 @@ export interface PageCommentItem {
   editedAt: string | null; // set → FE shows "modifié"
 }
 
+/** A linked CS-3 file (Asset) resolved onto a board card, for the card's per-type FICHIERS sections,
+ *  per-file chips, and the derived "⎘ vN" badge (max version). Derived server-side from
+ *  `Asset.linkedPageId` — the FE never derives the rollup from a stored counter. */
+export interface PageLinkedFileRef {
+  assetId: string;
+  type: AssetType;
+  filename: string;
+  version: number; // = Asset.currentVersion
+}
+
 /** A kanban board card (CS-2 `Page`) — NOT the reader `Planche`. */
 export interface WorkspacePage {
   id: string;
   chapterId: string | null;
   title: string;
   stage: PageStage;
-  version: number;
   fileTags: PageFileTag[];
-  linkedFileIds: string[];
+  linkedFileIds: string[]; // server-maintained denorm (CS-3 link logic); kept for compat
+  linkedFiles: PageLinkedFileRef[]; // CS-3 assets linked to this card (badge/chips/sections)
   // CS-2 card-modal extension (server always computes these — additive for consumers):
   dueDate: string | null; // 'YYYY-MM-DD'
   labels: ProjectLabelItem[];
@@ -292,7 +303,7 @@ export interface UpdatePageRequest {
   title?: string;
   chapterId?: string | null;
   fileTags?: PageFileTag[];
-  linkedFileIds?: string[];
+  // NOTE: linkedFileIds is NOT writable here — link state is owned by CS-3's POST /assets/:id/link.
   // CS-2 card-modal extension (all optional; null clears where nullable):
   description?: string | null;
   dueDate?: string | null; // 'YYYY-MM-DD'
@@ -302,12 +313,6 @@ export interface UpdatePageRequest {
 
 export interface UpdatePageStageRequest {
   stage: PageStage;
-}
-
-export interface PageVersionItem {
-  version: number;
-  note: string | null;
-  createdAt: string;
 }
 
 /** GET /pages/:id — full card detail for the modal. */

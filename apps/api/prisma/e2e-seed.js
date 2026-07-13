@@ -365,7 +365,7 @@ async function main() {
 
     // Reset: invitations on/for these accounts, then this owner's projects (invitations FK-restrict).
     // CS-2: Page rows (kanban cards, e.g. from cs2-espace-projet.spec.ts creating projects as this
-    // owner) FK-restrict Project deletion too — drop them first (PageVersion cascades via schema).
+    // owner) FK-restrict Project deletion too — drop them first.
     await prisma.invitation.deleteMany({ where: { OR: [{ fromUserId: owner }, { toUserId: owner }, { fromUserId: collab }, { toUserId: collab }] } });
     await prisma.page.deleteMany({ where: { project: { ownerId: owner } } });
     await prisma.project.deleteMany({ where: { ownerId: owner } });

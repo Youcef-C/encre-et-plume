@@ -18,7 +18,7 @@ import {
   type WorkspaceMember,
   type WorkspacePage,
   type ProjectLabelItem,
-  type PageVersionItem,
+  type AssetType,
 } from '@encre-et-plume/shared';
 import {
   PenNibIcon,
@@ -30,7 +30,7 @@ import {
   ChecklistIcon,
   ChatIcon,
 } from '../icons';
-import { createPage, deletePage, updatePageStage, getPageVersions, createProjectLabel, deleteProjectLabel } from '../../lib/api';
+import { createPage, deletePage, updatePageStage, createProjectLabel, deleteProjectLabel } from '../../lib/api';
 import CardModal from './CardModal';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -54,6 +54,24 @@ const FILE_TAG_META: Record<PageFileTag, { label: string; icon?: 'doc' | 'img'; 
     nemu: { label: 'nemu', icon: 'img' },
     double: { label: 'Double', accent: true },
   };
+
+// Linked-file (CS-3 Asset) chip label + icon per asset type (D-E). "page" reads as "planche".
+const LINKED_TYPE_META: Record<AssetType, { label: string; icon: 'doc' | 'img' }> = {
+  scenario: { label: 'scénario', icon: 'doc' },
+  texte: { label: 'texte', icon: 'doc' },
+  dessin: { label: 'dessin', icon: 'img' },
+  page: { label: 'planche', icon: 'img' },
+  ref: { label: 'réf', icon: 'img' },
+};
+
+// A manual fileTag is hidden once a linked file of its mapped type exists (D-E). `double` is a
+// page-format flag, never a file type, so it maps to nothing and always renders.
+const FILE_TAG_COVERING_TYPES: Record<PageFileTag, AssetType[]> = {
+  scenario: ['scenario', 'texte'],
+  nemu: ['dessin'],
+  ref: ['ref'],
+  double: [],
+};
 
 const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 function formatShortDate(iso: string): string {
@@ -656,38 +674,33 @@ function PageCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [versions, setVersions] = useState<PageVersionItem[] | null>(null);
-  const [versionsOpen, setVersionsOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Outside-click / Escape close for the popovers. The ⋯ menu is rendered in a portal (below) so it
-  // escapes the board's `overflow-x:auto` clipping — the outside check covers both the card and the
-  // portalled menu.
+  // Outside-click close for the ⋯ menu. It is rendered in a portal (below) so it escapes the board's
+  // `overflow-x:auto` clipping — the outside check covers both the card and the portalled menu.
   useEffect(() => {
-    if (!menuOpen && !versionsOpen) return;
+    if (!menuOpen) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (cardRef.current?.contains(t) || menuRef.current?.contains(t)) return;
       setMenuOpen(false);
-      setVersionsOpen(false);
     };
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
-  }, [menuOpen, versionsOpen]);
-
-  async function openVersions() {
-    setVersionsOpen((v) => !v);
-    if (versions === null) {
-      try {
-        setVersions(await getPageVersions(card.id));
-      } catch {
-        setVersions([]);
-      }
-    }
-  }
+  }, [menuOpen]);
 
   const overdue = card.dueDate !== null && card.dueDate < todayStr();
+
+  // Derived rollup badge (D-D): highest linked-file version; absent when nothing is linked.
+  const badgeVersion =
+    card.linkedFiles.length > 0 ? Math.max(...card.linkedFiles.map((f) => f.version)) : null;
+
+  // Manual fileTags whose mapped type is already carried by a linked-file chip are hidden (D-E).
+  const linkedTypes = new Set(card.linkedFiles.map((f) => f.type));
+  const visibleFileTags = card.fileTags.filter(
+    (t) => !FILE_TAG_COVERING_TYPES[t].some((mapped) => linkedTypes.has(mapped)),
+  );
 
   return (
     <div
@@ -700,7 +713,6 @@ function PageCard({
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           setMenuOpen(false);
-          setVersionsOpen(false);
           return;
         }
         if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
@@ -720,7 +732,7 @@ function PageCard({
       onDragEnd={readOnly ? undefined : onDragEnd}
       style={{
         position: 'relative',
-        zIndex: menuOpen || versionsOpen ? 30 : undefined,
+        zIndex: menuOpen ? 30 : undefined,
         border: '2px solid var(--ink)',
         borderRadius: 6,
         padding: 8,
@@ -747,78 +759,48 @@ function PageCard({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
         <b>{card.title}</b>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void openVersions();
-          }}
-          title="Versions"
-          aria-label={`Versions de ${card.title}`}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 9,
-            fontWeight: 700,
-            background: 'var(--ink)',
-            color: 'var(--paper)',
-            border: 'none',
-            borderRadius: 4,
-            padding: '1px 6px',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          ⎘ v{card.version}
-        </button>
+        {badgeVersion !== null && (
+          <span
+            title="Version la plus récente des fichiers liés"
+            aria-label={`Version ${badgeVersion}`}
+            style={{
+              marginLeft: 'auto',
+              fontSize: 9,
+              fontWeight: 700,
+              background: 'var(--ink)',
+              color: 'var(--paper)',
+              borderRadius: 4,
+              padding: '1px 6px',
+            }}
+          >
+            ⎘ v{badgeVersion}
+          </span>
+        )}
       </div>
 
-      {versionsOpen && (
-        <ul
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            listStyle: 'none',
-            margin: '7px 0 0',
-            padding: 7,
-            border: '1.5px solid var(--ink)',
-            borderRadius: 5,
-            background: 'var(--paper)',
-            fontSize: 11,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-          }}
-        >
-          {versions === null && <li style={{ color: 'var(--ink2)' }}>Chargement…</li>}
-          {versions?.length === 0 && <li style={{ color: 'var(--ink2)' }}>Aucune version</li>}
-          {versions?.map((v) => (
-            <li key={v.version}>
-              <b>v{v.version}</b>
-              {v.note ? ` · ${v.note}` : ''}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {card.fileTags.length > 0 && (
+      {(card.linkedFiles.length > 0 || visibleFileTags.length > 0) && (
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
-          {card.fileTags.map((tag) => {
+          {/* Linked-file chips (type label + per-file version) first, then un-covered manual tags. */}
+          {card.linkedFiles.map((f) => {
+            const tm = LINKED_TYPE_META[f.type];
+            return (
+              <span
+                key={f.assetId}
+                title={f.filename}
+                style={fileChipStyle}
+              >
+                {tm.icon === 'doc' ? <FileTextIcon size={10} style={{ display: 'inline' }} /> : <ImageIcon size={10} style={{ display: 'inline' }} />}
+                {tm.label} v{f.version}
+              </span>
+            );
+          })}
+          {visibleFileTags.map((tag) => {
             const tm = FILE_TAG_META[tag];
             return (
               <span
                 key={tag}
                 title={tm.accent ? 'Double page' : undefined}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  fontSize: 9,
-                  fontWeight: 700,
-                  border: '1.5px solid var(--ink)',
-                  borderRadius: 4,
-                  padding: '1px 5px',
-                  background: tm.accent ? 'var(--accent)' : 'transparent',
-                  color: tm.accent ? '#fff' : 'var(--ink)',
-                }}
+                style={{ ...fileChipStyle, background: tm.accent ? 'var(--accent)' : 'transparent', color: tm.accent ? '#fff' : 'var(--ink)' }}
               >
                 {tm.icon === 'doc' && <FileTextIcon size={10} style={{ display: 'inline' }} />}
                 {tm.icon === 'img' && <ImageIcon size={10} style={{ display: 'inline' }} />}
@@ -1024,6 +1006,19 @@ function PageCard({
     </div>
   );
 }
+
+const fileChipStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+  fontSize: 9,
+  fontWeight: 700,
+  border: '1.5px solid var(--ink)',
+  borderRadius: 4,
+  padding: '1px 5px',
+  background: 'transparent',
+  color: 'var(--ink)',
+};
 
 const menuItemStyle: React.CSSProperties = {
   textAlign: 'left',

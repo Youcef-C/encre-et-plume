@@ -430,6 +430,19 @@ export function ChecklistIcon(p: IconProps) {
   );
 }
 
+// CS-2 (iter 2) — "Supprimer" glyph for the Fichiers grid card: a lidded waste bin.
+export function TrashIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <polyline points="4 6.5 20 6.5" />
+      <path d="M8.5 6.5V4.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2" />
+      <path d="M6 6.5l1 13a1.6 1.6 0 0 0 1.6 1.5h6.8a1.6 1.6 0 0 0 1.6-1.5l1-13" />
+      <line x1="10" y1="10.5" x2="10" y2="17.5" />
+      <line x1="14" y1="10.5" x2="14" y2="17.5" />
+    </Svg>
+  );
+}
+
 // CS-3 — import/drop-zone glyph + "Télécharger" (replaces the prototype's ⤓): a downward arrow
 // dropping into a tray.
 export function DownloadIcon(p: IconProps) {

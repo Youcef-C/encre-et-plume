@@ -183,7 +183,8 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
 
     await page.getByRole('tab', { name: 'Fichiers' }).click();
     await expect(page).toHaveURL(/\?tab=fichiers/);
-    await expect(page.getByText("L'import de fichiers arrive bientôt.")).toBeVisible();
+    // The CS-2 placeholder was replaced by the real CS-3 "Importer dessins & textes" panel.
+    await expect(page.getByText('Importer dessins & textes')).toBeVisible();
 
     await page.getByRole('tab', { name: 'Discussion' }).click();
     await expect(page).toHaveURL(/\?tab=discussion/);
