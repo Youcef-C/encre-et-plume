@@ -17,6 +17,8 @@ import {
   ASSET_SORTS,
   ASSET_TYPES,
   ASSETS_PAGE_SIZE,
+  DRAWING_SOURCE_CONTENT_TYPES,
+  DRAWING_SOURCE_EXTENSIONS,
   MAX_UPLOAD_BYTES,
   PAGE_FILE_TAGS,
   PSD_CONTENT_TYPE,
@@ -30,6 +32,8 @@ const SIGNED_URL_TTL = () => Number(process.env['MEDIA_SIGNED_URL_TTL'] ?? 300);
 const TEXT_PREVIEW_CAP = 500 * 1024; // 500 KB — small derived text payload
 
 const ASSET_ALLOWED_SET = new Set<string>(ASSET_ALLOWED_CONTENT_TYPES);
+const DRAWING_EXT_SET = new Set<string>(DRAWING_SOURCE_EXTENSIONS);
+const DRAWING_CT_SET = new Set<string>(DRAWING_SOURCE_CONTENT_TYPES);
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
 const ASSET_SORT_SET = new Set<string>(ASSET_SORTS);
 const PAGE_TAG_SET = new Set<string>(PAGE_FILE_TAGS);
@@ -46,8 +50,11 @@ type MediaRow = {
   variants: Record<string, string>;
 };
 
-/** D1: image (incl. .psd) → dessin; a text/docx/pdf whose filename matches "scénario" → scenario, else texte. */
+/** D1: image (incl. .psd) or a drawing-source extension (.clip/.kra/.procreate/… — CS-3 2026-07-13) →
+ *  dessin; a text/docx/pdf whose filename matches "scénario" → scenario, else texte. */
 function deriveAssetType(contentType: string, filename: string): AssetType {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  if (DRAWING_EXT_SET.has(ext)) return 'dessin';
   if (contentType.startsWith('image/')) return 'dessin';
   return /sc[eé]nario/i.test(filename) ? 'scenario' : 'texte';
 }
@@ -315,7 +322,8 @@ export class AssetsService {
       if (buf.length > TEXT_PREVIEW_CAP) return { mode: 'unavailable', ...base };
       return { mode: 'text', text: buf.toString('utf8'), ...base };
     }
-    if (ct === PSD_CONTENT_TYPE) return { mode: 'unavailable', ...base };
+    // psd + drawing-source formats: proprietary/binary → download-only, no inline viewer (CS-3).
+    if (ct === PSD_CONTENT_TYPE || DRAWING_CT_SET.has(ct)) return { mode: 'unavailable', ...base };
     // docx (and any other document): preview HTML derivative or "processing"
     const previewKey = media.variants?.preview;
     if (!previewKey) return { mode: 'processing', ...base };
@@ -346,7 +354,8 @@ export class AssetsService {
       currentVersion: asset.currentVersion,
       size: asset.size,
       thumbnailUrl: await this.resolveThumb(media),
-      previewable: ct !== '' && ct !== PSD_CONTENT_TYPE,
+      // Not previewable: psd, drawing-source formats (octet-stream / format-specific), and unknown.
+      previewable: ct !== '' && ct !== PSD_CONTENT_TYPE && !DRAWING_CT_SET.has(ct),
       linkedPage: asset.linkedPage ? { id: asset.linkedPage.id, title: asset.linkedPage.title } : null,
       updatedAt: asset.updatedAt.toISOString(),
     };

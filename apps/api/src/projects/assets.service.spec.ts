@@ -129,6 +129,22 @@ describe('AssetsService', () => {
       expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('dessin');
     });
 
+    // CS-3 (2026-07-13): drawing-source files upload as octet-stream and derive `dessin` by EXTENSION.
+    it('derives type: octet-stream .clip → dessin (by extension)', async () => {
+      prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: 'application/octet-stream' }));
+      await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: 'planche.clip' });
+      expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('dessin');
+    });
+
+    it('derives type: octet-stream .kra / .procreate → dessin (by extension)', async () => {
+      for (const filename of ['art.kra', 'sketch.procreate']) {
+        prisma.asset.create.mockClear();
+        prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: 'application/octet-stream' }));
+        await service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename });
+        expect(prisma.asset.create.mock.calls[0][0].data.type).toBe('dessin');
+      }
+    });
+
     it('rejects empty filename (400)', async () => {
       await expect(service.createAsset('acc-me', 'x', { mediaId: 'media-1', filename: '   ' })).rejects.toBeInstanceOf(BadRequestException);
     });
@@ -416,6 +432,26 @@ describe('AssetsService', () => {
       prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: PSD, variants: { orig: 'k.psd' } }));
       const res = await service.getPreview('acc-me', 'asset-1');
       expect(res.mode).toBe('unavailable');
+    });
+
+    // CS-3 (2026-07-13): drawing-source (octet-stream) is download-only — never previewed inline.
+    it('drawing-source octet-stream → mode unavailable (not processing)', async () => {
+      prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: 'application/octet-stream', variants: { orig: 'k.clip' } }));
+      const res = await service.getPreview('acc-me', 'asset-1');
+      expect(res.mode).toBe('unavailable');
+      expect(res.downloadUrl).toBe('https://signed/download'); // download still offered
+    });
+  });
+
+  // CS-3 (2026-07-13): a drawing-source asset lists as non-previewable.
+  describe('list previewable flag', () => {
+    it('drawing-source octet-stream asset → previewable: false', async () => {
+      prisma.asset.count.mockResolvedValue(1);
+      prisma.asset.findMany.mockResolvedValue([ASSET({ type: 'dessin', filename: 'planche.clip' })]);
+      prisma.media.findMany.mockResolvedValue([MEDIA({ contentType: 'application/octet-stream' })]);
+      const res = await service.list('acc-me', 'x', {});
+      expect(res.items[0].type).toBe('dessin');
+      expect(res.items[0].previewable).toBe(false);
     });
   });
 });

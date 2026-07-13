@@ -6,12 +6,16 @@ import {
   ASSET_ALLOWED_CONTENT_TYPES,
   DOCX_CONTENT_TYPE,
   PSD_CONTENT_TYPE,
+  DRAWING_SOURCE_EXTENSIONS,
   MAX_UPLOAD_BYTES,
+  MAX_ASSET_BYTES,
 } from '@encre-et-plume/shared';
 import { requestUpload, finalizeMedia, getMedia } from './api';
 
 const ALLOWED = new Set<string>(ASSET_ALLOWED_CONTENT_TYPES);
+const DRAWING_EXTS = new Set<string>(DRAWING_SOURCE_EXTENSIONS);
 const MAX_MB = Math.round(MAX_UPLOAD_BYTES / 1_048_576);
+const MAX_ASSET_MB = Math.round(MAX_ASSET_BYTES / 1_048_576);
 
 // Extension → content-type fallback (browsers often report an empty MIME for .psd / .docx / .txt).
 const EXT_TO_TYPE: Record<string, string> = {
@@ -26,18 +30,30 @@ const EXT_TO_TYPE: Record<string, string> = {
   psd: PSD_CONTENT_TYPE,
 };
 
-/** The content-type we upload the file as: the browser's, else derived from the extension. */
-export function assetContentType(file: File): string {
-  if (file.type && ALLOWED.has(file.type)) return file.type;
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  return EXT_TO_TYPE[ext] ?? file.type;
+function fileExt(file: File): string {
+  return file.name.split('.').pop()?.toLowerCase() ?? '';
 }
 
-/** French inline validation message, or null when the file is acceptable. */
+/** The content-type we upload the file as: the browser's (if allowlisted), else derived from the
+ *  extension. Drawing-source formats (.clip/.kra/.procreate/…, except .psd) upload as octet-stream —
+ *  they're accepted by extension server-side and never magic-verified. */
+export function assetContentType(file: File): string {
+  if (file.type && ALLOWED.has(file.type)) return file.type;
+  const ext = fileExt(file);
+  if (EXT_TO_TYPE[ext]) return EXT_TO_TYPE[ext];
+  if (DRAWING_EXTS.has(ext)) return 'application/octet-stream';
+  return file.type;
+}
+
+/** French inline validation message, or null when the file is acceptable. Drawing-source files get
+ *  the raised ~200 MB cap; images/documents keep the 10 MB cap. */
 export function validateAssetFile(file: File): string | null {
-  if (!ALLOWED.has(assetContentType(file)))
-    return 'Format non pris en charge (.png .jpg .psd .txt .docx .pdf)';
-  if (file.size > MAX_UPLOAD_BYTES) return `Fichier trop volumineux (max ${MAX_MB} Mo)`;
+  const ext = fileExt(file);
+  const isDrawing = DRAWING_EXTS.has(ext);
+  if (!isDrawing && !ALLOWED.has(assetContentType(file)))
+    return 'Format non pris en charge (.png .jpg .psd .clip .kra .procreate .txt .docx .pdf)';
+  const cap = isDrawing ? MAX_ASSET_BYTES : MAX_UPLOAD_BYTES;
+  if (file.size > cap) return `Fichier trop volumineux (max ${isDrawing ? MAX_ASSET_MB : MAX_MB} Mo)`;
   return null;
 }
 

@@ -114,7 +114,7 @@ describe('FichiersPanel', () => {
       screen.getByRole('button', { name: /Glissez vos fichiers ici/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('images (.png .jpg .psd) · textes (.txt .docx) · scénarios'),
+      screen.getByText('images (.png .jpg) · dessin (.psd .clip .kra .procreate …) · textes (.txt .docx) · scénarios'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Parcourir…' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tablette' })).toBeDisabled();
@@ -212,7 +212,9 @@ describe('FichiersPanel', () => {
     renderPanel();
     await screen.findByText('ruelle-nemu.png');
     const bad = new File(['x'], 'archive.zip', { type: 'application/zip' });
-    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), bad);
+    // applyAccept:false → exercise the JS validation directly (the drop-zone/drag-drop path bypasses
+    // the input's `accept` filter, so validateAssetFile stays the real gate for unsupported types).
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), bad, { applyAccept: false });
     expect(
       await screen.findByText(/Format non pris en charge/),
     ).toBeInTheDocument();
@@ -226,6 +228,31 @@ describe('FichiersPanel', () => {
     Object.defineProperty(big, 'size', { value: 11 * 1024 * 1024 });
     await userEvent.upload(screen.getByLabelText('Importer des fichiers'), big);
     expect(await screen.findByText(/Fichier trop volumineux \(max 10 Mo\)/)).toBeInTheDocument();
+    expect(api.requestUpload).not.toHaveBeenCalled();
+  });
+
+  // CS-3 (2026-07-13): drawing-source formats are accepted by extension (browser reports no MIME).
+  it('accepts a .clip drawing-source file (uploads as octet-stream, no size rejection)', async () => {
+    vi.mocked(api.createProjectAsset).mockResolvedValue({ ...dessin, id: 'a3', filename: 'planche.clip' });
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const clip = new File(['x'], 'planche.clip', { type: '' }); // no browser MIME
+    Object.defineProperty(clip, 'size', { value: 80 * 1024 * 1024 }); // 80 MB — over the 10 MB image cap, under 200 MB
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), clip);
+    await waitFor(() =>
+      expect(api.requestUpload).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'asset', contentType: 'application/octet-stream' }),
+      ),
+    );
+  });
+
+  it('rejects a drawing-source file over the 200 Mo cap before any network call', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const huge = new File(['x'], 'huge.kra', { type: '' });
+    Object.defineProperty(huge, 'size', { value: 201 * 1024 * 1024 });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), huge);
+    expect(await screen.findByText(/Fichier trop volumineux \(max 200 Mo\)/)).toBeInTheDocument();
     expect(api.requestUpload).not.toHaveBeenCalled();
   });
 

@@ -51,7 +51,47 @@ export const ASSET_ALLOWED_CONTENT_TYPES = [
   PSD_CONTENT_TYPE,
 ] as const;
 
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
+// CS-3 (2026-07-13) — Drawing-software source files. Accepted by EXTENSION only: proprietary/binary
+// formats report a generic content-type (most `application/octet-stream`; zip-based .kra/.procreate
+// share the same PK magic as .docx), so the extension is the reliable discriminator. Stored as
+// `dessin`, never previewed, and NEVER downloaded server-side for magic verification (they can be
+// hundreds of MB). One shared allowlist keeps the FE drop-zone `accept` + hint and the BE upload
+// validation in sync. Deliberate loosening — safe because asset blobs stay private, member-gated,
+// and are only ever served as download attachments (never rendered/executed server-side).
+export const DRAWING_SOURCE_EXTENSIONS = [
+  'clip', // Clip Studio Paint
+  'kra', // Krita
+  'procreate', // Procreate
+  'psd', // Photoshop
+  'psb', // Photoshop (large)
+  'sai', // PaintTool SAI
+  'sai2', // PaintTool SAI 2
+  'xcf', // GIMP
+  'ase', // Aseprite
+  'aseprite', // Aseprite
+  'ai', // Illustrator
+  'tiff', // TIFF
+  'tif', // TIFF
+] as const;
+export type DrawingSourceExtension = (typeof DRAWING_SOURCE_EXTENSIONS)[number];
+
+// Permissive content-types drawing-source files upload as. Valid ONLY for the `asset` kind — never for
+// image/document kinds (octet-stream on a non-asset kind is rejected). PSD keeps its own dedicated
+// content-type (magic-verified separately); this set covers the extension-only, no-download formats.
+export const DRAWING_SOURCE_CONTENT_TYPES = [
+  'application/octet-stream', // generic fallback — most drawing apps / browsers report this
+  'application/x-krita', // .kra
+  'application/x-photoshop', // .psb (some clients)
+  'application/illustrator', // .ai
+  'application/postscript', // .ai (classic)
+  'image/tiff', // .tiff/.tif
+  'image/x-tiff',
+  'application/x-clip', // .clip (best-effort)
+  'application/x-sai', // .sai
+] as const;
+
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo — images / documents
+export const MAX_ASSET_BYTES = 200 * 1024 * 1024; // 200 Mo — multi-layer drawing-source art files
 export const MAX_IMAGE_DIMENSION = 8000; // px, per side
 
 export interface MediaVariants {

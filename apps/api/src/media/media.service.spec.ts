@@ -711,6 +711,71 @@ describe('MediaService', () => {
     });
   });
 
+  // ── CS-3 (2026-07-13): drawing-source formats — extension-only, no download, 200 MB cap ──
+
+  describe('CS-3 drawing-source formats', () => {
+    it('requestUpload: accepts application/octet-stream for the asset kind (drawing source)', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', visibility: 'private' }));
+      await expect(
+        service.requestUpload('acc-1', { kind: 'asset', contentType: 'application/octet-stream', size: 2048 }),
+      ).resolves.toBeDefined();
+    });
+
+    it('requestUpload: accepts an asset up to MAX_ASSET_BYTES (~200 MB)', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', visibility: 'private' }));
+      await expect(
+        service.requestUpload('acc-1', { kind: 'asset', contentType: 'application/octet-stream', size: 150 * 1024 * 1024 }),
+      ).resolves.toBeDefined();
+    });
+
+    it('requestUpload: rejects an asset over MAX_ASSET_BYTES (201 MB) with 400', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'asset', contentType: 'application/octet-stream', size: 201 * 1024 * 1024 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.media.create).not.toHaveBeenCalled();
+    });
+
+    it('requestUpload: rejects application/octet-stream for a NON-asset kind (400)', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'attachment', contentType: 'application/octet-stream', size: 2048 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.requestUpload('acc-1', { kind: 'avatar', contentType: 'application/octet-stream', size: 2048 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.media.create).not.toHaveBeenCalled();
+    });
+
+    it('requestUpload: rejects a >10 MB NON-asset upload (kind-specific cap unchanged)', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'avatar', contentType: 'image/png', size: 11 * 1024 * 1024 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('finalize: drawing-source (octet-stream) is marked ready WITHOUT downloading/verifying bytes, no queue', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: 'application/octet-stream', bucketKey: 'asset/acc-1/media-1.bin', visibility: 'private' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: 'application/octet-stream', size: 120 * 1024 * 1024 });
+      prisma.media.update.mockImplementation(({ data }: any) => Promise.resolve({ ...media, ...data }));
+
+      const res = await service.finalize('acc-1', 'media-1');
+
+      expect(res.status).toBe('ready');
+      expect(s3.getObjectBuffer).not.toHaveBeenCalled(); // never pull the (large) proprietary bytes
+      expect(queue.enqueue).not.toHaveBeenCalled(); // no preview/variants derivative
+      expect(res.variants).toEqual({ orig: 'asset/acc-1/media-1.bin' }); // private → bucket key, not CDN url
+    });
+
+    it('finalize: a 120 MB asset passes the raised cap (no MAX_UPLOAD_BYTES rejection)', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: 'application/octet-stream', bucketKey: 'asset/acc-1/media-1.bin', visibility: 'private' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: 'application/octet-stream', size: 120 * 1024 * 1024 });
+      prisma.media.update.mockImplementation(({ data }: any) => Promise.resolve({ ...media, ...data }));
+
+      const res = await service.finalize('acc-1', 'media-1');
+      expect(res.status).toBe('ready');
+    });
+  });
+
   // ── cleanupOrphans ────────────────────────────────────────────────────────
 
   describe('cleanupOrphans()', () => {

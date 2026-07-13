@@ -17,6 +17,7 @@ import {
   createProjectAsset,
   createProjectAssetFromUrl,
 } from '../../lib/api';
+import { DRAWING_SOURCE_EXTENSIONS } from '@encre-et-plume/shared';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import OnBrandSelect from '../form/OnBrandSelect';
 import { DownloadIcon, EyeIcon, FileTextIcon } from '../icons';
@@ -30,6 +31,19 @@ const TYPE_TABS: { label: string; type: AssetType | null }[] = [
   { label: 'Textes', type: 'texte' },
   { label: 'Scénarios', type: 'scenario' },
 ];
+
+// Drop-zone `accept`: image/document MIME types + every drawing-source extension (kept in the shared
+// allowlist so FE + BE agree). Extensions carry the drawing formats the browser reports no MIME for.
+const ACCEPT_ATTR = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/avif',
+  'application/pdf',
+  'text/plain',
+  '.docx',
+  ...DRAWING_SOURCE_EXTENSIONS.map((e) => `.${e}`),
+].join(',');
 
 const TYPE_CHIP: Record<AssetType, string> = {
   dessin: 'Dessin',
@@ -322,6 +336,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
         ref={fileInputRef}
         type="file"
         multiple
+        accept={ACCEPT_ATTR}
         aria-label="Importer des fichiers"
         onChange={(e) => {
           if (e.target.files?.length) addFiles(e.target.files);
@@ -363,7 +378,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
             Glissez vos fichiers ici
           </span>
           <span style={{ display: 'block', fontSize: 13, color: 'var(--ink2)', fontWeight: 500, margin: '4px 0 0' }}>
-            images (.png .jpg .psd) · textes (.txt .docx) · scénarios
+            images (.png .jpg) · dessin (.psd .clip .kra .procreate …) · textes (.txt .docx) · scénarios
           </span>
         </button>
         <div style={{ display: 'flex', gap: 9, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>

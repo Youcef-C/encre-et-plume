@@ -15,9 +15,11 @@ import {
   DOCUMENT_ALLOWED_CONTENT_TYPES,
   DOCUMENT_MEDIA_KINDS,
   ASSET_ALLOWED_CONTENT_TYPES,
+  DRAWING_SOURCE_CONTENT_TYPES,
   DOCX_CONTENT_TYPE,
   PSD_CONTENT_TYPE,
   MAX_UPLOAD_BYTES,
+  MAX_ASSET_BYTES,
   MAX_IMAGE_DIMENSION,
 } from '@encre-et-plume/shared';
 import type {
@@ -49,6 +51,17 @@ const PSD_MAGIC = Buffer.from('8BPS');
 
 // MC-4X: kinds that accept ONLY application/pdf and skip the image pipeline.
 const DOCUMENT_KINDS = new Set<MediaKind>(DOCUMENT_MEDIA_KINDS as readonly MediaKind[]);
+
+// CS-3 (2026-07-13): drawing-source content-types (octet-stream + format-specific) — asset-kind only.
+// These are stored, never downloaded for magic verification, never processed. Extension is validated
+// FE-side + at Asset registration; here they route straight to ready. PSD/DOCX are NOT in this set —
+// they keep their dedicated magic-verify path above.
+const DRAWING_SOURCE_SET = new Set<string>(DRAWING_SOURCE_CONTENT_TYPES);
+
+/** The per-kind max upload size: the `asset` kind carries big multi-layer art files. */
+function maxBytesForKind(kind: MediaKind): number {
+  return kind === 'asset' ? MAX_ASSET_BYTES : MAX_UPLOAD_BYTES;
+}
 
 const SIGNED_URL_TTL = () => Number(process.env['MEDIA_SIGNED_URL_TTL'] ?? 300);
 
@@ -132,16 +145,17 @@ export class MediaService {
     const allowed = DOCUMENT_KINDS.has(dto.kind as MediaKind)
       ? (DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[])
       : dto.kind === 'asset'
-        ? (ASSET_ALLOWED_CONTENT_TYPES as readonly string[])
+        ? ([...ASSET_ALLOWED_CONTENT_TYPES, ...DRAWING_SOURCE_CONTENT_TYPES] as readonly string[])
         : dto.kind === 'attachment'
           ? ([...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES] as readonly string[])
           : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
     if (!allowed.includes(dto.contentType)) {
       throw new BadRequestException(`contentType not allowed: ${dto.contentType}`);
     }
-    // Validate size
-    if (dto.size <= 0 || dto.size > MAX_UPLOAD_BYTES) {
-      throw new BadRequestException(`size must be between 1 and ${MAX_UPLOAD_BYTES} bytes`);
+    // Validate size — per-kind cap (asset uploads get the raised MAX_ASSET_BYTES; everything else 10 MB).
+    const maxBytes = maxBytesForKind(dto.kind as MediaKind);
+    if (dto.size <= 0 || dto.size > maxBytes) {
+      throw new BadRequestException(`size must be between 1 and ${maxBytes} bytes`);
     }
 
     // Redis rate-limit: skip when DISABLE_RATE_LIMIT=true (CI / tests).
@@ -216,10 +230,28 @@ export class MediaService {
       throw new BadRequestException('Content-type mismatch between declared and uploaded object');
     }
 
-    // Re-validate size (trusting headObject over client claim)
-    if (head.size > MAX_UPLOAD_BYTES) {
+    // Re-validate size (trusting headObject over client claim) — per-kind cap.
+    const maxBytes = maxBytesForKind(kind);
+    if (head.size > maxBytes) {
       await this.prisma.media.update({ where: { id: mediaId }, data: { status: 'failed' } });
-      throw new BadRequestException(`Object exceeds max size of ${MAX_UPLOAD_BYTES} bytes`);
+      throw new BadRequestException(`Object exceeds max size of ${maxBytes} bytes`);
+    }
+
+    // CS-3 (2026-07-13): drawing-source formats (asset kind, octet-stream / format-specific type) are
+    // stored as-is and marked ready WITHOUT downloading the (potentially hundreds-of-MB) proprietary
+    // bytes — no magic gate (zip-shared/opaque magic is unreliable), no derivative. They stay private,
+    // are never previewed inline, and are only ever served as a signed download. Validation is by
+    // extension (at Asset registration) + size (above).
+    if (kind === 'asset' && DRAWING_SOURCE_SET.has(declaredContentType)) {
+      const readyDraw = await this.prisma.media.update({
+        where: { id: mediaId },
+        data: {
+          status: 'ready',
+          size: head.size || declaredSize,
+          variants: { orig: isPrivate ? bucketKey : this.s3.publicUrl(bucketKey) } as never,
+        },
+      });
+      return toMediaResponse(readyDraw as unknown as Record<string, unknown>);
     }
 
     // CS-3: asset-only formats — .docx (verify ZIP magic, enqueue HTML derivative off the request path)
