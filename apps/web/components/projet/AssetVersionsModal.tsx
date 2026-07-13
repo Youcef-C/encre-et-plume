@@ -4,6 +4,7 @@
 // (desc) with note + date + author, and appends a new version through the same F-10 upload pipeline
 // (re-import never spawns a second asset). Proto modal chrome, Escape-dismissible.
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetVersionItem } from '@encre-et-plume/shared';
 import { getAssetVersions, addAssetVersion } from '../../lib/api';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
@@ -28,6 +29,7 @@ type UploadPhase =
   | { kind: 'error'; message: string };
 
 export default function AssetVersionsModal({ slug, asset, readOnly = false, onClose, onUpdated }: AssetVersionsModalProps) {
+  useScrollLock();
   const [versions, setVersions] = useState<AssetVersionItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [note, setNote] = useState('');
@@ -101,7 +103,7 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
           </button>
         </div>
 
-        <div style={{ padding: 16, maxHeight: '52vh', overflowY: 'auto' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: 16 }}>
           {loadError ? (
             <div style={{ fontSize: 14, color: 'var(--ink2)' }}>
               Impossible de charger les versions.{' '}
@@ -199,6 +201,7 @@ const overlay: React.CSSProperties = {
 const panel: React.CSSProperties = {
   width: 480,
   maxWidth: '100%',
+  maxHeight: '88vh',
   background: 'var(--card)',
   border: '3px solid var(--ink)',
   borderRadius: 12,
@@ -210,6 +213,7 @@ const panel: React.CSSProperties = {
 };
 
 const header: React.CSSProperties = {
+  flex: 'none',
   display: 'flex',
   alignItems: 'center',
   gap: 6,
@@ -218,6 +222,7 @@ const header: React.CSSProperties = {
 };
 
 const footer: React.CSSProperties = {
+  flex: 'none',
   display: 'flex',
   flexDirection: 'column',
   gap: 8,

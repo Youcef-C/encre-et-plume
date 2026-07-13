@@ -4,11 +4,13 @@
 // a11y pattern (role="dialog" aria-modal, focus-in on open, Esc + backdrop-click + close dismiss).
 // Ponytail: an in-page overlay, not the native Fullscreen API (simpler, testable, no cross-instance concern).
 import { useEffect, useRef } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { IllustrationDetail } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
 import { XIcon } from '../icons';
 
 export default function IllustrationFullscreen({ detail, onClose }: { detail: IllustrationDetail; onClose: () => void }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

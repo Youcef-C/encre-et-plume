@@ -4,6 +4,7 @@
 // one calls POST /assets/:id/link. Re-link replaces server-side (one card max per asset). Proto modal
 // chrome (3px ink border, radius 12, hard offset shadow, ✕ close), Escape-dismissible, focus-trapped.
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, PageStage, WorkspacePage } from '@encre-et-plume/shared';
 import { linkAssetToPage } from '../../lib/api';
 import { XIcon } from '../icons';
@@ -26,6 +27,7 @@ export interface LinkCardModalProps {
 }
 
 export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkCardModalProps) {
+  useScrollLock();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
           </button>
         </div>
 
-        <div style={{ padding: 16, maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 500, marginBottom: 12 }}>
             {asset.filename}
             {asset.linkedPage && (
@@ -150,15 +152,19 @@ const overlay: React.CSSProperties = {
 const panel: React.CSSProperties = {
   width: 460,
   maxWidth: '100%',
+  maxHeight: '88vh',
   background: 'var(--card)',
   border: '3px solid var(--ink)',
   borderRadius: 12,
   boxShadow: '7px 7px 0 var(--shadow)',
   overflow: 'hidden',
   boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
 };
 
 const header: React.CSSProperties = {
+  flex: 'none',
   display: 'flex',
   alignItems: 'center',
   gap: 10,

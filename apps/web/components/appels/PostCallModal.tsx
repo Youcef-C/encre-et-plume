@@ -28,6 +28,7 @@ import {
   type ProjectSummary,
 } from '@encre-et-plume/shared';
 import { createCall, updateCall, getMyProjects } from '../../lib/api';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { isDocumentType, ROLE_LABEL } from '../../lib/calls';
 import { XIcon } from '../icons';
 import GenreChip from '../GenreChip';
@@ -157,6 +158,7 @@ export default function PostCallModal({
   edit?: { callId: string; initial: CallDetail };
   onUpdated?: (card: CallCard) => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'post-call-title';
   const isEdit = !!edit;
@@ -308,7 +310,9 @@ export default function PostCallModal({
           width: 520,
           maxWidth: '100%',
           maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 12,
@@ -318,6 +322,7 @@ export default function PostCallModal({
         {/* Header */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: 11,
@@ -341,7 +346,7 @@ export default function PostCallModal({
           </button>
         </div>
 
-        <div style={{ padding: '16px 18px' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 18px' }}>
           {/* Postes recherchés — per-role seat count (0..5, 0 = not sought; ≥1 total to submit). */}
           <div style={field}>
             <span style={label} id="post-call-seats-label">
@@ -650,6 +655,7 @@ export default function PostCallModal({
         {/* Footer */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             justifyContent: 'flex-end',
             gap: 10,

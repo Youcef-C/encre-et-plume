@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CREATOR_ROLES, type CallCard, type CallDetail, type ApiError } from '@encre-et-plume/shared';
 import { getCallDetail, deleteCall, closeCall } from '../../lib/api';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { roleGateHint, ROLE_LABEL } from '../../lib/calls';
 import { formatBytes } from '../../lib/format';
 import { XIcon } from '../icons';
@@ -96,6 +97,7 @@ export default function CallDetailModal({
   onChanged?: () => void;
   onDeleted?: () => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'call-detail-title';
   const hintId = 'call-detail-role-hint';
@@ -193,7 +195,9 @@ export default function CallDetailModal({
           width: 640,
           maxWidth: '100%',
           maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 12,
@@ -203,15 +207,13 @@ export default function CallDetailModal({
         {/* Header */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: 11,
             padding: '15px 18px',
             borderBottom: '3px solid var(--ink)',
-            position: 'sticky',
-            top: 0,
             background: 'var(--card)',
-            zIndex: 1,
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', color: 'var(--ink)' }}>
@@ -227,6 +229,8 @@ export default function CallDetailModal({
           </button>
         </div>
 
+        {/* Scrolling body — header above and footer below stay pinned. */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto' }}>
         {state.status === 'loading' && (
           <div role="status" aria-label="Chargement du détail…" style={{ padding: 24 }}>
             <div className="ep-skeleton-delayed" style={{ height: 24, width: '60%', background: 'var(--tone)', borderRadius: 6, marginBottom: 12 }} />
@@ -480,11 +484,13 @@ export default function CallDetailModal({
             )}
           </div>
         )}
+        </div>
 
         {/* Footer — same Candidater gating as the board card. */}
         {call && (
           <div
             style={{
+              flex: 'none',
               display: 'flex',
               justifyContent: 'flex-end',
               alignItems: 'center',
@@ -492,8 +498,6 @@ export default function CallDetailModal({
               padding: '14px 18px',
               borderTop: '3px solid var(--ink)',
               background: 'var(--paper)',
-              position: 'sticky',
-              bottom: 0,
             }}
           >
             {confirming ? (

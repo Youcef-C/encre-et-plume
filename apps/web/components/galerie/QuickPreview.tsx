@@ -5,6 +5,7 @@
 // moves in on open and returns to the triggering eye button on close (handled by the caller,
 // GalerieClient, which remembers the trigger element — same pattern as Paywall's Esc handling).
 import { useEffect, useRef } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import Link from 'next/link';
 import type { GalleryPreview } from '@encre-et-plume/shared';
 import { formatLikeCount } from '../../lib/home';
@@ -27,6 +28,7 @@ export default function QuickPreview({
   preview: GalleryPreview | null;
   onClose: () => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const { account } = useSession();
   const cleared = useAgeCleared(account);

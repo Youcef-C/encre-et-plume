@@ -25,6 +25,7 @@ import {
 } from '@encre-et-plume/shared';
 import { getMe, getProfile, getProfilePortfolio, applyToCall, updateMyApplication } from '../../lib/api';
 import { ROLE_LABEL } from '../../lib/calls';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { XIcon } from '../icons';
 import UploadControl from '../UploadControl';
 
@@ -114,6 +115,7 @@ export default function ApplyCallModal({
   onClose: () => void;
   onApplied: (callId: string, applicationId: string) => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'apply-call-title';
   const sampleErrId = 'apply-call-sample-error';
@@ -266,7 +268,9 @@ export default function ApplyCallModal({
           width: 500,
           maxWidth: '100%',
           maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 12,
@@ -276,6 +280,7 @@ export default function ApplyCallModal({
         {/* Header (prototype 2783) */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             alignItems: 'flex-start',
             gap: 11,
@@ -309,6 +314,7 @@ export default function ApplyCallModal({
           </button>
         </div>
 
+        <div style={{ flex: '1 1 auto', overflowY: 'auto' }}>
         {sent ? (
           // Success state — body replaced by confirmation.
           <div style={{ padding: '28px 18px' }}>
@@ -506,10 +512,12 @@ export default function ApplyCallModal({
             )}
           </div>
         )}
+        </div>
 
         {/* Footer (prototype 2798) */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             justifyContent: 'flex-end',
             gap: 10,

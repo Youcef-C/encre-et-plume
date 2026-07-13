@@ -5,6 +5,7 @@
 // people show as removable chips. Direct add — a non-contact can be added straight in. Submit →
 // POST /conversations { name, participantIds } → opens the new thread. Focus-trap/Esc as InviteModal.
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import {
   GROUP_NAME_MAX_LENGTH,
   type ApiError,
@@ -48,6 +49,7 @@ export default function GroupCreateModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'group-modal-title';
 
@@ -102,9 +104,9 @@ export default function GroupCreateModal({
           }
           focusTrap(e, dialogRef);
         }}
-        style={{ width: 420, maxWidth: '100%', background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 12, boxShadow: '7px 7px 0 var(--shadow)' }}
+        style={{ width: 420, maxWidth: '100%', maxHeight: 'calc(100dvh - 48px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 12, boxShadow: '7px 7px 0 var(--shadow)' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', padding: '15px 18px', borderBottom: '3px solid var(--ink)' }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', padding: '15px 18px', borderBottom: '3px solid var(--ink)' }}>
           <div id={titleId} style={{ fontFamily: 'var(--font-display)', fontSize: 19, textTransform: 'uppercase', lineHeight: 1 }}>
             Nouveau groupe
           </div>
@@ -113,7 +115,7 @@ export default function GroupCreateModal({
           </button>
         </div>
 
-        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label htmlFor="group-name" style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 6 }}>
               Nom du groupe
@@ -164,7 +166,7 @@ export default function GroupCreateModal({
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
+        <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
           <button type="button" onClick={onClose} style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)' }}>
             Annuler
           </button>

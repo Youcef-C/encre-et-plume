@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useScrollLock } from '../lib/useScrollLock';
 import type { ProfileResponse, ApiError, SeekingTargetRole, MediaResponse, MediaVariants, PartnerRegion, CreatorRole } from '@encre-et-plume/shared';
 import { SEEKING_TARGET_ROLES, PARTNER_REGIONS, COUNTRY_CODES, CREATOR_ROLES, countryLabelFr, formatLocationFr } from '@encre-et-plume/shared';
 import { BrushIcon, PenNibIcon } from './icons';
@@ -110,6 +111,7 @@ function AvatarLightbox({
   alt: string;
   onClose: () => void;
 }) {
+  useScrollLock();
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {

@@ -7,6 +7,7 @@
 // "Enregistré ✓" pattern; checklist/comment/assignee actions are immediate + optimistic (revert on
 // error). Comments/checklist are refetch-on-open (no realtime — deferred by the story).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import {
   PAGE_STAGES,
   LABEL_COLORS,
@@ -132,6 +133,7 @@ export default function CardModal({
 
   const pendingRef = useRef<UpdatePageRequest>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useScrollLock();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const previouslyFocused = useRef<Element | null>(null);
@@ -359,6 +361,8 @@ export default function CardModal({
   return (
     <Overlay onBackdrop={onClose}>
       <Panel panelRef={panelRef} titleId={titleId} onKeyDown={onKeyDown}>
+        {/* Pinned header (title + close + save state) — the body below scrolls under it. */}
+        <div style={{ flex: 'none', padding: 18, borderBottom: '2px solid var(--border)', background: 'var(--card)' }}>
         {/* Header — editable title + close */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -399,7 +403,10 @@ export default function CardModal({
           {saveState === 'saved' && 'Enregistré ✓'}
           {saveState === 'error' && "L'enregistrement a échoué. Réessayez."}
         </span>
+        </div>
 
+        {/* Scrolling body */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: 18 }}>
         {/* COLONNE + TYPE DE PAGE */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
           <div style={{ flex: '1 1 160px', minWidth: 0 }}>
@@ -688,6 +695,7 @@ export default function CardModal({
             </button>
           </div>
         )}
+        </div>
       </Panel>
       {confirmDelete && (
         <ConfirmDialog
@@ -782,12 +790,13 @@ function Panel({
         width: 480,
         maxWidth: '100%',
         maxHeight: '88vh',
-        overflow: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         background: 'var(--card)',
         border: '3px solid var(--ink)',
         borderRadius: 12,
         boxShadow: '7px 7px 0 var(--shadow)',
-        padding: 18,
         boxSizing: 'border-box',
       }}
     >

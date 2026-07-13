@@ -17,6 +17,7 @@ import {
   type ProjectSummary,
 } from '@encre-et-plume/shared';
 import { getMyProjects, getContacts, createInvitation } from '../../lib/api';
+import { useScrollLock } from '../../lib/useScrollLock';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import { XIcon } from '../icons';
 
@@ -168,6 +169,7 @@ export default function InviteModal({
   const toggleRecipient = (id: string) =>
     setSelected((cur) => (cur.includes(id) ? cur.filter((v) => v !== id) : [...cur, id]));
 
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'invite-modal-title';
   const errorId = 'invite-modal-error';
@@ -280,7 +282,9 @@ export default function InviteModal({
           width: 460,
           maxWidth: '100%',
           maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 12,
@@ -290,6 +294,7 @@ export default function InviteModal({
         {/* Header — in prefilled mode this IS the read-only recipient field. */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             alignItems: 'center',
             gap: 11,
@@ -332,6 +337,7 @@ export default function InviteModal({
           </button>
         </div>
 
+        <div style={{ flex: '1 1 auto', overflowY: 'auto' }}>
         {results ? (
           // Picker success — one line per recipient with its send result (plan §F1).
           <div style={{ padding: '22px 18px' }}>
@@ -592,10 +598,12 @@ export default function InviteModal({
             )}
           </div>
         )}
+        </div>
 
         {/* Footer */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             justifyContent: 'flex-end',
             gap: 10,

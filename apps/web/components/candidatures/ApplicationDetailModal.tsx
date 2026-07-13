@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MyApplicationRow } from '@encre-et-plume/shared';
 import { getMyApplication } from '../../lib/api';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { formatBytes } from '../../lib/format';
 import StatusBadge from './StatusBadge';
 import { XIcon } from '../icons';
@@ -54,6 +55,7 @@ export default function ApplicationDetailModal({
   callTitle: string;
   onClose: () => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'application-detail-title';
   const [state, setState] = useState<State>({ status: 'loading' });
@@ -108,7 +110,9 @@ export default function ApplicationDetailModal({
           width: 560,
           maxWidth: '100%',
           maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 12,
@@ -118,6 +122,7 @@ export default function ApplicationDetailModal({
         {/* Header */}
         <div
           style={{
+            flex: 'none',
             display: 'flex',
             alignItems: 'flex-start',
             gap: 11,
@@ -144,6 +149,8 @@ export default function ApplicationDetailModal({
           </button>
         </div>
 
+        {/* Scrolling body — the header above stays pinned. */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto' }}>
         {state.status === 'loading' && (
           <div role="status" aria-label="Chargement de la candidature…" style={{ padding: 24 }}>
             <div className="ep-skeleton-delayed" style={{ height: 20, width: '50%', background: 'var(--tone)', borderRadius: 6, marginBottom: 12 }} />
@@ -215,6 +222,7 @@ export default function ApplicationDetailModal({
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

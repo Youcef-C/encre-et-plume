@@ -340,10 +340,12 @@ export default function NewProjectWizard() {
   const busy = pending || coverBusy;
 
   return (
-    <div style={{ maxWidth: 740, margin: '0 auto', padding: '30px 20px 80px' }}>
-      <div style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 12, overflow: 'hidden', boxShadow: '7px 7px 0 var(--shadow)' }}>
+    <div style={{ maxWidth: 740, margin: '0 auto', padding: '24px 20px' }}>
+      {/* Shell is a bounded flex column: header + step rail + footer pin, only the step body scrolls.
+         Height budget = viewport − the 68px sticky global Header − the wrapper's 24px top/bottom. */}
+      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100dvh - 68px - 48px)', background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 12, overflow: 'hidden', boxShadow: '7px 7px 0 var(--shadow)' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '3px solid var(--ink)' }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '3px solid var(--ink)' }}>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
             Nouveau projet
           </h1>
@@ -353,7 +355,7 @@ export default function NewProjectWizard() {
         </div>
 
         {/* Step rail */}
-        <nav aria-label="Étapes" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '15px 20px', borderBottom: '2px solid var(--border)', background: 'var(--paper)' }}>
+        <nav aria-label="Étapes" style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '15px 20px', borderBottom: '2px solid var(--border)', background: 'var(--paper)' }}>
           {steps.map((s, i) => (
             <div key={s.n} style={{ display: 'contents' }}>
               <button
@@ -387,7 +389,7 @@ export default function NewProjectWizard() {
           ))}
         </nav>
 
-        <div style={{ padding: '20px 20px 22px' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '20px 20px 22px' }}>
           {/* ── STEP 1 · TYPE ────────────────────────────────────────────── */}
           {step === 1 && (
             <>
@@ -692,7 +694,7 @@ export default function NewProjectWizard() {
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderTop: '3px solid var(--ink)', background: 'var(--paper)', flexWrap: 'wrap' }}>
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderTop: '3px solid var(--ink)', background: 'var(--paper)', flexWrap: 'wrap' }}>
           {step > 1 && (
             <button type="button" onClick={goBack} style={footerBtn}>
               ← Retour

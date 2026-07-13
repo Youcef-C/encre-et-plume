@@ -6,6 +6,7 @@
 // own illustrations NOT already members (passed in already filtered). Confirm POSTs one membership
 // per selected id (the round-1 endpoint) and commits the LAST returned CollectionDetail.
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { useRouter } from 'next/navigation';
 import type { ApiError, CollectionDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
 import { addCollectionIllustration } from '../../lib/api';
@@ -51,6 +52,7 @@ export default function AddIllustrationsPicker({
   onCommitted: (detail: CollectionDetail) => void;
 }) {
   const router = useRouter();
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const titleId = 'add-illustrations-title';

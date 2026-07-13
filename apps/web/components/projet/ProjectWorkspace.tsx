@@ -201,7 +201,9 @@ export default function ProjectWorkspace({
           background: 'var(--card)',
           border: '3px solid var(--ink)',
           borderRadius: 10,
-          overflow: 'hidden',
+          // No overflow:hidden — it would make this a non-scrolling scroll container and neutralize
+          // the tab bar's position:sticky against the page. Corners still read fine (nothing full-bleed
+          // reaches them). The tab bar's own background clips content scrolling under it instead.
           boxShadow: '6px 6px 0 var(--shadow)',
         }}
       >
@@ -295,11 +297,17 @@ export default function ProjectWorkspace({
           )}
         </div>
 
-        {/* Tab bar (proto 1305) — ARIA tablist */}
+        {/* Tab bar (proto 1305) — ARIA tablist. Sticks just below the 68px sticky global Header so it
+            stays visible as the page scrolls; its var(--card) background hides panel content passing
+            under it, and z-index 20 stays below the global Header (z 30). */}
         <div
           role="tablist"
           aria-label="Sections du projet"
           style={{
+            position: 'sticky',
+            top: 68,
+            zIndex: 20,
+            background: 'var(--card)',
             display: 'flex',
             gap: 18,
             padding: '11px 18px',

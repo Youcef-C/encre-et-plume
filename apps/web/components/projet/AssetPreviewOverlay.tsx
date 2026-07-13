@@ -5,6 +5,7 @@
 // origin), .txt and .docx (server-sanitized HTML). Read-only, Escape/keyboard-dismissible, scrolls
 // long documents. A "Télécharger" link stays available but is never required to view.
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetPreviewResponse } from '@encre-et-plume/shared';
 import { getAssetPreview } from '../../lib/api';
 import { XIcon, DownloadIcon } from '../icons';
@@ -17,6 +18,7 @@ export interface AssetPreviewOverlayProps {
 }
 
 export default function AssetPreviewOverlay({ assetId, filename, version, onClose }: AssetPreviewOverlayProps) {
+  useScrollLock();
   const [preview, setPreview] = useState<AssetPreviewResponse | null>(null);
   const [error, setError] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);

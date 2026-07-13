@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useScrollLock } from '../lib/useScrollLock';
 import Link from 'next/link';
 import type { SearchResultType } from '@encre-et-plume/shared';
 import { SEARCH_GROUP_LABEL, GROUP_ORDER, totalResults } from '../lib/search';
@@ -18,6 +19,7 @@ interface Props {
 const PLACEHOLDER_DEFAULT = 'Recherchez une œuvre, un·e créateur·rice…';
 
 export default function SearchOverlay({ open, onClose, scope, placeholder }: Props) {
+  useScrollLock(open);
   const [query, setQuery] = useState('');
   const { status, results, error } = useSearch(query, scope);
   const inputRef = useRef<HTMLInputElement>(null);

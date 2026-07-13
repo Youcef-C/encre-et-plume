@@ -4,6 +4,7 @@
 // label actions instead of an inline "Confirmer / Annuler" row). Overlay + centered panel, closes
 // on backdrop / Escape, focus moves to the cancel button on open.
 import { useEffect, useRef } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -25,6 +26,7 @@ export default function ConfirmDialog({
   onCancel,
   zIndex = 80,
 }: ConfirmDialogProps) {
+  useScrollLock();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useRef(`confirm-${Math.random().toString(36).slice(2)}`).current;
 

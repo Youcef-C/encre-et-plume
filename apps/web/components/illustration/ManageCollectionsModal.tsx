@@ -6,6 +6,7 @@
 // to their own collections, create a new collection to add it to, or remove it from a member
 // collection. Changes are batched and only committed on "Sauvegarder"; "Annuler" discards them.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import type { ApiError, CollectionChip, CollectionSummary } from '@encre-et-plume/shared';
@@ -124,6 +125,7 @@ export default function ManageCollectionsModal({
   onClose: () => void;
   onSaved: (collections: CollectionChip[]) => void;
 }) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'manage-collections-title';
 
@@ -246,14 +248,16 @@ export default function ManageCollectionsModal({
             width: 480,
             maxWidth: '100%',
             maxHeight: 'calc(100dvh - 48px)',
-            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             background: 'var(--card)',
             border: '3px solid var(--ink)',
             borderRadius: 12,
             boxShadow: '7px 7px 0 var(--shadow)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '15px 18px', borderBottom: '3px solid var(--ink)' }}>
+          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 11, padding: '15px 18px', borderBottom: '3px solid var(--ink)' }}>
             <h2 id={titleId} style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
               Gérer les collections
             </h2>
@@ -267,7 +271,7 @@ export default function ManageCollectionsModal({
             </button>
           </div>
 
-          <div style={{ padding: '16px 18px' }}>
+          <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 18px' }}>
             {loadState === 'loading' && (
               <p role="status" style={{ fontSize: 14, color: 'var(--ink2)', margin: 0 }}>
                 Chargement de vos collections…
@@ -360,7 +364,7 @@ export default function ManageCollectionsModal({
             )}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
+          <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
             <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
               Annuler
             </button>

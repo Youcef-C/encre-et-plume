@@ -5,6 +5,7 @@
 // On success: clears session + redirects to /compte-supprime.
 
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../lib/useScrollLock';
 import { useRouter } from 'next/navigation';
 import { useSession } from '../lib/session';
 import { deleteAccount } from '../lib/api';
@@ -41,6 +42,7 @@ export default function SupprimerCompteModal() {
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
+  useScrollLock(open);
   const [confirmWord, setConfirmWord] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -140,46 +142,51 @@ export default function SupprimerCompteModal() {
               zIndex: 61,
               width: 'min(520px, calc(100vw - 32px))',
               maxHeight: 'calc(100dvh - 48px)',
-              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
               background: 'var(--card)',
               border: '3px solid var(--ink)',
               borderRadius: 8,
               boxShadow: '6px 6px 0 var(--shadow)',
-              padding: '28px 32px',
             }}
           >
-            <h2
-              id="delete-account-title"
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 20,
-                margin: '0 0 16px',
-                color: 'var(--accent)',
-              }}
-            >
-              Supprimer mon compte
-            </h2>
+            <div style={{ flex: 'none', padding: '24px 32px 16px', borderBottom: '2px solid var(--border)' }}>
+              <h2
+                id="delete-account-title"
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 20,
+                  margin: 0,
+                  color: 'var(--accent)',
+                }}
+              >
+                Supprimer mon compte
+              </h2>
+            </div>
 
-            {/* Consequences — screen-reader readable list */}
-            <p style={{ fontSize: 14, color: 'var(--ink)', margin: '0 0 8px', fontWeight: 700 }}>
-              Conséquences irrévocables :
-            </p>
-            <ul
-              style={{
-                margin: '0 0 20px 18px',
-                padding: 0,
-                fontSize: 14,
-                color: 'var(--ink)',
-                lineHeight: 1.65,
-              }}
-            >
-              <li>Profil supprimé</li>
-              <li>Œuvres et contributions anonymisées ou retirées</li>
-              <li>Abonnements arrêtés</li>
-              <li>Données de paiement conservées le temps légal</li>
-            </ul>
+            {/* Flex form: consequences + fields scroll, the action buttons stay pinned. */}
+            <form onSubmit={(e) => void handleSubmit(e)} noValidate style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 }}>
+              <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '18px 32px' }}>
+              {/* Consequences — screen-reader readable list */}
+              <p style={{ fontSize: 14, color: 'var(--ink)', margin: '0 0 8px', fontWeight: 700 }}>
+                Conséquences irrévocables :
+              </p>
+              <ul
+                style={{
+                  margin: '0 0 20px 18px',
+                  padding: 0,
+                  fontSize: 14,
+                  color: 'var(--ink)',
+                  lineHeight: 1.65,
+                }}
+              >
+                <li>Profil supprimé</li>
+                <li>Œuvres et contributions anonymisées ou retirées</li>
+                <li>Abonnements arrêtés</li>
+                <li>Données de paiement conservées le temps légal</li>
+              </ul>
 
-            <form onSubmit={(e) => void handleSubmit(e)} noValidate>
               {/* Confirmation word */}
               <div style={{ marginBottom: 16 }}>
                 <label
@@ -229,9 +236,10 @@ export default function SupprimerCompteModal() {
                   {error}
                 </p>
               )}
+              </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 'none', display: 'flex', gap: 10, flexWrap: 'wrap', padding: '14px 32px', borderTop: '2px solid var(--border)', background: 'var(--paper)' }}>
                 <button
                   type="submit"
                   className="ep-btn-primary"

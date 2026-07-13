@@ -5,6 +5,7 @@
 // image-replace slot) live in the shared IllustrationEditFields so this modal and the full
 // /illustration/:id/modifier page never diverge. This file owns only the dialog chrome + delete flow.
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import { useRouter } from 'next/navigation';
 import type { ApiError, IllustrationDetail } from '@encre-et-plume/shared';
 import { deleteIllustration, updateIllustration } from '../../lib/api';
@@ -58,6 +59,7 @@ export default function EditIllustrationForm({
   onClose: () => void;
 }) {
   const router = useRouter();
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = 'edit-illustration-title';
 

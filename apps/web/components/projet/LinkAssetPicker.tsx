@@ -6,6 +6,7 @@
 // debounced filename search, and links the picked asset to THIS card via POST /assets/:id/link
 // (CS-3's re-link = "one card max per asset; re-link replaces" — the "remplacer" semantics, D-C).
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetType } from '@encre-et-plume/shared';
 import { listProjectAssets, linkAssetToPage } from '../../lib/api';
 import { XIcon } from '../icons';
@@ -34,6 +35,7 @@ const TYPE_LABEL: Record<AssetType, string> = {
 };
 
 export default function LinkAssetPicker({ slug, pageId, types, canonicalType, sectionLabel, onClose, onLinked }: LinkAssetPickerProps) {
+  useScrollLock();
   const [assets, setAssets] = useState<AssetItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState('');
@@ -123,7 +125,7 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
           </button>
         </div>
 
-        <div style={{ padding: 16 }}>
+        <div style={{ flex: '1 1 auto', minHeight: 0, padding: 16, display: 'flex', flexDirection: 'column' }}>
           <input
             type="search"
             aria-label="Rechercher un fichier"
@@ -139,7 +141,7 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
             </div>
           )}
 
-          <div style={{ marginTop: 12, maxHeight: '50vh', overflowY: 'auto' }}>
+          <div style={{ marginTop: 12, flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>
             {loadError ? (
               <div style={{ fontSize: 14, color: 'var(--ink2)' }}>Impossible de charger les fichiers.</div>
             ) : sorted === null ? (
@@ -232,15 +234,19 @@ const overlay: React.CSSProperties = {
 const panel: React.CSSProperties = {
   width: 460,
   maxWidth: '100%',
+  maxHeight: '88vh',
   background: 'var(--card)',
   border: '3px solid var(--ink)',
   borderRadius: 12,
   boxShadow: '7px 7px 0 var(--shadow)',
   overflow: 'hidden',
   boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
 };
 
 const header: React.CSSProperties = {
+  flex: 'none',
   display: 'flex',
   alignItems: 'center',
   gap: 6,

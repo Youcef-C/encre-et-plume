@@ -4,6 +4,7 @@
 // (profile overflow, DM thread header, contact row). Focus-trapped dialog with the story's
 // verbatim effects copy. Modal mechanics copied from InviteModal (the codebase's canonical modal).
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import type { ApiError } from '@encre-et-plume/shared';
 import { createBlock } from '../../lib/api';
 import { XIcon } from '../icons';
@@ -50,6 +51,7 @@ export default function BlockConfirmModal({
   onClose: () => void;
   onBlocked: () => void;
 }) {
+  useScrollLock();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);

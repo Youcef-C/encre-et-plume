@@ -4,6 +4,7 @@
 // purchase/subscription flow) aren't built yet, so the CTA is a link stub to the work page's
 // support section rather than a checkout flow (see plan.md §7 — honest stub, no 404).
 import { useEffect } from 'react';
+import { useScrollLock } from '../../lib/useScrollLock';
 import Link from 'next/link';
 import { StarIcon, XIcon } from '../icons';
 
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export default function Paywall({ chapter, workSlug, onClose }: Props) {
+  useScrollLock();
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
