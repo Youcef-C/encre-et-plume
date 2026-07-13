@@ -6,7 +6,14 @@
 
 ## Frontend
 - Filter tabs: "Tout / Dessins / Textes / Scénarios" (active state filters the recent grid).
-- **Filter by card** (2026-07-13): the recent grid can also be scoped to the card an asset is linked to (a card filter that composes with the type tabs), so a member can see **all versions of each file grouped by type** for a given card ([[CS-2]] card).
+- **Search & filter bar** (2026-07-13): a **search input** ("Rechercher un fichier…", debounced,
+  auto-applies — no "Appliquer" button, per the design-system filter rule) matches on **filename**
+  and composes (AND) with the type tabs and the card filter. Alongside it, an on-brand **sort** control
+  (`OnBrandSelect`: "Récents" (default) / "Nom A–Z" / "Taille"). A clear-all affordance resets the
+  search + filters. Empty result → "Aucun fichier ne correspond".
+- **Filter by card** (2026-07-13): the recent grid can also be scoped to the card an asset is linked to
+  (a card filter — `OnBrandSelect` of the project's cards — that composes with the type tabs and the
+  search), so a member can see **all versions of each file grouped by type** for a given card ([[CS-2]] card).
 - **Per-file version history** (2026-07-13): an asset is a **versioned file** — its card shows its current version (e.g. "v3") and opens a version list (v1…vN, each with note + date + author); re-importing/replacing the file adds a **new version of the same asset** (it does not create a second asset).
 - "＋ Importer" button.
 - Dashed drag-drop zone "Glissez vos fichiers ici", with accepted-types hint: "images (.png .jpg .psd) · textes (.txt .docx) · scénarios".
@@ -22,7 +29,7 @@
 - **POST /projects/{slug}/assets** — multipart upload (one or many files). Generates thumbnail; stores size.
 - **POST /projects/{slug}/assets/from-url** — import from a URL ("Lien · URL").
 - Cloud / Tablet connectors — import from external source (tech-agnostic).
-- **GET /projects/{slug}/assets?type=dessin|texte|scenario&pageId=…** — list, filterable by type **and by linked card** (`pageId`); each item carries its **current version** and the linked card. This is the source for [[CS-2]]'s per-file card badge/chips (grouping versions by file type for a card).
+- **GET /projects/{slug}/assets?type=dessin|texte|scenario&pageId=…&q=…&sort=recent|name|size** — list, filterable by type, **by linked card** (`pageId`), and **by filename search** (`q`, case-insensitive substring; combine AND), with `sort` (default `recent`). **Paginated** (per CLAUDE.md — index `filename`/`projectId`). Each item carries its **current version** and the linked card. This is the source for [[CS-2]]'s per-file card badge/chips (grouping versions by file type for a card).
 - **POST /projects/{slug}/assets/{id}/versions** — add a new version of an existing asset (new [[F-10]] `Media` blob + optional note); increments the asset's version. Replaces the naive [[CS-2]] `Page.version` bump.
 - **GET /assets/{id}/versions** — the asset's version chain (v1…vN with note, date, author, `mediaId`). Supersedes CS-2's `GET /pages/{id}/versions`.
 - **Document preview** (user-specified 2026-07-09): the asset payload exposes a **preview form for documents** so the client renders them inline without a download — `.docx` is converted to viewable HTML (a derivative produced off the request path via the [[F-8]] queue, like image variants, cached in [[F-10]]); `.txt` returns text; PDFs stream inline (`Content-Disposition: inline`, or a short-lived signed URL for private assets). Allowlist `.docx` on upload and cap size/pages.
