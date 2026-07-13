@@ -244,6 +244,26 @@ h1, h2, h3, h4, h5, h6 {
     transform: none;
   }
 }
+/* When an action control on a project card is hovered, drop the card's own lift so the button/link
+   hover reads on its own (the card :hover was otherwise swallowing it). :has() has higher specificity
+   than .ep-projet-card:hover, so it wins without !important. The action links are <a> (not <button>),
+   so give them the same hover the global button rule gives real buttons. */
+.ep-projet-card:has(.ep-projet-card-actions a:hover),
+.ep-projet-card:has(.ep-projet-card-actions button:hover) {
+  transform: none;
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+.ep-projet-card-actions a:hover,
+.ep-projet-card-actions button:hover {
+  filter: brightness(0.92);
+  transform: translate(-1px, -1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-projet-card-actions a:hover,
+  .ep-projet-card-actions button:hover {
+    transform: none;
+  }
+}
 
 /* CS-12: narrow screens (≤520px, covers 375px). Stack the card so the action buttons drop to their own
    full-width row BELOW the cover+content instead of colliding with the wrapped badge/meta text. The row
