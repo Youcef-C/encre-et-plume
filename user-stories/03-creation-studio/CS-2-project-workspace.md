@@ -11,7 +11,7 @@
 - **TABLEAU (kanban)**:
   - Chapter selector chips: "Prologue", "Ch.1"–"Ch.6", "＋" (add chapter → [[CS-7]]). Selecting a chip filters the board to that chapter.
   - Production columns: "Scénario ✒ · Nemu · Corrections · PROPRE · Encrage 🖌 · VALIDÉ ✓".
-  - Page cards: version badge ("⎘ v3"), file-type tags ("📄 scénario", "🖼 réf", "🖼 nemu", "⇿ Double page"); per-card icons "✎ éditer" / "👁 aperçu" / "⚑ corrections" ([[CS-5]]) / "⋯".
+  - Page cards: version badge ("⎘ v3" — a **derived rollup** of the linked files' versions, see the per-file versioning note below / [[CS-3]]), file-type tags ("📄 scénario", "🖼 réf", "🖼 nemu", "⇿ Double page"); per-card icons "✎ éditer" / "👁 aperçu" / "⚑ corrections" ([[CS-5]]) / "⋯".
   - "＋ Ajouter une carte" per column. Cards drag between columns to change production stage.
   - **Card cards ergonomics** (extension 2026-07-11): cards are not forced compact — they grow with
     their data (Trello-style). A card shows, when present: color-label bars on top; title + "⎘ vN";
@@ -54,7 +54,7 @@
 - **PATCH /projects/{slug}** — update info fields (title, synopsis, hashtags, collaborationRequests toggle, **cover**); auto-save (debounced). The `cover` field takes the media URL/id produced by the [[F-10]] presigned upload (the endpoint stores the reference; it does not receive image bytes) and writes it to the œuvre's `coverImage` so [[DR-3]] and the catalog cards pick it up.
 - **POST /projects/{slug}/pages** + **PATCH /pages/{id}** + **DELETE /pages/{id}** — page/card CRUD.
 - **PATCH /pages/{id}/stage** — kanban stage transition (`scenario|nemu|corrections|propre|encrage|valide`).
-- **GET /pages/{id}/versions** — version history for the "⎘ vN" badge.
+- **Versioning is per FILE, not per card** (model correction 2026-07-13): a card links several distinct files (scénario, nemu, réf, encrage) that each evolve independently, so version history belongs to the **file (Asset), owned by [[CS-3]]** — see CS-3's Asset version chain and `GET /assets/{id}/versions`. On the card, the **linked-file chips show a per-file version** (e.g. "scénario v3 · nemu v2"); the card's "⎘ vN" badge becomes a **derived rollup** (highest linked-file version, or linked-file count) — not a stored `Page.version`. The card modal's version panel lists versions **per linked file**. `Page.version` / `PageVersion` / `GET /pages/{id}/versions` from the first CS-2 slice are **superseded by CS-3 file versioning** and should be removed when CS-3 lands (kept only until then to avoid breaking the shipped badge).
 - **Card detail + collaboration data** (extension 2026-07-11):
   - **GET /pages/{id}** — full card detail (description, dueDate, labels, assignees, checklist, comments with author, linked files, version summary) for the modal.
   - **PATCH /pages/{id}** — extended to also accept `description`, `dueDate`, `labelIds`, `assigneeIds`. Diffing `assigneeIds` notifies **both added and removed** members ([[F-5]] `project_activity`).
@@ -62,7 +62,7 @@
   - **Checklist**: **POST /pages/{id}/checklist**, **PATCH /checklist/{itemId}**, **DELETE /checklist/{itemId}**.
   - **Comments**: **POST /pages/{id}/comments**; **PATCH /comments/{id}** (author only, sets `editedAt`); **DELETE /comments/{id}** (author or project owner). On create (and on edit for newly-added mentions), parse `@name` mentions of project members and notify each mentioned member ([[F-5]] mention).
 - Entities: **Page** `{ id, projectId, chapterId, stage, version, fileTags[], linkedFileIds[], description?, dueDate? }`; **ProjectLabel** `{ id, projectId, name, color }` + **PageLabel** join; **PageAssignee** `{ pageId, userId }` join; **PageChecklistItem** `{ id, pageId, text, done, order }`; **PageComment** `{ id, pageId, authorId, body, createdAt, editedAt? }`; **Project** info fields (see [[CS-1]]).
-- Business rules: stage values constrained to the 6 columns; version increments on new file revision; label `color` ∈ the fixed palette; a card's labels/assignees belong to the same project.
+- Business rules: stage values constrained to the 6 columns; **file versions increment per linked file** on re-import ([[CS-3]]), and the card badge is a derived rollup (not a stored counter); label `color` ∈ the fixed palette; a card's labels/assignees belong to the same project.
 - Authorization: project members only (labels/checklist/comments/assignees/delete all member-gated); visibility rules from [[CS-1]] gate read access for non-members; comment edit = author only, comment delete = author or project owner.
 - Side effects: stage change to "Corrections" / raising a correction notifies collaborators ([[F-5]], via [[CS-5]]); assigning/unassigning a member on a card notifies that member ([[F-5]]); `@name`-mentioning a member in a comment notifies that member ([[F-5]]).
 
