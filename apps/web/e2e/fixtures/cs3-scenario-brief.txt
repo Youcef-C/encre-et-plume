@@ -1,0 +1,2 @@
+Brief de scenario e2e CS-3.
+Case 1 : Rin penetre dans le sanctuaire.

@@ -45,6 +45,7 @@ describe('MediaService', () => {
       findMany: jest.Mock;
     };
     message: { findFirst: jest.Mock };
+    assetVersion: { findFirst: jest.Mock };
   };
   let redis: jest.Mocked<Pick<RedisService, 'incr' | 'expire'>>;
   let queue: jest.Mocked<Pick<QueueService, 'enqueue' | 'schedule'>>;
@@ -59,6 +60,7 @@ describe('MediaService', () => {
         findMany: jest.fn(),
       },
       message: { findFirst: jest.fn().mockResolvedValue(null) },
+      assetVersion: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     s3 = {
       presignPut: jest.fn().mockResolvedValue('https://minio/presigned'),
@@ -607,6 +609,105 @@ describe('MediaService', () => {
 
       expect(s3.deleteObject).not.toHaveBeenCalled();
       expect(prisma.media.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── CS-3: asset kind (docx/psd/pdf/txt/images), private default, signed-URL member exception ──
+
+  describe('CS-3 asset kind', () => {
+    const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const PSD = 'image/vnd.adobe.photoshop';
+
+    it('requestUpload: accepts docx/psd/pdf/txt/images for the asset kind, defaults private', async () => {
+      for (const ct of ['image/png', 'application/pdf', 'text/plain', DOCX, PSD]) {
+        prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', visibility: 'private' }));
+        await expect(
+          service.requestUpload('acc-1', { kind: 'asset', contentType: ct, size: 2048 }),
+        ).resolves.toBeDefined();
+      }
+      const call = prisma.media.create.mock.calls.at(-1)![0];
+      expect(call.data).toMatchObject({ kind: 'asset', visibility: 'private' });
+    });
+
+    it('requestUpload: rejects a non-allowlisted content-type for the asset kind (400)', async () => {
+      await expect(
+        service.requestUpload('acc-1', { kind: 'asset', contentType: 'image/svg+xml', size: 2048 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('finalize docx: verifies PK zip magic, stores ready with variants.orig, enqueues docx-preview', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: DOCX, bucketKey: 'asset/acc-1/media-1.docx', visibility: 'private' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: DOCX, size: 4096 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]));
+      prisma.media.update.mockImplementation(({ data }: any) => Promise.resolve({ ...media, ...data }));
+
+      const res = await service.finalize('acc-1', 'media-1');
+
+      expect(res.status).toBe('ready');
+      expect(queue.enqueue).toHaveBeenCalledWith(
+        'image-processing',
+        'docx-preview',
+        { mediaId: 'media-1' },
+        expect.objectContaining({ idempotencyKey: 'docx-preview-media-1' }),
+      );
+    });
+
+    it('finalize docx: rejects a fake docx without PK magic (400, marks failed)', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: DOCX, bucketKey: 'asset/acc-1/media-1.docx' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: DOCX, size: 4096 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('<html>not a docx</html>'));
+
+      await expect(service.finalize('acc-1', 'media-1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.media.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'failed' } }));
+    });
+
+    it('finalize psd: verifies 8BPS magic, stores ready, NO variants job', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: PSD, bucketKey: 'asset/acc-1/media-1.psd' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: PSD, size: 4096 });
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from([0x38, 0x42, 0x50, 0x53, 0, 1]));
+      prisma.media.update.mockImplementation(({ data }: any) => Promise.resolve({ ...media, ...data }));
+
+      const res = await service.finalize('acc-1', 'media-1');
+
+      expect(res.status).toBe('ready');
+      expect(queue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('finalize asset PDF: re-stores with Content-Disposition inline (not attachment)', async () => {
+      const media = makeMedia({ kind: 'asset', contentType: 'application/pdf', bucketKey: 'asset/acc-1/media-1.pdf' });
+      prisma.media.findUnique.mockResolvedValue(media);
+      s3.headObject.mockResolvedValue({ contentType: 'application/pdf', size: 4096 });
+      const bytes = Buffer.from('%PDF-1.4 body');
+      s3.getObjectBuffer.mockResolvedValue(bytes);
+      prisma.media.update.mockImplementation(({ data }: any) => Promise.resolve({ ...media, ...data }));
+
+      await service.finalize('acc-1', 'media-1');
+
+      expect(s3.putObject).toHaveBeenCalledWith('asset/acc-1/media-1.pdf', bytes, 'application/pdf', 'inline');
+    });
+
+    it('signedUrl: grants a project member a presigned GET for a non-owned private asset', async () => {
+      prisma.media.findUnique.mockResolvedValue(
+        makeMedia({ visibility: 'private', ownerId: 'other', kind: 'asset', bucketKey: 'asset/other/media-1.png' }),
+      );
+      prisma.assetVersion.findFirst.mockResolvedValue({ id: 'av-1' });
+
+      const res = await service.signedUrl('acc-1', 'media-1');
+
+      expect(prisma.assetVersion.findFirst).toHaveBeenCalled();
+      expect(res.url).toBe('https://minio/signed-get');
+    });
+
+    it('signedUrl: 403 for a non-member on a private asset', async () => {
+      prisma.media.findUnique.mockResolvedValue(
+        makeMedia({ visibility: 'private', ownerId: 'other', kind: 'asset', bucketKey: 'asset/other/media-1.png' }),
+      );
+      prisma.assetVersion.findFirst.mockResolvedValue(null);
+
+      await expect(service.signedUrl('acc-1', 'media-1')).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 

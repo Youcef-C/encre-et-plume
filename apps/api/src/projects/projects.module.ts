@@ -4,12 +4,15 @@ import { getJwtSecret } from '../auth/jwt-secret';
 import { ProjectsController } from './projects.controller';
 import { PagesController } from './pages.controller';
 import { CardCollabController } from './card-collab.controller';
+import { AssetsController, AssetRootController } from './assets.controller';
 import { ProjectsService } from './projects.service';
 import { PagesService } from './pages.service';
 import { CardCollabService } from './card-collab.service';
+import { AssetsService } from './assets.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
+import { S3StorageService } from '../media/s3-storage.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 import { CollectionsModule } from '../collections/collections.module';
 import { MediaModule } from '../media/media.module';
@@ -35,8 +38,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CallsModule, // CS-1 "Appel à projets" seed (MC-4)
     NotificationsModule, // CS-2 stage→corrections notify (F-5)
   ],
-  controllers: [ProjectsController, PagesController, CardCollabController],
-  providers: [ProjectsService, PagesService, CardCollabService, PrismaService, RedisService, SlugService, SessionGuard],
+  controllers: [ProjectsController, PagesController, CardCollabController, AssetsController, AssetRootController],
+  providers: [ProjectsService, PagesService, CardCollabService, AssetsService, PrismaService, RedisService, SlugService, S3StorageService, SessionGuard],
   exports: [ProjectsService],
 })
 export class ProjectsModule {}

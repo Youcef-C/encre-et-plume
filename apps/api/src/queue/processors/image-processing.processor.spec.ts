@@ -15,12 +15,13 @@ import sharp from 'sharp';
 
 describe('ImageProcessingProcessor', () => {
   let processor: ImageProcessingProcessor;
-  let mediaService: { processVariants: jest.Mock; cleanupOrphans: jest.Mock };
+  let mediaService: { processVariants: jest.Mock; cleanupOrphans: jest.Mock; processDocxPreview: jest.Mock };
 
   beforeEach(() => {
     mediaService = {
       processVariants: jest.fn().mockResolvedValue(undefined),
       cleanupOrphans: jest.fn().mockResolvedValue(undefined),
+      processDocxPreview: jest.fn().mockResolvedValue(undefined),
     };
     processor = new ImageProcessingProcessor(mediaService as unknown as MediaService);
   });
@@ -56,6 +57,83 @@ describe('ImageProcessingProcessor', () => {
 
       expect(mediaService.cleanupOrphans).toHaveBeenCalled();
       expect(mediaService.processVariants).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('docx-preview job (CS-3)', () => {
+    it('delegates to mediaService.processDocxPreview(mediaId)', async () => {
+      const job = { name: 'docx-preview', attemptsMade: 0, opts: { attempts: 3 } } as unknown as Job;
+
+      await processor.process({ mediaId: 'media-docx' }, job);
+
+      expect(mediaService.processDocxPreview).toHaveBeenCalledWith('media-docx');
+      expect(mediaService.processVariants).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processDocxPreview: sanitizes mammoth output (real service, mocked mammoth/S3/Prisma)', () => {
+    it('strips <script>, on* handlers and javascript: urls, stores preview.html, merges variants.preview', async () => {
+      jest.resetModules();
+      jest.doMock('mammoth', () => ({
+        __esModule: true,
+        default: {
+          convertToHtml: jest.fn().mockResolvedValue({
+            value: '<p onclick="steal()">hi</p><script>evil()</script><a href="javascript:evil()">x</a>',
+            messages: [],
+          }),
+        },
+        convertToHtml: jest.fn().mockResolvedValue({
+          value: '<p onclick="steal()">hi</p><script>evil()</script><a href="javascript:evil()">x</a>',
+          messages: [],
+        }),
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { MediaService: FreshMediaService } = require('../../media/media.service');
+
+      const captured: Array<[string, Buffer, string, string?]> = [];
+      const s3Mock = {
+        getObjectBuffer: jest.fn().mockResolvedValue(Buffer.from([0x50, 0x4b, 0x03, 0x04])),
+        putObject: jest.fn().mockImplementation((k: string, b: Buffer, ct: string, cd?: string) => {
+          captured.push([k, b, ct, cd]);
+          return Promise.resolve();
+        }),
+        publicUrl: jest.fn((k: string) => `https://cdn/${k}`),
+        presignPut: jest.fn(),
+        headObject: jest.fn(),
+        deleteObject: jest.fn(),
+        presignGet: jest.fn(),
+      };
+      const docxMedia = {
+        id: 'media-docx',
+        ownerId: 'acc-1',
+        kind: 'asset',
+        bucketKey: 'asset/acc-1/media-docx.docx',
+        variants: { orig: 'asset/acc-1/media-docx.docx' },
+      };
+      const prismaMock = {
+        media: {
+          findUnique: jest.fn().mockResolvedValue(docxMedia),
+          update: jest.fn().mockResolvedValue(docxMedia),
+        },
+      };
+      const service = new FreshMediaService(
+        prismaMock as unknown as PrismaService,
+        s3Mock as unknown as S3StorageService,
+        { incr: jest.fn(), expire: jest.fn() } as unknown as RedisService,
+        { enqueue: jest.fn(), schedule: jest.fn() } as unknown as QueueService,
+      );
+
+      await service.processDocxPreview('media-docx');
+
+      const previewPut = captured.find(([k]) => k.endsWith('preview.html'));
+      expect(previewPut).toBeDefined();
+      const html = previewPut![1].toString('utf8');
+      expect(html).not.toContain('<script');
+      expect(html).not.toContain('onclick');
+      expect(html).not.toContain('javascript:');
+      const updateCall = prismaMock.media.update.mock.calls[0][0] as { data: { variants: Record<string, string> } };
+      expect(updateCall.data.variants.preview).toBe('asset/acc-1/media-docx/preview.html');
+      jest.dontMock('mammoth');
     });
   });
 

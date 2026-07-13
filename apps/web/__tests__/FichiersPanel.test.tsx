@@ -1,0 +1,270 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type {
+  AssetItem,
+  AssetListResponse,
+  MediaResponse,
+  WorkspacePage,
+} from '@encre-et-plume/shared';
+
+vi.mock('../lib/api', () => ({
+  listProjectAssets: vi.fn(),
+  createProjectAsset: vi.fn(),
+  createProjectAssetFromUrl: vi.fn(),
+  requestUpload: vi.fn(),
+  finalizeMedia: vi.fn(),
+  getMedia: vi.fn(),
+}));
+
+import * as api from '../lib/api';
+import FichiersPanel from '../components/projet/FichiersPanel';
+
+function makePage(over: Partial<WorkspacePage>): WorkspacePage {
+  return {
+    id: 'pg',
+    chapterId: 'c1',
+    title: 'Page',
+    stage: 'scenario',
+    version: 1,
+    fileTags: [],
+    linkedFileIds: [],
+    dueDate: null,
+    labels: [],
+    assignees: [],
+    checklistDone: 0,
+    checklistTotal: 0,
+    commentCount: 0,
+    ...over,
+  };
+}
+
+const pages = [
+  makePage({ id: 'pg7', title: 'Page 7' }),
+  makePage({ id: 'pg6', title: 'Page 6', stage: 'nemu' }),
+];
+
+const dessin: AssetItem = {
+  id: 'a1',
+  type: 'dessin',
+  filename: 'ruelle-nemu.png',
+  currentVersion: 1,
+  size: 2_400_000,
+  thumbnailUrl: 'https://cdn/thumb.webp',
+  previewable: true,
+  linkedPage: null,
+  updatedAt: '2026-07-13T10:00:00.000Z',
+};
+
+function listResponse(items: AssetItem[]): AssetListResponse {
+  return { items, total: items.length, page: 1, pageSize: 24, totalPages: 1 };
+}
+
+const readyMedia: MediaResponse = {
+  id: 'm3',
+  kind: 'asset',
+  status: 'ready',
+  visibility: 'private',
+  width: 100,
+  height: 100,
+  variants: { orig: 'o', web: 'w', thumb: 't' },
+  createdAt: '2026-07-13T11:00:00.000Z',
+};
+
+let capturedXHR: { onload: (() => void) | null } | undefined;
+const XHRMock = vi.fn().mockImplementation(function () {
+  const xhr = {
+    open: vi.fn(),
+    setRequestHeader: vi.fn(),
+    send: vi.fn().mockImplementation(() => queueMicrotask(() => xhr.onload?.())),
+    abort: vi.fn(),
+    upload: { onprogress: null as ((e: Partial<ProgressEvent>) => void) | null },
+    onload: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onabort: null as (() => void) | null,
+    status: 200,
+  };
+  capturedXHR = xhr;
+  return xhr;
+});
+
+function renderPanel(props?: { readOnly?: boolean }) {
+  return render(<FichiersPanel slug="lames-de-brume" pages={pages} {...props} />);
+}
+
+describe('FichiersPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('XMLHttpRequest', XHRMock);
+    vi.mocked(api.listProjectAssets).mockResolvedValue(listResponse([dessin]));
+    vi.mocked(api.requestUpload).mockResolvedValue({
+      mediaId: 'm3',
+      uploadUrl: 'https://minio.test/asset/m3.png',
+      bucketKey: 'asset/m3.png',
+      expiresIn: 300,
+    });
+    vi.mocked(api.finalizeMedia).mockResolvedValue(readyMedia);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('renders the replica layout: heading, drop zone, hint, source buttons', async () => {
+    renderPanel();
+    expect(screen.getByRole('heading', { name: 'Importer dessins & textes' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Glissez vos fichiers ici/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('images (.png .jpg .psd) · textes (.txt .docx) · scénarios'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Parcourir…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tablette' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cloud' })).toBeDisabled();
+    expect(screen.getByText('Importés récemment')).toBeInTheDocument();
+    await screen.findByText('ruelle-nemu.png');
+  });
+
+  it('renders a grid card with chip, French size and version badge', async () => {
+    renderPanel();
+    const name = await screen.findByText('ruelle-nemu.png');
+    const card = name.closest('[data-asset-card]') as HTMLElement;
+    expect(within(card).getByText(/Dessin/)).toBeInTheDocument();
+    expect(within(card).getByText(/2,4 Mo/)).toBeInTheDocument();
+    expect(within(card).getByText('v1')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: /Aperçu/ })).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', { name: 'Lier ruelle-nemu.png à une carte' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the empty state when there are no files', async () => {
+    vi.mocked(api.listProjectAssets).mockResolvedValue(listResponse([]));
+    renderPanel();
+    expect(await screen.findByText('Aucun fichier importé')).toBeInTheDocument();
+  });
+
+  it('filters by type when a tab is selected', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('button', { name: 'Dessins' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+        'lames-de-brume',
+        expect.objectContaining({ type: 'dessin' }),
+      ),
+    );
+  });
+
+  it('debounced search auto-applies the q filter', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.type(screen.getByPlaceholderText('Rechercher un fichier…'), 'ruelle');
+    await waitFor(
+      () =>
+        expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+          'lames-de-brume',
+          expect.objectContaining({ q: 'ruelle' }),
+        ),
+      { timeout: 2000 },
+    );
+  });
+
+  it('maps the sort control to the sort param', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Trier les fichiers' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Nom A–Z' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+        'lames-de-brume',
+        expect.objectContaining({ sort: 'name' }),
+      ),
+    );
+  });
+
+  it('maps the card filter to the pageId param and clears with Réinitialiser', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Filtrer par carte' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Page 7' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith(
+        'lames-de-brume',
+        expect.objectContaining({ pageId: 'pg7' }),
+      ),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Réinitialiser' }));
+    await waitFor(() =>
+      expect(api.listProjectAssets).toHaveBeenLastCalledWith('lames-de-brume', {}),
+    );
+  });
+
+  it('shows the filtered-empty message', async () => {
+    vi.mocked(api.listProjectAssets)
+      .mockResolvedValueOnce(listResponse([dessin]))
+      .mockResolvedValue(listResponse([]));
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('button', { name: 'Scénarios' }));
+    expect(await screen.findByText('Aucun fichier ne correspond')).toBeInTheDocument();
+  });
+
+  it('rejects an unsupported file before any network call', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const bad = new File(['x'], 'archive.zip', { type: 'application/zip' });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), bad);
+    expect(
+      await screen.findByText(/Format non pris en charge/),
+    ).toBeInTheDocument();
+    expect(api.requestUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversize file before any network call', async () => {
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const big = new File(['x'], 'huge.png', { type: 'image/png' });
+    Object.defineProperty(big, 'size', { value: 11 * 1024 * 1024 });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), big);
+    expect(await screen.findByText(/Fichier trop volumineux \(max 10 Mo\)/)).toBeInTheDocument();
+    expect(api.requestUpload).not.toHaveBeenCalled();
+  });
+
+  it('registers a successful upload via createProjectAsset', async () => {
+    vi.mocked(api.createProjectAsset).mockResolvedValue({ ...dessin, id: 'a2', filename: 'ok.png' });
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const ok = new File(['x'], 'ok.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), ok);
+    await waitFor(() =>
+      expect(api.createProjectAsset).toHaveBeenCalledWith('lames-de-brume', {
+        mediaId: 'm3',
+        filename: 'ok.png',
+      }),
+    );
+  });
+
+  it('readOnly hides every write affordance but keeps the grid + preview', async () => {
+    renderPanel({ readOnly: true });
+    await screen.findByText('ruelle-nemu.png');
+    expect(screen.queryByRole('button', { name: '＋ Importer' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Glissez vos fichiers ici/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Importer des fichiers')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Lier ruelle-nemu.png à une carte' }),
+    ).not.toBeInTheDocument();
+    // Read-only view stays usable.
+    expect(screen.getByRole('button', { name: /Aperçu/ })).toBeInTheDocument();
+    expect(screen.getByText('v1')).toBeInTheDocument();
+  });
+
+  it('shows a retry affordance when registration fails', async () => {
+    vi.mocked(api.createProjectAsset).mockRejectedValue({ message: 'Boom' });
+    renderPanel();
+    await screen.findByText('ruelle-nemu.png');
+    const ok = new File(['x'], 'ok.png', { type: 'image/png' });
+    await userEvent.upload(screen.getByLabelText('Importer des fichiers'), ok);
+    expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  });
+});

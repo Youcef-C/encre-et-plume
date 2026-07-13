@@ -80,6 +80,7 @@ enum MediaKind {
   application_sample
   call_document
   application_document
+  asset
 }
 
 enum MediaStatus {
@@ -151,6 +152,7 @@ model Account {
   blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
   pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
   pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
+  assetVersions           AssetVersion[]           @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -305,6 +307,7 @@ model Project {
   calls       ProjectCall[] // MC-4X req6: calls linked to this project
   pages       Page[] // CS-2 kanban board cards (NOT Planche — see Page model)
   labels      ProjectLabel[] // CS-2 card-modal: user-created label palette
+  assets      Asset[] // CS-3 imported files (versioned)
 
   @@index([ownerId])
 }
@@ -929,6 +932,7 @@ model Page {
   assignees     PageAssignee[] // CS-2 card-modal: assigned members
   checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
   comments      PageComment[] // CS-2 card-modal: comments
+  assets        Asset[]       @relation("PageAssets") // CS-3 assets linked to this card
 
   @@index([projectId, chapterId, stage])
 }
@@ -999,4 +1003,50 @@ model PageComment {
   editedAt  DateTime?
 
   @@index([pageId, createdAt])
+}
+
+// ── CS-3: project assets (versioned logical files) ─────────────────────────────
+
+enum AssetType {
+  dessin
+  texte
+  scenario
+  ref
+  page
+}
+
+model Asset {
+  id             String         @id @default(cuid())
+  projectId      String
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type           AssetType
+  filename       String
+  currentVersion Int            @default(1)
+  size           Int // denormalized current-version size → sort=size is one indexed orderBy
+  mediaId        String // current version's Media id (denormalized head of the chain)
+  linkedPageId   String?
+  linkedPage     Page?          @relation("PageAssets", fields: [linkedPageId], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  versions       AssetVersion[]
+
+  @@unique([projectId, filename]) // D10 re-import rule
+  @@index([projectId, type])
+  @@index([projectId, updatedAt]) // sort=recent
+  @@index([linkedPageId]) // pageId filter
+}
+
+model AssetVersion {
+  id        String   @id @default(cuid())
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  version   Int
+  mediaId   String
+  size      Int
+  note      String?
+  authorId  String
+  author    Account  @relation("AssetVersionAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([assetId, version]) // linear chain, no branching
 }

@@ -25,6 +25,12 @@ export class ImageProcessingProcessor implements JobProcessor<ImageProcessingJob
       return;
     }
 
+    // CS-3: docx → sanitized HTML derivative (off the request path).
+    if (job.name === 'docx-preview') {
+      await this.mediaService.processDocxPreview((data as ImageProcessingJob).mediaId);
+      return;
+    }
+
     // Default: process-variants
     await this.mediaService.processVariants((data as ImageProcessingJob).mediaId);
   }

@@ -16,6 +16,7 @@ export const MEDIA_KINDS = [
   'application_sample', // MC-5: "Candidater" work-sample upload (public — portfolio parity)
   'call_document', // MC-4X: "Appels à projets" PDF scenario attachment (public, no image derivatives)
   'application_document', // MC-4X: "Candidater" PDF work-sample (public, no image derivatives)
+  'asset', // CS-3: project WIP file (drawing/text/script) — private by default, versioned via Asset
 ] as const;
 export type MediaKind = (typeof MEDIA_KINDS)[number];
 
@@ -35,6 +36,21 @@ export type AllowedContentType = (typeof UPLOAD_ALLOWED_CONTENT_TYPES)[number];
 export const DOCUMENT_MEDIA_KINDS = ['call_document', 'application_document'] as const;
 export const DOCUMENT_ALLOWED_CONTENT_TYPES = ['application/pdf', 'text/plain'] as const;
 
+// CS-3: the `asset` kind accepts images + documents + docx + psd (magic-byte verified at finalize).
+export const DOCX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const PSD_CONTENT_TYPE = 'image/vnd.adobe.photoshop';
+export const ASSET_ALLOWED_CONTENT_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'application/pdf',
+  'text/plain',
+  DOCX_CONTENT_TYPE,
+  PSD_CONTENT_TYPE,
+] as const;
+
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 Mo
 export const MAX_IMAGE_DIMENSION = 8000; // px, per side
 
@@ -44,6 +60,7 @@ export interface MediaVariants {
   thumb: string;
   webp?: string;
   avif?: string;
+  preview?: string; // CS-3: docx → sanitized HTML derivative bucket key (F-8 'docx-preview' job)
 }
 
 // ── API request / response shapes ────────────────────────────────────────────

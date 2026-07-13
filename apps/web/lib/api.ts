@@ -682,6 +682,67 @@ export const updatePageComment = (id: string, body: UpdatePageCommentRequest): P
 export const deletePageComment = (id: string): Promise<void> =>
   request<void>(`/comments/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+// ─── CS-3 · project assets (versioned files) ─────────────────────────────────
+import type {
+  AssetItem,
+  AssetListQuery,
+  AssetListResponse,
+  CreateAssetRequest,
+  CreateAssetFromUrlRequest,
+  AddAssetVersionRequest,
+  AssetVersionItem,
+  AssetPreviewResponse,
+  LinkAssetRequest,
+} from '@encre-et-plume/shared';
+
+export const listProjectAssets = (slug: string, q: AssetListQuery = {}): Promise<AssetListResponse> => {
+  const p = new URLSearchParams();
+  if (q.type) p.set('type', q.type);
+  if (q.pageId) p.set('pageId', q.pageId);
+  if (q.q) p.set('q', q.q);
+  if (q.sort && q.sort !== 'recent') p.set('sort', q.sort);
+  if (q.page && q.page > 1) p.set('page', String(q.page));
+  const qs = p.toString();
+  return request<AssetListResponse>(`/projects/${encodeURIComponent(slug)}/assets${qs ? `?${qs}` : ''}`);
+};
+
+export const createProjectAsset = (slug: string, body: CreateAssetRequest): Promise<AssetItem> =>
+  request<AssetItem>(`/projects/${encodeURIComponent(slug)}/assets`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const createProjectAssetFromUrl = (
+  slug: string,
+  body: CreateAssetFromUrlRequest,
+): Promise<AssetItem> =>
+  request<AssetItem>(`/projects/${encodeURIComponent(slug)}/assets/from-url`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const addAssetVersion = (
+  slug: string,
+  assetId: string,
+  body: AddAssetVersionRequest,
+): Promise<AssetItem> =>
+  request<AssetItem>(`/projects/${encodeURIComponent(slug)}/assets/${encodeURIComponent(assetId)}/versions`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const getAssetVersions = (assetId: string): Promise<AssetVersionItem[]> =>
+  request<AssetVersionItem[]>(`/assets/${encodeURIComponent(assetId)}/versions`);
+
+export const getAssetPreview = (assetId: string): Promise<AssetPreviewResponse> =>
+  request<AssetPreviewResponse>(`/assets/${encodeURIComponent(assetId)}/preview`);
+
+export const linkAssetToPage = (assetId: string, body: LinkAssetRequest): Promise<AssetItem> =>
+  request<AssetItem>(`/assets/${encodeURIComponent(assetId)}/link`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 // No-arg call keeps hitting the legacy picker mode (MC-3 InviteModal / MC-4 PostCallModal, unchanged).
 // The CS-12 dashboard passes { scope: 'all', q, status, page } for the merged projects+collections list.
 export const getMyProjects = (params?: MyProjectsQuery): Promise<MyProjectsResponse> => {

@@ -7,12 +7,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import sharp from 'sharp';
+import mammoth from 'mammoth';
 import { randomUUID } from 'node:crypto';
 import {
   MEDIA_KINDS,
   UPLOAD_ALLOWED_CONTENT_TYPES,
   DOCUMENT_ALLOWED_CONTENT_TYPES,
   DOCUMENT_MEDIA_KINDS,
+  ASSET_ALLOWED_CONTENT_TYPES,
+  DOCX_CONTENT_TYPE,
+  PSD_CONTENT_TYPE,
   MAX_UPLOAD_BYTES,
   MAX_IMAGE_DIMENSION,
 } from '@encre-et-plume/shared';
@@ -36,7 +40,12 @@ const RATE_LIMIT_WINDOW_S = 3600;
 
 // Visibility defaults: attachment and chapter_page are private by default.
 // MC-4X: document kinds stay PUBLIC (detail links are plain CDN URLs).
-const PRIVATE_KINDS = new Set<MediaKind>(['attachment', 'chapter_page']);
+// CS-3: project asset WIP files are private by default (F-10 "private attachments").
+const PRIVATE_KINDS = new Set<MediaKind>(['attachment', 'chapter_page', 'asset']);
+
+// CS-3: magic-byte signatures for the asset-only formats (docx = zip container, psd = 8BPS).
+const DOCX_ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]); // "PK\x03\x04"
+const PSD_MAGIC = Buffer.from('8BPS');
 
 // MC-4X: kinds that accept ONLY application/pdf and skip the image pipeline.
 const DOCUMENT_KINDS = new Set<MediaKind>(DOCUMENT_MEDIA_KINDS as readonly MediaKind[]);
@@ -61,6 +70,21 @@ function isVerifiedDocument(buffer: Buffer, contentType: string): boolean {
   return true;
 }
 
+// CS-3 (D5): defense-in-depth sanitizer for the docx→HTML derivative. mammoth already emits a
+// restricted subset (p / headings / lists / a / img / strong / em), but strip any script/style block,
+// on* handlers, and javascript:/data: URLs before the HTML is ever stored or returned.
+const DOCX_PREVIEW_CAP = 500 * 1024; // 500 KB
+function sanitizeDocxHtml(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/(href|src)\s*=\s*"(?:\s*(?:javascript|data|vbscript):)[^"]*"/gi, '$1="#"')
+    .replace(/(href|src)\s*=\s*'(?:\s*(?:javascript|data|vbscript):)[^']*'/gi, "$1='#'");
+}
+
 function extFromContentType(ct: string): string {
   const map: Record<string, string> = {
     'image/jpeg': 'jpg',
@@ -69,6 +93,8 @@ function extFromContentType(ct: string): string {
     'image/avif': 'avif',
     'application/pdf': 'pdf',
     'text/plain': 'txt',
+    [DOCX_CONTENT_TYPE]: 'docx',
+    [PSD_CONTENT_TYPE]: 'psd',
   };
   return map[ct] ?? 'bin';
 }
@@ -105,9 +131,11 @@ export class MediaService {
     // raster allowlist (SVG excluded — XSS risk).
     const allowed = DOCUMENT_KINDS.has(dto.kind as MediaKind)
       ? (DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[])
-      : dto.kind === 'attachment'
-        ? ([...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES] as readonly string[])
-        : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
+      : dto.kind === 'asset'
+        ? (ASSET_ALLOWED_CONTENT_TYPES as readonly string[])
+        : dto.kind === 'attachment'
+          ? ([...UPLOAD_ALLOWED_CONTENT_TYPES, ...DOCUMENT_ALLOWED_CONTENT_TYPES] as readonly string[])
+          : (UPLOAD_ALLOWED_CONTENT_TYPES as readonly string[]);
     if (!allowed.includes(dto.contentType)) {
       throw new BadRequestException(`contentType not allowed: ${dto.contentType}`);
     }
@@ -170,6 +198,8 @@ export class MediaService {
     const bucketKey = (media as Record<string, unknown>)['bucketKey'] as string;
     const declaredContentType = (media as Record<string, unknown>)['contentType'] as string;
     const declaredSize = (media as Record<string, unknown>)['size'] as number;
+    const kind = (media as Record<string, unknown>)['kind'] as MediaKind;
+    const isPrivate = (media as Record<string, unknown>)['visibility'] === 'private';
 
     // Verify object exists and matches declared metadata
     let head: { contentType: string; size: number };
@@ -192,10 +222,41 @@ export class MediaService {
       throw new BadRequestException(`Object exceeds max size of ${MAX_UPLOAD_BYTES} bytes`);
     }
 
+    // CS-3: asset-only formats — .docx (verify ZIP magic, enqueue HTML derivative off the request path)
+    // and .psd (verify 8BPS magic, no derivative — libvips can't read PSD). Private → variants store
+    // bucket keys (resolved via signedUrl at read time), never a public URL.
+    if (declaredContentType === DOCX_CONTENT_TYPE || declaredContentType === PSD_CONTENT_TYPE) {
+      const buffer = await this.s3.getObjectBuffer(bucketKey);
+      const isDocx = declaredContentType === DOCX_CONTENT_TYPE;
+      const magic = isDocx ? DOCX_ZIP_MAGIC : PSD_MAGIC;
+      if (!buffer.subarray(0, magic.length).equals(magic)) {
+        await this.prisma.media.update({ where: { id: mediaId }, data: { status: 'failed' } });
+        await this.s3.deleteObject(bucketKey);
+        throw new BadRequestException('Ce document est invalide ou potentiellement dangereux.');
+      }
+      const readyDoc = await this.prisma.media.update({
+        where: { id: mediaId },
+        data: {
+          status: 'ready',
+          size: head.size || declaredSize,
+          variants: { orig: isPrivate ? bucketKey : this.s3.publicUrl(bucketKey) } as never,
+        },
+      });
+      if (isDocx) {
+        await this.queue.enqueue(
+          'image-processing',
+          'docx-preview',
+          { mediaId },
+          { idempotencyKey: `docx-preview-${mediaId}` },
+        );
+      }
+      return toMediaResponse(readyDoc as unknown as Record<string, unknown>);
+    }
+
     // MC-4X §7: documents (PDF/TXT) skip sharp, but the client's declared content-type is NOT trusted.
     // Download the (≤10 MB) bytes, VERIFY the real content (PDF magic / plain-text is not disguised
-    // markup or a NUL-heavy binary), then re-store with Content-Disposition: attachment so the CDN
-    // forces download instead of in-origin rendering — killing PDF-embedded JS and sniffing vectors.
+    // markup or a NUL-heavy binary), then re-store. CS-3 asset docs render inline in a sandboxed viewer
+    // (different origin), so they use Content-Disposition: inline; every other kind forces download.
     if ((DOCUMENT_ALLOWED_CONTENT_TYPES as readonly string[]).includes(declaredContentType)) {
       const buffer = await this.s3.getObjectBuffer(bucketKey);
       if (!isVerifiedDocument(buffer, declaredContentType)) {
@@ -203,13 +264,14 @@ export class MediaService {
         await this.s3.deleteObject(bucketKey);
         throw new BadRequestException('Ce document est invalide ou potentiellement dangereux.');
       }
-      await this.s3.putObject(bucketKey, buffer, declaredContentType, 'attachment');
+      const disposition = kind === 'asset' ? 'inline' : 'attachment';
+      await this.s3.putObject(bucketKey, buffer, declaredContentType, disposition);
       const readyDoc = await this.prisma.media.update({
         where: { id: mediaId },
         data: {
           status: 'ready',
           size: head.size || declaredSize,
-          variants: { orig: this.s3.publicUrl(bucketKey) } as never,
+          variants: { orig: isPrivate ? bucketKey : this.s3.publicUrl(bucketKey) } as never,
         },
       });
       return toMediaResponse(readyDoc as unknown as Record<string, unknown>);
@@ -268,7 +330,9 @@ export class MediaService {
     // participates in a conversation whose message references this mediaId (one query, no leak: a
     // non-participant/non-owner still gets 403). AD-11 subscriber checks layer on later.
     if (row['ownerId'] !== accountId) {
-      const allowed = row['kind'] === 'attachment' && (await this.isConversationAttachmentReadable(accountId, mediaId));
+      const allowed =
+        (row['kind'] === 'attachment' && (await this.isConversationAttachmentReadable(accountId, mediaId))) ||
+        (row['kind'] === 'asset' && (await this.isProjectAssetReadable(accountId, mediaId)));
       if (!allowed) throw new ForbiddenException();
     }
 
@@ -286,6 +350,23 @@ export class MediaService {
       select: { id: true },
     });
     return msg !== null;
+  }
+
+  /** CS-3 (D3): is `accountId` a member (owner or WorkCreator) of a project owning an AssetVersion
+   *  that references this media? Same membership predicate as isMemberOf, expressed in one query. */
+  private async isProjectAssetReadable(accountId: string, mediaId: string): Promise<boolean> {
+    const av = await this.prisma.assetVersion.findFirst({
+      where: {
+        mediaId,
+        asset: {
+          project: {
+            OR: [{ ownerId: accountId }, { work: { creators: { some: { accountId } } } }],
+          },
+        },
+      },
+      select: { id: true },
+    });
+    return av !== null;
   }
 
   async getForOwner(accountId: string, mediaId: string): Promise<MediaResponse> {
@@ -352,6 +433,32 @@ export class MediaService {
     });
   }
 
+  /** CS-3 (B8): docx → sanitized viewable HTML derivative. Enqueued from finalize/from-url on the
+   *  `image-processing` queue (job 'docx-preview'). Reads the .docx, converts with mammoth, sanitizes,
+   *  caps at 500 KB, stores at asset/{ownerId}/{mediaId}/preview.html, records variants.preview. */
+  async processDocxPreview(mediaId: string): Promise<void> {
+    const media = await this.prisma.media.findUnique({ where: { id: mediaId } });
+    if (!media) return; // orphaned — nothing to do
+
+    const row = media as unknown as Record<string, unknown>;
+    const bucketKey = row['bucketKey'] as string;
+    const ownerId = row['ownerId'] as string;
+
+    const buffer = await this.s3.getObjectBuffer(bucketKey);
+    const result = await mammoth.convertToHtml({ buffer });
+    let html = sanitizeDocxHtml(result.value ?? '');
+    if (Buffer.byteLength(html) > DOCX_PREVIEW_CAP) {
+      html = Buffer.from(html).subarray(0, DOCX_PREVIEW_CAP).toString('utf8');
+    }
+
+    const previewKey = `asset/${ownerId}/${mediaId}/preview.html`;
+    // 'attachment' disposition: this HTML is only ever read back by the API (B7), never served to a browser origin.
+    await this.s3.putObject(previewKey, Buffer.from(html), 'text/html', 'attachment');
+
+    const variants = { ...((row['variants'] as Record<string, string>) ?? {}), preview: previewKey };
+    await this.prisma.media.update({ where: { id: mediaId }, data: { variants: variants as never } });
+  }
+
   // ── F-14: RGPD helpers ────────────────────────────────────────────────────
 
   /**
@@ -385,6 +492,76 @@ export class MediaService {
 
     void filename; // ponytail: filename is in the zip itself; bucket key carries the id
     return { mediaId: (media as unknown as Record<string, unknown>)['id'] as string };
+  }
+
+  /**
+   * CS-3 (B3): ingest a server-fetched buffer as a private `asset` Media (the one sanctioned exception
+   * to "never proxy bytes" — from-url has no browser to presign for). Same magic-byte verification and
+   * routing as finalize: images strip EXIF + enqueue variants, docx enqueues its HTML derivative, pdf/txt
+   * store inline, psd stores as-is. Returns the ready media reference for the Asset registration.
+   */
+  async ingestAsset(
+    ownerId: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<{ id: string; size: number; contentType: string }> {
+    if (!(ASSET_ALLOWED_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+      throw new BadRequestException('Format non pris en charge');
+    }
+    const mediaId = randomUUID().replace(/-/g, '');
+    const ext = extFromContentType(contentType);
+    const bucketKey = `asset/${ownerId}/${mediaId}.${ext}`;
+    const isImage = contentType.startsWith('image/') && contentType !== PSD_CONTENT_TYPE;
+
+    let stored = buffer;
+    let width: number | null = null;
+    let height: number | null = null;
+
+    if (isImage) {
+      const metadata = await sharp(buffer).metadata();
+      if ((metadata.width ?? 0) > MAX_IMAGE_DIMENSION || (metadata.height ?? 0) > MAX_IMAGE_DIMENSION) {
+        throw new BadRequestException(`Image dimensions exceed ${MAX_IMAGE_DIMENSION}px`);
+      }
+      width = metadata.width ?? null;
+      height = metadata.height ?? null;
+      stored = await sharp(buffer).rotate().toBuffer(); // strip EXIF
+      await this.s3.putObject(bucketKey, stored, contentType);
+    } else {
+      // Verify magic bytes (client-supplied URL is not trusted).
+      const ok =
+        contentType === DOCX_CONTENT_TYPE
+          ? buffer.subarray(0, DOCX_ZIP_MAGIC.length).equals(DOCX_ZIP_MAGIC)
+          : contentType === PSD_CONTENT_TYPE
+            ? buffer.subarray(0, PSD_MAGIC.length).equals(PSD_MAGIC)
+            : isVerifiedDocument(buffer, contentType);
+      if (!ok) throw new BadRequestException('Ce document est invalide ou potentiellement dangereux.');
+      const disposition = contentType === DOCX_CONTENT_TYPE ? 'attachment' : contentType === PSD_CONTENT_TYPE ? undefined : 'inline';
+      await this.s3.putObject(bucketKey, buffer, contentType, disposition);
+    }
+
+    await this.prisma.media.create({
+      data: {
+        id: mediaId,
+        ownerId,
+        kind: 'asset' as never,
+        bucketKey,
+        contentType,
+        size: stored.length,
+        width,
+        height,
+        status: 'ready' as never,
+        visibility: 'private' as never,
+        variants: { orig: bucketKey } as never,
+      },
+    });
+
+    if (isImage) {
+      await this.queue.enqueue('image-processing', 'process-variants', { mediaId }, { idempotencyKey: `media-variants-${mediaId}` });
+    } else if (contentType === DOCX_CONTENT_TYPE) {
+      await this.queue.enqueue('image-processing', 'docx-preview', { mediaId }, { idempotencyKey: `docx-preview-${mediaId}` });
+    }
+
+    return { id: mediaId, size: stored.length, contentType };
   }
 
   /**

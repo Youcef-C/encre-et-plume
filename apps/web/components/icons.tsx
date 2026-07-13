@@ -429,3 +429,15 @@ export function ChecklistIcon(p: IconProps) {
     </Svg>
   );
 }
+
+// CS-3 — import/drop-zone glyph + "Télécharger" (replaces the prototype's ⤓): a downward arrow
+// dropping into a tray.
+export function DownloadIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <line x1="12" y1="3.5" x2="12" y2="15" />
+      <polyline points="7 10.5 12 15.5 17 10.5" />
+      <path d="M4.5 18.5v1a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-1" />
+    </Svg>
+  );
+}

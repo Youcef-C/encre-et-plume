@@ -12,6 +12,7 @@ import { PenNibIcon, BrushIcon, CaretDownIcon } from '../icons';
 import KanbanBoard from './KanbanBoard';
 import InfosPanel from './InfosPanel';
 import PlaceholderPanel from './PlaceholderPanel';
+import FichiersPanel from './FichiersPanel';
 
 export const WORKSPACE_TABS = [
   'tableau',
@@ -369,7 +370,7 @@ export default function ProjectWorkspace({
             <PlaceholderPanel title="Chapitres" note="La gestion des chapitres arrive bientôt." />
           )}
           {tab === 'fichiers' && (
-            <PlaceholderPanel title="Fichiers du projet" note="L'import de fichiers arrive bientôt." />
+            <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!isMember} />
           )}
           {tab === 'discussion' && (
             <PlaceholderPanel
