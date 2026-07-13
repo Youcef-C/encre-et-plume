@@ -280,6 +280,46 @@ describe('CardModal', () => {
     expect(screen.getByText('v4')).toBeInTheDocument();
   });
 
+  it('shows a total file-count label in the section header', async () => {
+    mount({}, {}, [
+      asset({ id: 'a1', type: 'scenario', filename: 's.txt' }),
+      asset({ id: 'a2', type: 'page', filename: 'p.png' }),
+    ]);
+    await screen.findByLabelText('TITRE');
+    expect(await screen.findByText('2 fichiers')).toBeInTheDocument();
+  });
+
+  it('shows "Aucun fichier" in the header when nothing is linked', async () => {
+    mount();
+    await screen.findByLabelText('TITRE');
+    expect(await screen.findByText('Aucun fichier')).toBeInTheDocument();
+  });
+
+  it('shows filled count pills on filled sections, "Vide" + empty state elsewhere', async () => {
+    mount({}, {}, [
+      asset({ id: 'a1', type: 'scenario', filename: 's.txt' }),
+      asset({ id: 'a2', type: 'page', filename: 'p.png' }),
+    ]);
+    await screen.findByText('s.txt');
+    expect(screen.getByText('2 fichiers')).toBeInTheDocument(); // header total
+    expect(screen.getAllByText('1 fichier')).toHaveLength(2); // scenario + page pills
+    expect(screen.getAllByText('Vide')).toHaveLength(2); // dessin + références
+    expect(screen.getAllByText('Aucun fichier lié')).toHaveLength(2);
+  });
+
+  it('collapses and expands a filled section', async () => {
+    mount({}, {}, [asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })]);
+    await screen.findByText('scenario.txt');
+    const toggle = screen.getByRole('button', { name: 'Masquer les fichiers — SCÉNARIO' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.click(toggle);
+    expect(screen.queryByText('scenario.txt')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Afficher les fichiers — SCÉNARIO' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
   it('opens the Aperçu overlay for a linked file', async () => {
     (api.getAssetPreview as ReturnType<typeof vi.fn>).mockResolvedValue({
       mode: 'image', url: 'blob:x', downloadUrl: 'd', filename: 'scenario.txt', version: 3,

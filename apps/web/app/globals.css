@@ -191,6 +191,23 @@ h1, h2, h3, h4, h5, h6 {
   color: #fff;
 }
 
+/* CardModal FICHIERS category card — subtle hover lift (base has no shadow so :hover can grow one). */
+.ep-fichier-card {
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.ep-fichier-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-fichier-card {
+    transition: none;
+  }
+  .ep-fichier-card:hover {
+    transform: none;
+  }
+}
+
 /* CS-12: "Mes projets" cards — default hard offset shadow + a hover lift (base shadow lives here, not
    inline, so :hover can grow it). Expanded/nested variants keep their inline shadow override. */
 .ep-projet-card {

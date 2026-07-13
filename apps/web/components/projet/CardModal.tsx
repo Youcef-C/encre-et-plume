@@ -25,7 +25,7 @@ import {
   type AssetType,
   type PageLinkedFileRef,
 } from '@encre-et-plume/shared';
-import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon } from '../icons';
+import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon, CaretDownIcon } from '../icons';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
 import ConfirmDialog from './ConfirmDialog';
@@ -130,6 +130,8 @@ export default function CardModal({
   const [previewTarget, setPreviewTarget] = useState<AssetItem | null>(null);
   const [versionsTarget, setVersionsTarget] = useState<AssetItem | null>(null);
   const [linkPicker, setLinkPicker] = useState<{ types: AssetType[]; canonical: AssetType; label: string } | null>(null);
+  // FICHIERS: per-section collapse (keyed by section label). Default expanded; only filled cards toggle.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const pendingRef = useRef<UpdatePageRequest>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -438,109 +440,149 @@ export default function CardModal({
           </div>
         </div>
 
-        {/* FICHIERS (par type) — Scénario / Dessin / Page / Références, wired to CS-3 assets. */}
+        {/* FICHIERS (par type) — Scénario / Dessin / Page / Références, wired to CS-3 assets.
+            One category card per section in a single vertical list (Modal accessible v2 layout). */}
         <div style={{ marginTop: 16 }}>
-          <div style={sectionLabel}>FICHIERS</div>
           {assetsError ? (
-            <div role="alert" style={errText}>
-              Impossible de charger les fichiers.
-            </div>
+            <>
+              <div style={sectionLabel}>FICHIERS</div>
+              <div role="alert" style={errText}>
+                Impossible de charger les fichiers.
+              </div>
+            </>
           ) : assets === null ? (
-            <div role="status" aria-label="Chargement des fichiers…" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[36, 36].map((h, i) => (
-                <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: h, background: 'var(--tone)', opacity: 0.35, borderRadius: 8 }} />
-              ))}
-            </div>
+            <>
+              <div style={sectionLabel}>FICHIERS</div>
+              <div role="status" aria-label="Chargement des fichiers…" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[52, 52].map((h, i) => (
+                  <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: h, background: 'var(--tone)', opacity: 0.35, borderRadius: 10 }} />
+                ))}
+              </div>
+            </>
           ) : (
-            // 2×2 grid on desktop, collapses to a single column below ~440px (no media query needed).
-            // `align-items: start` keeps a file-heavy section from stretching its empty neighbour.
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, alignItems: 'start' }}>
-              {FICHIERS_SECTIONS.map((sec) => {
-                const files = assets.filter((a) => sec.types.includes(a.type));
-                return (
-                  <div key={sec.label} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                        {sec.label}
-                      </span>
-                      {sec.hint && <span style={{ fontSize: 11, color: 'var(--ink2)', fontWeight: 500 }}>{sec.hint}</span>}
-                      {memberOnly && (
-                        <button
-                          type="button"
-                          aria-label={`Lier un fichier (${sec.label})`}
-                          title="Lier · remplacer un fichier"
-                          onClick={() => setLinkPicker({ types: sec.types, canonical: sec.canonical, label: sec.label })}
-                          style={{ ...plusBtn, marginLeft: 'auto' }}
-                        >
-                          ＋ Lier
-                        </button>
-                      )}
-                    </div>
-                    {files.length === 0 ? (
-                      <span style={mutedText}>Aucun fichier</span>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {files.map((a) => (
-                          // Two-line card: name + version on top, actions below — stays clean even in a
-                          // narrow 2×2 grid column (no messy mid-row wrapping).
-                          <div
-                            key={a.id}
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 6,
-                              border: '2px solid var(--ink)',
-                              borderRadius: 8,
-                              padding: '7px 9px',
-                              minWidth: 0,
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                              <span style={{ flex: 'none', display: 'inline-flex' }}>
-                                {sec.icon === 'doc' ? <FileTextIcon size={14} /> : <ImageIcon size={14} />}
-                              </span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {a.filename}
-                              </span>
-                              <span style={{ ...chipStyle, flex: 'none', padding: '1px 7px', fontSize: 11, color: '#000' }}>v{a.currentVersion}</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 5, flexWrap: 'nowrap', alignItems: 'stretch', minWidth: 0 }}>
-                              <button
-                                type="button"
-                                onClick={() => setPreviewTarget(a)}
-                                aria-label={`Aperçu de ${a.filename}`}
-                                disabled={!a.previewable}
-                                style={{ ...rowBtn, opacity: a.previewable ? 1 : 0.5 }}
-                              >
-                                <EyeIcon size={12} /> Aperçu
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setVersionsTarget(a)}
-                                aria-label={`Historique des versions de ${a.filename}`}
-                                style={rowBtn}
-                              >
-                                Historique
-                              </button>
-                              {memberOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => void unlinkAsset(a)}
-                                  aria-label={`Retirer ${a.filename} de la carte`}
-                                  style={{ ...rowBtn, color: '#fff', background: 'var(--accent)', borderColor: 'var(--accent)' }}
-                                >
-                                  Retirer
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            (() => {
+              const perSection = FICHIERS_SECTIONS.map((sec) => ({ sec, files: assets.filter((a) => sec.types.includes(a.type)) }));
+              const total = perSection.reduce((n, s) => n + s.files.length, 0);
+              const countLabel = total === 0 ? 'Aucun fichier' : `${total} ${total === 1 ? 'fichier' : 'fichiers'}`;
+              return (
+                <>
+                  {/* Section header: FICHIERS + right-aligned total-count label */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <div style={{ ...sectionLabel, marginBottom: 0 }}>FICHIERS</div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}>{countLabel}</span>
                   </div>
-                );
-              })}
-            </div>
+                  <div role="list" aria-label="Fichiers de la page" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {perSection.map(({ sec, files }) => {
+                      const has = files.length > 0;
+                      const isCollapsed = !!collapsed[sec.label];
+                      const bodyId = `fichiers-body-${sec.canonical}`;
+                      const pillText = `${files.length} ${files.length === 1 ? 'fichier' : 'fichiers'}`;
+                      const SecIcon = sec.icon === 'doc' ? FileTextIcon : ImageIcon;
+                      return (
+                        <div key={sec.label} role="listitem" className="ep-fichier-card" style={categoryCard(has)}>
+                          {/* Header row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={iconBox}>
+                              <SecIcon size={16} />
+                            </span>
+                            <span style={typeLabelStyle}>{sec.label}</span>
+                            {sec.hint && <span style={subLabelStyle}>{sec.hint}</span>}
+                            <span style={has ? pillFilled : pillOutline}>{has ? pillText : 'Vide'}</span>
+                            {memberOnly && (
+                              <button
+                                type="button"
+                                aria-label={`Lier un fichier (${sec.label})`}
+                                title="Lier · remplacer un fichier"
+                                onClick={() => setLinkPicker({ types: sec.types, canonical: sec.canonical, label: sec.label })}
+                                style={{ ...plusBtn, marginLeft: 'auto' }}
+                              >
+                                ＋ Lier
+                              </button>
+                            )}
+                            {has && (
+                              <button
+                                type="button"
+                                aria-expanded={!isCollapsed}
+                                aria-controls={bodyId}
+                                aria-label={`${isCollapsed ? 'Afficher' : 'Masquer'} les fichiers — ${sec.label}`}
+                                onClick={() => setCollapsed((c) => ({ ...c, [sec.label]: !c[sec.label] }))}
+                                style={{ ...chevronBtn, marginLeft: memberOnly ? undefined : 'auto' }}
+                              >
+                                <CaretDownIcon size={16} style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Body: file rows (expanded) or empty state */}
+                          {!has ? (
+                            <div style={{ ...mutedText, marginTop: 8 }}>Aucun fichier lié</div>
+                          ) : (
+                            !isCollapsed && (
+                              <div
+                                id={bodyId}
+                                role="list"
+                                aria-label={`Fichiers liés — ${sec.label}`}
+                                style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}
+                              >
+                                {files.map((a) => (
+                                  <div key={a.id} role="listitem" style={fileRow}>
+                                    <span style={thumbBox}>
+                                      {a.thumbnailUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={a.thumbnailUrl} alt="" width={44} height={44} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                      ) : (
+                                        <SecIcon size={18} />
+                                      )}
+                                    </span>
+                                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                                        <span style={filenameStyle}>{a.filename}</span>
+                                        <span title={`Version ${a.currentVersion}`} style={versionBadge}>
+                                          v{a.currentVersion}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 5, minWidth: 0 }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewTarget(a)}
+                                          aria-label={`Aperçu de ${a.filename}`}
+                                          disabled={!a.previewable}
+                                          style={{ ...rowBtn, opacity: a.previewable ? 1 : 0.5 }}
+                                        >
+                                          <EyeIcon size={12} /> Aperçu
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setVersionsTarget(a)}
+                                          aria-label={`Historique des versions de ${a.filename}`}
+                                          style={rowBtn}
+                                        >
+                                          Historique
+                                        </button>
+                                        {memberOnly && (
+                                          <button
+                                            type="button"
+                                            onClick={() => void unlinkAsset(a)}
+                                            aria-label={`Retirer ${a.filename} de la carte`}
+                                            style={dangerRowBtn}
+                                          >
+                                            Retirer
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()
           )}
         </div>
 
@@ -1562,6 +1604,90 @@ const plusBtn: React.CSSProperties = {
   fontFamily: 'inherit',
   padding: '3px 8px',
 };
+
+// ── FICHIERS category-card styles (Modal accessible v2 layout) ────────────────
+const categoryCard = (has: boolean): React.CSSProperties => ({
+  border: '3px solid var(--ink)',
+  borderRadius: 10,
+  padding: 11,
+  minWidth: 0,
+  background: has ? 'var(--card)' : 'var(--paper)',
+});
+
+const iconBox: React.CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 30,
+  height: 30,
+  border: '2px solid var(--ink)',
+  borderRadius: 7,
+  background: 'var(--paper)',
+  color: 'var(--ink)',
+};
+
+const typeLabelStyle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '.04em' };
+const subLabelStyle: React.CSSProperties = { fontSize: 11, color: 'var(--ink2)', fontWeight: 500 };
+
+const pillBase: React.CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  fontSize: 11,
+  fontWeight: 700,
+  borderRadius: 20,
+  padding: '1px 9px',
+  minHeight: 20,
+};
+const pillFilled: React.CSSProperties = { ...pillBase, border: '2px solid var(--ink)', background: 'var(--ink)', color: 'var(--paper)' };
+const pillOutline: React.CSSProperties = { ...pillBase, border: '2px solid var(--ink2)', background: 'transparent', color: 'var(--ink2)' };
+
+const chevronBtn: React.CSSProperties = {
+  flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 30,
+  height: 30,
+  border: '2px solid var(--ink)',
+  borderRadius: 7,
+  background: 'var(--card)',
+  color: 'var(--ink)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
+const thumbBox: React.CSSProperties = {
+  flex: 'none',
+  width: 44,
+  height: 44,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '2px solid var(--ink)',
+  borderRadius: 7,
+  background: 'var(--paper)',
+  color: 'var(--ink)',
+  overflow: 'hidden',
+};
+
+const filenameStyle: React.CSSProperties = { flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)' };
+const versionBadge: React.CSSProperties = { ...chipStyle, flex: 'none', padding: '1px 7px', fontSize: 11, color: 'var(--ink)' };
+
+const fileRow: React.CSSProperties = {
+  display: 'flex',
+  gap: 9,
+  alignItems: 'flex-start',
+  border: '2px solid var(--ink)',
+  borderRadius: 8,
+  padding: 8,
+  background: 'var(--card)',
+  minWidth: 0,
+};
+
+// Ghost DANGER — red text + red border (unlink is destructive-ish, distinct from the neutral ghosts).
+const dangerRowBtn: React.CSSProperties = { ...rowBtn, color: 'var(--accent)', borderColor: 'var(--accent)' };
 
 const linkBtn: React.CSSProperties = {
   border: 'none',
