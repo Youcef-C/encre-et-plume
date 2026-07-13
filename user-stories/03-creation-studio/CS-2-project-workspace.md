@@ -19,8 +19,15 @@
     **checklist `(x/x)`** count, a comment count, and an assignee avatar stack.
   - **Card detail modal** (extension 2026-07-11 — improves the prototype's `[data-card-modal]`
     "Nouvelle carte"): clicking a card opens a modal that keeps the prototype's TITRE · COLONNE ·
-    TYPE DE PAGE (Simple / ⇿ Double page) · FICHIERS LIÉS, and adds:
+    TYPE DE PAGE (Simple / ⇿ Double page) · FICHIERS LIÉS (reworked into per-type sections, see FICHIERS below), and adds:
     - **DESCRIPTION** (textarea).
+    - **FICHIERS (par type)** (2026-07-13, induced) — replaces the prototype's single flat "FICHIERS
+      LIÉS" chip list with **one section per file type**: **Scénario**, **Dessin** (nemu/encrage),
+      **Page** (planche finale) and **Références**. Each section lists that type's linked file(s) with
+      its **current version** + an "👁 Aperçu" / "Lier · remplacer" action, and opens the file's
+      **version history** ([[CS-3]] per-file versioning). The sections map onto CS-3's asset `type`
+      vocabulary (`scenario`/`texte`, `dessin`, `ref`) plus the composed **page/planche** (see the CS-3
+      type-alignment note); an empty section shows a "＋ Lier un fichier" affordance.
     - **ÉTIQUETTES** — user-created project labels (name ≤30 + a color from a fixed on-brand palette,
       no presets); toggle to apply/remove on the card; create/rename/recolor/delete from the picker;
       deleting a label removes it from every card.
@@ -77,5 +84,5 @@
 
 - Explicit: header, tabs, kanban columns, card anatomy, Infos auto-save, reviews. Soutien detail deferred to MR epic.
 - **Cover control reconciliation (2026-07-09)**: the prototype's INFOS view (`data-projview="infos"`) draws only TITRE / SYNOPSIS / HASHTAGS + the collaboration toggle + reviews — it does **not** draw a cover control there. The cover-drop *component* IS drawn in the prototype (the `image-slot` "Déposez la couverture" on the "Œuvre" hero `id="oeuvre-cover"`, and the gallery hero). This story reuses that drop component **inside the INFOS editor** (an **induced deviation** — the INFOS form gains the drawn cover-drop that the prototype places on the public hero), so a creator can add/replace the œuvre cover from the workspace. Covers apply to every œuvre type — Manga, Histoire/Roman, and Illustration collections ([[DR-12]]) — since all are `Work` rows with `coverImage`.
-- **Card modal extension (2026-07-11, induced)**: the prototype draws a card modal (`[data-card-modal]` "Nouvelle carte": TITRE · DESCRIPTION · COLONNE · TYPE DE PAGE · FICHIERS LIÉS · ASSIGNÉ À) but the shipped CS-2 slice built only a lightweight inline "add card". This extension makes **clicking a card open that modal** and **improves it** with color labels, a deadline, a checklist, comments, and (added+removed) assignee notifications — grade the modal against the prototype base **plus** these additions, not the raw prototype. The bigger/richer mini cards and the label-filter row are induced ergonomics (the prototype is desktop-only and doesn't draw them). Design spec: `docs/superpowers/specs/2026-07-11-cs2-card-modal-design.md`.
+- **Card modal extension (2026-07-11, induced)**: the prototype draws a card modal (`[data-card-modal]` "Nouvelle carte": TITRE · DESCRIPTION · COLONNE · TYPE DE PAGE · FICHIERS LIÉS · ASSIGNÉ À) but the shipped CS-2 slice built only a lightweight inline "add card". This extension makes **clicking a card open that modal** and **improves it** with color labels, a deadline, a checklist, comments, (added+removed) assignee notifications, and **per-type FICHIERS sections** (Scénario / Dessin / Page / Références, each with per-file version + preview) — grade the modal against the prototype base **plus** these additions, not the raw prototype. The bigger/richer mini cards and the label-filter row are induced ergonomics (the prototype is desktop-only and doesn't draw them). Design spec: `docs/superpowers/specs/2026-07-11-cs2-card-modal-design.md`.
 - **Deferred (do not flag as gaps)**: realtime websocket push for comments/checklist (intentional refetch-on-open); per-checklist-item due dates / assignment; comment threading & reactions.
