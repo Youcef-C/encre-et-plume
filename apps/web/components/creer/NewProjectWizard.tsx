@@ -3,7 +3,7 @@
 // CS-1 — "Nouveau projet" wizard, a faithful replica of the prototype's data-page="creer" section
 // (proto 1747–1852): a 740px ink-bordered card, header + ✕, a clickable 3-dot step rail
 // (Type · Détails · Soutien), and the drawn footer. All three type cards are single-select:
-// Manga/Histoire walk this wizard and submit POST /projects (returns to /projets); Illustration(s)
+// Manga/Histoire walk this wizard and submit POST /projects (opens the new project's workspace); Illustration(s)
 // runs the real publish flow INLINE inside the same shell (the embedded PublishIllustrationForm,
 // split Détails / Soutien) and posts to /illustrations. Deep-link /creer?type=illustration (the
 // Galerie CTA) opens straight on the Illustration Détails step.

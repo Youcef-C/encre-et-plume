@@ -79,7 +79,11 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await page.getByRole('checkbox', { name: /Autoriser les dons uniques/ }).check();
 
     await page.getByRole('button', { name: 'Créer le projet' }).click();
-    await expect(page).toHaveURL(/\/projets/, { timeout: 10_000 });
+    // CS-2: creating a project opens its workspace (/projet/{slug}); its title shows in the header.
+    await expect(page).toHaveURL(/\/projet\//, { timeout: 10_000 });
+    await expect(page.getByText(title)).toBeVisible({ timeout: 10_000 });
+    // It also lists on the "Mes projets" dashboard with a "Manga" badge.
+    await page.goto('/projets');
     await expect(page.getByText(title)).toBeVisible({ timeout: 10_000 });
   });
 
@@ -92,7 +96,8 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await page.getByRole('button', { name: /Continuer/ }).click();
     await page.getByLabel('Titre du projet').fill(title);
     await page.getByRole('button', { name: /Configurer plus tard/ }).click();
-    await expect(page).toHaveURL(/\/projets/, { timeout: 10_000 });
+    // CS-2: create-immediately opens the new project's workspace; its title shows in the header.
+    await expect(page).toHaveURL(/\/projet\//, { timeout: 10_000 });
     await expect(page.getByText(title)).toBeVisible({ timeout: 10_000 });
   });
 
