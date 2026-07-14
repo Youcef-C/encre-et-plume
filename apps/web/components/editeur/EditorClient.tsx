@@ -234,8 +234,8 @@ function EditorLoaded({
         // Bug fix — Word-like caret scrolling (scrollCaretIntoView). The editor has no inner scroll
         // frame (Item 1): the whole window scrolls. This fires only when PM wants to scroll the
         // selection into view (typing / arrow nav / programmatic reveal — NOT a plain mouse click), and
-        // scrolls only when the caret would leave the comfortable band, so clicking leaves the view put
-        // and typing keeps the caret around 78% of the window without abrupt re-centering.
+        // scrolls only when the caret would leave the VISIBLE viewport, so clicking leaves the view put
+        // and typing on a visible line never shifts the camera.
         handleScrollToSelection: scrollCaretIntoView,
       },
     },
@@ -1114,14 +1114,16 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
   return cursor;
 }
 
-// Word-like caret scrolling: the caret moves freely within a comfortable band of the WINDOW and the
-// view only scrolls when it would leave that band — the caret can descend to ~78% of the viewport
-// before typing another line nudges the page by one line to keep it there, and it never abruptly
-// re-centers (nor scrolls at all when the caret is already comfortably in view — e.g. on a click).
-// `window.scrollTo` clamps to [0, maxScroll], so near the document end the caret simply rests wherever
-// the remaining space allows (78% of the window, not forced against missing paper below).
-const CARET_BOTTOM_ANCHOR = 0.78; // caret may sit this far down the viewport before the page scrolls
+// Word-like caret scrolling: while the caret is anywhere in the VISIBLE viewport (below the sticky
+// header, above the bottom edge) the view does NOT move — typing more chars on a visible line never
+// shifts the camera. The page only scrolls when the caret would actually leave the visible area:
+// slip behind the header (scroll up) or drop below the bottom edge (scroll down). When it does scroll
+// down it re-anchors the caret with runway (~72% of the window) so you get several fresh lines before
+// the next scroll, instead of a shift every line. `window.scrollTo` clamps to [0, maxScroll], so near
+// the document end the caret just rests wherever the remaining paper allows.
 const CARET_TOP_MARGIN = 180; // px kept clear at the top for the sticky header + toolbar
+const CARET_BOTTOM_MARGIN = 56; // px kept clear at the bottom edge — caret is "off-screen" past this
+const CARET_REANCHOR = 0.72; // on a downward scroll, land the caret this far down (runway for more lines)
 function scrollCaretIntoView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
   if (typeof window === 'undefined') return false;
   let coords: { top: number; bottom: number };
@@ -1130,10 +1132,12 @@ function scrollCaretIntoView(view: { state: { selection: { head: number } }; coo
   } catch {
     return false; // let PM fall back to its default if the position can't be measured
   }
-  const bottomLimit = window.innerHeight * CARET_BOTTOM_ANCHOR;
   let delta = 0;
-  if (coords.bottom > bottomLimit) delta = coords.bottom - bottomLimit; // caret dropped past 78% → scroll down
-  else if (coords.top < CARET_TOP_MARGIN) delta = coords.top - CARET_TOP_MARGIN; // caret behind the chrome → scroll up
+  if (coords.bottom > window.innerHeight - CARET_BOTTOM_MARGIN) {
+    delta = coords.bottom - window.innerHeight * CARET_REANCHOR; // caret went off the bottom → scroll, land at 72%
+  } else if (coords.top < CARET_TOP_MARGIN) {
+    delta = coords.top - CARET_TOP_MARGIN; // caret behind the chrome → scroll up just enough to clear it
+  }
   if (delta !== 0) window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: 'auto' });
   return true; // we own scroll-to-selection (suppresses PM's abrupt edge jump when already in view)
 }
