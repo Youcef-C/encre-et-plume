@@ -44,6 +44,7 @@ const TYPE_CHIPS: { key: ProjectTypeFilter; label: string }[] = [
   { key: 'histoire', label: 'Histoire' },
   { key: 'illustrations', label: 'Illustrations' },
   { key: 'collections', label: 'Collections' },
+  { key: 'collaborations', label: 'Collaborations' },
 ];
 
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' });

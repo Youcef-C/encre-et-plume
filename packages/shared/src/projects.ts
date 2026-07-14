@@ -27,7 +27,7 @@ export const PROJECTS_SEARCH_MAX = 100;
 export const PROJECT_STATUS_FILTERS = ['tous', 'en-cours', 'en-pause', 'publies'] as const;
 export type ProjectStatusFilter = (typeof PROJECT_STATUS_FILTERS)[number];
 
-export const PROJECT_TYPE_FILTERS = ['tous', 'manga', 'histoire', 'illustrations', 'collections'] as const;
+export const PROJECT_TYPE_FILTERS = ['tous', 'manga', 'histoire', 'illustrations', 'collections', 'collaborations'] as const;
 export type ProjectTypeFilter = (typeof PROJECT_TYPE_FILTERS)[number];
 
 export interface ProjectMemberRef {

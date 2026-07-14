@@ -358,6 +358,21 @@ describe('ProjectsService', () => {
     ]);
   });
 
+  it('type=collaborations returns only member (isOwner:false) projects, not owned ones', async () => {
+    const owned = PROJECT({ id: 'p-owned' }); // ownerId acc-me
+    const member = PROJECT({
+      id: 'p-member',
+      ownerId: 'acc-owner',
+      owner: { id: 'acc-owner', displayName: 'Aki', profile: { creatorRoles: ['dessinateur'] } },
+      invitations: [
+        { status: 'accepted', toUser: { id: 'acc-me', displayName: 'Moi', profile: { creatorRoles: ['scenariste'] } } },
+      ],
+    });
+    build([owned, member], []);
+    const res = await service.getMine('acc-me', q({ type: 'collaborations' }));
+    expect(res.items.map((i) => i.id)).toEqual(['p-member']);
+  });
+
   it('dedupes to one row when the caller is both owner and WorkCreator (no double row)', async () => {
     const p = PROJECT({ id: 'p-dup' });
     build([p, p], []); // OR would never duplicate in SQL, but guard against it anyway

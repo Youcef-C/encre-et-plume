@@ -91,7 +91,7 @@ const ACTIVE_STATUSES = new Set(['en cours', 'en révision']);
 
 /** CS-12: dashboard type chip → keeps rows by `kind` (illustrations/collections) or, for series, by the
  *  emitted project `type` badge (label-insensitive so a label tweak never silently drops rows). */
-function typeMatches(filter: ProjectTypeFilter, row: { kind?: string; type?: string }): boolean {
+function typeMatches(filter: ProjectTypeFilter, row: { kind?: string; type?: string; isOwner?: boolean }): boolean {
   switch (filter) {
     case 'tous':
       return true;
@@ -103,6 +103,9 @@ function typeMatches(filter: ProjectTypeFilter, row: { kind?: string; type?: str
       return row.kind === 'project' && (row.type ?? '').toLowerCase().startsWith('manga');
     case 'histoire':
       return row.kind === 'project' && (row.type ?? '').toLowerCase().startsWith('histoire');
+    case 'collaborations':
+      // Projects the caller collaborates on but does not own (member via WorkCreator).
+      return row.kind === 'project' && row.isOwner === false;
     default:
       return true;
   }
