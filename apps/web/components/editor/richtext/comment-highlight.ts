@@ -4,8 +4,14 @@
 // are best-effort (they can drift after collaborative edits); the comment's stored `quote` is the
 // durable indicator, so a stale range simply stops painting rather than mis-highlighting.
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import * as Y from 'yjs';
+// TipTap v3's Collaboration extension binds via @tiptap/y-tiptap (its y-prosemirror fork), so the
+// live ySyncPlugin state — and thus the RelativePosition helpers — MUST come from y-tiptap: the
+// PluginKey from the upstream `y-prosemirror` is a different instance and getState() would no-op.
+import { ySyncPluginKey, relativePositionToAbsolutePosition } from '@tiptap/y-tiptap';
 
 export interface CommentRange {
   id: string;
@@ -60,7 +66,175 @@ export function commentRangesFrom(
   return out;
 }
 
-export const commentHighlightKey = new PluginKey<DecorationSet>('commentHighlight');
+export const commentHighlightKey = new PluginKey<HighlightState>('commentHighlight');
+
+// A comment anchored to Yjs RELATIVE positions. Absolute ProseMirror positions drift under
+// collaborative editing: DecorationSet.map (inward bias) DROPS a highlight when a remote peer's edit
+// replaces the underlying text node (y-prosemirror rebuilds nodes on remote sync), and outward-bias
+// mapping GROWS it to swallow the doc. Yjs relative positions bind to a CRDT item, so they resolve to
+// the correct absolute range across local AND remote edits without growing or dropping — the standard
+// collaborative-anchor approach. We convert each comment's absolute range to relative ONCE (keyed by
+// id, so re-painting the whole list when a new comment arrives never disturbs existing anchors), then
+// resolve relative→absolute every transaction to rebuild the decorations.
+interface Anchor {
+  id: string;
+  color: string;
+  from: Y.RelativePosition;
+  to: Y.RelativePosition;
+}
+interface HighlightState {
+  anchors: Anchor[];
+  pending: CommentRange[] | null; // desired ranges awaiting a ready y-sync binding
+  set: DecorationSet;
+}
+
+interface YSyncState {
+  type: Y.XmlFragment;
+  doc: Y.Doc;
+  binding: { mapping: Map<Y.AbstractType<unknown>, PMNode> } | null;
+}
+
+function ySync(state: EditorState): YSyncState | null {
+  const s = ySyncPluginKey.getState(state) as YSyncState | undefined;
+  return s && s.binding ? s : null;
+}
+
+// CS-15 — vendored + adapted from @tiptap/y-tiptap@3.0.6 `absolutePositionToRelativePosition`
+// (dist/y-tiptap.cjs L1635-1701) and its `createRelativePosition` helper (L1723). The upstream helper
+// hard-codes assoc = -1 (LEFT association) for every text position, so BOTH ends of a comment range
+// left-associate and an insert immediately BEFORE a highlight lands INSIDE it. We expose the `assoc`
+// parameter so the plugin can bind `from` right-associated (assoc 0 → an insert at the start boundary
+// stays outside) and `to` left-associated (assoc -1 → an insert at the end boundary stays outside; an
+// insert strictly inside shifts `to` right, growing the highlight) — the Docs-like contract (FE-1).
+// Only the three `createRelativePositionFromTypeIndex(…, -1)` call sites take `assoc`; the structural
+// boundary fallbacks are unchanged from upstream (their association is inherent). Decoration-only:
+// nothing here is serialized — the DB `anchorFrom`/`anchorTo` are untouched.
+function createRelativePosition(type: any, item: any): Y.RelativePosition {
+  let typeid = null;
+  let tname = null;
+  if (type._item === null) {
+    tname = Y.findRootTypeKey(type);
+  } else {
+    typeid = Y.createID(type._item.id.client, type._item.id.clock);
+  }
+  return new Y.RelativePosition(typeid, tname, item.id);
+}
+
+export function absPosToRelPos(
+  pos: number,
+  type: Y.XmlFragment,
+  mapping: Map<Y.AbstractType<unknown>, PMNode>,
+  assoc: -1 | 0,
+): Y.RelativePosition {
+  const t = type as any;
+  // Plain boolean (not a type predicate) so `n` keeps its `any` type through the Yjs-internal traversal.
+  const isXmlText = (x: any): boolean => x.constructor === Y.XmlText;
+  if (pos === 0) {
+    return Y.createRelativePositionFromTypeIndex(type, 0, assoc);
+  }
+  let n: any = t._first === null ? null : t._first.content.type;
+  while (n !== null && type !== n) {
+    if (isXmlText(n)) {
+      if (n._length >= pos) {
+        return Y.createRelativePositionFromTypeIndex(n, pos, assoc);
+      } else {
+        pos -= n._length;
+      }
+      if (n._item !== null && n._item.next !== null) {
+        n = n._item.next.content.type;
+      } else {
+        do {
+          n = n._item === null ? null : n._item.parent;
+          pos--;
+        } while (n !== type && n !== null && n._item !== null && n._item.next === null);
+        if (n !== null && n !== type) {
+          n = n._item === null ? null : n._item.next.content.type;
+        }
+      }
+    } else {
+      const pNodeSize = (mapping.get(n) || { nodeSize: 0 }).nodeSize;
+      if (n._first !== null && pos < pNodeSize) {
+        n = n._first.content.type;
+        pos--;
+      } else {
+        if (pos === 1 && n._length === 0 && pNodeSize > 1) {
+          return new Y.RelativePosition(
+            n._item === null ? null : n._item.id,
+            n._item === null ? Y.findRootTypeKey(n) : null,
+            null,
+          );
+        }
+        pos -= pNodeSize;
+        if (n._item !== null && n._item.next !== null) {
+          n = n._item.next.content.type;
+        } else {
+          if (pos === 0) {
+            n = n._item === null ? n : n._item.parent;
+            return new Y.RelativePosition(
+              n._item === null ? null : n._item.id,
+              n._item === null ? Y.findRootTypeKey(n) : null,
+              null,
+            );
+          }
+          do {
+            n = n._item.parent;
+            pos--;
+          } while (n !== type && n._item.next === null);
+          if (n !== type) {
+            n = n._item.next.content.type;
+          }
+        }
+      }
+    }
+    if (n === null) {
+      throw new Error('absPosToRelPos: unexpected case');
+    }
+    if (pos === 0 && n.constructor !== Y.XmlText && n !== type) {
+      return createRelativePosition(n._item.parent, n._item);
+    }
+  }
+  return Y.createRelativePositionFromTypeIndex(type, t._length, assoc);
+}
+
+// CS-15 — whitespace-tolerant so a reflow (extra spaces / trailing space) alone never flags "modifié".
+const normalizeQuote = (s: string) => s.trim().replace(/\s+/g, ' ');
+/** CS-15 — true when a comment's live anchored text differs from its stored `quote` (before vs after). */
+export function quoteChanged(quote: string, current: string): boolean {
+  return normalizeQuote(quote) !== normalizeQuote(current);
+}
+
+function buildDecos(anchors: Anchor[], y: YSyncState, doc: PMNode): DecorationSet {
+  const size = doc.content.size;
+  const decos: Decoration[] = [];
+  for (const a of anchors) {
+    const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
+    const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+    if (from == null || to == null || to <= from || from < 0 || to > size) continue;
+    // keep .ep-comment-highlight for shape (radius, wrap cloning); override the wash + underline colour.
+    decos.push(
+      Decoration.inline(from, to, {
+        class: 'ep-comment-highlight',
+        style: `background:color-mix(in srgb, ${a.color} 24%, transparent);border-bottom-color:${a.color}`,
+      }),
+    );
+  }
+  return DecorationSet.create(doc, decos);
+}
+
+// Best-effort absolute paint used only until the y-sync binding is ready (first paint before sync).
+function buildAbsolute(ranges: CommentRange[], doc: PMNode): DecorationSet {
+  const size = doc.content.size;
+  const decos = ranges
+    .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
+    .map((r) => {
+      const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
+      return Decoration.inline(r.from, r.to, {
+        class: 'ep-comment-highlight',
+        style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
+      });
+    });
+  return DecorationSet.create(doc, decos);
+}
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -85,38 +259,74 @@ export const CommentHighlight = Extension.create({
   },
   addProseMirrorPlugins() {
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<HighlightState>({
         key: commentHighlightKey,
         state: {
-          init: () => DecorationSet.empty,
-          apply(tr, old) {
-            const ranges = tr.getMeta(commentHighlightKey) as CommentRange[] | undefined;
-            if (ranges) {
-              const size = tr.doc.content.size;
-              const decos = ranges
-                .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
-                .map((r) => {
-                  // Per-comment colour (assigned by order via commentColor, carried on the range):
-                  // keep .ep-comment-highlight for shape (radius, wrap cloning), override the wash +
-                  // underline colour inline so each comment is distinguishable.
-                  const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
-                  return Decoration.inline(r.from, r.to, {
-                    class: 'ep-comment-highlight',
-                    style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
-                  });
-                });
-              return DecorationSet.create(tr.doc, decos);
+          init: () => ({ anchors: [], pending: null, set: DecorationSet.empty }),
+          apply(tr, old, _oldState, newState): HighlightState {
+            const meta = tr.getMeta(commentHighlightKey) as CommentRange[] | undefined;
+            const y = ySync(newState);
+            // Desired ranges (absolute) — a fresh set from the effect, or whatever's still pending.
+            const desired = meta ?? old.pending;
+
+            // No binding yet: paint absolute as a fallback and keep the desired ranges pending.
+            if (!y) {
+              if (desired) return { anchors: old.anchors, pending: desired, set: buildAbsolute(desired, tr.doc) };
+              if (!tr.docChanged) return old;
+              return { ...old, set: old.set.map(tr.mapping, tr.doc) };
             }
-            // Keep highlights aligned as the doc changes locally (best-effort mapping).
-            return old.map(tr.mapping, tr.doc);
+
+            // Binding is ready. If we have desired ranges, (re)derive anchors — reusing each existing
+            // anchor's relative positions by id so re-painting the list can't shift older highlights;
+            // only genuinely new ids are converted from their (current, correct) absolute positions.
+            let anchors = old.anchors;
+            if (desired) {
+              const byId = new Map(old.anchors.map((a) => [a.id, a]));
+              anchors = desired
+                .filter((r) => r.from >= 0 && r.to <= tr.doc.content.size && r.to > r.from)
+                .map((r) => {
+                  const prev = byId.get(r.id);
+                  const color = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
+                  if (prev) return { ...prev, color }; // keep the anchor, refresh its colour/order
+                  // CS-15 — `from` right-associated, `to` left-associated: typing inside the range grows
+                  // the highlight; typing at either outer boundary stays outside (Docs-like).
+                  return {
+                    id: r.id,
+                    color,
+                    from: absPosToRelPos(r.from, y.type, y.binding!.mapping, 0),
+                    to: absPosToRelPos(r.to, y.type, y.binding!.mapping, -1),
+                  };
+                });
+            } else if (!tr.docChanged && old.pending === null) {
+              return old; // nothing changed and nothing pending — reuse the current set
+            }
+            return { anchors, pending: null, set: buildDecos(anchors, y, tr.doc) };
           },
         },
         props: {
           decorations(state) {
-            return commentHighlightKey.getState(state);
+            return commentHighlightKey.getState(state)?.set;
           },
         },
       }),
     ];
   },
 });
+
+/** CS-15 — the current text under each live comment anchor (id → text), for the sidebar "· modifié"
+ *  indicator. A collapsed / unresolvable range (its commented text was fully deleted) yields `''`.
+ *  Case-level comments carry no anchor, so they never appear in the map (the sidebar shows them plain).
+ *  Same resolution + guards as `buildDecos`, so it tracks local AND remote edits transaction-by-transaction. */
+export function resolveCommentTexts(state: EditorState): Map<string, string> {
+  const out = new Map<string, string>();
+  const hs = commentHighlightKey.getState(state);
+  const y = ySync(state);
+  if (!hs || !y) return out;
+  const size = state.doc.content.size;
+  for (const a of hs.anchors) {
+    const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
+    const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+    out.set(a.id, from == null || to == null || to <= from || from < 0 || to > size ? '' : state.doc.textBetween(from, to, ' '));
+  }
+  return out;
+}
