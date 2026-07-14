@@ -60,7 +60,33 @@ export function commentRangesFrom(
   return out;
 }
 
-export const commentHighlightKey = new PluginKey<DecorationSet>('commentHighlight');
+export const commentHighlightKey = new PluginKey<HighlightState>('commentHighlight');
+
+// Plugin state carries the raw RANGES (not just the built DecorationSet) so we can re-map their
+// positions ourselves on every transaction. Mapping raw positions with an OUTWARD bias survives a
+// remote peer's edit — y-prosemirror applies a collaborator's change by REPLACING the affected text
+// node, and DecorationSet.map (inward bias) drops any decoration whose content is replaced, so the
+// highlight would vanish until reload. Mapping positions directly keeps the range alive.
+interface HighlightState {
+  ranges: CommentRange[];
+  set: DecorationSet;
+}
+
+function buildDecos(ranges: CommentRange[], doc: { content: { size: number } }): DecorationSet {
+  const size = doc.content.size;
+  const decos = ranges
+    .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
+    .map((r) => {
+      // Per-comment colour (assigned by order via commentColor, carried on the range): keep
+      // .ep-comment-highlight for shape (radius, wrap cloning), override the wash + underline colour.
+      const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
+      return Decoration.inline(r.from, r.to, {
+        class: 'ep-comment-highlight',
+        style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
+      });
+    });
+  return DecorationSet.create(doc as never, decos);
+}
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -85,35 +111,33 @@ export const CommentHighlight = Extension.create({
   },
   addProseMirrorPlugins() {
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<HighlightState>({
         key: commentHighlightKey,
         state: {
-          init: () => DecorationSet.empty,
-          apply(tr, old) {
-            const ranges = tr.getMeta(commentHighlightKey) as CommentRange[] | undefined;
-            if (ranges) {
-              const size = tr.doc.content.size;
-              const decos = ranges
-                .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
-                .map((r) => {
-                  // Per-comment colour (assigned by order via commentColor, carried on the range):
-                  // keep .ep-comment-highlight for shape (radius, wrap cloning), override the wash +
-                  // underline colour inline so each comment is distinguishable.
-                  const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
-                  return Decoration.inline(r.from, r.to, {
-                    class: 'ep-comment-highlight',
-                    style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
-                  });
-                });
-              return DecorationSet.create(tr.doc, decos);
+          init: () => ({ ranges: [], set: DecorationSet.empty }),
+          apply(tr, old): HighlightState {
+            const meta = tr.getMeta(commentHighlightKey) as CommentRange[] | undefined;
+            if (meta) {
+              return { ranges: meta, set: buildDecos(meta, tr.doc) };
             }
-            // Keep highlights aligned as the doc changes locally (best-effort mapping).
-            return old.map(tr.mapping, tr.doc);
+            if (!tr.docChanged) return old;
+            // Re-map each range's raw positions through this transaction with an OUTWARD bias
+            // (from moves left, to moves right), then rebuild — robust across remote text-node
+            // replacements that DecorationSet.map would drop. Ranges that collapse are filtered out.
+            const size = tr.doc.content.size;
+            const ranges = old.ranges
+              .map((r) => ({
+                ...r,
+                from: tr.mapping.map(r.from, -1),
+                to: tr.mapping.map(r.to, 1),
+              }))
+              .filter((r) => r.to > r.from && r.to <= size);
+            return { ranges, set: buildDecos(ranges, tr.doc) };
           },
         },
         props: {
           decorations(state) {
-            return commentHighlightKey.getState(state);
+            return commentHighlightKey.getState(state)?.set;
           },
         },
       }),
