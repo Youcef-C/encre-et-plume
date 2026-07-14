@@ -12,6 +12,7 @@ import type { ParsedMyProjectsQuery } from './parse-my-projects-query';
 const PROJECT = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'proj-1',
   ownerId: 'acc-me',
+  owner: { id: 'acc-me', displayName: 'Moi', profile: { creatorRoles: ['scenariste'] } },
   title: 'Lames de Brume',
   kind: 'Manga',
   genre: 'Seinen',
@@ -321,12 +322,60 @@ describe('ProjectsService', () => {
     ]);
   });
 
-  it('scopes the project query to the caller (never another user\'s rows)', async () => {
+  it('queries the caller\'s owned AND member (WorkCreator) projects', async () => {
     build([PROJECT()], []);
     await service.getMine('acc-me', q());
     expect(prisma.project.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { ownerId: 'acc-me' } }),
+      expect.objectContaining({
+        where: { OR: [{ ownerId: 'acc-me' }, { work: { creators: { some: { accountId: 'acc-me' } } } }] },
+      }),
     );
+  });
+
+  // ── CS-12 bugfix: member projects appear, ownership indicator ─────────────
+  it('an owned project reports isOwner:true', async () => {
+    build([PROJECT()], []);
+    const res = await service.getMine('acc-me', q());
+    expect(res.items[0].isOwner).toBe(true);
+  });
+
+  it('a member-but-not-owner project appears with isOwner:false, the real owner + caller(self) as members', async () => {
+    const member = PROJECT({
+      id: 'p-member',
+      ownerId: 'acc-owner',
+      owner: { id: 'acc-owner', displayName: 'Aki', profile: { creatorRoles: ['dessinateur'] } },
+      invitations: [
+        { status: 'accepted', toUser: { id: 'acc-me', displayName: 'Moi', profile: { creatorRoles: ['scenariste'] } } },
+      ],
+    });
+    build([member], []);
+    const res = await service.getMine('acc-me', q());
+    const row = res.items.find((i) => i.id === 'p-member')!;
+    expect(row.isOwner).toBe(false);
+    expect(row.members).toEqual([
+      { id: 'acc-owner', name: 'Aki', role: 'dessinateur', self: false },
+      { id: 'acc-me', name: 'Moi', role: 'scenariste', self: true },
+    ]);
+  });
+
+  it('dedupes to one row when the caller is both owner and WorkCreator (no double row)', async () => {
+    const p = PROJECT({ id: 'p-dup' });
+    build([p, p], []); // OR would never duplicate in SQL, but guard against it anyway
+    const res = await service.getMine('acc-me', q());
+    expect(res.items.filter((i) => i.id === 'p-dup')).toHaveLength(1);
+  });
+
+  it('summary counts the merged owned+member set once', async () => {
+    const owned = PROJECT({ id: 'p-own', status: 'en cours' });
+    const member = PROJECT({
+      id: 'p-mem',
+      ownerId: 'acc-owner',
+      owner: { id: 'acc-owner', displayName: 'Aki', profile: { creatorRoles: ['dessinateur'] } },
+      status: 'en révision',
+    });
+    build([owned, member], []);
+    const res = await service.getMine('acc-me', q());
+    expect(res.summary).toEqual({ active: 2, enRevision: 1, nextReleaseAt: null });
   });
 
   // ── CS-1 §11: published one-shot → "terminé" ─────────────────────────────

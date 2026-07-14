@@ -46,6 +46,7 @@ export interface MyProjectItem extends ProjectSummary {
   slug?: string | null; // Project.slug (nullable legacy) | Work.slug (collection → Voir /oeuvre/{slug})
   type?: string; // badge verbatim: "Manga" | "Histoire" | "Illustration(s)"
   status?: string | null; // series only: "en cours" | "en révision" | "en pause" | "publié"; null for illustration/collection rows
+  isOwner?: boolean; // caller owns the project (vs. member/collaborator) → FE gates owner-only actions
   members?: ProjectMemberRef[]; // owner first, then accepted invitees
   step?: string | null; // "encrage Ch.1" — CS-2/CS-5 write it later
   nextReleaseAt?: string | null; // ISO — CS-9 writes it later

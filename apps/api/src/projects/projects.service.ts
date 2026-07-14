@@ -127,6 +127,7 @@ function statusMatches(filter: ProjectStatusFilter, status: string | null): bool
 }
 
 type InviteeRow = { status: string; toUser: { id: string; displayName: string; profile: { creatorRoles: string[] } | null } };
+type OwnerRow = { id: string; displayName: string; profile: { creatorRoles: string[] } | null };
 
 /**
  * CS-1 seam extended for CS-12 ("Mes projets"). The legacy `scope='projects'` path is byte-for-byte
@@ -325,10 +326,13 @@ export class ProjectsService {
   private async dashboard(accountId: string, query: ParsedMyProjectsQuery): Promise<MyProjectsResponse> {
     const [projects, owner, collections, illustrations] = await Promise.all([
       this.prisma.project.findMany({
-        where: { ownerId: accountId },
+        // CS-12 bugfix: owned OR member (a WorkCreator on the linked Work — e.g. after accepting a
+        // collaboration invite). SQL OR never duplicates a Project row; the loop dedupes by id anyway.
+        where: { OR: [{ ownerId: accountId }, { work: { creators: { some: { accountId } } } }] },
         include: {
           // CS-1 §11: the linked œuvre drives the "terminé" status for a published one-shot.
           work: { select: { format: true, publishedAt: true } },
+          owner: { select: { id: true, displayName: true, profile: { select: { creatorRoles: true } } } },
           invitations: {
             where: { status: 'accepted' },
             include: { toUser: { select: { id: true, displayName: true, profile: { select: { creatorRoles: true } } } } },
@@ -359,16 +363,30 @@ export class ProjectsService {
     type Row = MyProjectItem & { _createdAt: number };
     const rows: Row[] = [];
 
-    for (const p of projects as unknown as Array<Record<string, unknown> & { invitations: InviteeRow[] }>) {
+    const seen = new Set<string>();
+    for (const p of projects as unknown as Array<Record<string, unknown> & { invitations: InviteeRow[]; owner: OwnerRow | null }>) {
+      const projectId = p['id'] as string;
+      if (seen.has(projectId)) continue; // ponytail: SQL OR never dups, but guard the merged set anyway
+      seen.add(projectId);
+      const ownerId = p['ownerId'] as string;
+      const isOwner = ownerId === accountId;
+      // Members: the ACTUAL project owner first (self when the caller owns it), then accepted invitees
+      // (self when an invitee is the caller — the collaboration path that lands them on this dashboard).
+      const projectOwnerRef: ProjectMemberRef = {
+        id: ownerId,
+        name: p.owner?.displayName ?? '',
+        role: firstRole(p.owner?.profile?.creatorRoles),
+        self: isOwner,
+      };
       const members: ProjectMemberRef[] = [
-        ownerRef,
+        projectOwnerRef,
         ...p.invitations
           .filter((inv) => inv.status === 'accepted')
           .map((inv) => ({
           id: inv.toUser.id,
           name: inv.toUser.displayName,
           role: firstRole(inv.toUser.profile?.creatorRoles),
-          self: false,
+          self: inv.toUser.id === accountId,
           })),
       ];
       const nextReleaseAt = p['nextReleaseAt'] as Date | null;
@@ -381,6 +399,7 @@ export class ProjectsService {
         slug: (p['slug'] as string | null) ?? null,
         type: p['kind'] as string,
         status,
+        isOwner,
         members,
         step: (p['step'] as string | null) ?? null,
         nextReleaseAt: nextReleaseAt ? nextReleaseAt.toISOString() : null,
@@ -401,6 +420,7 @@ export class ProjectsService {
         // Status is series-only — collections/illustrations have no lifecycle state on Work, so null
         // (not "en cours"). They match only the "tous" status chip and never count toward summary.active.
         status: null,
+        isOwner: true, // collections are always the caller's own
         members: [ownerRef],
         step: null,
         nextReleaseAt: null,
@@ -419,6 +439,7 @@ export class ProjectsService {
         slug: null, // no workspace/collection route for a standalone illustration
         type: 'illustration',
         status: null, // series-only status; standalone illustrations carry none
+        isOwner: true, // standalone illustrations are always the caller's own
         members: [ownerRef],
         step: null,
         nextReleaseAt: null,

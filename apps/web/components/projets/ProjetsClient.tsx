@@ -421,6 +421,12 @@ function ProjectCard({ item, variant = 'default' }: { item: MyProjectItem; varia
             <span style={badgeBase}>{typeBadge}</span>
             {/* Status badge is series-only: illustration/collection rows report status:null → no badge. */}
             {item.status && <StatusBadge status={item.status} />}
+            {/* Member (non-owner) project → subtle "Collaboration" cue. Owned rows carry isOwner:true. */}
+            {item.kind === 'project' && item.isOwner === false && (
+              <span style={{ ...badgeBase, border: '2px solid var(--ink2)', color: 'var(--ink2)', background: 'var(--card)' }}>
+                Collaboration
+              </span>
+            )}
           </div>
           <MetaLine item={item} count={count} />
           <div style={{ fontSize: 11, color: 'var(--ink2)', marginTop: 6 }}>{release}</div>

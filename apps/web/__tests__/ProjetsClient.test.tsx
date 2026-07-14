@@ -193,6 +193,28 @@ describe('ProjetsClient (CS-12)', () => {
     expect(screen.getByRole('link', { name: "Voir Carnet d'encre" })).toHaveAttribute('href', '/oeuvre/carnet-encre');
   });
 
+  it('shows a "Collaboration" cue and Modifier + Voir (no owner-only actions) on a member project; owned projects show no cue', async () => {
+    getMine().mockResolvedValue(
+      response([
+        project({ id: 'p-own', title: 'Mon projet', isOwner: true }),
+        project({ id: 'p-mem', title: 'Projet partagé', slug: 'projet-partage', isOwner: false }),
+      ]),
+    );
+    renderClient();
+
+    await screen.findByText('Projet partagé');
+    const memberCard = screen.getByText('Projet partagé').closest('li')!;
+    const ownedCard = screen.getByText('Mon projet').closest('li')!;
+
+    // Member card carries the collaboration cue; the owned card does not.
+    expect(within(memberCard).getByText('Collaboration')).toBeInTheDocument();
+    expect(within(ownedCard).queryByText('Collaboration')).not.toBeInTheDocument();
+
+    // Member still gets the editable/viewable actions (members can edit the workspace).
+    expect(within(memberCard).getByRole('link', { name: 'Modifier Projet partagé' })).toHaveAttribute('href', '/projet/projet-partage');
+    expect(within(memberCard).getByRole('link', { name: 'Voir Projet partagé' })).toBeInTheDocument();
+  });
+
   it('renders a standalone illustration card: "Illustration" badge, no status badge, Voir/Modifier to /illustration/{id}', async () => {
     getMine().mockResolvedValue(response([illustration(), collection()]));
     renderClient();
