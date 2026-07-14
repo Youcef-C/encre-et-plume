@@ -98,16 +98,26 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
             <img
               src={preview.url}
               alt={filename}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', border: '3px solid var(--ink)' }}
+              style={{ margin: 'auto', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', border: '3px solid var(--ink)' }}
             />
           ) : preview.mode === 'pdf' ? (
-            <iframe
-              // storage/CDN origin ≠ app origin; sandbox="" blocks scripts from reaching app cookies.
-              sandbox=""
-              src={preview.url}
-              title={filename}
-              style={{ width: '100%', height: '100%', border: '3px solid var(--ink)', background: '#fff' }}
-            />
+            <div style={pdfWrap}>
+              {/* No `sandbox` here: the browser's native PDF viewer needs to run, and `sandbox=""`
+                  disables it (blank frame). The src is a cross-origin signed storage URL, so the
+                  same-origin policy already isolates it from the app's cookies/DOM — the sandbox was
+                  redundant for a cross-origin PDF. */}
+              <iframe
+                src={preview.url}
+                title={filename}
+                style={{ flex: 1, width: '100%', minHeight: 0, border: '3px solid var(--ink)', background: '#fff' }}
+              />
+              <p style={{ fontSize: 12, color: 'var(--ink2)', margin: '10px 0 0', textAlign: 'center' }}>
+                Le PDF ne s’affiche pas ?{' '}
+                <a href={preview.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                  Ouvrir dans un nouvel onglet →
+                </a>
+              </p>
+            </div>
           ) : preview.mode === 'text' ? (
             <pre style={textDoc}>{preview.text}</pre>
           ) : preview.mode === 'html' ? (
@@ -172,15 +182,29 @@ const body: React.CSSProperties = {
   padding: 16,
   overflow: 'auto',
   display: 'flex',
+  flexDirection: 'column',
+  // Top-aligned + horizontally centered so a tall document GROWS and the body scrolls (small
+  // content still centers via each child's own `margin:auto`). Center-aligning here clipped/
+  // overflowed tall docs — the white panel couldn't grow past the viewport height.
   alignItems: 'center',
-  justifyContent: 'center',
+  justifyContent: 'flex-start',
   background: 'var(--paper)',
 };
 
-const centered: React.CSSProperties = { textAlign: 'center' };
+const centered: React.CSSProperties = { margin: 'auto', textAlign: 'center' };
+
+const pdfWrap: React.CSSProperties = {
+  alignSelf: 'stretch',
+  flex: 1,
+  minHeight: '70vh',
+  display: 'flex',
+  flexDirection: 'column',
+};
 
 const textDoc: React.CSSProperties = {
-  alignSelf: 'stretch',
+  // Size to content (NOT alignSelf:'stretch', which pinned it to the body height and let the text
+  // spill out of the white panel); the body scrolls.
+  flexShrink: 0,
   width: '100%',
   maxWidth: 720,
   margin: '0 auto',
@@ -196,7 +220,7 @@ const textDoc: React.CSSProperties = {
 };
 
 const htmlDoc: React.CSSProperties = {
-  alignSelf: 'stretch',
+  flexShrink: 0,
   width: '100%',
   maxWidth: 760,
   margin: '0 auto',
@@ -206,6 +230,7 @@ const htmlDoc: React.CSSProperties = {
   padding: '24px 28px',
   fontSize: 15,
   lineHeight: 1.75,
+  overflowWrap: 'anywhere',
 };
 
 const dlLink: React.CSSProperties = {

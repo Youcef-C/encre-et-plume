@@ -29,13 +29,17 @@ describe('AssetPreviewOverlay', () => {
     expect(img).toHaveAttribute('src', 'https://cdn/web.webp');
   });
 
-  it('renders a PDF in a sandboxed iframe', async () => {
+  it('renders a PDF in an iframe (no sandbox, so the native PDF viewer runs) with an open-in-tab fallback', async () => {
     renderOverlay({ mode: 'pdf', url: 'https://cdn/doc.pdf', ...base });
     await waitFor(() => {
       const frame = document.querySelector('iframe');
       expect(frame).toHaveAttribute('src', 'https://cdn/doc.pdf');
-      expect(frame).toHaveAttribute('sandbox', '');
+      // No sandbox: sandbox="" disables the browser PDF viewer (blank frame). The src is a
+      // cross-origin signed URL, already isolated from app cookies by the same-origin policy.
+      expect(frame).not.toHaveAttribute('sandbox');
     });
+    const fallback = screen.getByRole('link', { name: /Ouvrir dans un nouvel onglet/ });
+    expect(fallback).toHaveAttribute('href', 'https://cdn/doc.pdf');
   });
 
   it('renders plain text', async () => {
