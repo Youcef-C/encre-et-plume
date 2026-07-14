@@ -1122,7 +1122,8 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
 // the next scroll, instead of a shift every line. `window.scrollTo` clamps to [0, maxScroll], so near
 // the document end the caret just rests wherever the remaining paper allows.
 const CARET_TOP_MARGIN = 180; // px kept clear at the top for the sticky header + toolbar
-const CARET_BOTTOM_MARGIN = 56; // px kept clear at the bottom edge — caret is "off-screen" past this
+const CARET_BOTTOM_MARGIN = 10; // px — the caret only counts as "off-screen" once clipped by the edge,
+// so any visible caret (even resting on the last line at ~95%) never shifts the view on char input.
 const CARET_REANCHOR = 0.72; // on a downward scroll, land the caret this far down (runway for more lines)
 function scrollCaretIntoView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
   if (typeof window === 'undefined') return false;
