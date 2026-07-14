@@ -325,7 +325,9 @@ describe('EditorClient (Éditeur shell)', () => {
     );
 
     // Two "· modifié" markers (changed + deleted), and only the changed one prints a "maintenant :" line.
-    expect(screen.getAllByText('· modifié')).toHaveLength(2);
+    // The indicator derives from resolveCommentTexts via an async state update after the editor mounts,
+    // so await it (a bare getAllByText races the render under full-suite load).
+    await waitFor(() => expect(screen.getAllByText('· modifié')).toHaveLength(2));
     expect(screen.getByText(/maintenant :/)).toHaveTextContent('maintenant : « bonsoir la lune »');
     // The unchanged comment keeps its quote and no marker; case-level comment shows neither quote nor marker.
     expect(screen.getByText('« bonjour le monde »')).toBeInTheDocument();
