@@ -1,5 +1,5 @@
-import { IsObject, IsString, MaxLength } from 'class-validator';
-import type { AutosaveDocumentRequest, CreateCaseCommentRequest, PlancheDocJson, SnapshotVersionRequest } from '@encre-et-plume/shared';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import type { AutosaveDocumentRequest, CreateCaseCommentRequest, EditorTemplate, PlancheDocJson, SnapshotVersionRequest } from '@encre-et-plume/shared';
 
 // Shape validation only — membership, asset binding, and version rules live in ScenarioDocumentsService.
 
@@ -16,6 +16,10 @@ export class AutosaveDocumentDto implements AutosaveDocumentRequest {
   @IsString()
   @MaxLength(HTML_CAP)
   html!: string;
+
+  @IsOptional()
+  @IsIn(['manga', 'prose'])
+  template?: EditorTemplate;
 }
 
 export class SnapshotVersionDto implements SnapshotVersionRequest {

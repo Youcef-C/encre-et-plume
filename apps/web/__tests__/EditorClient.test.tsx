@@ -103,6 +103,7 @@ function makeDoc(over: Partial<EditorDocumentResponse> = {}): EditorDocumentResp
     initialHtml: null,
     cases: [],
     comments: [],
+    template: null,
     ...over,
   };
 }

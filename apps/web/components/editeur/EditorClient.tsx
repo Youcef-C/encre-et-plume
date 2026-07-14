@@ -17,6 +17,7 @@ import {
   type EditorDocumentResponse,
   type CaseCommentDto,
   type EditorAwarenessState,
+  type EditorTemplate,
   type AssetItem,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
@@ -27,7 +28,7 @@ import { buildRichTextExtensions } from '../editor/richtext/core';
 import { plancheExtensions, blankPlancheDoc, appendCase, casePlaceholder } from '../editor/richtext/planche-schema';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
-import { PenNibIcon, BrushIcon, FileTextIcon, ChatIcon } from '../icons';
+import { FileTextIcon, ChatIcon } from '../icons';
 
 const colorForId = (id: string): string => {
   let h = 0;
@@ -43,7 +44,11 @@ interface Peer {
   color: string;
   role: 'pen' | 'brush';
   typing: boolean;
+  avatar: string | null;
 }
+
+/** Item 20 — the editor's document scheme. `null` = not yet chosen (gates "Ajouter une case"). */
+type TemplateChoice = EditorTemplate | null;
 
 export interface EditorClientProps {
   pageId: string;
@@ -110,7 +115,7 @@ function EditorLoaded({
   slug: string;
   assetId?: string;
   initial: EditorDocumentResponse;
-  account: { id: string; displayName: string; role: string };
+  account: { id: string; displayName: string; role: string; avatar?: string | null };
 }) {
   const [asset, setAsset] = useState(initial.asset);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -120,9 +125,15 @@ function EditorLoaded({
   const [comments, setComments] = useState<CaseCommentDto[]>(initial.comments);
   const [toast, setToast] = useState<string | null>(null);
   const [provider, setProvider] = useState<EditorCollabProvider | null>(null);
+  // Item 20/26 — the persisted document scheme. Restored from the saved document (`initial.template`);
+  // a brand-new blank card (no doc yet) is `null` → the writer must pick a scheme before adding cases.
+  const [template, setTemplate] = useState<TemplateChoice>(initial.template);
 
   const ydoc = useMemo(() => new Y.Doc(), []);
   const seededRef = useRef(false);
+  // Item 26 — the placeholder resolver reads the current template through a ref (the editor is created
+  // once; a ref keeps the resolver live without recreating it). Prose mode → no case placeholders.
+  const templateRef = useRef<TemplateChoice>(template);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -155,7 +166,7 @@ function EditorLoaded({
       },
       assetId,
     );
-    p.setLocalUser('user', { id: account.id, name: account.displayName, color: myColor, role: myRole });
+    p.setLocalUser('user', { id: account.id, name: account.displayName, color: myColor, role: myRole, avatar: account.avatar ?? null });
     p.setLocalUser('typing', false);
     setProvider(p);
     return () => {
@@ -181,7 +192,11 @@ function EditorLoaded({
     {
       immediatelyRender: false,
       extensions: [
-        ...buildRichTextExtensions({ collab: true, ownDocument: true, placeholder: casePlaceholder }),
+        ...buildRichTextExtensions({
+          collab: true,
+          ownDocument: true,
+          placeholder: ({ editor: ed, pos }) => casePlaceholder({ editor: ed, pos, prose: templateRef.current === 'prose' }),
+        }),
         ...plancheExtensions,
         Collaboration.configure({ document: ydoc }),
         ...(provider
@@ -232,6 +247,13 @@ function EditorLoaded({
     editor?.setEditable(status === 'connected');
   }, [editor, status]);
 
+  // Item 26 — on a template switch, refresh the ref + recompute placeholder decorations (a no-op
+  // transaction re-runs the Placeholder plugin without touching the doc, so nothing is saved).
+  useEffect(() => {
+    templateRef.current = template;
+    editor?.view?.dispatch(editor.state.tr);
+  }, [template, editor]);
+
   // ── Autosave (2s debounce) + typing awareness ────────────────────────────────
   const flushSave = useCallback(async () => {
     if (!editor) return;
@@ -239,7 +261,13 @@ function EditorLoaded({
     try {
       const res = await api.autosaveEditorDocument(
         pageId,
-        { ydocState: encodeState(ydoc), contentJson: editor.getJSON() as Record<string, unknown>, html: editor.getHTML() },
+        {
+          ydocState: encodeState(ydoc),
+          contentJson: editor.getJSON() as Record<string, unknown>,
+          html: editor.getHTML(),
+          // Item 26 — persist the chosen scheme in place with the draft (read live via the ref).
+          ...(templateRef.current ? { template: templateRef.current } : {}),
+        },
         assetId,
       );
       if (res.materialized) {
@@ -251,6 +279,22 @@ function EditorLoaded({
       setSaveState('error');
     }
   }, [editor, pageId, ydoc, assetId]);
+
+  // Item 26 — a template switch is a user action: set state, sync the ref immediately (so a save
+  // reads the new value), and persist. If the doc already exists, save now; a blank card persists it
+  // with the first autosave that materializes the doc (flushSave reads templateRef).
+  const changeTemplate = useCallback(
+    (t: EditorTemplate) => {
+      templateRef.current = t;
+      setTemplate(t);
+      if (asset) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        setSaveState('saving');
+        saveTimer.current = setTimeout(() => void flushSave(), 300);
+      }
+    },
+    [asset, flushSave],
+  );
 
   useEffect(() => {
     if (!editor) return;
@@ -291,14 +335,31 @@ function EditorLoaded({
 
   const typingPeer = peers.find((p) => p.typing);
 
+  // Item 16 — the sticky comment composer needs the sidebar pinned just below the sticky header +
+  // toolbar. Measure that region's height and expose it as --ep-sticky-h so the sidebar's sticky
+  // `top` clears it exactly (no hardcoded guess that breaks when the toolbar wraps).
+  const cardRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sticky = stickyRef.current;
+    const card = cardRef.current;
+    if (!sticky || !card) return;
+    const apply = () => card.style.setProperty('--ep-sticky-h', `${sticky.offsetHeight}px`);
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(sticky);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 28px 70px' }}>
       <ConnectionBanner status={status} />
       {/* Item 1 — the card must NOT clip (no overflow:hidden), or the sticky controls get trapped in
           a non-scrolling scrollport. The whole page scrolls with the window; the header + toolbar are
           sticky (see .ep-editor-sticky) so every A4 page stays fully visible while they stay pinned. */}
-      <div className="ep-editor-card" style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 10, boxShadow: '6px 6px 0 var(--shadow)' }}>
-        <div className="ep-editor-sticky">
+      <div ref={cardRef} className="ep-editor-card" style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 10, boxShadow: '6px 6px 0 var(--shadow)' }}>
+        <div ref={stickyRef} className="ep-editor-sticky">
           <EditorHeader
             slug={slug}
             projectTitle={initial.project.title}
@@ -309,6 +370,7 @@ function EditorLoaded({
             saveState={saveState}
             peers={peers}
             selfColor={myColor}
+            selfAvatar={account.avatar ?? null}
           />
           <RichTextToolbar
             editor={editor}
@@ -321,24 +383,42 @@ function EditorLoaded({
                 currentAsset={asset}
                 onSnapshot={onVersionSaved}
                 onError={showToast}
-                onFocusComment={() => commentInputRef.current?.focus()}
                 editor={editor}
+                template={template}
+                onTemplate={changeTemplate}
               />
             }
           />
         </div>
         <div className="ep-editor-body" style={{ display: 'flex' }}>
           <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--tone)' }}>
-            {/* Item 11 — each case renders as its own bordered A4 sheet (see .ep-a4-sheet / .ep-case-block). */}
+            {/* Item 11 — each case renders as its own bordered A4 sheet (see .ep-a4-sheet / .ep-case-block).
+                Item 20 — prose mode hides the case chrome (CASE label, Description prefix, remove button)
+                so the same planche doc reads as one plain rich-text page. */}
             <div className="ep-a4-sheet">
-              <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
+              <div className={`ep-planche-canvas${template === 'prose' ? ' ep-mode-prose' : ''}`} style={{ fontSize: 14, lineHeight: 1.6 }}>
                 <EditorContent editor={editor} />
               </div>
-              {editor && status === 'connected' && (
+              {editor && status === 'connected' && template !== 'prose' && (
                 <button
                   type="button"
-                  onClick={() => appendCase(editor)}
-                  style={{ marginTop: 14, border: '2px dashed var(--ink)', borderRadius: 6, padding: '10px 14px', minHeight: 44, fontSize: 13, fontWeight: 700, color: 'var(--ink2)', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+                  onClick={() => template === 'manga' && appendCase(editor)}
+                  disabled={template !== 'manga'}
+                  aria-disabled={template !== 'manga'}
+                  title={template === 'manga' ? 'Ajouter une case' : 'Choisissez d’abord un modèle'}
+                  style={{
+                    marginTop: 14,
+                    border: template === 'manga' ? '2px solid var(--ink)' : '2px dashed var(--ink)',
+                    borderRadius: 6,
+                    padding: '10px 14px',
+                    minHeight: 44,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: template === 'manga' ? '#fff' : 'var(--ink2)',
+                    background: template === 'manga' ? 'var(--accent)' : 'transparent',
+                    cursor: template === 'manga' ? 'pointer' : 'not-allowed',
+                    fontFamily: 'inherit',
+                  }}
                 >
                   ＋ Ajouter une case
                 </button>
@@ -346,8 +426,6 @@ function EditorLoaded({
             </div>
           </div>
           <Sidebar
-            peers={peers}
-            self={{ id: account.id, name: account.displayName, color: myColor, role: myRole, typing: false }}
             comments={comments}
             typingPeer={typingPeer ?? null}
             canComment={!!asset}
@@ -377,6 +455,7 @@ function EditorHeader({
   saveState,
   peers,
   selfColor,
+  selfAvatar,
 }: {
   slug: string;
   projectTitle: string;
@@ -385,6 +464,7 @@ function EditorHeader({
   saveState: SaveState;
   peers: Peer[];
   selfColor: string;
+  selfAvatar: string | null;
 }) {
   const onlineCount = peers.length + 1; // include self
   return (
@@ -403,9 +483,9 @@ function EditorHeader({
       </span>
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <AvatarDot color={selfColor} />
+        <AvatarDot color={selfColor} avatar={selfAvatar} />
         {peers.map((p) => (
-          <AvatarDot key={p.id} color={p.color} shift />
+          <AvatarDot key={p.id} color={p.color} avatar={p.avatar} shift />
         ))}
         <span style={{ fontSize: 12, color: 'var(--ink2)', marginLeft: 9, fontWeight: 700 }}>{onlineCount} en ligne</span>
       </div>
@@ -414,19 +494,26 @@ function EditorHeader({
   );
 }
 
-function AvatarDot({ color, shift }: { color: string; shift?: boolean }) {
+// Item 17 — the header stack shows each collaborator's real avatar (from Yjs awareness), the ink ring
+// tinted to their caret colour; falls back to the halftone placeholder only when there's no avatar.
+function AvatarDot({ color, avatar, shift }: { color: string; avatar?: string | null; shift?: boolean }) {
+  const base = {
+    width: 30,
+    height: 30,
+    borderRadius: '50%',
+    border: `3px solid ${color}`,
+    display: 'block',
+    marginLeft: shift ? -9 : 0,
+    objectFit: 'cover' as const,
+  };
+  if (avatar) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={avatar} alt="" style={base} />;
+  }
   return (
     <span
       aria-hidden="true"
-      style={{
-        width: 30,
-        height: 30,
-        borderRadius: '50%',
-        background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px',
-        border: `3px solid ${color}`,
-        display: 'block',
-        marginLeft: shift ? -9 : 0,
-      }}
+      style={{ ...base, background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px' }}
     />
   );
 }
@@ -482,7 +569,7 @@ function SharePopover({ pageId }: { pageId: string }) {
   );
 }
 
-// ── Toolbar right-hand extras: file dropdown + version snapshot + "＋ Commentaire" ──
+// ── Toolbar right-hand extras: template selector + file dropdown + version snapshot ──
 function ToolbarExtras({
   slug,
   pageId,
@@ -490,8 +577,9 @@ function ToolbarExtras({
   currentAsset,
   onSnapshot,
   onError,
-  onFocusComment,
   editor,
+  template,
+  onTemplate,
 }: {
   slug: string;
   pageId: string;
@@ -499,8 +587,9 @@ function ToolbarExtras({
   currentAsset: EditorDocumentResponse['asset'];
   onSnapshot: (a: AssetItem) => void;
   onError: (msg: string) => void;
-  onFocusComment: () => void;
   editor: Editor | null;
+  template: TemplateChoice;
+  onTemplate: (t: EditorTemplate) => void;
 }) {
   const [snapping, setSnapping] = useState(false);
   const version = currentAsset?.currentVersion ?? null;
@@ -520,16 +609,9 @@ function ToolbarExtras({
 
   return (
     <>
+      <TemplateSelector template={template} onTemplate={onTemplate} />
       <FileDropdown slug={slug} pageId={pageId} currentAssetId={assetId} onError={onError} />
-      <button
-        type="button"
-        onClick={onFocusComment}
-        disabled={!currentAsset}
-        title={currentAsset ? 'Ajouter un commentaire' : 'Enregistrez d’abord le scénario pour commenter.'}
-        style={{ background: currentAsset ? 'var(--accent)' : 'var(--tone)', color: currentAsset ? '#fff' : 'var(--ink2)', border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 12px', minHeight: 32, fontSize: 13, fontWeight: 700, cursor: currentAsset ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
-      >
-        ＋ Commentaire
-      </button>
+      {/* Commenting lives ONLY in the sidebar composer — no toolbar comment button (coordinator req). */}
       {version != null && (
         <>
           <span title="Version courante" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', border: '2px solid var(--ink)', borderRadius: 6, padding: '3px 8px' }}>v{version}</span>
@@ -544,6 +626,44 @@ function ToolbarExtras({
         </>
       )}
     </>
+  );
+}
+
+// ── Item 20 — document-scheme selector: manga cases vs. plain prose. Segmented control (on-brand):
+// the active option fills accent; picking a scheme is what enables the "Ajouter une case" button. ──
+function TemplateSelector({ template, onTemplate }: { template: TemplateChoice; onTemplate: (t: EditorTemplate) => void }) {
+  const opts: { key: 'manga' | 'prose'; label: string }[] = [
+    { key: 'manga', label: 'Manga' },
+    { key: 'prose', label: 'Prose' },
+  ];
+  return (
+    <div role="group" aria-label="Modèle du document" style={{ display: 'inline-flex', border: '2px solid var(--ink)', borderRadius: 6, overflow: 'hidden' }}>
+      {opts.map((o, i) => {
+        const active = template === o.key;
+        return (
+          <button
+            key={o.key}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onTemplate(o.key)}
+            style={{
+              padding: '5px 11px',
+              minHeight: 32,
+              fontSize: 12,
+              fontWeight: 700,
+              fontFamily: 'inherit',
+              cursor: 'pointer',
+              border: 'none',
+              borderLeft: i > 0 ? '2px solid var(--ink)' : 'none',
+              background: active ? 'var(--accent)' : 'var(--card)',
+              color: active ? '#fff' : 'var(--ink2)',
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -671,10 +791,8 @@ function FileDropdown({
   );
 }
 
-// ── Right sidebar: presence + per-case comments + typing indicator ──────────────
+// ── Right sidebar: comments-only (presence lives in the header) + typing cue ──────────────
 function Sidebar({
-  peers,
-  self,
   comments,
   typingPeer,
   canComment,
@@ -684,8 +802,6 @@ function Sidebar({
   commentInputRef,
   onCommentAdded,
 }: {
-  peers: Peer[];
-  self: Peer;
   comments: CaseCommentDto[];
   typingPeer: Peer | null;
   canComment: boolean;
@@ -732,25 +848,26 @@ function Sidebar({
     }
   };
 
-  const online = [self, ...peers];
-
   return (
-    <aside className="ep-editor-sidebar" aria-label="Présence et commentaires" style={{ width: 256, borderLeft: '3px solid var(--ink)', padding: '14px 15px', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 9 }}>En ligne</div>
-      <ul style={{ listStyle: 'none', margin: '0 0 15px', padding: 0, display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13, fontWeight: 500 }}>
-        {online.map((p) => (
-          <li key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: p.color, display: 'block' }} />
-            {p.name}
-            {p.role === 'brush' ? <BrushIcon size={13} /> : <PenNibIcon size={13} />}
-          </li>
-        ))}
-      </ul>
+    <aside className="ep-editor-sidebar" aria-label="Commentaires" style={{ width: 256, borderLeft: '3px solid var(--ink)', background: 'var(--paper)' }}>
+      {/* Item 16/28 — the aside (paper bg) stretches the full canvas height so there's no white gap;
+          the INNER panel is the sticky, height-capped column that keeps the composer pinned. */}
+      <div className="ep-editor-sidepanel" style={{ padding: '14px 15px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, flex: '0 0 auto' }}>Commentaires</div>
 
-      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Commentaires</div>
-      {/* Item 3 — the composer follows directly under the last comment (no flex:1 pushing it to the
-          bottom); the sidebar itself scrolls (.ep-editor-sidebar overflow-y:auto). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {typingPeer && (
+        <div style={{ marginBottom: 10, flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: typingPeer.color, fontWeight: 700 }} aria-live="polite">
+          <span style={{ display: 'flex', gap: 3 }} aria-hidden="true">
+            {[0, 0.2, 0.4].map((d) => (
+              <span key={d} style={{ width: 5, height: 5, borderRadius: '50%', background: typingPeer.color, display: 'block', animation: `epType 1.2s infinite ${d}s` }} />
+            ))}
+          </span>
+          {typingPeer.name} écrit…
+        </div>
+      )}
+
+      {/* Item 16 — the comments list scrolls internally (flex:1) so the composer below stays pinned. */}
+      <div className="ep-comments-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucun commentaire</div>}
         {comments.map((c) => (
           <div key={c.id} style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 10px', fontSize: 12, background: 'var(--card)' }}>
@@ -764,8 +881,9 @@ function Sidebar({
         ))}
       </div>
 
+      {/* Item 16 — the composer is pinned at the sidebar bottom (flex:none) while comments scroll. */}
       {canComment ? (
-        <form onSubmit={submit} style={{ marginTop: 10 }}>
+        <form onSubmit={submit} className="ep-comment-composer">
           <label htmlFor="ep-comment-input" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ChatIcon size={12} /> Commentaire — case {currentCaseNo}</span>
           </label>
@@ -777,6 +895,7 @@ function Sidebar({
               setText(e.target.value);
               if (error) setError(null);
             }}
+            placeholder="Votre commentaire…"
             aria-label={`Ajouter un commentaire à la case ${currentCaseNo}`}
             aria-invalid={!!error}
             rows={2}
@@ -788,22 +907,13 @@ function Sidebar({
           </button>
         </form>
       ) : (
-        <p style={{ marginTop: 10, fontSize: 11, color: 'var(--ink2)', fontStyle: 'italic' }}>Enregistrez d’abord le scénario pour commenter.</p>
+        <p className="ep-comment-composer" style={{ fontSize: 11, color: 'var(--ink2)', fontStyle: 'italic' }}>Enregistrez d’abord le scénario pour commenter.</p>
       )}
-
-      {typingPeer && (
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: typingPeer.color, fontWeight: 700 }} aria-live="polite">
-          <span style={{ display: 'flex', gap: 3 }} aria-hidden="true">
-            {[0, 0.2, 0.4].map((d) => (
-              <span key={d} style={{ width: 5, height: 5, borderRadius: '50%', background: typingPeer.color, display: 'block', animation: `epType 1.2s infinite ${d}s` }} />
-            ))}
-          </span>
-          {typingPeer.name} écrit…
-        </div>
-      )}
+      </div>
     </aside>
   );
 }
+
 
 function ConnectionBanner({ status }: { status: CollabStatus }) {
   if (status === 'connected') return null;
@@ -856,6 +966,7 @@ function readPeers(provider: EditorCollabProvider): Peer[] {
       color: s.user.color ?? '#888',
       role: s.user.role ?? 'pen',
       typing: !!s.typing,
+      avatar: s.user.avatar ?? null,
     });
   });
   return out;

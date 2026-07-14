@@ -7,6 +7,7 @@ import type {
   CaseSummary,
   CreateCaseCommentRequest,
   EditorDocumentResponse,
+  EditorTemplate,
   PlancheDocJson,
   SharePageResponse,
   SnapshotVersionRequest,
@@ -98,6 +99,7 @@ export class ScenarioDocumentsService {
     let documentId: string | null = null;
     let initialHtml: string | null = null;
     let comments: CaseCommentDto[] = [];
+    let template: EditorTemplate | null = null;
 
     if (asset) {
       const doc = await this.prisma.scenarioDocument.findUnique({
@@ -105,12 +107,14 @@ export class ScenarioDocumentsService {
         select: {
           id: true,
           contentJson: true,
+          template: true,
           comments: { include: { author: { select: { displayName: true } } }, orderBy: { createdAt: 'asc' } },
         },
       });
       if (doc) {
         contentJson = doc.contentJson as PlancheDocJson;
         documentId = doc.id;
+        template = (doc.template as EditorTemplate) ?? 'manga';
         comments = doc.comments.map((c) => this.toCommentDto(c as never));
       } else {
         // Asset exists but was never opened in the editor: seed from its current blob (.txt/.docx).
@@ -131,6 +135,7 @@ export class ScenarioDocumentsService {
       initialHtml,
       cases: deriveCases(contentJson),
       comments,
+      template,
     };
   }
 
@@ -138,17 +143,23 @@ export class ScenarioDocumentsService {
     const page = await this.resolveMemberPage(accountId, pageId);
     const ydoc = Buffer.from(body.ydocState, 'base64');
     const asset = await this.resolveEditorAsset(page, assetId);
+    // Item 20/26 — persist the chosen scheme in place. `undefined` (older client) leaves it untouched
+    // on update, and defaults to 'manga' at create.
+    const template = body.template;
 
     if (asset) {
       // Edit-existing (or a subsequent autosave): update the draft in place; NEVER touch AssetVersion.
       const existing = await this.prisma.scenarioDocument.findUnique({ where: { assetId: asset.id }, select: { id: true } });
       if (existing) {
         await this.prisma.$transaction([
-          this.prisma.scenarioDocument.update({ where: { id: existing.id }, data: { ydocState: ydoc, contentJson: body.contentJson as never } }),
+          this.prisma.scenarioDocument.update({
+            where: { id: existing.id },
+            data: { ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) },
+          }),
           this.prisma.scenarioUpdate.deleteMany({ where: { documentId: existing.id } }),
         ]);
       } else {
-        await this.prisma.scenarioDocument.create({ data: { assetId: asset.id, ydocState: ydoc, contentJson: body.contentJson as never } });
+        await this.prisma.scenarioDocument.create({ data: { assetId: asset.id, ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) } });
       }
       return { savedAt: new Date().toISOString(), materialized: null };
     }
@@ -158,7 +169,7 @@ export class ScenarioDocumentsService {
     const filename = await this.uniqueScenarioFilename(page.projectId, page.title);
     const created = await this.assets.createAsset(accountId, page.project.slug, { mediaId: media.id, filename, type: 'scenario' });
     await this.assets.linkToPage(accountId, created.id, { pageId, type: 'scenario' });
-    const doc = await this.prisma.scenarioDocument.create({ data: { assetId: created.id, ydocState: ydoc, contentJson: body.contentJson as never } });
+    const doc = await this.prisma.scenarioDocument.create({ data: { assetId: created.id, ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) } });
 
     this.gateway.emitMaterialized(pageId, created.id); // pre-materialization clients rejoin the asset room
     return { savedAt: new Date().toISOString(), materialized: { assetId: created.id, filename: created.filename, documentId: doc.id } };

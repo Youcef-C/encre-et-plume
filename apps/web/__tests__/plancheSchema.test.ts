@@ -3,9 +3,15 @@ import type { Editor } from '@tiptap/react';
 import { blankPlancheDoc, emptyCaseJson, plancheExtensions, casePlaceholder } from '../components/editor/richtext/planche-schema';
 
 // A fake editor whose resolve() returns a $pos with the given ancestor node-type chain
-// (index = depth), mimicking ProseMirror's ResolvedPos for the placeholder resolver.
-function fakeEditor(chain: string[]): Editor {
-  const $pos = { depth: chain.length - 1, node: (d: number) => ({ type: { name: chain[d] } }) };
+// (index = depth), mimicking ProseMirror's ResolvedPos for the placeholder resolver. `fieldText` is
+// the resolved field's textContent and `fieldIndex` the decorated block's index within the field
+// (item 18 — only the first empty block of an empty field is labelled).
+function fakeEditor(chain: string[], fieldText = '', fieldIndex = 0): Editor {
+  const $pos = {
+    depth: chain.length - 1,
+    node: (d: number) => ({ type: { name: chain[d] }, textContent: fieldText }),
+    index: () => fieldIndex,
+  };
   return { state: { doc: { content: { size: 100 }, resolve: () => $pos } } } as unknown as Editor;
 }
 
@@ -39,9 +45,9 @@ describe('planche schema', () => {
     expect(json).not.toContain('"type":"text"');
   });
 
-  it('exports the four planche nodes (doc, caseBlock, caseDescription, caseDialogue)', () => {
+  it('exports the planche nodes + the case-field key guard', () => {
     const names = plancheExtensions.map((e) => e.name).sort();
-    expect(names).toEqual(['caseBlock', 'caseDescription', 'caseDialogue', 'doc']);
+    expect(names).toEqual(['caseBlock', 'caseDescription', 'caseDialogue', 'caseFieldGuard', 'doc']);
   });
 
   // Item 6 — an empty field keeps its label via a per-field placeholder.
@@ -57,6 +63,16 @@ describe('planche schema', () => {
     it('falls back to the scenario guidance outside a case field', () => {
       const editor = fakeEditor(['doc', 'paragraph']);
       expect(casePlaceholder({ editor, pos: 1 })).toBe('Écrivez votre scénario…');
+    });
+
+    // Item 18 — pressing Enter adds empty paragraphs; the label must NOT repeat on each of them.
+    it('does not repeat the label on a later empty line of the same field', () => {
+      const editor = fakeEditor(['doc', 'caseBlock', 'caseDialogue', 'paragraph'], '', 1);
+      expect(casePlaceholder({ editor, pos: 9 })).toBe('');
+    });
+    it('shows no label once the field has text', () => {
+      const editor = fakeEditor(['doc', 'caseBlock', 'caseDescription', 'paragraph'], 'Il pleut', 0);
+      expect(casePlaceholder({ editor, pos: 3 })).toBe('');
     });
   });
 });

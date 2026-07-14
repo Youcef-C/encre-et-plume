@@ -17,6 +17,9 @@ export interface CaseSummary {
 /** TipTap JSON (schema: doc > caseBlock+ > caseDescription caseDialogue+). Opaque here. */
 export type PlancheDocJson = Record<string, unknown>;
 
+/** Item 20/26 — the document scheme, persisted on the ScenarioDocument. */
+export type EditorTemplate = 'manga' | 'prose';
+
 export interface CaseCommentDto {
   id: string;
   caseNo: number;
@@ -39,12 +42,14 @@ export interface EditorDocumentResponse {
   initialHtml: string | null; // asset exists but never opened in editor: converted .txt/.docx content
   cases: CaseSummary[]; // derived from contentJson (story shape)
   comments: CaseCommentDto[];
+  template: EditorTemplate | null; // persisted scheme; null when the doc doesn't exist yet (blank card)
 }
 
 export interface AutosaveDocumentRequest {
   ydocState: string; // base64 merged Yjs state
   contentJson: PlancheDocJson;
   html: string; // current draft as HTML (materialization seed only; not versioned)
+  template?: EditorTemplate; // persisted in place with the draft (no version bump)
 }
 export interface AutosaveDocumentResponse {
   savedAt: string; // ISO
@@ -106,6 +111,6 @@ export interface WsEditorComment {
 
 /** Awareness user state (client-side convention, typed here for FE reuse). */
 export interface EditorAwarenessState {
-  user: { id: string; name: string; color: string; role: 'pen' | 'brush' };
+  user: { id: string; name: string; color: string; role: 'pen' | 'brush'; avatar?: string | null };
   typing: boolean;
 }

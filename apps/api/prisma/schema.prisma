@@ -1064,6 +1064,9 @@ model ScenarioDocument {
   asset       Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
   ydocState   Bytes
   contentJson Json
+  // CS-4 item 20/26 — document scheme: 'manga' (case/description/dialogue) | 'prose' (plain rich text).
+  // Persisted in place by autosave (no version bump) so reopening restores the writer's choice.
+  template    String            @default("manga")
   updatedAt   DateTime          @updatedAt
   updates     ScenarioUpdate[]
   comments    ScenarioComment[]
