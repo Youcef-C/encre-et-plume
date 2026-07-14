@@ -239,14 +239,17 @@ test.describe('CS-3 multi-link — ML-5 per-card unlink (isolated; optimistic fi
     await page.goto(`/projet/${slug}?tab=fichiers`);
     await page.getByLabel('Importer des fichiers').setInputFiles(SCENARIO_TXT_FIXTURE);
     await expect(assetCard(page, 'cs3-scenario-brief.txt')).toBeVisible({ timeout: 30_000 });
-    // Link to both cards via the Fichiers-grid picker (adds, per the multi-link rule).
+    // Link to both cards via the Fichiers-grid picker. Multi-linking QOL: the picker STAYS OPEN, so
+    // both links are added from a single session — each row toggles to aria-pressed, then Terminé.
+    await assetCard(page, 'cs3-scenario-brief.txt').getByRole('button', { name: /Lier cs3-scenario-brief\.txt à une carte/ }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
     for (const cardTitle of ['Page 1', 'Page 2']) {
-      await assetCard(page, 'cs3-scenario-brief.txt').getByRole('button', { name: /Lier cs3-scenario-brief\.txt à une carte/ }).click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
       await dialog.getByRole('button', { name: new RegExp(cardTitle) }).click();
-      await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+      await expect(dialog.getByRole('button', { name: new RegExp(cardTitle) })).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
     }
+    await dialog.getByRole('button', { name: 'Terminé' }).click();
+    await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     await page.close();
   });
 

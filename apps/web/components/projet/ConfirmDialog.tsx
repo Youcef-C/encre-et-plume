@@ -3,7 +3,14 @@
 // CS-2 card-modal extension — a small on-brand confirmation modal (used for destructive card /
 // label actions instead of an inline "Confirmer / Annuler" row). Overlay + centered panel, closes
 // on backdrop / Escape, focus moves to the cancel button on open.
+//
+// Rendered through a portal to <body>: a caller (e.g. a kanban card that is `role="button"`) can sit
+// under an ancestor with a CSS `filter`/`transform` — the button hover-brightness transition in
+// globals.css is enough — which would become the containing block for this `position:fixed` overlay,
+// mispositioning it and making it jitter as the hover-filter animates (Playwright "element is not
+// stable"). Portalling to <body> escapes any such ancestor so the overlay is always viewport-centered.
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useScrollLock } from '../../lib/useScrollLock';
 
 export interface ConfirmDialogProps {
@@ -34,7 +41,9 @@ export default function ConfirmDialog({
     cancelRef.current?.focus();
   }, []);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => {
@@ -117,6 +126,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

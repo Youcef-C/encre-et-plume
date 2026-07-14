@@ -231,6 +231,10 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     let dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: /Page 1/ }).click();
+    // Multi-linking QOL: the grid picker stays open after a pick; the row reflects the link
+    // (aria-pressed), and an explicit "Terminé" dismisses it.
+    await expect(dialog.getByRole('button', { name: /Page 1/ })).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Terminé' }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     await expect(assetCard(page, 'cs3-scenario-brief.txt').getByText('Page 1')).toBeVisible();
 
@@ -247,6 +251,8 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     await expect(dialog.getByText('actuellement liée à')).toBeVisible();
     await expect(dialog.getByText('Un scénario/une référence peut être liée à plusieurs cartes.')).toBeVisible();
     await dialog.getByRole('button', { name: /Page 2/ }).click();
+    await expect(dialog.getByRole('button', { name: /Page 2/ })).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Terminé' }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     await expect(assetCard(page, 'cs3-scenario-brief.txt').getByText('Liée à 2 cartes')).toBeVisible();
 

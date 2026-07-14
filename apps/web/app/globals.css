@@ -76,6 +76,13 @@
 }
 
 /* ─── Base reset / body ─────────────────────────────────────────────── */
+/* Reserve the scrollbar gutter permanently so opening a modal (which locks body overflow) never
+   widens the viewport — otherwise position:fixed overlays re-center mid-open ("element is not
+   stable" in Playwright). Pairs with useScrollLock, which only toggles overflow now. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--font-body);
   /* prototype: #fbfaf6 + halftone dots (not --paper #f1ece1 — body bg is lighter than the paper token) */

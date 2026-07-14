@@ -558,8 +558,10 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           pages={pages}
           onClose={() => setLinkTarget(null)}
           onLinked={(updated) => {
+            // Bubble each toggle to the grid live; the modal stays open for multi-linking and is
+            // dismissed only by Terminé/Escape/backdrop (onClose).
             onAssetUpdated(updated);
-            setLinkTarget(null);
+            setLinkTarget(updated);
           }}
         />
       )}

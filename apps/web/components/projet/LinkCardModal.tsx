@@ -1,13 +1,16 @@
 'use client';
 
-// CS-3 F5 — "Lier à une carte" picker. Lists the project's kanban cards ([[CS-2]] pages); selecting
-// one calls POST /assets/:id/link. Re-link replaces server-side (one card max per asset). Proto modal
-// chrome (3px ink border, radius 12, hard offset shadow, ✕ close), Escape-dismissible, focus-trapped.
+// CS-3 F5 — "Lier à une carte" picker. Lists the project's kanban cards ([[CS-2]] pages); each row is
+// a link/unlink TOGGLE and the modal stays open, so an asset can be linked to several cards in a row.
+// Clicking an unlinked card → POST /assets/:id/link; clicking a linked one → DELETE …/link?pageId=.
+// MULTI types (scenario/texte/ref) toggle any number of cards on; SINGLE types (dessin/page) replace
+// their single link server-side (the previously-linked row toggles off from the returned linkedPages).
+// Proto modal chrome (3px ink border, radius 12, hard offset shadow, ✕ close), Escape-dismissible.
 import { useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetType, PageStage, WorkspacePage } from '@encre-et-plume/shared';
 import { MULTI_LINK_ASSET_TYPES } from '@encre-et-plume/shared';
-import { linkAssetToPage } from '../../lib/api';
+import { linkAssetToPage, unlinkAssetFromPage } from '../../lib/api';
 import { XIcon } from '../icons';
 
 // Small stage label map (mirrors KanbanBoard's private STAGE_META — only the label is needed here).
@@ -31,6 +34,9 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
   useScrollLock();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  // Working copy so row selection + the header note reflect each toggle without a reload; the server
+  // returns the authoritative linkedPages every time (add/replace/drop), which we also bubble up.
+  const [current, setCurrent] = useState<AssetItem>(asset);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const titleId = useRef(`link-card-${Math.random().toString(36).slice(2)}`).current;
@@ -39,12 +45,16 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
     closeRef.current?.focus();
   }, []);
 
-  async function pick(pageId: string) {
+  async function toggle(pageId: string, isLinked: boolean) {
     setBusyId(pageId);
     setError(null);
     try {
-      const updated = await linkAssetToPage(asset.id, { pageId });
+      const updated = isLinked
+        ? await unlinkAssetFromPage(current.id, pageId)
+        : await linkAssetToPage(current.id, { pageId });
+      setCurrent(updated);
       onLinked(updated);
+      setBusyId(null);
     } catch (e) {
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : null;
       setError(msg ?? 'Échec de la liaison. Réessayez.');
@@ -83,14 +93,16 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
 
         <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 500, marginBottom: 12 }}>
-            {asset.filename}
-            {asset.linkedPages.length > 0 && (
+            {current.filename}
+            {current.linkedPages.length > 0 && (
               <> · actuellement liée à{' '}
-                <b style={{ color: 'var(--ink)' }}>{asset.linkedPages.map((p) => p.title).join(' · ')}</b>
+                <b style={{ color: 'var(--ink)' }}>{current.linkedPages.map((p) => p.title).join(' · ')}</b>
               </>
             )}
-            {(MULTI_LINK_ASSET_TYPES as readonly AssetType[]).includes(asset.type) && (
+            {(MULTI_LINK_ASSET_TYPES as readonly AssetType[]).includes(current.type) ? (
               <div style={{ marginTop: 4 }}>Un scénario/une référence peut être liée à plusieurs cartes.</div>
+            ) : (
+              <div style={{ marginTop: 4 }}>Cliquez une carte pour lier/délier ce fichier.</div>
             )}
           </div>
           {error && (
@@ -103,12 +115,13 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
           ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {pages.map((p) => {
-                const current = asset.linkedPages.some((lp) => lp.id === p.id);
+                const isLinked = current.linkedPages.some((lp) => lp.id === p.id);
                 return (
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => pick(p.id)}
+                      aria-pressed={isLinked}
+                      onClick={() => toggle(p.id, isLinked)}
                       disabled={busyId !== null}
                       style={{
                         width: '100%',
@@ -116,9 +129,9 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
                         alignItems: 'center',
                         gap: 10,
                         textAlign: 'left',
-                        border: '2px solid var(--ink)',
+                        border: `2px solid ${isLinked ? 'var(--accent)' : 'var(--ink)'}`,
                         borderRadius: 8,
-                        background: current ? 'var(--accent-soft)' : 'var(--card)',
+                        background: isLinked ? 'var(--accent-soft)' : 'var(--card)',
                         color: 'var(--ink)',
                         fontFamily: 'inherit',
                         padding: '10px 12px',
@@ -130,14 +143,25 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
                         {STAGE_LABEL[p.stage] ?? p.stage}
                       </span>
-                      {current && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>✓ liée</span>}
-                      {busyId === p.id && <span style={{ fontSize: 12, color: 'var(--ink2)' }}>…</span>}
+                      {busyId === p.id ? (
+                        <span style={{ fontSize: 12, color: 'var(--ink2)' }}>…</span>
+                      ) : (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: isLinked ? 'var(--accent)' : 'var(--ink2)' }}>
+                          {isLinked ? '✓ liée' : '＋ lier'}
+                        </span>
+                      )}
                     </button>
                   </li>
                 );
               })}
             </ul>
           )}
+        </div>
+
+        <div style={footer}>
+          <button type="button" onClick={onClose} style={doneBtn}>
+            Terminé
+          </button>
         </div>
       </div>
     </div>
@@ -186,4 +210,26 @@ const closeBtn: React.CSSProperties = {
   cursor: 'pointer',
   display: 'inline-flex',
   padding: 4,
+};
+
+const footer: React.CSSProperties = {
+  flex: 'none',
+  display: 'flex',
+  justifyContent: 'flex-end',
+  padding: '12px 18px',
+  borderTop: '3px solid var(--ink)',
+};
+
+const doneBtn: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  background: 'var(--accent)',
+  color: '#fff',
+  border: '2px solid var(--ink)',
+  borderRadius: 6,
+  padding: '9px 18px',
+  cursor: 'pointer',
+  boxShadow: '2px 2px 0 var(--shadow)',
+  fontFamily: 'inherit',
+  minHeight: 44,
 };
