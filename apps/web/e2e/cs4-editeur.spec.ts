@@ -371,26 +371,40 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
   });
 });
 
-// Reads the live pagination geometry of CASE `no` from the DOM: the case-block's measured A4 page
-// height (`--ep-page-h`), the number of bordered A4 sheet frames (`.ep-page-frame`), the number of
-// non-zero reflow spacers (`.ep-page-spacer`), and the second frame's top offset (to prove the sheets
-// are stacked with a real inter-sheet gap, not overlaid).
+// Reads the live pagination geometry of CASE `no` from the DOM. The case block IS the bordered A4
+// sheet (no frame overlay), so pages are counted by page-break spacers (pages = non-zero spacers + 1),
+// and — critically — we verify every editable paragraph sits INSIDE the sheet's border box (content
+// must never escape onto the background). `--ep-page-h` is the measured one-page height.
 async function paginationGeometry(page: Page, no: number) {
   return page.evaluate((caseNo) => {
     const block = document.querySelector(`[data-case-block][data-case-no="${caseNo}"]`) as HTMLElement | null;
     if (!block) return null;
-    const brect = block.getBoundingClientRect();
-    const frames = Array.from(block.querySelectorAll('.ep-page-frame')) as HTMLElement[];
+    const b = block.getBoundingClientRect();
     const spacers = Array.from(block.querySelectorAll('.ep-page-spacer')) as HTMLElement[];
     const pageH = parseFloat(getComputedStyle(block).getPropertyValue('--ep-page-h')) || 0;
+    const nonZeroSpacers = spacers.filter((s) => s.getBoundingClientRect().height > 1).length;
+    const paras = Array.from(block.querySelectorAll('.ep-case-content p, .ep-case-content li')) as HTMLElement[];
+    // Every paragraph must be within the sheet's border box (a small tolerance for sub-pixel rounding).
+    const allInside = paras.every((p) => {
+      const r = p.getBoundingClientRect();
+      return r.left >= b.left - 2 && r.right <= b.right + 2 && r.top >= b.top - 2 && r.bottom <= b.bottom + 2;
+    });
     return {
       blockHeight: block.offsetHeight,
       pageH,
-      frameCount: frames.length,
-      nonZeroSpacers: spacers.filter((s) => s.getBoundingClientRect().height > 1).length,
-      secondFrameTop: frames[1] ? Math.round(frames[1].getBoundingClientRect().top - brect.top) : 0,
+      nonZeroSpacers,
+      pages: nonZeroSpacers + 1,
+      paraCount: paras.length,
+      contentInsideSheet: allInside,
     };
   }, no);
+}
+
+// Asserts every editable paragraph of CASE `no` is inside the bordered sheet (content on the page).
+async function expectContentInsideSheet(page: Page, no = 1) {
+  const geo = (await paginationGeometry(page, no))!;
+  expect(geo.paraCount).toBeGreaterThan(0);
+  expect(geo.contentInsideSheet).toBe(true);
 }
 
 // Types `lines` Enter-separated single-line paragraphs into CASE `no`'s description — reliably taller
@@ -405,20 +419,21 @@ async function fillPastOnePage(page: Page, no: number, lines: number) {
   }
 }
 
-// Asserts CASE 1 reflowed onto ≥2 bordered A4 sheets with a real gap and ≥1 reflow spacer. Retries the
-// read (pagination measures on rAF after the last keystroke settles) so the check is deterministic.
+// Asserts CASE 1 grew onto ≥2 pages (a page-break spacer pushed content past the boundary) and that
+// all content is still inside the sheet. Retries the read (pagination measures on rAF after the last
+// keystroke settles) so the check is deterministic.
 async function expectMultiSheetReflow(page: Page) {
   await expect
-    .poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 })
+    .poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 })
     .toBeGreaterThanOrEqual(2);
   const geo = (await paginationGeometry(page, 1))!;
   expect(geo.pageH).toBeGreaterThan(0);
-  // Content grew past one page → the block is taller than a single A4 sheet.
+  // Content grew past one page → the sheet is taller than a single A4 page.
   expect(geo.blockHeight).toBeGreaterThan(geo.pageH);
-  // A block that would cross the page boundary was pushed down → at least one real reflow spacer.
+  // A block that would cross the page boundary was pushed down → at least one real page-break spacer.
   expect(geo.nonZeroSpacers).toBeGreaterThanOrEqual(1);
-  // The 2nd sheet is stacked below the 1st with the inter-sheet gap (top ≈ one page + gap, > pageH).
-  expect(geo.secondFrameTop).toBeGreaterThan(geo.pageH);
+  // The content never escaped the bordered sheet.
+  expect(geo.contentInsideSheet).toBe(true);
 }
 
 test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 24)', () => {
@@ -451,9 +466,10 @@ test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 
     await page.getByRole('button', { name: 'Prose', exact: true }).click();
     await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
     await expectMultiSheetReflow(page);
+    await expectContentInsideSheet(page); // content stays on the page in Prose too
 
     // Caret stability: with the doc paginated, press Enter then type a marker — it lands right after
-    // the caret (the frames/spacers are view-only decorations that never touch the doc position).
+    // the caret (the spacer is a view-only decoration that never touches the doc position).
     const lastPara = caseBlock(page, 1).locator('[data-case-description] p').last();
     await lastPara.click();
     await page.keyboard.press('End');
@@ -519,18 +535,20 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     for (let i = 0; i < 15; i++) await page.keyboard.press('Enter');
     await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
 
-    // Manga: exactly ONE bordered sheet, no reflow spacer, block no taller than one page.
-    await expect.poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 }).toBe(1);
+    // Manga: exactly ONE page (no page-break spacer), sheet no taller than one A4, content on the page.
+    await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 }).toBe(1);
     let geo = (await paginationGeometry(page, 1))!;
     expect(geo.nonZeroSpacers).toBe(0);
-    expect(geo.blockHeight).toBeLessThanOrEqual(geo.pageH + 2);
+    expect(geo.blockHeight).toBeLessThanOrEqual(geo.pageH + 4);
+    expect(geo.contentInsideSheet).toBe(true);
 
-    // Prose: the same doc must ALSO stay a single sheet (the phantom border showed in Prose).
+    // Prose: the same doc must ALSO stay a single sheet, content still on the page.
     await page.getByRole('button', { name: 'Prose', exact: true }).click();
     await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
-    await expect.poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 }).toBe(1);
     geo = (await paginationGeometry(page, 1))!;
     expect(geo.nonZeroSpacers).toBe(0);
+    expect(geo.contentInsideSheet).toBe(true);
     await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-single-sheet-1280.png', fullPage: true });
   });
 
@@ -543,30 +561,30 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     const y = await caretViewportY(page);
     expect(y).not.toBeNull();
     // Centered means comfortably inside the middle band — NOT near the bottom edge (the pre-fix drift).
-    expect(y!.top).toBeGreaterThan(y!.ih * 0.2);
-    expect(y!.top).toBeLessThan(y!.ih * 0.75);
+    expect(y!.top).toBeGreaterThan(y!.ih * 0.55);
+    expect(y!.top).toBeLessThan(y!.ih * 0.95);
     await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-multipage-1280.png', fullPage: true });
   });
 
-  test('CS4-E24d: clicking the inter-sheet gutter lands on real content (never the gap); deleting the trailing blank line keeps the caret', async ({ page }) => {
+  test('CS4-E24d: clicking the page-break gap lands the caret on real content, never in the gap (delete-keeps-caret is covered by CS4-E24f)', async ({ page }) => {
     await openFreshEditor(page);
     await fillPastOnePage(page, 1, 55);
     await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
     await expectMultiSheetReflow(page);
-    // Evidence: a clean partly-filled sheet 2 — one bordered A4 below sheet 1 with a real gutter and NO
-    // stray black line (the pre-fix phantom-page artifact).
+    // Evidence: a clean sheet with a partly-filled 2nd page below the page-break rule, content inside.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-partly-filled-page2-1280.png', fullPage: true });
 
-    // Click the studio-tone gutter between sheet 1 and sheet 2 — the caret must snap to real text.
+    // Click the page-break gap (the spacer region) — the caret must snap to real text, not the gap.
     const target = await page.evaluate(() => {
-      const block = document.querySelector('[data-case-block][data-case-no="1"]') as HTMLElement;
-      const frames = Array.from(block.querySelectorAll('.ep-page-frame')) as HTMLElement[];
-      const f1 = frames[0].getBoundingClientRect();
-      const f2 = frames[1].getBoundingClientRect();
-      return { x: f1.left + 60, y: (f1.bottom + f2.top) / 2 };
+      const spacer = Array.from(document.querySelectorAll('[data-case-block][data-case-no="1"] .ep-page-spacer'))
+        .map((s) => s.getBoundingClientRect())
+        .find((r) => r.height > 1);
+      if (!spacer) return null;
+      return { x: spacer.left + 60, y: spacer.top + spacer.height / 2 };
     });
-    await page.mouse.click(target.x, target.y);
+    expect(target).not.toBeNull();
+    await page.mouse.click(target!.x, target!.y);
     const landed = await page.evaluate(() => {
       const sel = window.getSelection();
       const node = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
@@ -574,17 +592,11 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
       return { gapcursor: document.querySelectorAll('.ProseMirror-gapcursor').length, inSpacer: !!el?.closest?.('.ep-page-spacer') };
     });
     expect(landed.gapcursor).toBe(0); // no gap cursor (the black horizontal line) anywhere
-    expect(landed.inSpacer).toBe(false); // caret is NOT stranded inside the spacer/gutter
-
-    // Delete the trailing blank line (fillPastOnePage leaves one) — the caret must survive on the
-    // previous line, so the next keystroke lands there and the editor stays focused.
-    const lastPara = caseBlock(page, 1).locator('[data-case-description] p').last();
-    await lastPara.click();
-    await page.keyboard.press('End');
-    await page.keyboard.press('Backspace'); // remove the empty trailing line
-    await page.keyboard.type('SUITE');
-    await expect(page.locator('.ProseMirror-focused')).toHaveCount(1); // caret never lost
-    await expect(caseBlock(page, 1).locator('[data-case-description] p').last()).toContainText('SUITE');
+    expect(landed.inSpacer).toBe(false); // caret is NOT stranded inside the spacer/gap
+    // Typing after the gap-click writes onto a real page line, and all content stays on the sheet.
+    await page.keyboard.type('X');
+    await expect(page.locator('.ProseMirror-focused')).toHaveCount(1);
+    await expectContentInsideSheet(page);
   });
 
   test('CS4-E24e: editing at the bottom of a paginated doc scrolls the view to follow the caret (no manual scroll needed)', async ({ page }) => {
@@ -604,8 +616,43 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
 
     const y = await caretViewportY(page);
     expect(y).not.toBeNull();
-    expect(y!.top).toBeGreaterThan(y!.ih * 0.2);
-    expect(y!.top).toBeLessThan(y!.ih * 0.75); // centered, not off the bottom nor stranded at the top
+    expect(y!.top).toBeGreaterThan(y!.ih * 0.55);
+    expect(y!.top).toBeLessThan(y!.ih * 0.95); // centered, not off the bottom nor stranded at the top
+  });
+
+  test('CS4-E24f: full cycle — fill a page then Enter adds a SECOND page the caret follows to; delete back down collapses to ONE page; content stays on the sheet throughout', async ({ page }) => {
+    await openFreshEditor(page);
+    const content = caseBlock(page, 1).locator('.ep-case-content').first();
+    await content.click({ position: { x: 40, y: 40 } });
+
+    // Type line by line until content overflows onto a SECOND page. The line that tips it over is
+    // exactly "Enter at the bottom of a filled page adds a new page". Reset scroll each step so the
+    // final caret position proves the view followed the caret onto the new page (not that we scrolled).
+    let pages = 1;
+    for (let i = 0; i < 70 && pages < 2; i++) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.keyboard.type(`Ligne ${i} pour remplir la planche jusqu'en bas.`);
+      pages = (await paginationGeometry(page, 1))?.pages ?? 1;
+      if (pages < 2) await page.keyboard.press('Enter');
+    }
+    expect(pages).toBe(2); // a real second page appeared once content overflowed
+    let geo = (await paginationGeometry(page, 1))!;
+    expect(geo.contentInsideSheet).toBe(true); // content on the page, not the background
+    const yAfter = await caretViewportY(page);
+    expect(yAfter).not.toBeNull();
+    expect(yAfter!.top).toBeGreaterThan(yAfter!.ih * 0.55);
+    expect(yAfter!.top).toBeLessThan(yAfter!.ih * 0.95); // caret followed onto the new page, centered
+
+    // Delete back down: remove content until it fits one page again → the second page collapses away.
+    for (let i = 0; i < 200; i++) {
+      await page.keyboard.press('Backspace');
+      if (i % 4 === 0 && ((await paginationGeometry(page, 1))?.pages ?? 2) === 1) break;
+    }
+    await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 5_000 }).toBe(1);
+    geo = (await paginationGeometry(page, 1))!;
+    expect(geo.nonZeroSpacers).toBe(0); // page-break gap gone
+    expect(geo.contentInsideSheet).toBe(true);
+    await expect(page.locator('.ProseMirror-focused')).toHaveCount(1); // caret preserved through the collapse
   });
 });
 

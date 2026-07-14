@@ -1305,43 +1305,25 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Planche canvas — structured CASE blocks. "CASE N" accent label + italic "Description —" prefix
    are CSS chrome (not editable document text), matching prototype lines 1051-1054. */
 .ep-planche-canvas .ProseMirror { outline: none; }
-/* Item 24 — TRUE content-reflow pagination. The case is a transparent container that is at least one
-   A4 page tall (min-height = --ep-page-h, set live from the sheet width by pagination.ts). It holds a
-   frame LAYER (one bordered A4 "sheet" per page, drawn by .ep-page-frame) behind the editable content.
-   When content grows past one page, pagination.ts pushes the overflowing block onto the next frame via
-   a spacer, and adds another frame — so a long scenario reads as stacked, clearly-separated A4 sheets
-   with a real studio-tone gutter between them, and text never runs across the boundary. */
+/* Item 24 — TRUE content-reflow pagination. The case block is the A4 writing sheet: a plain full-white
+   area (no page border/shadow) the editable content lives DIRECTLY inside, so text and caret are always
+   visibly ON the page — never on a background layer, in either Manga or Prose. It is at least one A4
+   page tall (min-height = --ep-page-h, set live from the width by pagination.ts) and GROWS with content.
+   When content passes a page boundary, pagination.ts pushes the overflowing block past a page-break gap
+   (a spacer styled as a rule + a "Page N" indicator), so long text starts a new page instead of
+   crossing the line; the sheet just gets taller. */
 .ep-planche-canvas .ep-case-block {
   position: relative;
   min-height: var(--ep-page-h, 1131px); /* one A4 page until measured; 800×297/210 ≈ 1131 */
   margin: 0 0 var(--ep-page-gap, 26px);
   box-sizing: border-box;
   overflow-wrap: anywhere;
-}
-/* The frame layer: one absolutely-positioned A4 sheet per page (top/height set inline by pagination.ts).
-   Behind the text (z-index:0) and non-interactive, so it never intercepts the caret. */
-.ep-planche-canvas .ep-page-frames {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-.ep-planche-canvas .ep-page-frame {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0; /* overridden inline per page by pagination.ts; default shows page 1 pre-measure */
-  height: var(--ep-page-h, 1131px);
   background: var(--card);
-  border: 3px solid var(--ink);
-  box-shadow: 5px 5px 0 var(--shadow);
-  border-radius: 4px;
 }
-/* The editable page area: full-page inner margins so text is visually BOUNDED inside each frame, and
-   above the frame layer (z-index:1). The "CASE N" accent label is CSS chrome at the top of the sheet. */
+/* The editable page area: full-page inner margins so text is visually BOUNDED inside the sheet border.
+   The "CASE N" accent label is CSS chrome at the top of the sheet. */
 .ep-planche-canvas .ep-case-content {
   position: relative;
-  z-index: 1;
   padding: 46px 54px;
 }
 .ep-planche-canvas .ep-case-content::before {
@@ -1352,13 +1334,41 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   font-size: 13px;
   margin-bottom: 2px;
 }
-/* A page-break spacer (widget decoration from pagination.ts): pure vertical space pushing the next
-   block onto the following frame. Never selectable, height set inline. */
+/* A page-break spacer (widget decoration from pagination.ts): the vertical gap that pushes an
+   overflowing block onto the next page inside the sheet. Never selectable, height set inline. A solid
+   ink rule across the middle of the gap marks the page boundary, with a "Page N" indicator pill on it. */
 .ep-planche-canvas .ep-page-spacer {
   display: block;
+  position: relative;
   pointer-events: none;
   user-select: none;
 }
+.ep-planche-canvas .ep-page-spacer::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 2px solid var(--ink);
+}
+/* "Page N" indicator pill sitting on the rule (N from the spacer's data-ep-page attribute). */
+.ep-planche-canvas .ep-page-spacer::after {
+  content: "Page " attr(data-ep-page);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+/* Collapsed during the pristine measure pass → hide the rule + pill so they can't affect measured tops. */
+.ep-planche-canvas .ep-pag-measure .ep-page-spacer::before,
+.ep-planche-canvas .ep-pag-measure .ep-page-spacer::after { display: none; }
 /* pagination.ts collapses every spacer to 0 for one synchronous measure pass (pristine, spacer-free
    geometry), then removes this class before paint — the zeroed state is never shown. !important beats
    the inline height the spacer widget sets. */

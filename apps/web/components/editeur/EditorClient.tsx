@@ -231,12 +231,12 @@ function EditorLoaded({
       ],
       editorProps: {
         attributes: { 'aria-label': 'Éditeur de scénario', role: 'textbox', 'aria-multiline': 'true' },
-        // Bug fix — keep the caret roughly centered. The editor has no inner scroll frame (Item 1): the
-        // whole window scrolls, so as text grows down a tall paginated doc ProseMirror's default nudge
-        // leaves the caret drifting to the bottom edge. This fires only when PM wants to scroll the
-        // selection into view (typing / arrow nav / programmatic reveal — NOT a plain mouse click), so
-        // clicking still leaves the view put while typing keeps the caret in the middle of the viewport.
-        handleScrollToSelection: centerCaretInView,
+        // Bug fix — Word-like caret scrolling (scrollCaretIntoView). The editor has no inner scroll
+        // frame (Item 1): the whole window scrolls. This fires only when PM wants to scroll the
+        // selection into view (typing / arrow nav / programmatic reveal — NOT a plain mouse click), and
+        // scrolls only when the caret would leave the comfortable band, so clicking leaves the view put
+        // and typing keeps the caret around 78% of the window without abrupt re-centering.
+        handleScrollToSelection: scrollCaretIntoView,
       },
     },
     [provider],
@@ -428,7 +428,7 @@ function EditorLoaded({
           />
         </div>
         <div className="ep-editor-body" style={{ display: 'flex' }}>
-          <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--tone)' }}>
+          <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--card)' }}>
             {/* Item 11 — each case renders as its own bordered A4 sheet (see .ep-a4-sheet / .ep-case-block).
                 Item 20 — prose mode hides the case chrome (CASE label, Description prefix, remove button)
                 so the same planche doc reads as one plain rich-text page. */}
@@ -975,12 +975,24 @@ function Sidebar({
     }
   };
 
-  // Item 5 — "voir dans le texte": select the comment's stored range and scroll it into view.
+  // Item 5 — "voir dans le texte": select the comment's stored range and reveal it. We do NOT use
+  // PM's .scrollIntoView() here — that routes through the typing caret-band handler keyed on the
+  // selection HEAD (the range END), which parks the end at ~78% and pushes the highlighted run up out
+  // of view. Instead place the range START just below the sticky header so the whole highlight reads.
   const revealRange = (from: number, to: number) => {
     if (!editor) return;
     const size = editor.state.doc.content.size;
     if (from < 0 || to > size || to <= from) return;
-    editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run();
+    editor.chain().focus().setTextSelection({ from, to }).run();
+    if (typeof window === 'undefined') return;
+    let top: number;
+    try {
+      top = editor.view.coordsAtPos(from).top;
+    } catch {
+      return;
+    }
+    const target = Math.max(CARET_TOP_MARGIN + 24, window.innerHeight * 0.22); // sit clear of the header
+    window.scrollTo({ top: Math.max(0, window.scrollY + (top - target)), behavior: 'smooth' });
   };
 
   return (
@@ -1102,11 +1114,15 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
   return cursor;
 }
 
-// Center the caret vertically in the viewport when ProseMirror asks to scroll the selection into view.
-// Returns true to take over PM's default (edge-nudge) scrolling. `window.scrollTo` clamps the target to
-// [0, maxScroll], so a short doc that fits above the fold never scrolls and the extremes stay natural —
-// the caret only pins to the middle once the doc is tall enough to scroll past it.
-function centerCaretInView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
+// Word-like caret scrolling: the caret moves freely within a comfortable band of the WINDOW and the
+// view only scrolls when it would leave that band — the caret can descend to ~78% of the viewport
+// before typing another line nudges the page by one line to keep it there, and it never abruptly
+// re-centers (nor scrolls at all when the caret is already comfortably in view — e.g. on a click).
+// `window.scrollTo` clamps to [0, maxScroll], so near the document end the caret simply rests wherever
+// the remaining space allows (78% of the window, not forced against missing paper below).
+const CARET_BOTTOM_ANCHOR = 0.78; // caret may sit this far down the viewport before the page scrolls
+const CARET_TOP_MARGIN = 180; // px kept clear at the top for the sticky header + toolbar
+function scrollCaretIntoView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
   if (typeof window === 'undefined') return false;
   let coords: { top: number; bottom: number };
   try {
@@ -1114,10 +1130,12 @@ function centerCaretInView(view: { state: { selection: { head: number } }; coord
   } catch {
     return false; // let PM fall back to its default if the position can't be measured
   }
-  const caretMid = (coords.top + coords.bottom) / 2; // viewport-relative
-  const target = window.scrollY + caretMid - window.innerHeight / 2;
-  window.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
-  return true;
+  const bottomLimit = window.innerHeight * CARET_BOTTOM_ANCHOR;
+  let delta = 0;
+  if (coords.bottom > bottomLimit) delta = coords.bottom - bottomLimit; // caret dropped past 78% → scroll down
+  else if (coords.top < CARET_TOP_MARGIN) delta = coords.top - CARET_TOP_MARGIN; // caret behind the chrome → scroll up
+  if (delta !== 0) window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: 'auto' });
+  return true; // we own scroll-to-selection (suppresses PM's abrupt edge jump when already in view)
 }
 
 function encodeState(ydoc: Y.Doc): string {

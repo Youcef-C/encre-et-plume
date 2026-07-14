@@ -57,45 +57,16 @@ describe('paginateBlocks', () => {
     expect(paginateBlocks([], geo)).toEqual({ spacers: [], pageCount: 1 });
   });
 
-  // Bug: a trailing EMPTY block (the blank line the caret rests on) must never manufacture a page
-  // break or an extra sheet — otherwise a doc that fits on one page draws a phantom empty page 2 whose
-  // border reads as a "stray black line", and the caret sits on the pushed blank line in the gutter.
-  it('ignores a trailing empty block so a blank line never forces a second page', () => {
+  // Every line counts — including blank ones: a blank line that overflows the page boundary is pushed
+  // onto a new page just like real content (so pressing Enter at the bottom of a filled page adds a
+  // page). No special-casing of blank lines.
+  it('pushes ANY overflowing block (blank or not) onto a new page', () => {
     const blocks: BlockMetrics[] = [
-      { pos: 1, top: 50, height: 850 }, // real content ends at 900 ≤ 950 → fits page 0
-      { pos: 11, top: 900, height: 100, empty: true }, // blank caret line; would end 1000 > 950
-    ];
-    expect(paginateBlocks(blocks, geo)).toEqual({ spacers: [], pageCount: 1 });
-  });
-
-  it('a NON-empty block at the same spot still reflows (guards against over-trimming)', () => {
-    const blocks: BlockMetrics[] = [
-      { pos: 1, top: 50, height: 850 },
-      { pos: 11, top: 900, height: 100 }, // real content overflow → still pushed
+      { pos: 1, top: 50, height: 850 }, // fills page 0 (ends 900 ≤ 950)
+      { pos: 11, top: 900, height: 100 }, // next line would end 1000 > 950 → new page
     ];
     const res = paginateBlocks(blocks, geo);
     expect(res.spacers).toEqual([{ pos: 11, height: 170 }]); // page-1 top 1070 − 900
-    expect(res.pageCount).toBe(2);
-  });
-
-  it('trims a run of trailing empty blocks (not just one)', () => {
-    const blocks: BlockMetrics[] = [
-      { pos: 1, top: 50, height: 850 },
-      { pos: 11, top: 900, height: 30, empty: true },
-      { pos: 15, top: 930, height: 30, empty: true },
-      { pos: 19, top: 960, height: 30, empty: true },
-    ];
-    expect(paginateBlocks(blocks, geo)).toEqual({ spacers: [], pageCount: 1 });
-  });
-
-  it('keeps an empty block that sits BETWEEN real content (only trailing ones are trimmed)', () => {
-    const blocks: BlockMetrics[] = [
-      { pos: 1, top: 50, height: 800 },
-      { pos: 11, top: 850, height: 40, empty: true }, // blank line mid-doc — real height, keep it
-      { pos: 15, top: 890, height: 200 }, // overflows (ends 1090 > 950) → pushed
-    ];
-    const res = paginateBlocks(blocks, geo);
-    expect(res.spacers).toEqual([{ pos: 15, height: 180 }]); // page-1 top 1070 − 890
     expect(res.pageCount).toBe(2);
   });
 });

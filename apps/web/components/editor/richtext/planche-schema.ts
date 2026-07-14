@@ -86,26 +86,20 @@ const CaseBlock = Node.create({
       contentDOM.className = 'ep-case-content';
       contentDOM.setAttribute('data-case-no', String(node.attrs.no)); // feeds the "CASE N" CSS label
 
-      // Item 24 — TRUE content-reflow pagination: an empty frame layer that the PaginationExtension
-      // (pagination.ts) fills with one bordered A4 "sheet" per page. Content taller than one page is
-      // pushed onto the next frame (with a real inter-sheet gap) by widget-decoration spacers, so long
-      // text visibly starts a new page instead of flowing across the boundary. The layer is a sibling
-      // of the editable content (contentEditable=false, pointer-events:none, behind the text), so the
-      // ProseMirror doc / Yjs CRDT are never touched and the caret stays put on Enter at a boundary.
-      const frames = document.createElement('div');
-      frames.className = 'ep-page-frames';
-      frames.setAttribute('contenteditable', 'false');
-      frames.setAttribute('aria-hidden', 'true');
-      // Seed one page-1 frame so the A4 sheet border shows immediately, before pagination.ts measures.
-      frames.appendChild(Object.assign(document.createElement('div'), { className: 'ep-page-frame' }));
-
-      dom.appendChild(frames);
+      // Item 24 — the case block IS the bordered A4 sheet (border/shadow are CSS on .ep-case-block): the
+      // editable content lives DIRECTLY inside it, so text and caret are always visibly ON the page,
+      // never on a background layer. There is no separate frame overlay to drift out of alignment. When
+      // content grows past one page, pagination.ts (PaginationExtension) pushes the overflowing block
+      // past a page-break gap via a widget-decoration spacer (styled as a page-break rule), and the
+      // sheet simply grows taller — the ProseMirror doc / Yjs CRDT are never touched.
       dom.appendChild(btn);
       dom.appendChild(contentDOM);
       return {
         dom,
         contentDOM,
-        ignoreMutation: (m) => m.target === frames || frames.contains(m.target as unknown as globalThis.Node) || !contentDOM.contains(m.target as unknown as globalThis.Node),
+        // Ignore mutations outside the editable content (the delete button); pagination writes only
+        // inline styles / widget decorations, which never mutate contentDOM structure.
+        ignoreMutation: (m) => !contentDOM.contains(m.target as unknown as globalThis.Node),
       };
     };
   },
