@@ -313,7 +313,13 @@ function EditorLoaded({
   // (immediatelyRender:false), and `editor.commands` throws while the view is still null.
   useEffect(() => {
     if (!editor || editor.isDestroyed || !editor.view) return;
-    editor.commands.setCommentHighlights(commentRangesFrom(comments, editor.state.doc.content.size));
+    // Colour each highlight by the comment's MESSAGE ORDER (index in the list), matching the sidebar.
+    const order = new Map(comments.map((c, i) => [c.id, i]));
+    const ranges = commentRangesFrom(comments, editor.state.doc.content.size).map((r) => ({
+      ...r,
+      color: commentColor(order.get(r.id) ?? 0),
+    }));
+    editor.commands.setCommentHighlights(ranges);
   }, [editor, comments, synced]);
 
   // ── Autosave (2s debounce) + typing awareness ────────────────────────────────
@@ -891,7 +897,7 @@ function Sidebar({
 
   const currentCaseNo = caseNoAtSelection(editor);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
     const trimmed = text.trim();
     if (!trimmed) {
@@ -958,17 +964,16 @@ function Sidebar({
       {/* Item 16 — the comments list scrolls internally (flex:1) so the composer below stays pinned. */}
       <div className="ep-comments-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucun commentaire</div>}
-        {comments.map((c) => (
+        {comments.map((c, i) => (
           <div key={c.id} style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 10px', fontSize: 12, background: 'var(--card)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px', border: '1.5px solid var(--ink)', display: 'block' }} />
               <b>{c.authorName}</b>
-              <span style={{ color: 'var(--ink2)' }}>case {c.caseNo}</span>
             </div>
             {/* Item 5 — a range-anchored comment shows the quoted highlight + a jump-to-text affordance.
-                Its accent shares the same per-comment colour as the in-canvas highlight (commentColor). */}
+                Its accent shares the same order-assigned colour as the in-canvas highlight (commentColor). */}
             {c.quote && (
-              <div style={{ marginBottom: 5, borderLeft: `3px solid ${commentColor(c.id)}`, paddingLeft: 7 }}>
+              <div style={{ marginBottom: 5, borderLeft: `3px solid ${commentColor(i)}`, paddingLeft: 7 }}>
                 <div style={{ color: 'var(--ink2)', fontStyle: 'italic', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>« {c.quote} »</div>
                 {c.anchorFrom != null && c.anchorTo != null && (
                   <button
@@ -991,7 +996,7 @@ function Sidebar({
         <form onSubmit={submit} className="ep-comment-composer">
           <label htmlFor="ep-comment-input" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <ChatIcon size={12} /> {range ? 'Commenter la sélection' : `Commentaire — case ${currentCaseNo}`}
+              <ChatIcon size={12} /> {range ? 'Commenter la sélection' : 'Commentaire'}
             </span>
           </label>
           {/* Item 5 — when text is selected, preview the quoted range the comment will anchor to. */}
@@ -1008,8 +1013,15 @@ function Sidebar({
               setText(e.target.value);
               if (error) setError(null);
             }}
+            onKeyDown={(e) => {
+              // Enter validates the comment; Shift+Enter inserts a newline.
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                void submit(e);
+              }
+            }}
             placeholder="Votre commentaire…"
-            aria-label={range ? 'Commenter la sélection' : `Ajouter un commentaire à la case ${currentCaseNo}`}
+            aria-label={range ? 'Commenter la sélection' : 'Ajouter un commentaire'}
             aria-invalid={!!error}
             rows={2}
             style={{ width: '100%', marginTop: 4, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)' }}
