@@ -478,7 +478,10 @@ export class MediaService {
     const ownerId = row['ownerId'] as string;
 
     const buffer = await this.s3.getObjectBuffer(bucketKey);
-    const result = await mammoth.convertToHtml({ buffer });
+    // mammoth's default style map already keeps bold (<strong>), italic (<em>), headings (<h1..h6>)
+    // and lists (<ul>/<ol>/<li>); its only formatting gap is underline, which it drops unless mapped.
+    // The custom map is merged on top of the defaults, so all the other semantics are preserved.
+    const result = await mammoth.convertToHtml({ buffer }, { styleMap: ['u => u'] });
     let html = sanitizeDocxHtml(result.value ?? '');
     if (Buffer.byteLength(html) > DOCX_PREVIEW_CAP) {
       html = Buffer.from(html).subarray(0, DOCX_PREVIEW_CAP).toString('utf8');

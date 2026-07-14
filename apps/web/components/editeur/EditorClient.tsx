@@ -302,7 +302,9 @@ function EditorLoaded({
           <EditorHeader
             slug={slug}
             projectTitle={initial.project.title}
-            chapterTitle={initial.chapter?.title ?? null}
+            switcherLabel={
+              initial.chapter ? `Ch. ${initial.chapter.number} — ${initial.pageTitle}` : initial.pageTitle
+            }
             pageId={pageId}
             saveState={saveState}
             peers={peers}
@@ -327,12 +329,7 @@ function EditorLoaded({
         </div>
         <div className="ep-editor-body" style={{ display: 'flex' }}>
           <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--tone)' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase' }}>
-                Planche {initial.plancheNo} / {initial.total}
-              </div>
-            </div>
-            {/* U3 — A4-portrait "script page" sheet. */}
+            {/* Item 11 — each case renders as its own bordered A4 sheet (see .ep-a4-sheet / .ep-case-block). */}
             <div className="ep-a4-sheet">
               <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
                 <EditorContent editor={editor} />
@@ -375,7 +372,7 @@ function EditorLoaded({
 function EditorHeader({
   slug,
   projectTitle,
-  chapterTitle,
+  switcherLabel,
   pageId,
   saveState,
   peers,
@@ -383,7 +380,7 @@ function EditorHeader({
 }: {
   slug: string;
   projectTitle: string;
-  chapterTitle: string | null;
+  switcherLabel: string;
   pageId: string;
   saveState: SaveState;
   peers: Peer[];
@@ -394,7 +391,7 @@ function EditorHeader({
     <div className="ep-editor-header" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: '3px solid var(--ink)', flexWrap: 'wrap' }}>
       <Link href={`/projet/${slug}`} style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>‹ Projet</Link>
       <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{projectTitle}</span>
-      <PageSwitcher slug={slug} currentPageId={pageId} label={chapterTitle ?? 'Hors chapitre'} />
+      <PageSwitcher slug={slug} currentPageId={pageId} label={switcherLabel} />
       <span role="status" aria-live="polite" style={{ fontSize: 12, color: saveState === 'error' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' ? 700 : 500 }}>
         {saveState === 'saving'
           ? 'Enregistrement…'

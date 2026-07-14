@@ -107,8 +107,7 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await expect(page.getByText('v1')).toHaveCount(0);
     await expect(page.getByText('Enregistrez d’abord le scénario pour commenter.')).toBeVisible();
 
-    // Canvas: "Planche N / M" + a blank CASE 1.
-    await expect(page.getByText(/Planche \d+ \/ \d+/)).toBeVisible();
+    // Canvas: a blank CASE 1 (item 15 — the "Planche N / M" counter was removed).
     await expect(caseBlock(page, 1)).toBeVisible();
 
     // No emojis anywhere in the shell chrome (user rule) — the file-dropdown/comment glyphs are SVGs.

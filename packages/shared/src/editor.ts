@@ -32,7 +32,7 @@ export interface EditorDocumentResponse {
   plancheNo: number; // 1-based position of this card among its chapter siblings
   total: number; // sibling count
   project: { slug: string; title: string };
-  chapter: { id: string; title: string } | null;
+  chapter: { id: string; number: number; title: string } | null;
   asset: { id: string; filename: string; currentVersion: number } | null; // null = blank, not yet materialized
   documentId: string | null;
   contentJson: PlancheDocJson | null; // saved draft (null when never saved)

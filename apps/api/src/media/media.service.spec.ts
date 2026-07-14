@@ -5,7 +5,7 @@
  */
 
 import { BadRequestException, ForbiddenException, NotFoundException, HttpException } from '@nestjs/common';
-import { MediaService } from './media.service';
+import { MediaService, sanitizeDocxHtml } from './media.service';
 import { S3StorageService } from './s3-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -817,6 +817,31 @@ describe('MediaService', () => {
       expect(s3.deleteObject).toHaveBeenCalledTimes(2);
       expect(prisma.media.deleteMany).toHaveBeenCalled();
     });
+  });
+});
+
+// Item 14 — the docx-preview sanitizer is a blocklist: it strips scripts/handlers but MUST keep the
+// formatting tags mammoth emits, otherwise the preview renders as plain text.
+describe('sanitizeDocxHtml', () => {
+  it('preserves bold/italic/underline/heading/list/blockquote/link formatting', () => {
+    const html =
+      '<h1>Titre</h1><p><strong>gras</strong> <em>italique</em> <u>souligné</u></p>' +
+      '<ul><li>un</li></ul><ol><li>deux</li></ol><blockquote>cite</blockquote>' +
+      '<a href="https://example.com">lien</a>';
+    const out = sanitizeDocxHtml(html);
+    for (const tag of ['<h1>', '<strong>', '<em>', '<u>', '<ul>', '<li>', '<ol>', '<blockquote>', '<a ']) {
+      expect(out).toContain(tag);
+    }
+    expect(out).toContain('href="https://example.com"');
+  });
+
+  it('strips scripts, event handlers, and javascript: URLs', () => {
+    const out = sanitizeDocxHtml(
+      '<script>alert(1)</script><p onclick="x()">t</p><a href="javascript:evil()">x</a>',
+    );
+    expect(out).not.toContain('<script>');
+    expect(out).not.toContain('onclick');
+    expect(out).not.toContain('javascript:');
   });
 });
 

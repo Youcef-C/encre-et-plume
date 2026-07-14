@@ -34,10 +34,15 @@ describe('PageSwitcher', () => {
     (api.getProjectWorkspace as ReturnType<typeof vi.fn>).mockResolvedValue(makeWorkspace());
   });
 
+  it('shows the current selection as "Ch. X — Page Y" in the trigger', () => {
+    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Ch. 2 — Planche 5" />);
+    expect(screen.getByRole('button', { name: /Ch\. 2 — Planche 5/ })).toBeInTheDocument();
+  });
+
   it('lazy-loads chapters + pages on open, ordered by chapter number', async () => {
-    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Chapitre 2 — La rencontre" />);
+    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Ch. 2 — Planche 5" />);
     expect(api.getProjectWorkspace).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: /Chapitre 2/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Ch\. 2/ }));
     const listbox = await screen.findByRole('listbox', { name: 'Pages et chapitres' });
     expect(within(listbox).getByText('Chapitre 1 — Prologue')).toBeInTheDocument();
     expect(within(listbox).getByText('Chapitre 2 — La rencontre')).toBeInTheDocument();
@@ -46,8 +51,8 @@ describe('PageSwitcher', () => {
   });
 
   it('marks the current page and shows the scénario marker', async () => {
-    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Chapitre 2 — La rencontre" />);
-    await userEvent.click(screen.getByRole('button', { name: /Chapitre 2/ }));
+    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Ch. 2 — Planche 5" />);
+    await userEvent.click(screen.getByRole('button', { name: /Ch\. 2/ }));
     await waitFor(() => screen.getByRole('option', { name: /Planche 5/ }));
     const current = screen.getByRole('option', { name: /Planche 5/ });
     expect(current).toHaveAttribute('aria-current', 'page');
@@ -55,16 +60,16 @@ describe('PageSwitcher', () => {
   });
 
   it('navigates to the chosen page', async () => {
-    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Chapitre 2 — La rencontre" />);
-    await userEvent.click(screen.getByRole('button', { name: /Chapitre 2/ }));
+    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Ch. 2 — Planche 5" />);
+    await userEvent.click(screen.getByRole('button', { name: /Ch\. 2/ }));
     await waitFor(() => screen.getByRole('option', { name: /Planche 1/ }));
     await userEvent.click(screen.getByRole('option', { name: /Planche 1/ }));
     expect(push).toHaveBeenCalledWith('/projet/lames/editeur/pg2');
   });
 
   it('does not navigate when the current page is re-selected', async () => {
-    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Chapitre 2 — La rencontre" />);
-    await userEvent.click(screen.getByRole('button', { name: /Chapitre 2/ }));
+    render(<PageSwitcher slug="lames" currentPageId="pg1" label="Ch. 2 — Planche 5" />);
+    await userEvent.click(screen.getByRole('button', { name: /Ch\. 2/ }));
     await waitFor(() => screen.getByRole('option', { name: /Planche 5/ }));
     await userEvent.click(screen.getByRole('option', { name: /Planche 5/ }));
     expect(push).not.toHaveBeenCalled();

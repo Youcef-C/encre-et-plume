@@ -124,7 +124,7 @@ export class ScenarioDocumentsService {
       plancheNo,
       total,
       project: { slug: page.project.slug, title: page.project.title },
-      chapter: page.chapter ? { id: page.chapter.id, title: page.chapter.title } : null,
+      chapter: page.chapter ? { id: page.chapter.id, number: page.chapter.number, title: page.chapter.title } : null,
       asset: asset ? { id: asset.id, filename: asset.filename, currentVersion: asset.currentVersion } : null,
       documentId,
       contentJson,
@@ -208,7 +208,7 @@ export class ScenarioDocumentsService {
         chapterId: true,
         createdAt: true,
         project: { select: { id: true, slug: true, title: true, ownerId: true, work: { select: { creators: { select: { accountId: true } } } } } },
-        chapter: { select: { id: true, title: true } },
+        chapter: { select: { id: true, number: true, title: true } },
       },
     });
     if (!page || !isMemberOf(page.project as never, accountId)) throw new NotFoundException('Carte introuvable');
@@ -218,7 +218,7 @@ export class ScenarioDocumentsService {
       chapterId: string | null;
       createdAt: Date;
       project: { id: string; slug: string; title: string };
-      chapter: { id: string; title: string } | null;
+      chapter: { id: string; number: number; title: string } | null;
     };
   }
 

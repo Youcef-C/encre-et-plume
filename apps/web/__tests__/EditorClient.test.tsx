@@ -96,7 +96,7 @@ function makeDoc(over: Partial<EditorDocumentResponse> = {}): EditorDocumentResp
     plancheNo: 5,
     total: 40,
     project: { slug: 'lames', title: 'Lames de Brume' },
-    chapter: { id: 'c2', title: 'Chapitre 2 — La rencontre' },
+    chapter: { id: 'c2', number: 2, title: 'La rencontre' },
     asset: null,
     documentId: null,
     contentJson: null,
@@ -121,11 +121,13 @@ describe('EditorClient (Éditeur shell)', () => {
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
   });
 
-  it('renders the header replica: back link, title, chapter switcher, planche header, Partager', async () => {
+  it('renders the header replica: back link, title, "Ch. X — Page Y" switcher, Partager', async () => {
     await renderEditor(makeDoc());
     expect(screen.getByRole('link', { name: '‹ Projet' })).toHaveAttribute('href', '/projet/lames');
-    expect(screen.getByText('Chapitre 2 — La rencontre')).toBeInTheDocument();
-    expect(screen.getByText('Planche 5 / 40')).toBeInTheDocument();
+    // Item 12 — the switcher shows the chapter number AND the page title.
+    expect(screen.getByRole('button', { name: /Ch\. 2 — Page 5/ })).toBeInTheDocument();
+    // Item 15 — the "Planche N / total" counter is gone.
+    expect(screen.queryByText('Planche 5 / 40')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Partager' })).toBeInTheDocument();
   });
 

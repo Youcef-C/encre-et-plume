@@ -122,8 +122,11 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
             <pre style={textDoc}>{preview.text}</pre>
           ) : preview.mode === 'html' ? (
             <div
+              className="ep-doc-preview"
               style={htmlDoc}
               // Sanitized server-side in the docx-preview worker (script/on*/javascript: stripped, D5).
+              // .ep-doc-preview restores heading/list/quote styling that Tailwind's preflight strips
+              // (item 14) so the docx formatting actually shows.
               dangerouslySetInnerHTML={{ __html: preview.html ?? '' }}
             />
           ) : preview.mode === 'processing' ? (

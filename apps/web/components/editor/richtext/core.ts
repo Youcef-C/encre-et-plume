@@ -7,6 +7,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import { Placeholder } from '@tiptap/extensions';
+import { MultiClickSelect } from './multi-click-select';
 import type { Extensions, Editor } from '@tiptap/react';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 
@@ -59,6 +60,8 @@ export function buildRichTextExtensions(opts: RichTextCoreOptions = {}): Extensi
       link: { openOnClick: false, autolink: true },
     }),
     TextAlign.configure({ types: TEXT_ALIGN_TYPES }),
+    // Item 13 — double=word / triple=sentence / quadruple=paragraph progressive selection.
+    MultiClickSelect,
     TextStyle,
     Color,
     Highlight.configure({ multicolor: true }),

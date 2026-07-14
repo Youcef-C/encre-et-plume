@@ -1305,7 +1305,24 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Planche canvas — structured CASE blocks. "CASE N" accent label + italic "Description —" prefix
    are CSS chrome (not editable document text), matching prototype lines 1051-1054. */
 .ep-planche-canvas .ProseMirror { outline: none; }
-.ep-planche-canvas .ep-case-block { margin-bottom: 16px; }
+/* Item 11 — each case is its own bordered A4 "sheet": white paper, A4 portrait shape (min-height via
+   aspect-ratio, grows with content), ink border + hard offset shadow, and inner page margins so text
+   is visually BOUNDED per sheet. The gap between sheets is the studio tone showing through, so a long
+   scenario reads as stacked, clearly-separated pages instead of one endless block.
+   ponytail: not a true content-reflow paginator (that needs a ProseMirror pagination plugin); one
+   sheet per case is the smallest thing that reads as distinct pages and never lets text spill into
+   the inter-sheet gap. */
+.ep-planche-canvas .ep-case-block {
+  background: var(--card);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--shadow);
+  border-radius: 4px;
+  aspect-ratio: 210 / 297;
+  padding: 46px 54px;
+  margin: 0 0 var(--ep-page-gap, 26px);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
 .ep-planche-canvas .ep-case-block::before {
   content: "CASE " attr(data-case-no);
   display: block;
@@ -1361,31 +1378,13 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   padding: 0 5px; border-radius: 3px 3px 3px 0; white-space: nowrap; user-select: none;
 }
 
-/* U3 / Item 2 — A4-portrait "script page" sheet on the studio background, with Word-like page
-   separation: the sheet paints repeating A4 paper bands with a gap band (studio tone) between them,
-   so a long scenario reads as stacked pages instead of one endless block. An empty/short doc shows
-   exactly one clean A4 (min-height = one page); content beyond one page reveals the page break.
-   ponytail: true content-reflow pagination (breaking text across fixed pages) needs a ProseMirror
-   pagination plugin — this CSS band approximation is the smallest thing that reads as pages. */
+/* Item 11 — the A4 sheet stack: a transparent centered column on the studio background. Each child
+   case renders as its own bordered A4 sheet (see .ep-case-block); this wrapper only sets the column
+   width and the inter-sheet gap token. */
 .ep-a4-sheet {
-  --ep-page-h: 1123px;
   --ep-page-gap: 26px;
   max-width: 800px;
   margin: 0 auto;
-  min-height: var(--ep-page-h);
-  border: 3px solid var(--ink);
-  box-shadow: 5px 5px 0 var(--shadow);
-  border-radius: 4px;
-  padding: 44px 52px;
-  background-color: var(--card);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--card) 0,
-    var(--card) var(--ep-page-h),
-    var(--tone) var(--ep-page-h),
-    var(--tone) calc(var(--ep-page-h) + var(--ep-page-gap))
-  );
-  background-origin: border-box;
 }
 
 /* Placeholder guidance (TipTap Placeholder extension) — decoration only, never serialized. */
@@ -1426,7 +1425,7 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* ≤768px: full-width A4 sheet (padding reduced); toolbar scrolls horizontally. The global header
    stays 68px at every breakpoint, so the sticky controls' top:68px needs no override. */
 @media (max-width: 768px) {
-  .ep-a4-sheet { padding: 24px 20px; }
+  .ep-planche-canvas .ep-case-block { padding: 28px 22px; }
   .ep-editor-main { padding: 16px 14px !important; }
   .ep-rt-toolbar {
     flex-wrap: nowrap !important;
@@ -1434,3 +1433,46 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
     overflow-y: visible;
   }
 }
+
+/* Item 14 — docx-preview content styling. Tailwind's preflight resets heading sizes and strips list
+   markers, so mammoth's semantic HTML renders as flat text without this. Restores the formatting the
+   .docx carried (headings, lists, bold/italic/underline, blockquote, links). */
+.ep-doc-preview h1,
+.ep-doc-preview h2,
+.ep-doc-preview h3,
+.ep-doc-preview h4,
+.ep-doc-preview h5,
+.ep-doc-preview h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 18px 0 8px;
+}
+.ep-doc-preview h1 { font-size: 26px; text-transform: uppercase; }
+.ep-doc-preview h2 { font-size: 21px; }
+.ep-doc-preview h3 { font-size: 18px; }
+.ep-doc-preview h4,
+.ep-doc-preview h5,
+.ep-doc-preview h6 { font-size: 16px; }
+.ep-doc-preview p { margin: 0 0 12px; }
+.ep-doc-preview ul,
+.ep-doc-preview ol { margin: 8px 0 12px; padding-left: 28px; }
+.ep-doc-preview ul { list-style: disc; }
+.ep-doc-preview ol { list-style: decimal; }
+.ep-doc-preview li { display: list-item; margin: 3px 0; }
+.ep-doc-preview strong,
+.ep-doc-preview b { font-weight: 700; }
+.ep-doc-preview em,
+.ep-doc-preview i { font-style: italic; }
+.ep-doc-preview u { text-decoration: underline; }
+.ep-doc-preview blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 10px 0;
+  padding: 2px 0 2px 14px;
+  color: var(--ink2);
+}
+.ep-doc-preview a { color: var(--accent); text-decoration: underline; }
+.ep-doc-preview img { max-width: 100%; height: auto; }
+.ep-doc-preview table { border-collapse: collapse; }
+.ep-doc-preview td,
+.ep-doc-preview th { border: 1px solid var(--ink); padding: 4px 8px; }
