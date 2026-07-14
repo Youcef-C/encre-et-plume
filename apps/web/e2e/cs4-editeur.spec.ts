@@ -25,6 +25,7 @@ const OWNER_EMAIL = 'qa_e2e_cs12_owner@test.com';
 const COLLAB_EMAIL = 'qa_e2e_cs12_collab@test.com';
 const STRANGER_EMAIL = 'qa_e2e_cs13_stranger@test.com';
 const MULTI_SLUG = 'e2e-cs2-multi';
+const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 
 const SCENARIO_TXT_FIXTURE = path.join(__dirname, 'fixtures/cs3-scenario-brief.txt');
 
@@ -751,6 +752,138 @@ test.describe('CS-4 Éditeur — authorization (non-member)', () => {
     await page.goto(href!);
     await expect(page.getByText('Éditeur indisponible')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Cette page n’existe pas ou vous n’y avez pas accès.')).toBeVisible();
+  });
+});
+
+// ─── CS-15 — comment change-tracking ("· modifié") + author-only delete + live removal ───
+// Reuses the seeded two-member `e2e-cs2-multi` project (OWNER author + COLLAB non-author), same
+// two-context pattern as CS4-RT. e2e-seed.js resets that project's pages every run → fresh card.
+test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser contexts)', () => {
+  let pageId = '';
+
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${MULTI_SLUG}`);
+    await addCard(page);
+    const href = await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).getAttribute('href');
+    pageId = href!.split('/editeur/')[1];
+    await page.close();
+  });
+
+  // CS15-E1 (AC-1) + CS15-E2 (AC-2): typing INSIDE an anchored range extends the highlight in BOTH
+  // clients; typing at the outer boundaries stays outside; the author's sidebar then shows "· modifié".
+  test('CS15-E1/E2: inside-edit extends the highlight live (two clients); the sidebar shows "· modifié"', async ({ browser }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const a = await ctxA.newPage();
+    const b = await ctxB.newPage();
+    await login(a, OWNER_EMAIL);
+    await login(b, COLLAB_EMAIL);
+
+    await a.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
+    await a.waitForTimeout(1000);
+    await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
+    await a.waitForTimeout(1500);
+
+    // A types a line, materializing the scenario (comments enabled), then comments the whole line.
+    await typeIntoCase(a, 1, 'Le chat dort ici.');
+    await expect(a.getByText('v1')).toBeVisible({ timeout: 15_000 });
+    await expect(caseBlock(b, 1)).toContainText('Le chat dort ici.', { timeout: 15_000 });
+
+    await a.keyboard.press('Home');
+    await a.keyboard.press('Shift+End');
+    await a.getByLabel('Commenter la sélection').fill('Vérifier ce passage');
+    await a.getByRole('button', { name: '＋ Commentaire' }).click();
+    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 10_000 });
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 10_000 });
+
+    // B types INSIDE the highlighted run → the highlight grows to cover the inserted text in BOTH clients.
+    const pB = caseBlock(b, 1).locator('[data-case-description] p').first();
+    const boxB = await pB.boundingBox();
+    await pB.click({ position: { x: boxB!.width / 2, y: boxB!.height / 2 } });
+    await b.keyboard.type('MIAOU');
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 10_000 });
+    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 10_000 });
+
+    // Typing at the very START of the range stays OUTSIDE it (from is right-associated).
+    await b.keyboard.press('Home');
+    await b.keyboard.type('AVANT');
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).not.toContainText('AVANT', { timeout: 10_000 });
+
+    // CS15-E2 (AC-2): now that the anchored text differs from the stored quote, A's sidebar comment
+    // shows the "· modifié" marker + the current text; the original quote line is still present.
+    const posted = commentItem(a, 'Vérifier ce passage');
+    await expect(posted.getByText('· modifié')).toBeVisible({ timeout: 10_000 });
+    await expect(posted.getByText(/maintenant :/)).toBeVisible();
+    await expect(posted.getByText('« Le chat dort ici. »')).toBeVisible();
+
+    await ctxA.close();
+    await ctxB.close();
+  });
+
+  // CS15-E3 (AC-3) + CS15-E4 (AC-4) + CS15-E5 (AC-5): author-only delete, non-author 403, live removal.
+  test('CS15-E3/E4/E5: only the author can delete; a forged non-author DELETE is 403; the removal is live + survives refetch', async ({ browser }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const a = await ctxA.newPage();
+    const b = await ctxB.newPage();
+    await login(a, OWNER_EMAIL);
+    await login(b, COLLAB_EMAIL);
+
+    await a.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
+    await a.waitForTimeout(1000);
+    await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
+    await a.waitForTimeout(1500);
+
+    await typeIntoCase(a, 1, 'Réplique à supprimer plus tard.');
+    await expect(a.getByText('v1')).toBeVisible({ timeout: 15_000 });
+
+    // A posts a case-level comment and captures its id from the POST response (for the forged DELETE).
+    await a.getByLabel(/Ajouter un commentaire/).fill('Note à supprimer');
+    const [postResp] = await Promise.all([
+      a.waitForResponse((r) => r.url().includes('/comments') && r.request().method() === 'POST'),
+      a.getByRole('button', { name: '＋ Commentaire' }).click(),
+    ]);
+    const commentId = (await postResp.json()).id as string;
+
+    const inB = commentItem(b, 'Note à supprimer');
+    await expect(inB).toBeVisible({ timeout: 10_000 });
+
+    // CS15-E4 (AC-4, client): the non-author sees NO trash affordance on the author's comment.
+    await expect(b.getByRole('button', { name: 'Supprimer le commentaire' })).toHaveCount(0);
+    // CS15-E4 (AC-4, server): a forged DELETE with the non-author's session returns 403; comment persists.
+    const forged = await ctxB.request.delete(`${API}/pages/${pageId}/document/comments/${commentId}`);
+    expect(forged.status()).toBe(403);
+    await b.reload();
+    await expect(commentItem(b, 'Note à supprimer')).toBeVisible({ timeout: 10_000 });
+    // The REST-fetched page (comment visible above) renders before B's collab WS socket has finished
+    // rejoining the asset room; same convention as the post-goto waits above — give the socket time to
+    // reconnect before A's delete fires the live broadcast, or B (still mid-handshake) would miss it.
+    await b.waitForTimeout(1500);
+
+    // CS15-E3 (AC-3): the author deletes via the trash + ConfirmDialog → it vanishes optimistically.
+    // Scoped to THIS comment — the prior test in this describe block (which shares `pageId`) leaves its
+    // own authored comment ("Vérifier ce passage") on the page, so a page-level locator over-matches.
+    await commentItem(a, 'Note à supprimer').getByRole('button', { name: 'Supprimer le commentaire' }).click();
+    await expect(a.getByText('Supprimer ce commentaire ?')).toBeVisible({ timeout: 5_000 });
+    await a.getByRole('button', { name: 'Supprimer', exact: true }).click();
+    await expect(a.getByText('Note à supprimer')).toHaveCount(0, { timeout: 10_000 });
+
+    // CS15-E5 (AC-5): the deletion propagates live to B without a reload.
+    await expect(commentItem(b, 'Note à supprimer')).toHaveCount(0, { timeout: 10_000 });
+
+    // CS15-E3 refetch: reloading A keeps it gone (server-side delete committed).
+    await a.reload();
+    await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
+    await expect(a.getByText('Note à supprimer')).toHaveCount(0, { timeout: 10_000 });
+
+    await ctxA.close();
+    await ctxB.close();
   });
 });
 

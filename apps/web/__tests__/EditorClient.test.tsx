@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { EditorDocumentResponse } from '@encre-et-plume/shared';
+import type { EditorDocumentResponse, CaseCommentDto } from '@encre-et-plume/shared';
 
 // ── Mock the realtime provider: capture handlers + a controllable awareness map. ──
 type Handlers = {
   onStatus?: (s: string) => void;
   onSync?: () => void;
   onComment?: (c: unknown) => void;
+  onCommentDeleted?: (id: string) => void;
   onMaterialized?: (id: string) => void;
 };
 interface MockProvider {
@@ -45,15 +46,31 @@ vi.mock('../lib/editor-collab', () => {
 });
 const getProvider = () => providerHolder.current;
 
+// CS-15 — liveTexts feed for the sidebar "· modifié" indicator. resolveCommentTexts reads the live
+// editor/Yjs state (unavailable under the static mock), so we mock it and control the id→text map here.
+const liveTextsHolder = vi.hoisted(() => ({ map: new Map<string, string>() }));
+vi.mock('../components/editor/richtext/comment-highlight', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../components/editor/richtext/comment-highlight')>();
+  return { ...actual, resolveCommentTexts: () => liveTextsHolder.map };
+});
+
 // ── Mock TipTap: a static fake editor + a placeholder EditorContent. ──
+// `on` keeps ALL listeners per event (multiple effects subscribe to 'update'); editorHandlers[e] fires them all.
+const editorListeners: Record<string, Array<() => void>> = {};
 const editorHandlers: Record<string, () => void> = {};
 const fakeEditor = {
-  on: (e: string, fn: () => void) => { editorHandlers[e] = fn; },
+  on: (e: string, fn: () => void) => {
+    (editorListeners[e] ??= []).push(fn);
+    editorHandlers[e] = () => editorListeners[e].forEach((f) => f());
+  },
   off: () => {},
   setEditable: vi.fn(),
   getJSON: () => ({ type: 'doc', content: [] }),
   getHTML: () => '<div data-case-block></div>',
-  commands: { setContent: vi.fn() },
+  // A truthy `view` lets the highlight-repaint + CS-15 liveTexts effects run (both guard on editor.view).
+  view: {},
+  isDestroyed: false,
+  commands: { setContent: vi.fn(), setCommentHighlights: vi.fn() },
   chain: () => ({ insertContentAt: () => ({ focus: () => ({ run: () => {} }) }) }),
   isActive: () => false,
   state: {
@@ -80,6 +97,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     autosaveEditorDocument: vi.fn(),
     snapshotEditorVersion: vi.fn(),
     addCaseComment: vi.fn(),
+    deleteCaseComment: vi.fn(),
     sharePage: vi.fn(),
     getProjectWorkspace: vi.fn(),
     listProjectAssets: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
@@ -119,7 +137,9 @@ describe('EditorClient (Éditeur shell)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     providerHolder.instances.length = 0;
+    liveTextsHolder.map = new Map();
     for (const k of Object.keys(editorHandlers)) delete editorHandlers[k];
+    for (const k of Object.keys(editorListeners)) delete editorListeners[k];
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
   });
 
@@ -194,6 +214,23 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(screen.getByText('Yuki écrit…')).toBeInTheDocument();
   });
 
+  it('drops a stale ghost of the local account (reload) so presence stays "1 en ligne"', async () => {
+    await renderEditor(makeDoc());
+    // A previous connection of THIS account (session id 'me') lingers under a different clientID after a
+    // reload. It must not count as a peer or add a duplicate avatar.
+    act(() => getProvider().awareness.setPeer(7, { user: { id: 'me', name: 'Moi', color: '#2a6fdb' }, typing: false }));
+    await waitFor(() => expect(screen.getByText('1 en ligne')).toBeInTheDocument());
+  });
+
+  it('dedupes multiple connections of the same peer account to one avatar', async () => {
+    await renderEditor(makeDoc());
+    act(() => {
+      getProvider().awareness.setPeer(3, { user: { id: 'yuki', name: 'Yuki', color: '#1f8a5b', role: 'brush' }, typing: false });
+      getProvider().awareness.setPeer(4, { user: { id: 'yuki', name: 'Yuki', color: '#1f8a5b', role: 'brush' }, typing: false });
+    });
+    await waitFor(() => expect(screen.getByText('2 en ligne')).toBeInTheDocument());
+  });
+
   it('flips the save indicator to "Enregistré ✓" after autosave', async () => {
     vi.useFakeTimers();
     (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
@@ -253,5 +290,99 @@ describe('EditorClient (Éditeur shell)', () => {
     // The sticky composer (textarea + submit) is present and usable even though prose has no visible cases.
     expect(screen.getByPlaceholderText('Votre commentaire…')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '＋ Commentaire' })).toBeInTheDocument();
+  });
+
+  // ── CS-15 — "· modifié" indicator, author-only delete, live removal ──
+  const mkComment = (over: Partial<CaseCommentDto> = {}): CaseCommentDto => ({
+    id: 'cx',
+    caseNo: 1,
+    authorId: 'me',
+    authorName: 'Moi',
+    text: 'Une note',
+    createdAt: '2026-07-14T10:00:00.000Z',
+    anchorFrom: 4,
+    anchorTo: 12,
+    quote: 'bonjour le monde',
+    ...over,
+  });
+
+  it('CS-15: shows "· modifié" + the current text only when the anchored text differs from the quote', async () => {
+    liveTextsHolder.map = new Map([
+      ['changed', 'bonsoir la lune'], // differs from its quote → modifié
+      ['same', 'bonjour le monde'], // identical → no marker
+      ['deleted', ''], // range fully removed → marker but no "maintenant" line
+    ]);
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'changed', quote: 'bonjour la lune' }),
+          mkComment({ id: 'same', quote: 'bonjour le monde' }),
+          mkComment({ id: 'deleted', quote: 'un passage' }),
+          mkComment({ id: 'caselevel', anchorFrom: null, anchorTo: null, quote: null }),
+        ],
+      }),
+    );
+
+    // Two "· modifié" markers (changed + deleted), and only the changed one prints a "maintenant :" line.
+    expect(screen.getAllByText('· modifié')).toHaveLength(2);
+    expect(screen.getByText(/maintenant :/)).toHaveTextContent('maintenant : « bonsoir la lune »');
+    // The unchanged comment keeps its quote and no marker; case-level comment shows neither quote nor marker.
+    expect(screen.getByText('« bonjour le monde »')).toBeInTheDocument();
+  });
+
+  it('CS-15: an author sees a labelled trash button on their own comment; a non-author sees none', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'mine', authorId: 'me', authorName: 'Moi' }),
+          mkComment({ id: 'theirs', authorId: 'yuki', authorName: 'Yuki' }),
+        ],
+      }),
+    );
+    const trashButtons = screen.getAllByRole('button', { name: 'Supprimer le commentaire' });
+    expect(trashButtons).toHaveLength(1); // only for the authored comment
+  });
+
+  it('CS-15: confirming the delete removes the comment optimistically and calls the API', async () => {
+    (api.deleteCaseComment as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'mine' });
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [mkComment({ id: 'mine', text: 'À supprimer', quote: null, anchorFrom: null, anchorTo: null })],
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer le commentaire' }));
+    expect(await screen.findByText('Supprimer ce commentaire ?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => expect(api.deleteCaseComment).toHaveBeenCalledWith('pg1', 'mine', undefined));
+    expect(screen.queryByText('À supprimer')).not.toBeInTheDocument();
+  });
+
+  it('CS-15: a failed delete restores the comment and shows a toast', async () => {
+    (api.deleteCaseComment as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 500, message: 'boom' });
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [mkComment({ id: 'mine', text: 'À supprimer', quote: null, anchorFrom: null, anchorTo: null })],
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer le commentaire' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    expect(await screen.findByText('Impossible de supprimer le commentaire')).toBeInTheDocument();
+    expect(screen.getByText('À supprimer')).toBeInTheDocument(); // restored
+  });
+
+  it('CS-15: a peer deletion removes the comment from the sidebar live (WS onCommentDeleted)', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [mkComment({ id: 'gone', text: 'Note distante', quote: null, anchorFrom: null, anchorTo: null })],
+      }),
+    );
+    expect(screen.getByText('Note distante')).toBeInTheDocument();
+    act(() => getProvider().handlers.onCommentDeleted!('gone'));
+    await waitFor(() => expect(screen.queryByText('Note distante')).not.toBeInTheDocument());
   });
 });

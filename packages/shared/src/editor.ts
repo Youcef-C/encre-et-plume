@@ -94,7 +94,13 @@ export const EDITOR_WS_EVENTS = {
   stateResponse: 'editor:state-response', // c→room { s }
   materialized: 'editor:materialized', // s→room { assetId }
   comment: 'editor:comment', // s→room { comment }
+  commentDeleted: 'editor:comment-deleted', // s→room { id } (CS-15)
 } as const;
+
+/** CS-15 — author-only comment delete (DELETE /pages/:id/document/comments/:commentId). */
+export interface DeleteCaseCommentResponse {
+  id: string;
+}
 
 export interface WsEditorJoin {
   pageId: string;
@@ -123,6 +129,9 @@ export interface WsEditorMaterialized {
 }
 export interface WsEditorComment {
   comment: CaseCommentDto;
+}
+export interface WsEditorCommentDeleted {
+  id: string;
 }
 
 /** Awareness user state (client-side convention, typed here for FE reuse). */

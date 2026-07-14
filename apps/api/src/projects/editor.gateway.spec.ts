@@ -198,10 +198,20 @@ describe('EditorGateway broadcasts', () => {
     expect(emit).toHaveBeenCalledWith('editor:comment', { comment });
   });
 
+  // CS-15 — author-only delete fan-out.
+  it('emitCommentDeleted broadcasts { id } to the asset room', () => {
+    const { gateway } = build();
+    const { emit, to } = serverOf(gateway);
+    gateway.emitCommentDeleted('asset-1', 'cmt-1');
+    expect(to).toHaveBeenCalledWith('editor:asset:asset-1');
+    expect(emit).toHaveBeenCalledWith('editor:comment-deleted', { id: 'cmt-1' });
+  });
+
   it('both are no-ops (never throw) with no socket server (worker context)', () => {
     const { gateway } = build();
     (gateway as unknown as { server: unknown }).server = undefined;
     expect(() => gateway.emitMaterialized('p', 'a')).not.toThrow();
     expect(() => gateway.emitComment('a', { id: 'c', caseNo: 1, authorId: 'a', authorName: 'A', text: 'x', createdAt: 'x', anchorFrom: null, anchorTo: null, quote: null })).not.toThrow();
+    expect(() => gateway.emitCommentDeleted('a', 'c')).not.toThrow();
   });
 });

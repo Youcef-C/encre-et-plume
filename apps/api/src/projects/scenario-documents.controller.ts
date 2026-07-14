@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   AssetItem,
   AutosaveDocumentResponse,
   CaseCommentDto,
+  DeleteCaseCommentResponse,
   EditorDocumentResponse,
   SharePageResponse,
 } from '@encre-et-plume/shared';
@@ -52,6 +53,18 @@ export class ScenarioDocumentsController {
     @Query('asset') asset?: string,
   ): Promise<CaseCommentDto> {
     return this.scenarios.addComment(req.accountId, id, caseNo, dto, asset);
+  }
+
+  /** CS-15 — author-only delete of a scenario comment (403 for anyone else; 404 if it isn't on this
+   *  page's document). Broadcasts `comment:deleted` so connected peers drop it live. */
+  @Delete(':id/document/comments/:commentId')
+  deleteComment(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Query('asset') asset?: string,
+  ): Promise<DeleteCaseCommentResponse> {
+    return this.scenarios.deleteComment(req.accountId, id, commentId, asset);
   }
 
   /** "Partager": returns the editor URL (thin — every project member can already edit). */

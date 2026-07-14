@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   AssetItem,
   AutosaveDocumentRequest,
@@ -6,6 +6,7 @@ import type {
   CaseCommentDto,
   CaseSummary,
   CreateCaseCommentRequest,
+  DeleteCaseCommentResponse,
   EditorDocumentResponse,
   EditorTemplate,
   PlancheDocJson,
@@ -218,6 +219,24 @@ export class ScenarioDocumentsService {
     const dto = this.toCommentDto(created as never);
     this.gateway.emitComment(asset!.id, dto);
     return dto;
+  }
+
+  /**
+   * CS-15 — author-only delete of a scenario comment. Member-gated to reach the document (404, no leak);
+   * 404 before 403 so a non-author probing a bogus/foreign id learns nothing (404), while probing a real
+   * comment they don't own gets 403. On success the deletion fans out to peers over the /editor room.
+   */
+  async deleteComment(accountId: string, pageId: string, commentId: string, assetId?: string): Promise<DeleteCaseCommentResponse> {
+    const page = await this.resolveMemberPage(accountId, pageId);
+    const asset = await this.resolveEditorAsset(page, assetId);
+    const doc = asset ? await this.prisma.scenarioDocument.findUnique({ where: { assetId: asset.id }, select: { id: true } }) : null;
+    if (!doc) throw new NotFoundException('Commentaire introuvable');
+    const comment = await this.prisma.scenarioComment.findFirst({ where: { id: commentId, documentId: doc.id }, select: { id: true, authorId: true } });
+    if (!comment) throw new NotFoundException('Commentaire introuvable'); // unknown id, another document's comment, or a re-delete
+    if (comment.authorId !== accountId) throw new ForbiddenException('Seul l’auteur peut supprimer ce commentaire');
+    await this.prisma.scenarioComment.delete({ where: { id: commentId } });
+    this.gateway.emitCommentDeleted(asset!.id, commentId);
+    return { id: commentId };
   }
 
   async share(accountId: string, pageId: string): Promise<SharePageResponse> {

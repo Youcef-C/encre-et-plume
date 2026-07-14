@@ -28,6 +28,7 @@ export interface EditorCollabHandlers {
   onPeers?: (count: number) => void;
   onMaterialized?: (assetId: string) => void;
   onComment?: (raw: unknown) => void;
+  onCommentDeleted?: (id: string) => void;
 }
 
 /**
@@ -105,6 +106,10 @@ export class EditorCollabProvider {
     });
     this.socket.on(EDITOR_WS_EVENTS.comment, (p: { comment: unknown }) => {
       handlers.onComment?.(p.comment);
+    });
+    // CS-15 — a peer deleted their comment: drop it (and its highlight) from every connected editor.
+    this.socket.on(EDITOR_WS_EVENTS.commentDeleted, (p: { id: string }) => {
+      handlers.onCommentDeleted?.(p.id);
     });
   }
 

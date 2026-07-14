@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ASSET_ALLOWED_CONTENT_TYPES } from '@encre-et-plume/shared';
 import { ScenarioDocumentsService } from './scenario-documents.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -76,6 +76,8 @@ function buildPrisma(over: Record<string, any> = {}) {
       create: jest.fn().mockImplementation(({ data }: any) =>
         Promise.resolve({ id: 'cmt-1', createdAt: new Date('2026-07-14T00:00:00Z'), ...data, author: { displayName: 'Moi' } }),
       ),
+      findFirst: jest.fn().mockResolvedValue(null),
+      delete: jest.fn().mockResolvedValue({ id: 'cmt-1' }),
     },
     $transaction: jest.fn((fn: any) => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn))),
     ...over,
@@ -91,7 +93,7 @@ function makeService(prisma: any, over: Record<string, any> = {}) {
     addVersion: jest.fn().mockResolvedValue({ id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 2 }),
     getPreview: jest.fn().mockResolvedValue({ mode: 'text', text: 'Ligne un\n\nLigne deux', downloadUrl: 'x', filename: 'f', version: 1 }),
   };
-  const gateway = over.gateway ?? { emitMaterialized: jest.fn(), emitComment: jest.fn() };
+  const gateway = over.gateway ?? { emitMaterialized: jest.fn(), emitComment: jest.fn(), emitCommentDeleted: jest.fn() };
   const service = new ScenarioDocumentsService(
     prisma as unknown as PrismaService,
     media as unknown as MediaService,
@@ -368,6 +370,62 @@ describe('ScenarioDocumentsService.addComment', () => {
     const prisma = buildPrisma(); // no link → no document
     const { service } = makeService(prisma);
     await expect(service.addComment('acc-me', 'page-1', 1, { text: 'hi' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+// CS-15 — author-only delete of a scenario comment.
+describe('ScenarioDocumentsService.deleteComment', () => {
+  function withDoc(over: Record<string, any> = {}) {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'x', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1' });
+    Object.assign(prisma.scenarioComment, over);
+    return prisma;
+  }
+
+  it('lets the author delete their own comment, returns { id }, and broadcasts the deletion', async () => {
+    const prisma = withDoc({ findFirst: jest.fn().mockResolvedValue({ id: 'cmt-1', authorId: 'acc-me' }) });
+    const { service, gateway } = makeService(prisma);
+    const res = await service.deleteComment('acc-me', 'page-1', 'cmt-1');
+    expect(prisma.scenarioComment.delete).toHaveBeenCalledWith({ where: { id: 'cmt-1' } });
+    expect(res).toEqual({ id: 'cmt-1' });
+    expect(gateway.emitCommentDeleted).toHaveBeenCalledWith('asset-1', 'cmt-1');
+  });
+
+  it('403s a non-author on an existing comment (no delete, no broadcast)', async () => {
+    const prisma = withDoc({ findFirst: jest.fn().mockResolvedValue({ id: 'cmt-1', authorId: 'acc-yuki' }) });
+    const { service, gateway } = makeService(prisma);
+    await expect(service.deleteComment('acc-me', 'page-1', 'cmt-1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.scenarioComment.delete).not.toHaveBeenCalled();
+    expect(gateway.emitCommentDeleted).not.toHaveBeenCalled();
+  });
+
+  it('404s an unknown / already-deleted commentId', async () => {
+    const prisma = withDoc({ findFirst: jest.fn().mockResolvedValue(null) });
+    const { service } = makeService(prisma);
+    await expect(service.deleteComment('acc-me', 'page-1', 'cmt-gone')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('scopes the lookup to the page document (a comment on another document → 404)', async () => {
+    const prisma = withDoc({ findFirst: jest.fn().mockResolvedValue(null) });
+    const { service } = makeService(prisma);
+    await expect(service.deleteComment('acc-me', 'page-1', 'cmt-other')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.scenarioComment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: 'cmt-other', documentId: 'doc-1' }) }),
+    );
+  });
+
+  it('404s when the page has no document yet (comment before first save)', async () => {
+    const prisma = buildPrisma(); // no link → no document
+    const { service } = makeService(prisma);
+    await expect(service.deleteComment('acc-me', 'page-1', 'cmt-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404s a non-member (no existence leak) before touching the comment', async () => {
+    const prisma = withDoc();
+    const { service } = makeService(prisma);
+    await expect(service.deleteComment('stranger', 'page-1', 'cmt-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.scenarioComment.delete).not.toHaveBeenCalled();
   });
 });
 

@@ -25,10 +25,11 @@ import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
 import { plancheExtensions, blankPlancheDoc, casePlaceholder } from '../editor/richtext/planche-schema';
-import { commentRangesFrom, commentColor } from '../editor/richtext/comment-highlight';
+import { commentRangesFrom, commentColor, resolveCommentTexts, quoteChanged } from '../editor/richtext/comment-highlight';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
-import { FileTextIcon, ChatIcon, CaretDownIcon } from '../icons';
+import ConfirmDialog from '../projet/ConfirmDialog';
+import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon } from '../icons';
 
 const colorForId = (id: string): string => {
   let h = 0;
@@ -187,6 +188,9 @@ function EditorLoaded({
         onSync: () => setSynced(true),
         onMaterialized: (aid) => setAsset((a) => a ?? { id: aid, filename: 'scenario.html', currentVersion: 1 }),
         onComment: (raw) => setComments((list) => mergeComment(list, raw as CaseCommentDto)),
+        // CS-15 — a peer (or our own broadcast) deleted a comment: drop it; the highlight-repaint effect
+        // (keyed on `comments`) clears its decoration. Idempotent with the optimistic remove below.
+        onCommentDeleted: (id) => setComments((list) => list.filter((c) => c.id !== id)),
       },
       assetId,
     );
@@ -206,15 +210,21 @@ function EditorLoaded({
   // roster by clientID to toast a join/leave; the first population (existing peers on open) is silent.
   useEffect(() => {
     if (!provider) return;
-    const selfId = provider.awareness.clientID;
-    let known = new Map<number, string>();
+    const selfClientId = provider.awareness.clientID;
+    const selfUserId = account.id;
+    // Key the roster by user.id (not clientID): a reconnecting peer keeps its account id, so a reload
+    // doesn't fire a spurious leave+join, and the local account's own ghost is excluded.
+    let known = new Map<string, string>();
     let primed = false;
     const namesNow = () => {
-      const m = new Map<number, string>();
+      const m = new Map<string, string>();
       provider.awareness.getStates().forEach((state, clientId) => {
-        if (clientId === selfId) return;
+        if (clientId === selfClientId) return;
         const u = (state as Partial<EditorAwarenessState>).user;
-        if (u) m.set(clientId, u.name ?? 'Collaborateur');
+        if (!u) return;
+        const uid = u.id ?? String(clientId);
+        if (uid === selfUserId) return;
+        if (!m.has(uid)) m.set(uid, u.name ?? 'Collaborateur');
       });
       return m;
     };
@@ -230,14 +240,14 @@ function EditorLoaded({
       }
       known = now;
       primed = true;
-      setPeers(readPeers(provider));
+      setPeers(readPeers(provider, selfUserId));
     };
     provider.awareness.on('change', sync);
     sync();
     return () => {
       provider.awareness.off('change', sync);
     };
-  }, [provider, pushToast]);
+  }, [provider, pushToast, account.id]);
 
   // ── The TipTap editor bound to the Y.Doc; recreated when the provider instance changes. ──────
   const editor = useEditor(
@@ -321,6 +331,36 @@ function EditorLoaded({
     }));
     editor.commands.setCommentHighlights(ranges);
   }, [editor, comments, synced]);
+
+  // CS-15 — the live text under each comment anchor, for the sidebar "· modifié" indicator. Re-derived
+  // whenever the comment set or sync changes AND on every doc `update` (local + remote), so the marker
+  // tracks edits as they happen. Cheap: a handful of textBetween calls per keystroke.
+  const [liveTexts, setLiveTexts] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !editor.view) return;
+    const derive = () => setLiveTexts(resolveCommentTexts(editor.state));
+    derive();
+    editor.on('update', derive);
+    return () => {
+      editor.off('update', derive);
+    };
+  }, [editor, comments, synced]);
+
+  // CS-15 — author-only optimistic delete. Remove first, then DELETE; a 404 means it was already gone
+  // (raced with the WS event) → keep it removed; a 403 / network error restores the comment + toasts.
+  const deleteComment = useCallback(
+    async (c: CaseCommentDto) => {
+      setComments((list) => list.filter((x) => x.id !== c.id));
+      try {
+        await api.deleteCaseComment(pageId, c.id, assetId);
+      } catch (err) {
+        if ((err as { statusCode?: number })?.statusCode === 404) return;
+        setComments((list) => mergeComment(list, c));
+        pushToast('Impossible de supprimer le commentaire');
+      }
+    },
+    [pageId, assetId, pushToast],
+  );
 
   // ── Autosave (2s debounce) + typing awareness ────────────────────────────────
   const flushSave = useCallback(async () => {
@@ -458,6 +498,9 @@ function EditorLoaded({
             assetId={assetId}
             commentInputRef={commentInputRef}
             onCommentAdded={(c) => setComments((list) => mergeComment(list, c))}
+            meId={account.id}
+            liveTexts={liveTexts}
+            onDelete={deleteComment}
           />
         </div>
       </div>
@@ -856,6 +899,9 @@ function Sidebar({
   assetId,
   commentInputRef,
   onCommentAdded,
+  meId,
+  liveTexts,
+  onDelete,
 }: {
   comments: CaseCommentDto[];
   typingPeer: Peer | null;
@@ -865,11 +911,20 @@ function Sidebar({
   assetId?: string;
   commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
   onCommentAdded: (c: CaseCommentDto) => void;
+  /** CS-15 — the current account id: only the author of a comment sees its trash affordance. */
+  meId: string;
+  /** CS-15 — live text under each comment anchor (id → text), for the "· modifié" indicator. */
+  liveTexts: Map<string, string>;
+  /** CS-15 — optimistic author-only delete, owned by the parent (mutates the shared comment list). */
+  onDelete: (c: CaseCommentDto) => Promise<void>;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, forceRender] = useState(0);
+  // CS-15 — the comment awaiting the confirm dialog, and the id whose delete is in flight (disabled trash).
+  const [confirmDelete, setConfirmDelete] = useState<CaseCommentDto | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // Item 5 — the highlighted text range the next comment will anchor to. Captured whenever the editor
   // holds a non-empty selection; cleared when the selection collapses to a caret. Persists while the
   // user types in the textarea (ProseMirror keeps its selection in state even when the DOM blurs).
@@ -964,17 +1019,45 @@ function Sidebar({
       {/* Item 16 — the comments list scrolls internally (flex:1) so the composer below stays pinned. */}
       <div className="ep-comments-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucun commentaire</div>}
-        {comments.map((c, i) => (
+        {comments.map((c, i) => {
+          // CS-15 — "· modifié": the live anchored text differs from the stored quote (whitespace-tolerant).
+          // undefined = case-level comment (no anchor) → never modified. '' = the range was fully deleted.
+          const current = liveTexts.get(c.id);
+          const changed = c.quote != null && current !== undefined && quoteChanged(c.quote, current);
+          return (
           <div key={c.id} style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 10px', fontSize: 12, background: 'var(--card)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px', border: '1.5px solid var(--ink)', display: 'block' }} />
               <b>{c.authorName}</b>
+              {/* CS-15 — author-only delete. Real <button> (keyboard-operable), labelled with intent; no emoji. */}
+              {c.authorId === meId && (
+                <button
+                  type="button"
+                  aria-label="Supprimer le commentaire"
+                  title="Supprimer le commentaire"
+                  disabled={deletingId === c.id}
+                  onClick={() => setConfirmDelete(c)}
+                  style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'none', border: 'none', borderRadius: 6, padding: 0, color: 'var(--ink2)', cursor: deletingId === c.id ? 'default' : 'pointer', opacity: deletingId === c.id ? 0.5 : 1 }}
+                >
+                  <TrashIcon size={13} />
+                </button>
+              )}
             </div>
             {/* Item 5 — a range-anchored comment shows the quoted highlight + a jump-to-text affordance.
                 Its accent shares the same order-assigned colour as the in-canvas highlight (commentColor). */}
             {c.quote && (
               <div style={{ marginBottom: 5, borderLeft: `3px solid ${commentColor(i)}`, paddingLeft: 7 }}>
-                <div style={{ color: 'var(--ink2)', fontStyle: 'italic', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>« {c.quote} »</div>
+                <div style={{ color: 'var(--ink2)', fontStyle: 'italic', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  « {c.quote} »
+                  {/* CS-15 — the marker reads as TEXT (not colour-only) for a11y. */}
+                  {changed && <span style={{ color: 'var(--ink2)', fontStyle: 'normal', fontWeight: 700, fontSize: 10 }}> · modifié</span>}
+                </div>
+                {/* CS-15 — the current text, only when it changed AND the range still resolves (non-empty). */}
+                {changed && current !== '' && (
+                  <div style={{ marginTop: 2, color: 'var(--ink2)', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    maintenant : « {current} »
+                  </div>
+                )}
                 {c.anchorFrom != null && c.anchorTo != null && (
                   <button
                     type="button"
@@ -988,7 +1071,8 @@ function Sidebar({
             )}
             <div style={{ color: 'var(--ink)', lineHeight: 1.3 }}>{c.text}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Item 16 — the composer is pinned at the sidebar bottom (flex:none) while comments scroll. */}
@@ -1035,6 +1119,20 @@ function Sidebar({
         <p className="ep-comment-composer" style={{ fontSize: 11, color: 'var(--ink2)', fontStyle: 'italic' }}>Enregistrez d’abord le scénario pour commenter.</p>
       )}
       </div>
+      {/* CS-15 — confirm before the optimistic delete; the trash is disabled while the DELETE is in flight. */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Supprimer ce commentaire ?"
+          confirmLabel="Supprimer"
+          onConfirm={() => {
+            const c = confirmDelete;
+            setConfirmDelete(null);
+            setDeletingId(c.id);
+            void onDelete(c).finally(() => setDeletingId((id) => (id === c.id ? null : id)));
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </aside>
   );
 }
@@ -1122,15 +1220,22 @@ function decodeState(b64: string): Uint8Array {
 
 // B-2 — self-exclusion keys off the Yjs awareness clientID (stable), NOT user.id which
 // @tiptap/extension-collaboration-caret clobbers to { name, color } on mount.
-function readPeers(provider: EditorCollabProvider): Peer[] {
-  const out: Peer[] = [];
+// Reload dedup — on reload the browser gets a NEW clientID, but the previous connection's awareness
+// state can linger (server relays it before it's GC'd), so the OLD "you" arrives as a peer with the
+// same account id → a duplicate avatar + inflated count. Exclude any state whose user.id is the local
+// account, and collapse multiple connections of one account to a single avatar (dedupe by user.id).
+function readPeers(provider: EditorCollabProvider, selfUserId: string): Peer[] {
+  const byUser = new Map<string, Peer>();
   const selfClientId = provider.awareness.clientID;
   provider.awareness.getStates().forEach((state, clientId) => {
     if (clientId === selfClientId) return;
     const s = state as Partial<EditorAwarenessState>;
     if (!s.user) return;
-    out.push({
-      id: s.user.id ?? String(clientId),
+    const uid = s.user.id ?? String(clientId);
+    if (uid === selfUserId) return; // a ghost of myself from a previous connection (reload)
+    if (byUser.has(uid)) return; // one avatar per account, even across connections
+    byUser.set(uid, {
+      id: uid,
       name: s.user.name ?? 'Collaborateur',
       color: s.user.color ?? '#888',
       role: s.user.role ?? 'pen',
@@ -1138,7 +1243,7 @@ function readPeers(provider: EditorCollabProvider): Peer[] {
       avatar: s.user.avatar ?? null,
     });
   });
-  return out;
+  return [...byUser.values()];
 }
 
 function mergeComment(list: CaseCommentDto[], c: CaseCommentDto): CaseCommentDto[] {

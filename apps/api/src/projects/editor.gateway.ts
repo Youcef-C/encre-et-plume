@@ -157,6 +157,12 @@ export class EditorGateway implements OnGatewayConnection {
     this.server.to(assetRoom(assetId)).emit(EDITOR_WS_EVENTS.comment, { comment });
   }
 
+  /** CS-15 — called by the service after a comment delete commits: peers drop it live. */
+  emitCommentDeleted(assetId: string, id: string): void {
+    if (!this.server) return;
+    this.server.to(assetRoom(assetId)).emit(EDITOR_WS_EVENTS.commentDeleted, { id });
+  }
+
   private async appendUpdate(assetId: string, u: string): Promise<void> {
     const doc = await this.prisma.scenarioDocument.findUnique({ where: { assetId }, select: { id: true } });
     if (!doc) return;

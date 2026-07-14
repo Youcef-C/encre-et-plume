@@ -1053,6 +1053,7 @@ import type {
   SnapshotVersionResponse,
   CaseCommentDto,
   CreateCaseCommentRequest,
+  DeleteCaseCommentResponse,
   SharePageResponse,
 } from '@encre-et-plume/shared';
 
@@ -1093,6 +1094,17 @@ export const addCaseComment = (
     method: 'POST',
     body: JSON.stringify(body),
   });
+
+// CS-15 — author-only delete of a scenario comment (same `?asset=` override the editor opened with).
+export const deleteCaseComment = (
+  pageId: string,
+  commentId: string,
+  assetId?: string,
+): Promise<DeleteCaseCommentResponse> =>
+  request<DeleteCaseCommentResponse>(
+    `/pages/${encodeURIComponent(pageId)}/document/comments/${encodeURIComponent(commentId)}${assetQuery(assetId)}`,
+    { method: 'DELETE' },
+  );
 
 export const sharePage = (pageId: string): Promise<SharePageResponse> =>
   request<SharePageResponse>(`/pages/${encodeURIComponent(pageId)}/share`, { method: 'POST' });
