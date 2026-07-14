@@ -1114,17 +1114,19 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
   return cursor;
 }
 
-// Word-like caret scrolling: while the caret is anywhere in the VISIBLE viewport (below the sticky
-// header, above the bottom edge) the view does NOT move — typing more chars on a visible line never
-// shifts the camera. The page only scrolls when the caret would actually leave the visible area:
-// slip behind the header (scroll up) or drop below the bottom edge (scroll down). When it does scroll
-// down it re-anchors the caret with runway (~72% of the window) so you get several fresh lines before
-// the next scroll, instead of a shift every line. `window.scrollTo` clamps to [0, maxScroll], so near
-// the document end the caret just rests wherever the remaining paper allows.
+// Word-like caret scrolling. The camera reacts to the caret changing LINE, never to typing on the
+// current line: appending a character (or deleting one) leaves the caret on the same visual line, so
+// its absolute document Y is unchanged and we do nothing — the view never shifts on char input, even
+// when the caret rests at the very bottom of the window. Only when the caret moves to a new line (a
+// newline, arrow key, wrap, or reflow that relocates it) do we check whether it left the comfortable
+// band: dropped below the bottom edge → scroll down and re-anchor with runway (~72% of the window, so
+// several fresh lines follow before the next scroll); slipped behind the sticky header → scroll up
+// just enough to clear it. `window.scrollTo` clamps to [0, maxScroll]. Single editor per page load, so
+// a module-level "last line Y" is enough (resets on navigation).
 const CARET_TOP_MARGIN = 180; // px kept clear at the top for the sticky header + toolbar
-const CARET_BOTTOM_MARGIN = 10; // px — the caret only counts as "off-screen" once clipped by the edge,
-// so any visible caret (even resting on the last line at ~95%) never shifts the view on char input.
+const CARET_BOTTOM_MARGIN = 24; // px kept clear at the bottom edge so the caret line never touches 100vh
 const CARET_REANCHOR = 0.72; // on a downward scroll, land the caret this far down (runway for more lines)
+let lastCaretDocY: number | null = null; // absolute (scroll-independent) Y of the caret's last line
 function scrollCaretIntoView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
   if (typeof window === 'undefined') return false;
   let coords: { top: number; bottom: number };
@@ -1133,9 +1135,14 @@ function scrollCaretIntoView(view: { state: { selection: { head: number } }; coo
   } catch {
     return false; // let PM fall back to its default if the position can't be measured
   }
+  // Absolute document Y of the caret line — unchanged while typing on the same line, so char input is
+  // a no-op (the core of "don't shift on character input, only on newline").
+  const docY = Math.round(coords.top + window.scrollY);
+  if (lastCaretDocY !== null && Math.abs(docY - lastCaretDocY) < 2) return true;
+  lastCaretDocY = docY;
   let delta = 0;
   if (coords.bottom > window.innerHeight - CARET_BOTTOM_MARGIN) {
-    delta = coords.bottom - window.innerHeight * CARET_REANCHOR; // caret went off the bottom → scroll, land at 72%
+    delta = coords.bottom - window.innerHeight * CARET_REANCHOR; // caret dropped to a new line off the bottom → scroll, land at 72%
   } else if (coords.top < CARET_TOP_MARGIN) {
     delta = coords.top - CARET_TOP_MARGIN; // caret behind the chrome → scroll up just enough to clear it
   }
