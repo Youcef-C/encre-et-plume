@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EditorDocumentResponse } from '@encre-et-plume/shared';
 
@@ -167,9 +167,8 @@ describe('EditorClient (Éditeur shell)', () => {
 
   it('rejects an empty comment', async () => {
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
-    // Two "＋ Commentaire" buttons: the toolbar one focuses the field, the sidebar one submits.
-    const buttons = screen.getAllByRole('button', { name: '＋ Commentaire' });
-    await userEvent.click(buttons[buttons.length - 1]);
+    // Commenting lives ONLY in the sidebar composer (the toolbar "＋ Commentaire" was removed in b8e1e9e).
+    await userEvent.click(screen.getByRole('button', { name: '＋ Commentaire' }));
     expect(await screen.findByText('Le commentaire ne peut pas être vide')).toBeInTheDocument();
     expect(api.addCaseComment).not.toHaveBeenCalled();
   });
@@ -221,5 +220,55 @@ describe('EditorClient (Éditeur shell)', () => {
     const live = providerHolder.instances[providerHolder.instances.length - 1];
     expect(live.destroyed).toBe(false); // the finally-active provider survives
     expect(providerHolder.instances.some((p) => p.destroyed)).toBe(true); // an earlier one was torn down
+  });
+
+  // ── Regression guards for the two reported "out of nowhere" breakages (b8e1e9e). Both turned out to
+  //    be a stale API build (dist/main predating the `template` column) mid `nest --watch` rebuild, not
+  //    a code defect — these lock the intended behavior so a genuine future regression is caught. ──
+
+  it('Manga/Prose selector toggles prose mode and gates "Ajouter une case" (regression item 20/26)', async () => {
+    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc({ template: null }));
+    const { container } = render(<EditorClient slug="lames" pageId="pg1" />);
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    act(() => getProvider().handlers.onStatus!('connected'));
+
+    const canvas = () => container.querySelector('.ep-planche-canvas')!;
+    const selector = screen.getByRole('group', { name: 'Modèle du document' });
+    const mangaBtn = within(selector).getByRole('button', { name: 'Manga' });
+    const proseBtn = within(selector).getByRole('button', { name: 'Prose' });
+
+    // template === null → no prose class, neither option pressed, add-case disabled.
+    expect(canvas().className).not.toContain('ep-mode-prose');
+    expect(mangaBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeDisabled();
+
+    // Pick Manga → add-case becomes enabled (accent-red), still not prose.
+    await userEvent.click(mangaBtn);
+    expect(mangaBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeEnabled();
+    expect(canvas().className).not.toContain('ep-mode-prose');
+
+    // Pick Prose → canvas hides case chrome (ep-mode-prose) and the add-case button is gone entirely.
+    await userEvent.click(proseBtn);
+    expect(proseBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(canvas().className).toContain('ep-mode-prose');
+    expect(screen.queryByRole('button', { name: /Ajouter une case/ })).not.toBeInTheDocument();
+
+    // Back to Manga → prose chrome removed, add-case returns.
+    await userEvent.click(mangaBtn);
+    expect(canvas().className).not.toContain('ep-mode-prose');
+    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeInTheDocument();
+  });
+
+  it('keeps the comments-only sidebar + composer in Prose mode (regression item 16/28)', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, template: 'prose' }));
+
+    // The "En ligne" presence roster is intentionally gone; the Commentaires section must remain.
+    expect(screen.queryByText('En ligne')).not.toBeInTheDocument();
+    expect(screen.getByText('Commentaires')).toBeInTheDocument();
+
+    // The sticky composer (textarea + submit) is present and usable even though prose has no visible cases.
+    expect(screen.getByPlaceholderText('Votre commentaire…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '＋ Commentaire' })).toBeInTheDocument();
   });
 });
