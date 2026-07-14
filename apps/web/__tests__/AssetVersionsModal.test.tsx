@@ -151,6 +151,34 @@ describe('AssetVersionsModal', () => {
     expect(api.getAssetVersions).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps focus inside the dialog after activating a version, so Escape still closes', async () => {
+    const updated: AssetItem = { ...asset, currentVersion: 1 };
+    vi.mocked(api.setAssetActiveVersion).mockResolvedValue(updated);
+    // After the switch the list reloads with v1 active → v1's "Rendre active" button unmounts.
+    const flipped: AssetVersionItem[] = [
+      { ...versions[0], active: false },
+      { ...versions[1], active: true },
+    ];
+    vi.mocked(api.getAssetVersions).mockResolvedValueOnce(versions).mockResolvedValue(flipped);
+    const onClose = vi.fn();
+    render(<AssetVersionsModal slug="s1" asset={asset} onClose={onClose} onUpdated={vi.fn()} />);
+    await screen.findByText('v2');
+
+    await userEvent.click(screen.getByRole('button', { name: /Rendre active la version 1/ }));
+
+    // The clicked row's button is replaced by the "Version active" badge…
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Rendre active la version 1/ })).not.toBeInTheDocument(),
+    );
+    // …but focus must stay inside the dialog, not drop to <body>.
+    expect(document.activeElement).not.toBe(document.body);
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+
+    // Escape still closes because the keydown reaches the dialog's onKeyDown.
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('read-only viewers cannot switch the active version', async () => {
     render(<AssetVersionsModal slug="s1" asset={asset} readOnly onClose={vi.fn()} onUpdated={vi.fn()} />);
     await screen.findByText('v2');

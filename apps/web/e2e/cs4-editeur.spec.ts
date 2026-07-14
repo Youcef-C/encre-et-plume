@@ -75,7 +75,15 @@ function commentItem(page: Page, text: string) {
 }
 
 async function typeIntoCase(page: Page, no: number, text: string) {
-  await caseBlock(page, no).locator('[data-case-description] p').first().click();
+  // A plain click lands the caret wherever it hits (the paragraph's centre when the line already has
+  // text) — appending to a non-empty case would then splice the new run mid-word. `End` is NOT a
+  // reliable fix: on macOS the End key doesn't move the caret in a contenteditable. Instead click at the
+  // paragraph's right edge, which places the caret at the end of the text (or the empty tail) cross-
+  // platform (harmless on an empty case).
+  const para = caseBlock(page, no).locator('[data-case-description] p').first();
+  const box = await para.boundingBox();
+  if (box) await para.click({ position: { x: box.width - 2, y: box.height - 2 } });
+  else await para.click();
   await page.keyboard.type(text, { delay: 20 });
 }
 
@@ -203,8 +211,11 @@ test.describe('CS-4 Éditeur — presence count (single connected user)', () => 
 
     await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 }); // editor mounted, awareness settled
     await page.waitForTimeout(1500); // let the CollaborationCaret ProseMirror view finish mounting
+    // Presence is the header count (the named roster was removed — see EditorClient.test.tsx). A single
+    // connected browser must read EXACTLY "1 en ligne": if self were double-counted (the old caret-clobber
+    // bug) readPeers would leak the self clientID back in and the header would read "2 en ligne".
     await expect(page.getByText('1 en ligne')).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('aside').getByText('E2E CS12_OWNER')).toHaveCount(1);
+    await expect(page.getByText('2 en ligne')).toHaveCount(0);
   });
 });
 
@@ -451,29 +462,19 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await a.keyboard.type('Encore une réplique en train de s’écrire', { delay: 80 });
     await expect(b.getByText(/écrit…/)).toBeVisible({ timeout: 5_000 });
 
-    // Presence: both header counts should read "2 en ligne" and each member should appear EXACTLY
-    // ONCE in the sidebar roster. FAILS TODAY (real bug, kept as a real assertion, not skipped):
-    // `CollaborationCaret`'s ProseMirror-view mount overwrites the app's own richer
-    // `{id,name,color,role}` Yjs-awareness "user" field with `{name,color}` only (see
-    // @tiptap/extension-collaboration-caret's `addProseMirrorPlugins().view()` →
-    // `provider.awareness.setLocalStateField("user", user)`), which strips `id` and breaks the
-    // self-exclusion filter in `readPeers()` (`components/editeur/EditorClient.tsx`) — each client
-    // double-counts itself, so 2 real members show as "3 en ligne" with one name listed twice. See
-    // the qa-report for the fix direction.
-    const rosterA = a.locator('aside', { hasText: 'En ligne' });
-    const rosterB = b.locator('aside', { hasText: 'En ligne' });
+    // Presence: with two real members joined, BOTH header counts must read EXACTLY "2 en ligne" — no
+    // more, no less. This is the self-duplication regression guard: `CollaborationCaret`'s ProseMirror
+    // view mount overwrites the app's `{id,name,color,role}` Yjs-awareness "user" field with `{name,color}`
+    // only, stripping `id`, so `readPeers()` (EditorClient.tsx) MUST self-exclude on the Yjs clientID, not
+    // user.id. If it regressed to id-keyed exclusion each client would re-count itself and read "3 en
+    // ligne". (The named presence roster was removed — presence now lives in the header count + the avatar
+    // stack; see EditorClient.test.tsx "the En ligne presence roster is intentionally gone".)
     await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 15_000 });
     await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 15_000 });
-    await expect(rosterA.getByText('E2E CS12_OWNER')).toHaveCount(1);
-    await expect(rosterA.getByText('E2E CS12_COLLAB')).toHaveCount(1);
-    await expect(rosterB.getByText('E2E CS12_OWNER')).toHaveCount(1);
-    await expect(rosterB.getByText('E2E CS12_COLLAB')).toHaveCount(1);
+    await expect(a.getByText('3 en ligne')).toHaveCount(0);
+    await expect(b.getByText('3 en ligne')).toHaveCount(0);
 
     // A's autosave materializes the scenario (v1) — B's toolbar picks up the version chip too.
-    // FAILS TODAY (a second, separate real bug — see the qa-report): `ScenarioDocumentsService`'s
-    // create-when-none path calls `MediaService.ingestAsset(html, 'text/html')`, but
-    // `ASSET_ALLOWED_CONTENT_TYPES` (packages/shared/src/media.ts) never got `'text/html'` added, so
-    // the autosave PATCH 400s ("Format non pris en charge") and the scenario never materializes.
     await expect(a.getByText('Enregistré ✓')).toBeVisible({ timeout: 15_000 });
     await expect(a.getByText('v1')).toBeVisible({ timeout: 10_000 });
 
@@ -532,9 +533,9 @@ test.describe('CS-4 Éditeur — responsive sweep (375/768/1280)', () => {
 
       expect(await noHorizontalOverflow(page)).toBe(true);
       if (width === 375) {
-        // sidebar stacks below the canvas, still reachable (scope to the aside — "En ligne"/"en ligne"
-        // also substring-matches the header count and the unrelated global "Le Comptoir" widget).
-        await expect(page.locator('aside').getByText('En ligne', { exact: true })).toBeVisible();
+        // The comments sidebar stacks below the canvas, still reachable (the aside is aria-label
+        // "Commentaires" — the removed presence roster no longer renders an "En ligne" heading here).
+        await expect(page.locator('aside').getByText('Commentaires', { exact: true })).toBeVisible();
         await page.screenshot({ path: `test-results/cs4-editeur-${width}.png`, fullPage: true });
       }
     });

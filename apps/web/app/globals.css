@@ -1305,59 +1305,59 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Planche canvas — structured CASE blocks. "CASE N" accent label + italic "Description —" prefix
    are CSS chrome (not editable document text), matching prototype lines 1051-1054. */
 .ep-planche-canvas .ProseMirror { outline: none; }
-/* Item 11 — each case is its own bordered A4 "sheet": white paper, A4 portrait shape (min-height via
-   aspect-ratio, grows with content), ink border + hard offset shadow, and inner page margins so text
-   is visually BOUNDED per sheet. The gap between sheets is the studio tone showing through, so a long
-   scenario reads as stacked, clearly-separated pages instead of one endless block.
-   ponytail: not a true content-reflow paginator (that needs a ProseMirror pagination plugin); one
-   sheet per case is the smallest thing that reads as distinct pages and never lets text spill into
-   the inter-sheet gap. */
+/* Item 24 — TRUE content-reflow pagination. The case is a transparent container that is at least one
+   A4 page tall (min-height = --ep-page-h, set live from the sheet width by pagination.ts). It holds a
+   frame LAYER (one bordered A4 "sheet" per page, drawn by .ep-page-frame) behind the editable content.
+   When content grows past one page, pagination.ts pushes the overflowing block onto the next frame via
+   a spacer, and adds another frame — so a long scenario reads as stacked, clearly-separated A4 sheets
+   with a real studio-tone gutter between them, and text never runs across the boundary. */
 .ep-planche-canvas .ep-case-block {
-  background: var(--card);
-  border: 3px solid var(--ink);
-  box-shadow: 5px 5px 0 var(--shadow);
-  border-radius: 4px;
-  aspect-ratio: 210 / 297;
-  padding: 46px 54px;
+  position: relative;
+  min-height: var(--ep-page-h, 1131px); /* one A4 page until measured; 800×297/210 ≈ 1131 */
   margin: 0 0 var(--ep-page-gap, 26px);
   box-sizing: border-box;
   overflow-wrap: anywhere;
 }
-.ep-planche-canvas .ep-case-block { position: relative; }
-.ep-planche-canvas .ep-case-block::before {
+/* The frame layer: one absolutely-positioned A4 sheet per page (top/height set inline by pagination.ts).
+   Behind the text (z-index:0) and non-interactive, so it never intercepts the caret. */
+.ep-planche-canvas .ep-page-frames {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.ep-planche-canvas .ep-page-frame {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0; /* overridden inline per page by pagination.ts; default shows page 1 pre-measure */
+  height: var(--ep-page-h, 1131px);
+  background: var(--card);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--shadow);
+  border-radius: 4px;
+}
+/* The editable page area: full-page inner margins so text is visually BOUNDED inside each frame, and
+   above the frame layer (z-index:1). The "CASE N" accent label is CSS chrome at the top of the sheet. */
+.ep-planche-canvas .ep-case-content {
+  position: relative;
+  z-index: 1;
+  padding: 46px 54px;
+}
+.ep-planche-canvas .ep-case-content::before {
   content: "CASE " attr(data-case-no);
   display: block;
   font-weight: 700;
   color: var(--accent);
   font-size: 13px;
   margin-bottom: 2px;
-  position: relative;
-  z-index: 1;
 }
-/* Item 24 — the case's editable content sits above the page-break overlay (which is z-index:0). */
-.ep-planche-canvas .ep-case-content { position: relative; z-index: 1; }
-/* Item 24 — page-boundary separators drawn every A4 page-height (--ep-page-h, set live from the sheet
-   width by the case NodeView). A soft studio-tone band with hairline edges reads as the gutter between
-   two stacked pages, so content that overflows one page visibly continues onto the next. Behind the
-   text (z-index:0), so it never intercepts the caret. */
-.ep-planche-canvas .ep-page-breaks {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+/* A page-break spacer (widget decoration from pagination.ts): pure vertical space pushing the next
+   block onto the following frame. Never selectable, height set inline. */
+.ep-planche-canvas .ep-page-spacer {
+  display: block;
   pointer-events: none;
-  border-radius: inherit;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent calc(var(--ep-page-h, 9999px) - 9px),
-    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) - 9px),
-    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) - 8px),
-    var(--tone) calc(var(--ep-page-h, 9999px) - 8px),
-    var(--tone) calc(var(--ep-page-h, 9999px) + 8px),
-    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) + 8px),
-    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) + 9px),
-    transparent calc(var(--ep-page-h, 9999px) + 9px)
-  );
+  user-select: none;
 }
 /* Item 5 — inline highlight for a range-anchored comment: a soft accent wash the reader can see in the
    canvas. Applied as a ProseMirror inline decoration (comment-highlight.ts), never serialized. */
@@ -1399,7 +1399,7 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Item 20 — prose mode: the same planche doc, presented as one plain rich-text page. Hide the case
    chrome (CASE label, Description prefix, per-case remove button) and flatten the sheet to a page so
    the manga scaffolding disappears when the writer picked "Édition normale". */
-.ep-planche-canvas.ep-mode-prose .ep-case-block::before,
+.ep-planche-canvas.ep-mode-prose .ep-case-content::before,
 .ep-planche-canvas.ep-mode-prose .ep-case-description > :first-child::before,
 .ep-planche-canvas.ep-mode-prose .ProseMirror .is-empty::before,
 .ep-planche-canvas.ep-mode-prose .ep-case-remove { display: none; content: none; }
@@ -1519,7 +1519,7 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* ≤768px: full-width A4 sheet (padding reduced); toolbar scrolls horizontally. The global header
    stays 68px at every breakpoint, so the sticky controls' top:68px needs no override. */
 @media (max-width: 768px) {
-  .ep-planche-canvas .ep-case-block { padding: 28px 22px; }
+  .ep-planche-canvas .ep-case-content { padding: 28px 22px; }
   .ep-editor-main { padding: 16px 14px !important; }
   .ep-rt-toolbar {
     flex-wrap: nowrap !important;

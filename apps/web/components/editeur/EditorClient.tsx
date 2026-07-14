@@ -1063,12 +1063,12 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
   const name = String(user.name ?? 'Collaborateur');
   const color = String(user.color ?? 'var(--accent)');
   const cursor = document.createElement('span');
-  cursor.classList.add('collaboration-cursor__caret');
+  cursor.classList.add('collaboration-carets__caret');
   cursor.setAttribute('style', `border-color: ${color}`);
   cursor.setAttribute('role', 'img');
   cursor.setAttribute('aria-label', `Curseur de ${name}`);
   const label = document.createElement('div');
-  label.classList.add('collaboration-cursor__label');
+  label.classList.add('collaboration-carets__label');
   label.setAttribute('style', `background-color: ${color}`);
   label.insertBefore(document.createTextNode(name), null);
   cursor.insertBefore(label, null);

@@ -86,6 +86,10 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
       // Leave the list untouched; a transient failure keeps the previous active version.
     } finally {
       setSwitching(null);
+      // The clicked "Rendre active" button unmounts (replaced by the "Version active" badge),
+      // which would drop focus to <body> and break Escape/keyboard nav. Move focus to the
+      // always-mounted Fermer button so the dialog stays keyboard-operable.
+      closeRef.current?.focus();
     }
   }
 
