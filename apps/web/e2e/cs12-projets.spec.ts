@@ -111,12 +111,12 @@ test.describe('CS-12 Mes projets — signed in (e2e-cs12-owner)', () => {
     await expect(page).not.toHaveURL(/statut=/);
   });
 
-  test('CS12-E4: five type chips (Tous/Manga/Histoire/Illustrations/Collections), single-active, URL-synced', async ({ page }) => {
+  test('CS12-E4: six type chips (Tous/Manga/Histoire/Illustrations/Collections/Collaborations), single-active, URL-synced', async ({ page }) => {
     await loginAsOwner(page);
     await page.goto('/projets');
     const typeGroup = page.getByRole('group', { name: 'Filtrer par type' });
-    await expect(typeGroup.getByRole('button')).toHaveCount(5);
-    for (const label of ['Tous', 'Manga', 'Histoire', 'Illustrations', 'Collections']) {
+    await expect(typeGroup.getByRole('button')).toHaveCount(6);
+    for (const label of ['Tous', 'Manga', 'Histoire', 'Illustrations', 'Collections', 'Collaborations']) {
       await expect(typeGroup.getByRole('button', { name: label })).toBeVisible();
     }
 
