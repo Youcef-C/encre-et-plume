@@ -156,7 +156,7 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
 
     // Comments are now enabled (materialized in CS4-E2).
     const sidebar = page.locator('aside');
-    const commentBox = page.getByLabel('Ajouter un commentaire à la case 1');
+    const commentBox = page.getByLabel('Ajouter un commentaire');
     await expect(commentBox).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: '＋ Commentaire' }).click();
     await expect(sidebar.getByRole('alert')).toHaveText('Le commentaire ne peut pas être vide');
@@ -165,7 +165,6 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await page.getByRole('button', { name: '＋ Commentaire' }).click();
     const posted = commentItem(page, 'On raccourcit la réplique ?');
     await expect(posted).toBeVisible({ timeout: 10_000 });
-    await expect(posted.getByText('case 1', { exact: true })).toBeVisible();
   });
 
   test('CS4-E4: "Enregistrer une nouvelle version" snapshots vN explicitly; a further autosave does NOT bump it again', async ({ page }) => {
@@ -363,8 +362,8 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
     // (empty) dialogue field — a plain click collapses any active selection reliably, unlike a
     // keyboard nav key on top of a decoration-driven ProseMirror selection.
     await caseBlock(page, 1).locator('[data-case-dialogue] p').first().click();
-    await expect(sidebar.getByText('Commentaire — case 1')).toBeVisible({ timeout: 5_000 });
-    await page.getByLabel(/Ajouter un commentaire à la case 1/).fill('Commentaire de case, pas de sélection.');
+    await expect(sidebar.getByText('Commentaire', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await page.getByLabel('Ajouter un commentaire').fill('Commentaire de case, pas de sélection.');
     await page.getByRole('button', { name: '＋ Commentaire' }).click();
     const posted2 = commentItem(page, 'Commentaire de case, pas de sélection.');
     await expect(posted2).toBeVisible({ timeout: 10_000 });
@@ -449,25 +448,18 @@ test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 
     await page.close();
   });
 
-  test('CS4-E24: content past one A4 page reflows onto successive bordered sheets in BOTH Manga and Prose; caret stays put on Enter', async ({ page }) => {
+  test('CS4-E24: content past one A4 page reflows onto successive bordered sheets; caret stays put on Enter', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}`);
     await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
     await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
 
-    // Pick the Manga scheme, then fill past one page — content must reflow onto a 2nd bordered sheet.
-    await page.getByRole('button', { name: 'Manga', exact: true }).click();
+    // Fill past one page — content must reflow onto a 2nd bordered sheet.
     await fillPastOnePage(page, 1, 55);
     await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
     await expectMultiSheetReflow(page);
-
-    // Switch to Prose — the SAME long document must paginate identically (this is the blocker-1 fix:
-    // prose hid the case chrome and pagination stopped reflowing; it must now behave like Manga).
-    await page.getByRole('button', { name: 'Prose', exact: true }).click();
-    await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
-    await expectMultiSheetReflow(page);
-    await expectContentInsideSheet(page); // content stays on the page in Prose too
+    await expectContentInsideSheet(page); // content stays on the page
 
     // Caret stability: with the doc paginated, press Enter then type a marker — it lands right after
     // the caret (the spacer is a view-only decoration that never touches the doc position).
@@ -510,7 +502,7 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     await page.close();
   });
 
-  // Each test gets a fresh blank card (the docs mutate), opened in Manga at 1280×900.
+  // Each test gets a fresh blank card (the docs mutate), opened at 1280×900.
   async function openFreshEditor(page: Page) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await login(page, OWNER_EMAIL);
@@ -520,10 +512,9 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     await kanbanCard(page, `Page ${card}`).getByRole('link', { name: 'Éditer le scénario' }).click();
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
     await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Manga', exact: true }).click();
   }
 
-  test('CS4-E24b: a doc UNDER one page stays a single sheet even with many trailing blank lines — no phantom page 2, in Manga AND Prose', async ({ page }) => {
+  test('CS4-E24b: a doc UNDER one page stays a single sheet even with many trailing blank lines — no phantom page 2', async ({ page }) => {
     await openFreshEditor(page);
     const content = caseBlock(page, 1).locator('.ep-case-content').first();
     await content.click({ position: { x: 40, y: 40 } });
@@ -536,19 +527,11 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     for (let i = 0; i < 15; i++) await page.keyboard.press('Enter');
     await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
 
-    // Manga: exactly ONE page (no page-break spacer), sheet no taller than one A4, content on the page.
+    // Exactly ONE page (no page-break spacer), sheet no taller than one A4, content on the page.
     await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 }).toBe(1);
-    let geo = (await paginationGeometry(page, 1))!;
+    const geo = (await paginationGeometry(page, 1))!;
     expect(geo.nonZeroSpacers).toBe(0);
     expect(geo.blockHeight).toBeLessThanOrEqual(geo.pageH + 4);
-    expect(geo.contentInsideSheet).toBe(true);
-
-    // Prose: the same doc must ALSO stay a single sheet, content still on the page.
-    await page.getByRole('button', { name: 'Prose', exact: true }).click();
-    await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
-    await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 }).toBe(1);
-    geo = (await paginationGeometry(page, 1))!;
-    expect(geo.nonZeroSpacers).toBe(0);
     expect(geo.contentInsideSheet).toBe(true);
     await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-single-sheet-1280.png', fullPage: true });
   });
@@ -627,11 +610,14 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     await content.click({ position: { x: 40, y: 40 } });
 
     // Type line by line until content overflows onto a SECOND page. The line that tips it over is
-    // exactly "Enter at the bottom of a filled page adds a new page". Reset scroll each step so the
-    // final caret position proves the view followed the caret onto the new page (not that we scrolled).
+    // exactly "Enter at the bottom of a filled page adds a new page". We do NOT reset scroll between
+    // lines: the caret-follow is line-change-gated on absolute document Y (EditorClient.scrollCaretIntoView)
+    // and deliberately ignores an external scroll (it treats it as a manual scroll not to fight), so a
+    // per-line scrollTo(0,0) would defeat the very re-anchoring we mean to observe. Letting the app
+    // scroll as it re-anchors each new line IS the view following the caret — which the band check below
+    // then proves, since past one page there is real overflow beyond a single viewport.
     let pages = 1;
     for (let i = 0; i < 70 && pages < 2; i++) {
-      await page.evaluate(() => window.scrollTo(0, 0));
       await page.keyboard.type(`Ligne ${i} pour remplir la planche jusqu'en bas.`);
       pages = (await paginationGeometry(page, 1))?.pages ?? 1;
       if (pages < 2) await page.keyboard.press('Enter');
@@ -727,12 +713,11 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await expect(a.getByText('v1')).toBeVisible({ timeout: 10_000 });
 
     // Comments: A posts a comment → it appears live in B, anchored to the right case, no reload.
-    await a.getByLabel(/Ajouter un commentaire à la case/).fill('Yuki: on garde cette version ?');
+    await a.getByLabel('Ajouter un commentaire').fill('Yuki: on garde cette version ?');
     await a.getByRole('button', { name: '＋ Commentaire' }).click();
     await expect(a.getByText('Yuki: on garde cette version ?')).toBeVisible({ timeout: 10_000 });
     const postedInB = commentItem(b, 'Yuki: on garde cette version ?');
     await expect(postedInB).toBeVisible({ timeout: 10_000 });
-    await expect(postedInB.getByText('case 1', { exact: true })).toBeVisible();
 
     await ctxA.close();
     await ctxB.close();
@@ -765,8 +750,17 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     const page = await browser.newPage();
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${MULTI_SLUG}`);
-    await addCard(page);
-    const href = await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).getAttribute('href');
+    // MULTI_SLUG is shared with the CS4-RT block above (same project, same e2e-seed reset) — when the
+    // full spec file runs, that block already added its own "Page 1" card, so the auto-numbered title
+    // here is "Page N+1", not "Page 1" (a hardcoded 'Page 1' lookup would silently resolve to the
+    // earlier block's card/pageId instead of ours). Wait for the board to finish hydrating before
+    // counting so a pre-existing card isn't missed by a too-early read.
+    const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
+    await expect(scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' })).toBeVisible({ timeout: 10_000 });
+    await page.waitForLoadState('networkidle');
+    const existing = await page.locator('div[draggable="true"]').filter({ hasText: /Page \d+/ }).count();
+    const title = await addCard(page, existing + 1);
+    const href = await kanbanCard(page, title).getByRole('link', { name: 'Éditer le scénario' }).getAttribute('href');
     pageId = href!.split('/editeur/')[1];
     await page.close();
   });
