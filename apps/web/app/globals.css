@@ -1302,12 +1302,13 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   [style*="epType"] { animation: none !important; }
 }
 
-/* Planche canvas — structured CASE blocks. "CASE N" accent label + italic "Description —" prefix
-   are CSS chrome (not editable document text), matching prototype lines 1051-1054. */
+/* Planche canvas — prose-only writing sheet. The caseBlock/caseDescription schema is kept as the sheet
+   container (pagination + backend projection), but the manga chrome (CASE label, Description prefix,
+   remove button) is always hidden (see the suppression rule below). */
 .ep-planche-canvas .ProseMirror { outline: none; }
 /* Item 24 — TRUE content-reflow pagination. The case block is the A4 writing sheet: a plain full-white
    area (no page border/shadow) the editable content lives DIRECTLY inside, so text and caret are always
-   visibly ON the page — never on a background layer, in either Manga or Prose. It is at least one A4
+   visibly ON the page — never on a background layer. It is at least one A4
    page tall (min-height = --ep-page-h, set live from the width by pagination.ts) and GROWS with content.
    When content passes a page boundary, pagination.ts pushes the overflowing block past a page-break gap
    (a spacer styled as a rule + a "Page N" indicator), so long text starts a new page instead of
@@ -1320,20 +1321,18 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   overflow-wrap: anywhere;
   background: var(--card);
 }
-/* The editable page area: full-page inner margins so text is visually BOUNDED inside the sheet border.
-   The "CASE N" accent label is CSS chrome at the top of the sheet. */
+/* The editable page area: full-page inner margins so text is visually BOUNDED inside the sheet border. */
 .ep-planche-canvas .ep-case-content {
   position: relative;
   padding: 46px 54px;
 }
-.ep-planche-canvas .ep-case-content::before {
-  content: "CASE " attr(data-case-no);
-  display: block;
-  font-weight: 700;
-  color: var(--accent);
-  font-size: 13px;
-  margin-bottom: 2px;
-}
+/* Prose-only editor (batch): the planche caseBlock/caseDescription schema stays as the writing-sheet
+   container (pagination + backend projection depend on it), but the manga chrome is always hidden — no
+   "CASE N" label, no "Description —" prefix, no per-case remove button. So these ::before labels and the
+   remove button are unconditionally suppressed (previously gated behind .ep-mode-prose). */
+.ep-planche-canvas .ep-case-content::before,
+.ep-planche-canvas .ep-case-description > :first-child::before,
+.ep-planche-canvas .ep-case-remove { display: none; content: none; }
 /* A page-break spacer (widget decoration from pagination.ts): the vertical gap that pushes an
    overflowing block onto the next page inside the sheet. Never selectable, height set inline. A solid
    ink rule across the middle of the gap marks the page boundary, with a "Page N" indicator pill on it. */
@@ -1382,42 +1381,23 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-/* Item 19 — per-case "Supprimer la case" button (NodeView), pinned top-right inside the A4 sheet. */
-.ep-planche-canvas .ep-case-remove {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  background: var(--card);
-  color: var(--ink2);
-  cursor: pointer;
-  z-index: 2;
-}
-.ep-planche-canvas .ep-case-remove:hover { background: var(--accent); color: #fff; }
-.ep-planche-canvas .ep-case-remove:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.ep-planche-canvas .ep-case-description > :first-child::before {
-  content: "Description — ";
-  font-style: italic;
-  color: var(--ink2);
-}
-.ep-planche-canvas .ep-case-dialogue { margin-top: 4px; }
+.ep-planche-canvas .ep-case-dialogue { margin-top: 0; }
 .ep-planche-canvas .ProseMirror p { margin: 0; }
 
-/* Item 20 — prose mode: the same planche doc, presented as one plain rich-text page. Hide the case
-   chrome (CASE label, Description prefix, per-case remove button) and flatten the sheet to a page so
-   the manga scaffolding disappears when the writer picked "Édition normale". */
-.ep-planche-canvas.ep-mode-prose .ep-case-content::before,
-.ep-planche-canvas.ep-mode-prose .ep-case-description > :first-child::before,
-.ep-planche-canvas.ep-mode-prose .ProseMirror .is-empty::before,
-.ep-planche-canvas.ep-mode-prose .ep-case-remove { display: none; content: none; }
-.ep-planche-canvas.ep-mode-prose .ep-case-dialogue { margin-top: 0; }
+/* Heading typography (batch): the Style ▾ menu applies real h1/h2/h3 levels, but Tailwind's preflight
+   flattens their size so Titre 1/2/3 all looked identical. Restore a distinct on-brand descending
+   scale (Anton display), consistent with the docx preview's heading scale. */
+.ep-planche-canvas .ProseMirror h1,
+.ep-planche-canvas .ProseMirror h2,
+.ep-planche-canvas .ProseMirror h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+  margin: 14px 0 6px;
+}
+.ep-planche-canvas .ProseMirror h1 { font-size: 30px; text-transform: uppercase; letter-spacing: 0.01em; }
+.ep-planche-canvas .ProseMirror h2 { font-size: 23px; }
+.ep-planche-canvas .ProseMirror h3 { font-size: 18px; color: var(--ink2); }
 
 /* Item 8 — Tailwind's preflight strips list-style; restore markers + indent inside the editor.
    BulletList / OrderedList / ListItem ship in StarterKit; this is the missing content styling. */
@@ -1573,10 +1553,13 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-doc-preview em,
 .ep-doc-preview i { font-style: italic; }
 .ep-doc-preview u { text-decoration: underline; }
+/* Citations render exactly like the editor's blockquote (accent left border, indent, muted text) so a
+   previewed .docx citation matches the in-editor look. mammoth maps Word Quote styles → <blockquote>
+   (media.service.ts styleMap); this styles it. */
 .ep-doc-preview blockquote {
   border-left: 3px solid var(--accent);
-  margin: 10px 0;
-  padding: 2px 0 2px 14px;
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
   color: var(--ink2);
 }
 .ep-doc-preview a { color: var(--accent); text-decoration: underline; }

@@ -13,6 +13,25 @@ export interface CommentRange {
   to: number;
 }
 
+// Item 5 (batch) — one distinct highlight colour per comment. An all-accent wash made overlapping or
+// adjacent comments impossible to tell apart; instead each comment's range (and its sidebar quote
+// accent) is tinted with a colour hashed deterministically from its id. On-brand manga-zine hues.
+export const COMMENT_HIGHLIGHT_COLORS = [
+  '#e8261c', // accent red
+  '#2f6db0', // ink blue
+  '#2e9e6b', // green
+  '#c9701a', // ochre
+  '#7a4fb0', // violet
+  '#c2367f', // magenta
+] as const;
+
+/** Deterministic colour for a comment id (same hash family as the caret-colour picker). */
+export function commentColor(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return COMMENT_HIGHLIGHT_COLORS[h % COMMENT_HIGHLIGHT_COLORS.length];
+}
+
 /** Pure: keep only comments with a valid in-bounds range, clamped to the current doc size. Exported
  *  for testing (the plugin re-uses the same filter before building decorations). */
 export function commentRangesFrom(
@@ -64,7 +83,15 @@ export const CommentHighlight = Extension.create({
               const size = tr.doc.content.size;
               const decos = ranges
                 .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
-                .map((r) => Decoration.inline(r.from, r.to, { class: 'ep-comment-highlight' }));
+                .map((r) => {
+                  // Per-comment colour: keep .ep-comment-highlight for shape (radius, wrap cloning),
+                  // override the wash + underline colour inline so each comment is distinguishable.
+                  const c = commentColor(r.id);
+                  return Decoration.inline(r.from, r.to, {
+                    class: 'ep-comment-highlight',
+                    style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
+                  });
+                });
               return DecorationSet.create(tr.doc, decos);
             }
             // Keep highlights aligned as the doc changes locally (best-effort mapping).

@@ -8,6 +8,8 @@ vi.mock('../lib/api', async (importOriginal) => {
   return { ...actual, createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn(), getMyProjects: vi.fn() };
 });
 vi.mock('../components/UploadControl', () => ({ default: ({ label }: { label: string }) => <div>{label}</div> }));
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={href} {...rest}>{children}</a>
@@ -61,6 +63,35 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Gérer le groupe' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditeur' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
+  });
+
+  // Batch — the header "Éditeur" button opens the collaborative editor: the last card opened for this
+  // project (localStorage) if it's still on the board, else the first board card. (Rendered on the
+  // INFOS tab so the KanbanBoard isn't mounted — the header buttons show regardless of active tab.)
+  const pg = (id: string) =>
+    ({ id, chapterId: null, title: id, stage: 'todo', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0 }) as unknown as ProjectWorkspaceResponse['pages'][number];
+
+  it('“Éditeur” navigates to the first board card when nothing was opened before', async () => {
+    localStorage.clear();
+    renderWs('infos', { pages: [pg('pg1'), pg('pg2')] });
+    await userEvent.click(screen.getByRole('button', { name: 'Éditeur' }));
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche/editeur/pg1');
+  });
+
+  it('“Éditeur” reopens the last-opened card when it is still on the board', async () => {
+    localStorage.setItem('ep:lastEditor:nuit-blanche', 'pg2');
+    renderWs('infos', { pages: [pg('pg1'), pg('pg2')] });
+    await userEvent.click(screen.getByRole('button', { name: 'Éditeur' }));
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche/editeur/pg2');
+    localStorage.clear();
+  });
+
+  it('“Éditeur” falls back to the first card when the stored id is no longer on the board', async () => {
+    localStorage.setItem('ep:lastEditor:nuit-blanche', 'gone');
+    renderWs('infos', { pages: [pg('pg1'), pg('pg2')] });
+    await userEvent.click(screen.getByRole('button', { name: 'Éditeur' }));
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche/editeur/pg1');
+    localStorage.clear();
   });
 
   it('renders one icon per active profile role (both for a dual-role member, one otherwise)', () => {

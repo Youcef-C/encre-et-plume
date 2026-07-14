@@ -5,6 +5,7 @@
 // no-op this story (their target screens are future stories: CS-10 / CS-4 / CS-6/CS-9).
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ProjectWorkspaceResponse, MyProjectItem } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { getMyProjects } from '../../lib/api';
@@ -179,7 +180,23 @@ export default function ProjectWorkspace({
   const [title, setTitle] = useState(workspace.title);
   const isMember = workspace.viewer.isMember;
   const { account } = useSession();
+  const router = useRouter();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // "Éditeur" header button → open the collaborative editor. Reopen the last card opened in this
+  // project (localStorage, written by the editor route), else the first board card. No cards → no-op.
+  function openEditor() {
+    const pages = workspace.pages;
+    if (pages.length === 0) return;
+    let pageId = pages[0].id;
+    try {
+      const last = localStorage.getItem(`ep:lastEditor:${slug}`);
+      if (last && pages.some((p) => p.id === last)) pageId = last;
+    } catch {
+      /* storage unavailable — fall back to the first card */
+    }
+    router.push(`/projet/${slug}/editeur/${pageId}`);
+  }
 
   function onTabKeyDown(e: React.KeyboardEvent, index: number) {
     let next = index;
@@ -278,7 +295,7 @@ export default function ProjectWorkspace({
               <button type="button" style={headerBtn}>
                 Gérer le groupe
               </button>
-              <button type="button" style={headerBtn}>
+              <button type="button" style={headerBtn} onClick={openEditor}>
                 Éditeur
               </button>
               <button

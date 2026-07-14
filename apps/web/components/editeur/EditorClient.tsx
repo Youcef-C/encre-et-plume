@@ -17,7 +17,6 @@ import {
   type EditorDocumentResponse,
   type CaseCommentDto,
   type EditorAwarenessState,
-  type EditorTemplate,
   type AssetItem,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
@@ -25,8 +24,8 @@ import * as api from '../../lib/api';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
-import { plancheExtensions, blankPlancheDoc, appendCase, casePlaceholder } from '../editor/richtext/planche-schema';
-import { commentRangesFrom } from '../editor/richtext/comment-highlight';
+import { plancheExtensions, blankPlancheDoc, casePlaceholder } from '../editor/richtext/planche-schema';
+import { commentRangesFrom, commentColor } from '../editor/richtext/comment-highlight';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
 import { FileTextIcon, ChatIcon, CaretDownIcon } from '../icons';
@@ -48,9 +47,6 @@ interface Peer {
   avatar: string | null;
 }
 
-/** Item 20 — the editor's document scheme. `null` = not yet chosen (gates "Ajouter une case"). */
-type TemplateChoice = EditorTemplate | null;
-
 export interface EditorClientProps {
   pageId: string;
   slug: string;
@@ -64,6 +60,16 @@ export default function EditorClient({ pageId, slug, assetId }: EditorClientProp
 
   const [doc, setDoc] = useState<EditorDocumentResponse | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  // Remember the last card opened in the editor for this project, so the kanban header "Éditeur"
+  // button can reopen it (ProjectWorkspace reads this key; falls back to the first board card).
+  useEffect(() => {
+    try {
+      localStorage.setItem(`ep:lastEditor:${slug}`, pageId);
+    } catch {
+      /* storage unavailable (private mode) — the fallback to the first card still works */
+    }
+  }, [slug, pageId]);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -124,11 +130,11 @@ function EditorLoaded({
   const [synced, setSynced] = useState(false);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [comments, setComments] = useState<CaseCommentDto[]>(initial.comments);
-  const [toast, setToast] = useState<string | null>(null);
+  // Transient toast stack (version saved, import errors, presence join/leave). No toast library — a
+  // fixed bottom-center stack, each entry auto-removed after its lifetime.
+  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+  const toastSeq = useRef(0);
   const [provider, setProvider] = useState<EditorCollabProvider | null>(null);
-  // Item 20/26 — the persisted document scheme. Restored from the saved document (`initial.template`);
-  // a brand-new blank card (no doc yet) is `null` → the writer must pick a scheme before adding cases.
-  const [template, setTemplate] = useState<TemplateChoice>(initial.template);
 
   // F-I7 — the shared Yjs doc, seeded from the persisted CRDT bytes shipped on the initial load BEFORE
   // the editor binds. This is the deterministic hydration fix: an empty Y.Doc makes the editor fill the
@@ -151,9 +157,6 @@ function EditorLoaded({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const seededRef = useRef(false);
-  // Item 26 — the placeholder resolver reads the current template through a ref (the editor is created
-  // once; a ref keeps the resolver live without recreating it). Prose mode → no case placeholders.
-  const templateRef = useRef<TemplateChoice>(template);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -161,9 +164,10 @@ function EditorLoaded({
   const myColor = colorForId(account.id);
   const myRole: 'pen' | 'brush' = account.role.includes('dessin') ? 'brush' : 'pen';
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast((t) => (t === msg ? null : t)), 3000);
+  const pushToast = useCallback((msg: string, ms = 3000) => {
+    const id = ++toastSeq.current;
+    setToasts((list) => [...list, { id, msg }]);
+    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), ms);
   }, []);
 
   // ── StrictMode-safe provider lifecycle (D8/F-I1) ─────────────────────────────
@@ -196,16 +200,44 @@ function EditorLoaded({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ydoc, pageId, assetId, account.id]);
 
-  // Live presence from awareness — recreated whenever the provider instance changes.
+  // Live presence from awareness — recreated whenever the provider instance changes. The 'change'
+  // event fires on clients ADDED, UPDATED and REMOVED, and readPeers recomputes the full roster
+  // (excluding self by clientID), so a peer that disconnects drops out promptly. We also diff the
+  // roster by clientID to toast a join/leave; the first population (existing peers on open) is silent.
   useEffect(() => {
     if (!provider) return;
-    const updatePeers = () => setPeers(readPeers(provider));
-    provider.awareness.on('change', updatePeers);
-    updatePeers();
-    return () => {
-      provider.awareness.off('change', updatePeers);
+    const selfId = provider.awareness.clientID;
+    let known = new Map<number, string>();
+    let primed = false;
+    const namesNow = () => {
+      const m = new Map<number, string>();
+      provider.awareness.getStates().forEach((state, clientId) => {
+        if (clientId === selfId) return;
+        const u = (state as Partial<EditorAwarenessState>).user;
+        if (u) m.set(clientId, u.name ?? 'Collaborateur');
+      });
+      return m;
     };
-  }, [provider]);
+    const sync = () => {
+      const now = namesNow();
+      if (primed) {
+        now.forEach((name, id) => {
+          if (!known.has(id)) pushToast(`${name} a rejoint l’éditeur`, 2500);
+        });
+        known.forEach((name, id) => {
+          if (!now.has(id)) pushToast(`${name} a quitté l’éditeur`, 2500);
+        });
+      }
+      known = now;
+      primed = true;
+      setPeers(readPeers(provider));
+    };
+    provider.awareness.on('change', sync);
+    sync();
+    return () => {
+      provider.awareness.off('change', sync);
+    };
+  }, [provider, pushToast]);
 
   // ── The TipTap editor bound to the Y.Doc; recreated when the provider instance changes. ──────
   const editor = useEditor(
@@ -215,7 +247,7 @@ function EditorLoaded({
         ...buildRichTextExtensions({
           collab: true,
           ownDocument: true,
-          placeholder: ({ editor: ed, pos }) => casePlaceholder({ editor: ed, pos, prose: templateRef.current === 'prose' }),
+          placeholder: ({ editor: ed, pos }) => casePlaceholder({ editor: ed, pos, prose: true }),
         }),
         ...plancheExtensions,
         Collaboration.configure({ document: ydoc }),
@@ -275,13 +307,6 @@ function EditorLoaded({
     editor?.setEditable(status === 'connected');
   }, [editor, status]);
 
-  // Item 26 — on a template switch, refresh the ref + recompute placeholder decorations (a no-op
-  // transaction re-runs the Placeholder plugin without touching the doc, so nothing is saved).
-  useEffect(() => {
-    templateRef.current = template;
-    editor?.view?.dispatch(editor.state.tr);
-  }, [template, editor]);
-
   // Item 5 — paint the inline highlight for every range-anchored comment. Recomputed whenever the
   // comment list changes or the doc is (re)seeded; case-level comments carry null anchors and are skipped.
   // Guard on `editor.view` (like the placeholder effect): the editor is created before its view mounts
@@ -302,8 +327,7 @@ function EditorLoaded({
           ydocState: encodeState(ydoc),
           contentJson: editor.getJSON() as Record<string, unknown>,
           html: editor.getHTML(),
-          // Item 26 — persist the chosen scheme in place with the draft (read live via the ref).
-          ...(templateRef.current ? { template: templateRef.current } : {}),
+          // Prose-only editor: `template` is no longer sent (the backend column defaults to 'prose').
         },
         assetId,
       );
@@ -316,22 +340,6 @@ function EditorLoaded({
       setSaveState('error');
     }
   }, [editor, pageId, ydoc, assetId]);
-
-  // Item 26 — a template switch is a user action: set state, sync the ref immediately (so a save
-  // reads the new value), and persist. If the doc already exists, save now; a blank card persists it
-  // with the first autosave that materializes the doc (flushSave reads templateRef).
-  const changeTemplate = useCallback(
-    (t: EditorTemplate) => {
-      templateRef.current = t;
-      setTemplate(t);
-      if (asset) {
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        setSaveState('saving');
-        saveTimer.current = setTimeout(() => void flushSave(), 300);
-      }
-    },
-    [asset, flushSave],
-  );
 
   useEffect(() => {
     if (!editor) return;
@@ -367,7 +375,7 @@ function EditorLoaded({
 
   const onVersionSaved = (updated: AssetItem) => {
     setAsset({ id: updated.id, filename: updated.filename, currentVersion: updated.currentVersion });
-    showToast('Nouvelle version enregistrée');
+    pushToast('Nouvelle version enregistrée');
   };
 
   const typingPeer = peers.find((p) => p.typing);
@@ -419,47 +427,20 @@ function EditorLoaded({
                 assetId={assetId}
                 currentAsset={asset}
                 onSnapshot={onVersionSaved}
-                onError={showToast}
+                onError={pushToast}
                 editor={editor}
-                template={template}
-                onTemplate={changeTemplate}
               />
             }
           />
         </div>
         <div className="ep-editor-body" style={{ display: 'flex' }}>
           <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--card)' }}>
-            {/* Item 11 — each case renders as its own bordered A4 sheet (see .ep-a4-sheet / .ep-case-block).
-                Item 20 — prose mode hides the case chrome (CASE label, Description prefix, remove button)
-                so the same planche doc reads as one plain rich-text page. */}
+            {/* Prose-only editor: the planche caseBlock schema is the writing-sheet container, always
+                rendered in prose form (case chrome hidden in CSS) so it reads as one rich-text page. */}
             <div className="ep-a4-sheet">
-              <div className={`ep-planche-canvas${template === 'prose' ? ' ep-mode-prose' : ''}`} style={{ fontSize: 14, lineHeight: 1.6 }}>
+              <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
                 <EditorContent editor={editor} />
               </div>
-              {editor && status === 'connected' && template !== 'prose' && (
-                <button
-                  type="button"
-                  onClick={() => template === 'manga' && appendCase(editor)}
-                  disabled={template !== 'manga'}
-                  aria-disabled={template !== 'manga'}
-                  title={template === 'manga' ? 'Ajouter une case' : 'Choisissez d’abord un modèle'}
-                  style={{
-                    marginTop: 14,
-                    border: template === 'manga' ? '2px solid var(--ink)' : '2px dashed var(--ink)',
-                    borderRadius: 6,
-                    padding: '10px 14px',
-                    minHeight: 44,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: template === 'manga' ? '#fff' : 'var(--ink2)',
-                    background: template === 'manga' ? 'var(--accent)' : 'transparent',
-                    cursor: template === 'manga' ? 'pointer' : 'not-allowed',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  ＋ Ajouter une case
-                </button>
-              )}
             </div>
           </div>
           <Sidebar
@@ -474,9 +455,13 @@ function EditorLoaded({
           />
         </div>
       </div>
-      {toast && (
-        <div role="status" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: 'var(--ink)', color: 'var(--paper)', border: '2px solid var(--ink)', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 700, boxShadow: '4px 4px 0 var(--shadow)', zIndex: 60, maxWidth: 'calc(100vw - 32px)', textAlign: 'center' }}>
-          {toast}
+      {toasts.length > 0 && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', maxWidth: 'calc(100vw - 32px)' }}>
+          {toasts.map((t) => (
+            <div key={t.id} role="status" style={{ background: 'var(--ink)', color: 'var(--paper)', border: '2px solid var(--ink)', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 700, boxShadow: '4px 4px 0 var(--shadow)', textAlign: 'center' }}>
+              {t.msg}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -606,7 +591,7 @@ function SharePopover({ pageId }: { pageId: string }) {
   );
 }
 
-// ── Toolbar right-hand extras: template selector + file dropdown + version snapshot ──
+// ── Toolbar right-hand extras: file dropdown + version snapshot ──
 function ToolbarExtras({
   slug,
   pageId,
@@ -615,8 +600,6 @@ function ToolbarExtras({
   onSnapshot,
   onError,
   editor,
-  template,
-  onTemplate,
 }: {
   slug: string;
   pageId: string;
@@ -625,8 +608,6 @@ function ToolbarExtras({
   onSnapshot: (a: AssetItem) => void;
   onError: (msg: string) => void;
   editor: Editor | null;
-  template: TemplateChoice;
-  onTemplate: (t: EditorTemplate) => void;
 }) {
   const [snapping, setSnapping] = useState(false);
   const version = currentAsset?.currentVersion ?? null;
@@ -648,7 +629,6 @@ function ToolbarExtras({
 
   return (
     <>
-      <TemplateSelector template={template} onTemplate={onTemplate} />
       <FileDropdown slug={slug} pageId={pageId} currentAssetId={assetId} onError={onError} />
       {/* Commenting lives ONLY in the sidebar composer — no toolbar comment button (coordinator req). */}
       {version != null && (
@@ -732,44 +712,6 @@ function VersionSplitButton({ snapping, onSnapshot }: { snapping: boolean; onSna
           </button>
         </form>
       )}
-    </div>
-  );
-}
-
-// ── Item 20 — document-scheme selector: manga cases vs. plain prose. Segmented control (on-brand):
-// the active option fills accent; picking a scheme is what enables the "Ajouter une case" button. ──
-function TemplateSelector({ template, onTemplate }: { template: TemplateChoice; onTemplate: (t: EditorTemplate) => void }) {
-  const opts: { key: 'manga' | 'prose'; label: string }[] = [
-    { key: 'manga', label: 'Manga' },
-    { key: 'prose', label: 'Prose' },
-  ];
-  return (
-    <div role="group" aria-label="Modèle du document" style={{ display: 'inline-flex', border: '2px solid var(--ink)', borderRadius: 6, overflow: 'hidden' }}>
-      {opts.map((o, i) => {
-        const active = template === o.key;
-        return (
-          <button
-            key={o.key}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onTemplate(o.key)}
-            style={{
-              padding: '5px 11px',
-              minHeight: 32,
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: 'inherit',
-              cursor: 'pointer',
-              border: 'none',
-              borderLeft: i > 0 ? '2px solid var(--ink)' : 'none',
-              background: active ? 'var(--accent)' : 'var(--card)',
-              color: active ? '#fff' : 'var(--ink2)',
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -1023,9 +965,10 @@ function Sidebar({
               <b>{c.authorName}</b>
               <span style={{ color: 'var(--ink2)' }}>case {c.caseNo}</span>
             </div>
-            {/* Item 5 — a range-anchored comment shows the quoted highlight + a jump-to-text affordance. */}
+            {/* Item 5 — a range-anchored comment shows the quoted highlight + a jump-to-text affordance.
+                Its accent shares the same per-comment colour as the in-canvas highlight (commentColor). */}
             {c.quote && (
-              <div style={{ marginBottom: 5, borderLeft: '3px solid var(--accent)', paddingLeft: 7 }}>
+              <div style={{ marginBottom: 5, borderLeft: `3px solid ${commentColor(c.id)}`, paddingLeft: 7 }}>
                 <div style={{ color: 'var(--ink2)', fontStyle: 'italic', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>« {c.quote} »</div>
                 {c.anchorFrom != null && c.anchorTo != null && (
                   <button

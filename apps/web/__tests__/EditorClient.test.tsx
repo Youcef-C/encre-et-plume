@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor, act, within } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EditorDocumentResponse } from '@encre-et-plume/shared';
 
@@ -223,46 +223,28 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(providerHolder.instances.some((p) => p.destroyed)).toBe(true); // an earlier one was torn down
   });
 
-  // ── Regression guards for the two reported "out of nowhere" breakages (b8e1e9e). Both turned out to
-  //    be a stale API build (dist/main predating the `template` column) mid `nest --watch` rebuild, not
-  //    a code defect — these lock the intended behavior so a genuine future regression is caught. ──
+  // ── Prose-only editor (batch 2026-07-14): the Manga/Prose toggle, template picker and "Ajouter une
+  //    case" affordance are removed; the editor is always a single prose document. ──
 
-  it('Manga/Prose selector toggles prose mode and gates "Ajouter une case" (regression item 20/26)', async () => {
-    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc({ template: null }));
+  it('is prose-only: no template selector and no "Ajouter une case" button', async () => {
+    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
     const { container } = render(<EditorClient slug="lames" pageId="pg1" />);
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
     act(() => getProvider().handlers.onStatus!('connected'));
 
-    const canvas = () => container.querySelector('.ep-planche-canvas')!;
-    const selector = screen.getByRole('group', { name: 'Modèle du document' });
-    const mangaBtn = within(selector).getByRole('button', { name: 'Manga' });
-    const proseBtn = within(selector).getByRole('button', { name: 'Prose' });
-
-    // template === null → no prose class, neither option pressed, add-case disabled.
-    expect(canvas().className).not.toContain('ep-mode-prose');
-    expect(mangaBtn).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeDisabled();
-
-    // Pick Manga → add-case becomes enabled (accent-red), still not prose.
-    await userEvent.click(mangaBtn);
-    expect(mangaBtn).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeEnabled();
-    expect(canvas().className).not.toContain('ep-mode-prose');
-
-    // Pick Prose → canvas hides case chrome (ep-mode-prose) and the add-case button is gone entirely.
-    await userEvent.click(proseBtn);
-    expect(proseBtn).toHaveAttribute('aria-pressed', 'true');
-    expect(canvas().className).toContain('ep-mode-prose');
+    // The manga UX is gone entirely.
+    expect(screen.queryByRole('group', { name: 'Modèle du document' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manga' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Ajouter une case/ })).not.toBeInTheDocument();
 
-    // Back to Manga → prose chrome removed, add-case returns.
-    await userEvent.click(mangaBtn);
-    expect(canvas().className).not.toContain('ep-mode-prose');
-    expect(screen.getByRole('button', { name: /Ajouter une case/ })).toBeInTheDocument();
+    // The canvas is unconditionally prose (no toggled ep-mode-prose class).
+    const canvas = container.querySelector('.ep-planche-canvas')!;
+    expect(canvas).toBeInTheDocument();
+    expect(canvas.className).not.toContain('ep-mode-prose');
   });
 
-  it('keeps the comments-only sidebar + composer in Prose mode (regression item 16/28)', async () => {
-    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, template: 'prose' }));
+  it('keeps the comments-only sidebar + composer (regression item 16/28)', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
 
     // The "En ligne" presence roster is intentionally gone; the Commentaires section must remain.
     expect(screen.queryByText('En ligne')).not.toBeInTheDocument();
