@@ -463,6 +463,152 @@ test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 
   });
 });
 
+// Reads the caret's viewport-relative Y and the viewport height — used to prove the caret stays
+// centered (not drifting to the bottom edge) as the doc grows down. A collapsed selection's bounding
+// rect can be zero-sized, so fall back to the paragraph element that holds the caret.
+async function caretViewportY(page: Page) {
+  return page.evaluate(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let r = sel.getRangeAt(0).getBoundingClientRect();
+    if (!r || (r.top === 0 && r.height === 0)) {
+      const n = sel.anchorNode;
+      const el = n && n.nodeType === 3 ? (n.parentElement as HTMLElement | null) : (n as HTMLElement | null);
+      if (!el) return null;
+      r = el.getBoundingClientRect();
+    }
+    return { top: r.top, ih: window.innerHeight };
+  });
+}
+
+test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page fixes)', () => {
+  test.describe.configure({ mode: 'serial' });
+  let slug = '';
+  let card = 0;
+
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await login(page, OWNER_EMAIL);
+    slug = await createProject(page, `E2E CS4 Pagination ${Date.now()}`);
+    await page.close();
+  });
+
+  // Each test gets a fresh blank card (the docs mutate), opened in Manga at 1280×900.
+  async function openFreshEditor(page: Page) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    card += 1;
+    await addCard(page, card);
+    await kanbanCard(page, `Page ${card}`).getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Manga', exact: true }).click();
+  }
+
+  test('CS4-E24b: a doc UNDER one page stays a single sheet even with many trailing blank lines — no phantom page 2, in Manga AND Prose', async ({ page }) => {
+    await openFreshEditor(page);
+    const content = caseBlock(page, 1).locator('.ep-case-content').first();
+    await content.click({ position: { x: 40, y: 40 } });
+    // ~18 real lines is well under one A4 page…
+    for (let i = 0; i < 18; i++) {
+      await page.keyboard.type(`Ligne ${i} de description, assez longue pour occuper la planche.`);
+      await page.keyboard.press('Enter');
+    }
+    // …then a run of trailing BLANK lines (the classic phantom-page trigger).
+    for (let i = 0; i < 15; i++) await page.keyboard.press('Enter');
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+
+    // Manga: exactly ONE bordered sheet, no reflow spacer, block no taller than one page.
+    await expect.poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 }).toBe(1);
+    let geo = (await paginationGeometry(page, 1))!;
+    expect(geo.nonZeroSpacers).toBe(0);
+    expect(geo.blockHeight).toBeLessThanOrEqual(geo.pageH + 2);
+
+    // Prose: the same doc must ALSO stay a single sheet (the phantom border showed in Prose).
+    await page.getByRole('button', { name: 'Prose', exact: true }).click();
+    await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
+    await expect.poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 }).toBe(1);
+    geo = (await paginationGeometry(page, 1))!;
+    expect(geo.nonZeroSpacers).toBe(0);
+    await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-single-sheet-1280.png', fullPage: true });
+  });
+
+  test('CS4-E24c: typing down a long doc keeps the caret centered in the viewport (not stuck at the bottom edge)', async ({ page }) => {
+    await openFreshEditor(page);
+    await fillPastOnePage(page, 1, 60); // well past one page → plenty of scroll room
+    await page.keyboard.type('POSITION-CARET'); // one more keystroke so a scroll-to-selection fires
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+
+    const y = await caretViewportY(page);
+    expect(y).not.toBeNull();
+    // Centered means comfortably inside the middle band — NOT near the bottom edge (the pre-fix drift).
+    expect(y!.top).toBeGreaterThan(y!.ih * 0.2);
+    expect(y!.top).toBeLessThan(y!.ih * 0.75);
+    await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-multipage-1280.png', fullPage: true });
+  });
+
+  test('CS4-E24d: clicking the inter-sheet gutter lands on real content (never the gap); deleting the trailing blank line keeps the caret', async ({ page }) => {
+    await openFreshEditor(page);
+    await fillPastOnePage(page, 1, 55);
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await expectMultiSheetReflow(page);
+    // Evidence: a clean partly-filled sheet 2 — one bordered A4 below sheet 1 with a real gutter and NO
+    // stray black line (the pre-fix phantom-page artifact).
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.screenshot({ path: 'e2e/screenshots/cs4-pagination-partly-filled-page2-1280.png', fullPage: true });
+
+    // Click the studio-tone gutter between sheet 1 and sheet 2 — the caret must snap to real text.
+    const target = await page.evaluate(() => {
+      const block = document.querySelector('[data-case-block][data-case-no="1"]') as HTMLElement;
+      const frames = Array.from(block.querySelectorAll('.ep-page-frame')) as HTMLElement[];
+      const f1 = frames[0].getBoundingClientRect();
+      const f2 = frames[1].getBoundingClientRect();
+      return { x: f1.left + 60, y: (f1.bottom + f2.top) / 2 };
+    });
+    await page.mouse.click(target.x, target.y);
+    const landed = await page.evaluate(() => {
+      const sel = window.getSelection();
+      const node = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+      const el = node && node.nodeType === 3 ? (node.parentElement as HTMLElement | null) : (node as HTMLElement | null);
+      return { gapcursor: document.querySelectorAll('.ProseMirror-gapcursor').length, inSpacer: !!el?.closest?.('.ep-page-spacer') };
+    });
+    expect(landed.gapcursor).toBe(0); // no gap cursor (the black horizontal line) anywhere
+    expect(landed.inSpacer).toBe(false); // caret is NOT stranded inside the spacer/gutter
+
+    // Delete the trailing blank line (fillPastOnePage leaves one) — the caret must survive on the
+    // previous line, so the next keystroke lands there and the editor stays focused.
+    const lastPara = caseBlock(page, 1).locator('[data-case-description] p').last();
+    await lastPara.click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Backspace'); // remove the empty trailing line
+    await page.keyboard.type('SUITE');
+    await expect(page.locator('.ProseMirror-focused')).toHaveCount(1); // caret never lost
+    await expect(caseBlock(page, 1).locator('[data-case-description] p').last()).toContainText('SUITE');
+  });
+
+  test('CS4-E24e: editing at the bottom of a paginated doc scrolls the view to follow the caret (no manual scroll needed)', async ({ page }) => {
+    await openFreshEditor(page);
+    await fillPastOnePage(page, 1, 55); // ≥ 2 sheets
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await expectMultiSheetReflow(page);
+
+    // Force the viewport to the very top, then edit at the END of the doc: the view must follow the
+    // caret back down and keep it centered — the user shouldn't have to scroll/click to find it.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const lastPara = caseBlock(page, 1).locator('[data-case-description] p').last();
+    await lastPara.click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('APPEND');
+
+    const y = await caretViewportY(page);
+    expect(y).not.toBeNull();
+    expect(y!.top).toBeGreaterThan(y!.ih * 0.2);
+    expect(y!.top).toBeLessThan(y!.ih * 0.75); // centered, not off the bottom nor stranded at the top
+  });
+});
+
 test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)', () => {
   let pageId = '';
 

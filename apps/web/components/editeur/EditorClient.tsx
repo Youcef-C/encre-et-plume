@@ -229,7 +229,15 @@ function EditorLoaded({
             ]
           : []),
       ],
-      editorProps: { attributes: { 'aria-label': 'Éditeur de scénario', role: 'textbox', 'aria-multiline': 'true' } },
+      editorProps: {
+        attributes: { 'aria-label': 'Éditeur de scénario', role: 'textbox', 'aria-multiline': 'true' },
+        // Bug fix — keep the caret roughly centered. The editor has no inner scroll frame (Item 1): the
+        // whole window scrolls, so as text grows down a tall paginated doc ProseMirror's default nudge
+        // leaves the caret drifting to the bottom edge. This fires only when PM wants to scroll the
+        // selection into view (typing / arrow nav / programmatic reveal — NOT a plain mouse click), so
+        // clicking still leaves the view put while typing keeps the caret in the middle of the viewport.
+        handleScrollToSelection: centerCaretInView,
+      },
     },
     [provider],
   );
@@ -1092,6 +1100,24 @@ function caretRender(user: Record<string, unknown>): HTMLElement {
   label.insertBefore(document.createTextNode(name), null);
   cursor.insertBefore(label, null);
   return cursor;
+}
+
+// Center the caret vertically in the viewport when ProseMirror asks to scroll the selection into view.
+// Returns true to take over PM's default (edge-nudge) scrolling. `window.scrollTo` clamps the target to
+// [0, maxScroll], so a short doc that fits above the fold never scrolls and the extremes stay natural —
+// the caret only pins to the middle once the doc is tall enough to scroll past it.
+function centerCaretInView(view: { state: { selection: { head: number } }; coordsAtPos: (pos: number) => { top: number; bottom: number } }): boolean {
+  if (typeof window === 'undefined') return false;
+  let coords: { top: number; bottom: number };
+  try {
+    coords = view.coordsAtPos(view.state.selection.head);
+  } catch {
+    return false; // let PM fall back to its default if the position can't be measured
+  }
+  const caretMid = (coords.top + coords.bottom) / 2; // viewport-relative
+  const target = window.scrollY + caretMid - window.innerHeight / 2;
+  window.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
+  return true;
 }
 
 function encodeState(ydoc: Y.Doc): string {

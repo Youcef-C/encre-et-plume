@@ -25,6 +25,10 @@ export interface BlockMetrics {
   top: number;
   /** Border-box height of the block, in px. */
   height: number;
+  /** True for a blank line (empty paragraph). Trailing blank lines are NOT content and must not
+   *  drive pagination — see `paginateBlocks`. Absent = treated as content (unit tests / callers that
+   *  don't care). */
+  empty?: boolean;
 }
 
 export interface Spacer {
@@ -57,11 +61,21 @@ export function paginateBlocks(blocks: BlockMetrics[], geo: PageGeometry): Pagin
   const pageTop = (k: number) => k * slot + padY; // usable content top of page k
   const usableBottom = (k: number) => k * slot + pageH - padY; // content must stop here on page k
 
+  // Trailing blank lines (the empty paragraph the caret rests on) are NOT content: a blank tail must
+  // never force a page break or draw an extra sheet. Left in, a blank line overflowing the last page's
+  // usable bottom gets a spacer that pushes it onto a phantom page 2 (its border reads as a "stray
+  // black line") or strands the caret in the inter-sheet gutter. Trim the empty tail before laying out
+  // — the blank line then renders in the last page's bottom padding, inside its frame. A blank line
+  // BETWEEN real content keeps its height (only the trailing run is dropped).
+  let end = blocks.length;
+  while (end > 0 && blocks[end - 1].empty) end -= 1;
+  const laid = blocks.slice(0, end);
+
   const spacers: Spacer[] = [];
   let page = 0;
   let accum = 0; // total spacer height inserted above the current block
 
-  for (const b of blocks) {
+  for (const b of laid) {
     const et = b.top + accum; // effective top after pushes above
     const eb = et + b.height;
     const overflows = eb > usableBottom(page) + EPS;
@@ -82,7 +96,7 @@ export function paginateBlocks(blocks: BlockMetrics[], geo: PageGeometry): Pagin
     }
   }
 
-  const last = blocks[blocks.length - 1];
+  const last = laid[laid.length - 1];
   const lastBottom = last ? last.top + accum + last.height : 0;
   const pageCount = Math.max(1, page + 1, Math.ceil((lastBottom - EPS) / slot));
   return { spacers, pageCount };
@@ -172,6 +186,7 @@ function measureAll(view: EditorView): Spacer[] {
     const contentTop = contentEl.getBoundingClientRect().top; // forces reflow with spacers at height 0
     const blocks: BlockMetrics[] = [];
     contentEl.querySelectorAll<HTMLElement>(':scope > .ep-case-description > *, :scope > .ep-case-dialogue > *').forEach((el) => {
+      if (el.classList.contains('ep-page-spacer')) return; // our own decoration, not a content block
       const r = el.getBoundingClientRect();
       let pos: number;
       try {
@@ -179,7 +194,9 @@ function measureAll(view: EditorView): Spacer[] {
       } catch {
         return;
       }
-      blocks.push({ pos, top: r.top - contentTop, height: r.height });
+      // A blank line has no text (an empty <p>, possibly holding only a trailing <br>). The ::before
+      // placeholder label isn't textContent, so this stays true for an empty-but-labelled field line.
+      blocks.push({ pos, top: r.top - contentTop, height: r.height, empty: (el.textContent ?? '').trim().length === 0 });
     });
     dom.classList.remove('ep-pag-measure');
 
@@ -228,7 +245,15 @@ export const PaginationExtension = Extension.create({
               const spacers = measureAll(view);
               if (!spacersEqual(spacers, applied)) {
                 applied = spacers;
-                view.dispatch(view.state.tr.setMeta(paginationKey, spacers));
+                // The spacers just changed a block's on-screen position (e.g. Enter at a page bottom
+                // pushed the caret's line onto a NEW sheet). The edit's own scroll-into-view already ran
+                // with the PRE-spacer geometry, so the view didn't follow the caret onto the new page.
+                // Re-fire scroll-into-view AFTER applying the spacers so the caret is revealed/centered
+                // at its real new position. Gate on focus: only follow when the user is editing here, so
+                // a background/remote reflow never yanks a reader's scroll position.
+                const tr = view.state.tr.setMeta(paginationKey, spacers);
+                if (view.hasFocus()) tr.scrollIntoView();
+                view.dispatch(tr);
               }
             });
           };
