@@ -288,6 +288,26 @@ describe('ScenarioDocumentsService.snapshotVersion', () => {
     const { service } = makeService(prisma);
     await expect(service.snapshotVersion('acc-me', 'page-1', { html: '<p>x</p>' })).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  // Item 22 — a version note rides through to the CS-3 AssetVersion.
+  it('forwards a version note to addVersion', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    const { service, assets } = makeService(prisma);
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>final</p>', note: 'Relecture chapitre 2' });
+    expect(assets.addVersion).toHaveBeenCalledWith('acc-me', 'lames-de-brume', 'asset-1', {
+      mediaId: 'media-html',
+      note: 'Relecture chapitre 2',
+    });
+  });
+
+  it('omits the note key when none is given (no empty note)', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    const { service, assets } = makeService(prisma);
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>final</p>' });
+    expect(assets.addVersion).toHaveBeenCalledWith('acc-me', 'lames-de-brume', 'asset-1', { mediaId: 'media-html' });
+  });
 });
 
 describe('ScenarioDocumentsService.addComment', () => {
@@ -303,6 +323,34 @@ describe('ScenarioDocumentsService.addComment', () => {
     expect(res.caseNo).toBe(2);
     expect(res.authorName).toBe('Moi');
     expect(gateway.emitComment).toHaveBeenCalledWith('asset-1', expect.objectContaining({ text: 'Revoir ce dialogue' }));
+  });
+
+  // Item 5 — a range-anchored comment persists anchorFrom/anchorTo/quote and returns them.
+  it('stores a highlighted-text anchor (from/to/quote) and returns it', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'x', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1' });
+    const { service } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 2, { text: 'À revoir', anchorFrom: 12, anchorTo: 20, quote: 'sous la pluie' });
+    expect(prisma.scenarioComment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ anchorFrom: 12, anchorTo: 20, quote: 'sous la pluie' }),
+      }),
+    );
+    expect(res.anchorFrom).toBe(12);
+    expect(res.anchorTo).toBe(20);
+    expect(res.quote).toBe('sous la pluie');
+  });
+
+  it('a case-level comment (no anchor) returns null anchor fields', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'x', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1' });
+    const { service } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 1, { text: 'ok' });
+    expect(res.anchorFrom).toBeNull();
+    expect(res.anchorTo).toBeNull();
+    expect(res.quote).toBeNull();
   });
 
   it('400s on empty/whitespace text', async () => {

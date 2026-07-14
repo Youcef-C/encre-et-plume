@@ -8,6 +8,7 @@
 import { Extension, Node } from '@tiptap/core';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor, Extensions, JSONContent } from '@tiptap/react';
+import { CommentHighlight } from './comment-highlight';
 
 /** Top-level document: a planche is an ordered list of cases. Replaces StarterKit's Document
  *  (disabled via buildRichTextExtensions({ ownDocument: true })). `caseBlock+` keeps at least one
@@ -83,9 +84,39 @@ const CaseBlock = Node.create({
       const contentDOM = document.createElement('div');
       contentDOM.className = 'ep-case-content';
 
+      // Item 24 — visual pagination: when a case's content grows past one A4 page, draw page-boundary
+      // separators so long text visibly continues onto successive pages instead of one endless sheet.
+      // A pure sibling overlay (contentEditable=false, pointer-events:none) means the doc is never
+      // touched, so the caret + scroll stay put on Enter. The boundary period is the sheet's own
+      // single-page height (border-box width × A4 ratio), measured live so it stays correct responsively.
+      // ponytail: a lightweight decoration, NOT a true content-reflow paginator — text still flows over
+      // the boundary rather than being pushed to the next sheet (that needs a ProseMirror pagination
+      // plugin). It's the smallest thing that makes overflow read as multiple A4 pages.
+      const breaks = document.createElement('div');
+      breaks.className = 'ep-page-breaks';
+      breaks.setAttribute('contenteditable', 'false');
+      breaks.setAttribute('aria-hidden', 'true');
+
+      let ro: ResizeObserver | null = null;
+      const measure = () => {
+        const pageH = (dom.offsetWidth * 297) / 210; // A4 portrait ratio → one-page height
+        if (pageH > 0) breaks.style.setProperty('--ep-page-h', `${Math.round(pageH)}px`);
+      };
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(measure);
+        ro.observe(dom);
+      }
+      measure();
+
+      dom.appendChild(breaks);
       dom.appendChild(btn);
       dom.appendChild(contentDOM);
-      return { dom, contentDOM, ignoreMutation: (m) => !contentDOM.contains(m.target as unknown as globalThis.Node) };
+      return {
+        dom,
+        contentDOM,
+        ignoreMutation: (m) => m.target === breaks || !contentDOM.contains(m.target as unknown as globalThis.Node),
+        destroy: () => ro?.disconnect(),
+      };
     };
   },
 });
@@ -155,7 +186,7 @@ const CaseFieldGuard = Extension.create({
 });
 
 /** Case-block schema extensions layered on top of the shared rich-text core. */
-export const plancheExtensions: Extensions = [PlancheDocument, CaseBlock, CaseDescription, CaseDialogue, CaseFieldGuard];
+export const plancheExtensions: Extensions = [PlancheDocument, CaseBlock, CaseDescription, CaseDialogue, CaseFieldGuard, CommentHighlight];
 
 /** Item 6 — per-field placeholder: an empty case description shows "Description…", an empty dialogue
  *  shows "Dialogue…", so the field's purpose persists when it's blank.

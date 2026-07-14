@@ -1331,6 +1331,42 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   color: var(--accent);
   font-size: 13px;
   margin-bottom: 2px;
+  position: relative;
+  z-index: 1;
+}
+/* Item 24 — the case's editable content sits above the page-break overlay (which is z-index:0). */
+.ep-planche-canvas .ep-case-content { position: relative; z-index: 1; }
+/* Item 24 — page-boundary separators drawn every A4 page-height (--ep-page-h, set live from the sheet
+   width by the case NodeView). A soft studio-tone band with hairline edges reads as the gutter between
+   two stacked pages, so content that overflows one page visibly continues onto the next. Behind the
+   text (z-index:0), so it never intercepts the caret. */
+.ep-planche-canvas .ep-page-breaks {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--ep-page-h, 9999px) - 9px),
+    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) - 9px),
+    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) - 8px),
+    var(--tone) calc(var(--ep-page-h, 9999px) - 8px),
+    var(--tone) calc(var(--ep-page-h, 9999px) + 8px),
+    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) + 8px),
+    color-mix(in srgb, var(--ink) 28%, transparent) calc(var(--ep-page-h, 9999px) + 9px),
+    transparent calc(var(--ep-page-h, 9999px) + 9px)
+  );
+}
+/* Item 5 — inline highlight for a range-anchored comment: a soft accent wash the reader can see in the
+   canvas. Applied as a ProseMirror inline decoration (comment-highlight.ts), never serialized. */
+.ep-planche-canvas .ep-comment-highlight {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-bottom: 2px solid var(--accent);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 /* Item 19 — per-case "Supprimer la case" button (NodeView), pinned top-right inside the A4 sheet. */
 .ep-planche-canvas .ep-case-remove {

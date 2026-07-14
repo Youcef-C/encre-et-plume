@@ -180,7 +180,9 @@ export class ScenarioDocumentsService {
     const asset = await this.resolveEditorAsset(page, assetId);
     if (!asset) throw new BadRequestException('Aucun scénario à versionner');
     const media = await this.media.ingestAsset(accountId, Buffer.from(body.html, 'utf8'), HTML);
-    return this.assets.addVersion(accountId, page.project.slug, asset.id, { mediaId: media.id });
+    // Item 22 — carry the optional note onto the AssetVersion (omit the key entirely when absent).
+    const note = body.note?.trim();
+    return this.assets.addVersion(accountId, page.project.slug, asset.id, { mediaId: media.id, ...(note ? { note } : {}) });
   }
 
   async addComment(accountId: string, pageId: string, caseNo: number, body: CreateCaseCommentRequest, assetId?: string): Promise<CaseCommentDto> {
@@ -191,8 +193,20 @@ export class ScenarioDocumentsService {
     const doc = asset ? await this.prisma.scenarioDocument.findUnique({ where: { assetId: asset.id }, select: { id: true } }) : null;
     if (!doc) throw new BadRequestException("Enregistrez d'abord le scénario");
 
+    // Item 5 — persist the optional highlighted-range anchor. A range needs both bounds AND from<to;
+    // otherwise it's a plain case-level comment (nulls).
+    const hasRange = typeof body.anchorFrom === 'number' && typeof body.anchorTo === 'number' && body.anchorFrom < body.anchorTo;
+    const quote = body.quote?.trim();
     const created = await this.prisma.scenarioComment.create({
-      data: { documentId: doc.id, caseNo, authorId: accountId, text },
+      data: {
+        documentId: doc.id,
+        caseNo,
+        authorId: accountId,
+        text,
+        anchorFrom: hasRange ? body.anchorFrom! : null,
+        anchorTo: hasRange ? body.anchorTo! : null,
+        quote: hasRange && quote ? quote : null,
+      },
       include: { author: { select: { displayName: true } } },
     });
     const dto = this.toCommentDto(created as never);
@@ -297,7 +311,27 @@ export class ScenarioDocumentsService {
     return null;
   }
 
-  private toCommentDto(c: { id: string; caseNo: number; authorId: string; text: string; createdAt: Date; author: { displayName: string } }): CaseCommentDto {
-    return { id: c.id, caseNo: c.caseNo, authorId: c.authorId, authorName: c.author.displayName, text: c.text, createdAt: c.createdAt.toISOString() };
+  private toCommentDto(c: {
+    id: string;
+    caseNo: number;
+    authorId: string;
+    text: string;
+    createdAt: Date;
+    author: { displayName: string };
+    anchorFrom?: number | null;
+    anchorTo?: number | null;
+    quote?: string | null;
+  }): CaseCommentDto {
+    return {
+      id: c.id,
+      caseNo: c.caseNo,
+      authorId: c.authorId,
+      authorName: c.author.displayName,
+      text: c.text,
+      createdAt: c.createdAt.toISOString(),
+      anchorFrom: c.anchorFrom ?? null,
+      anchorTo: c.anchorTo ?? null,
+      quote: c.quote ?? null,
+    };
   }
 }

@@ -27,6 +27,12 @@ export interface CaseCommentDto {
   authorName: string;
   text: string;
   createdAt: string; // ISO
+  // Item 5 — optional text-range anchor. `anchorFrom`/`anchorTo` are ProseMirror positions (best-effort:
+  // they can drift after collaborative edits, so `quote` is the durable snapshot of the highlighted run
+  // shown as the sidebar indicator). All null → a plain case-level comment (backwards compatible).
+  anchorFrom: number | null;
+  anchorTo: number | null;
+  quote: string | null;
 }
 
 export interface EditorDocumentResponse {
@@ -58,11 +64,18 @@ export interface AutosaveDocumentResponse {
 
 export interface SnapshotVersionRequest {
   html: string;
+  // Item 22 — optional note attached to the new AssetVersion (same note UX as the history modal).
+  note?: string;
 } // → response: AssetItem (CS-3); currentVersion feeds the "v{n}" chip
 export type SnapshotVersionResponse = AssetItem;
 
 export interface CreateCaseCommentRequest {
   text: string;
+  // Item 5 — optionally anchor the comment to a highlighted text range (ProseMirror positions + the
+  // quoted snippet). Omit for a plain case-level comment.
+  anchorFrom?: number;
+  anchorTo?: number;
+  quote?: string;
 }
 export interface SharePageResponse {
   url: string;

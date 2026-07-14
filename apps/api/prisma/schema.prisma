@@ -1093,6 +1093,11 @@ model ScenarioComment {
   authorId   String
   author     Account          @relation("ScenarioCommentAuthor", fields: [authorId], references: [id])
   text       String
+  // CS-4 item 5 — optional highlighted-text anchor: ProseMirror positions (best-effort) + the durable
+  // quoted snippet shown as the sidebar indicator. All null → a plain case-level comment.
+  anchorFrom Int?
+  anchorTo   Int?
+  quote      String?
   createdAt  DateTime         @default(now())
 
   @@index([documentId, caseNo, createdAt])

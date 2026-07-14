@@ -26,9 +26,10 @@ import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
 import { plancheExtensions, blankPlancheDoc, appendCase, casePlaceholder } from '../editor/richtext/planche-schema';
+import { commentRangesFrom } from '../editor/richtext/comment-highlight';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
-import { FileTextIcon, ChatIcon } from '../icons';
+import { FileTextIcon, ChatIcon, CaretDownIcon } from '../icons';
 
 const colorForId = (id: string): string => {
   let h = 0;
@@ -253,6 +254,15 @@ function EditorLoaded({
     templateRef.current = template;
     editor?.view?.dispatch(editor.state.tr);
   }, [template, editor]);
+
+  // Item 5 — paint the inline highlight for every range-anchored comment. Recomputed whenever the
+  // comment list changes or the doc is (re)seeded; case-level comments carry null anchors and are skipped.
+  // Guard on `editor.view` (like the placeholder effect): the editor is created before its view mounts
+  // (immediatelyRender:false), and `editor.commands` throws while the view is still null.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !editor.view) return;
+    editor.commands.setCommentHighlights(commentRangesFrom(comments, editor.state.doc.content.size));
+  }, [editor, comments, synced]);
 
   // ── Autosave (2s debounce) + typing awareness ────────────────────────────────
   const flushSave = useCallback(async () => {
@@ -594,11 +604,13 @@ function ToolbarExtras({
   const [snapping, setSnapping] = useState(false);
   const version = currentAsset?.currentVersion ?? null;
 
-  const snapshot = async () => {
+  // Item 22 — snapshot the current draft as a new version, optionally with a note. The version endpoint
+  // accepts the note; it rides onto the CS-3 AssetVersion (same note UX as the history modal).
+  const snapshot = async (note?: string) => {
     if (!editor || snapping) return;
     setSnapping(true);
     try {
-      const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML() }, assetId);
+      const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML(), ...(note ? { note } : {}) }, assetId);
       onSnapshot(updated);
     } catch (err) {
       onError((err as { message?: string })?.message ?? 'Impossible d’enregistrer la version');
@@ -615,17 +627,85 @@ function ToolbarExtras({
       {version != null && (
         <>
           <span title="Version courante" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', border: '2px solid var(--ink)', borderRadius: 6, padding: '3px 8px' }}>v{version}</span>
-          <button
-            type="button"
-            onClick={snapshot}
-            disabled={snapping}
-            style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
-          </button>
+          <VersionSplitButton snapping={snapping} onSnapshot={snapshot} />
         </>
       )}
     </>
+  );
+}
+
+// ── Item 22 — split control: primary snapshots now; the down-chevron opens an inline note form that
+// snapshots WITH a note. Same note UX (optional textarea) as the CS-3 history modal. ──
+function VersionSplitButton({ snapping, onSnapshot }: { snapping: boolean; onSnapshot: (note?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
+  const submitNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSnapshot(note.trim() || undefined);
+    setNote('');
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      {/* Split button: primary (snapshot now) + attached chevron (snapshot with a note). */}
+      <button
+        type="button"
+        onClick={() => onSnapshot()}
+        disabled={snapping}
+        style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: '6px 0 0 6px', borderRight: 'none', padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+      >
+        {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
+      </button>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Ajouter une note à la version"
+        onClick={() => setOpen((o) => !o)}
+        disabled={snapping}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, minHeight: 32, border: '2px solid var(--ink)', borderRadius: '0 6px 6px 0', background: open ? 'var(--accent)' : 'var(--card)', color: open ? '#fff' : 'var(--ink)', cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+      >
+        <CaretDownIcon size={13} />
+      </button>
+      {open && (
+        <form
+          onSubmit={submitNote}
+          role="dialog"
+          aria-label="Note de version"
+          style={{ position: 'absolute', top: 40, right: 0, zIndex: 30, width: 260, maxWidth: 'calc(100vw - 32px)', background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 8, boxShadow: '5px 5px 0 var(--shadow)', padding: 12 }}
+        >
+          <label htmlFor="ep-version-note" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>NOTE (optionnelle)</label>
+          <textarea
+            id="ep-version-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Décrivez cette version…"
+            rows={2}
+            autoFocus
+            style={{ width: '100%', marginTop: 4, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)' }}
+          />
+          <button
+            type="submit"
+            disabled={snapping}
+            style={{ marginTop: 8, width: '100%', background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 36, fontSize: 12, fontWeight: 700, cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+          >
+            Enregistrer
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -815,14 +895,28 @@ function Sidebar({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, forceRender] = useState(0);
+  // Item 5 — the highlighted text range the next comment will anchor to. Captured whenever the editor
+  // holds a non-empty selection; cleared when the selection collapses to a caret. Persists while the
+  // user types in the textarea (ProseMirror keeps its selection in state even when the DOM blurs).
+  const [range, setRange] = useState<{ from: number; to: number; quote: string } | null>(null);
 
-  // Track the caret so "case N" reflects the block the comment will anchor to.
+  // Track the caret so "case N" reflects the block the comment will anchor to, and capture a selected
+  // text range for range-anchored comments (item 5).
   useEffect(() => {
     if (!editor) return;
-    const rerender = () => forceRender((n) => n + 1);
-    editor.on('selectionUpdate', rerender);
+    const onSel = () => {
+      forceRender((n) => n + 1);
+      const { from, to, empty } = editor.state.selection;
+      if (empty) {
+        setRange(null);
+      } else {
+        const quote = editor.state.doc.textBetween(from, to, ' ').trim();
+        setRange(quote ? { from, to, quote } : null);
+      }
+    };
+    editor.on('selectionUpdate', onSel);
     return () => {
-      editor.off('selectionUpdate', rerender);
+      editor.off('selectionUpdate', onSel);
     };
   }, [editor]);
 
@@ -838,7 +932,13 @@ function Sidebar({
     setBusy(true);
     setError(null);
     try {
-      const created = await api.addCaseComment(pageId, currentCaseNo, { text: trimmed }, assetId);
+      const created = await api.addCaseComment(
+        pageId,
+        currentCaseNo,
+        // Item 5 — attach the range anchor when a selection is active; otherwise a case-level comment.
+        range ? { text: trimmed, anchorFrom: range.from, anchorTo: range.to, quote: range.quote } : { text: trimmed },
+        assetId,
+      );
       onCommentAdded(created);
       setText('');
     } catch (err) {
@@ -846,6 +946,14 @@ function Sidebar({
     } finally {
       setBusy(false);
     }
+  };
+
+  // Item 5 — "voir dans le texte": select the comment's stored range and scroll it into view.
+  const revealRange = (from: number, to: number) => {
+    if (!editor) return;
+    const size = editor.state.doc.content.size;
+    if (from < 0 || to > size || to <= from) return;
+    editor.chain().focus().setTextSelection({ from, to }).scrollIntoView().run();
   };
 
   return (
@@ -876,6 +984,21 @@ function Sidebar({
               <b>{c.authorName}</b>
               <span style={{ color: 'var(--ink2)' }}>case {c.caseNo}</span>
             </div>
+            {/* Item 5 — a range-anchored comment shows the quoted highlight + a jump-to-text affordance. */}
+            {c.quote && (
+              <div style={{ marginBottom: 5, borderLeft: '3px solid var(--accent)', paddingLeft: 7 }}>
+                <div style={{ color: 'var(--ink2)', fontStyle: 'italic', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>« {c.quote} »</div>
+                {c.anchorFrom != null && c.anchorTo != null && (
+                  <button
+                    type="button"
+                    onClick={() => revealRange(c.anchorFrom!, c.anchorTo!)}
+                    style={{ marginTop: 3, background: 'none', border: 'none', padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+                  >
+                    voir dans le texte
+                  </button>
+                )}
+              </div>
+            )}
             <div style={{ color: 'var(--ink)', lineHeight: 1.3 }}>{c.text}</div>
           </div>
         ))}
@@ -885,8 +1008,16 @@ function Sidebar({
       {canComment ? (
         <form onSubmit={submit} className="ep-comment-composer">
           <label htmlFor="ep-comment-input" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ChatIcon size={12} /> Commentaire — case {currentCaseNo}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <ChatIcon size={12} /> {range ? 'Commenter la sélection' : `Commentaire — case ${currentCaseNo}`}
+            </span>
           </label>
+          {/* Item 5 — when text is selected, preview the quoted range the comment will anchor to. */}
+          {range && (
+            <div style={{ marginTop: 4, borderLeft: '3px solid var(--accent)', paddingLeft: 7, fontSize: 11, fontStyle: 'italic', color: 'var(--ink2)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              « {range.quote} »
+            </div>
+          )}
           <textarea
             id="ep-comment-input"
             ref={commentInputRef}
@@ -896,7 +1027,7 @@ function Sidebar({
               if (error) setError(null);
             }}
             placeholder="Votre commentaire…"
-            aria-label={`Ajouter un commentaire à la case ${currentCaseNo}`}
+            aria-label={range ? 'Commenter la sélection' : `Ajouter un commentaire à la case ${currentCaseNo}`}
             aria-invalid={!!error}
             rows={2}
             style={{ width: '100%', marginTop: 4, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)' }}

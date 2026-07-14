@@ -47,7 +47,7 @@ describe('planche schema', () => {
 
   it('exports the planche nodes + the case-field key guard', () => {
     const names = plancheExtensions.map((e) => e.name).sort();
-    expect(names).toEqual(['caseBlock', 'caseDescription', 'caseDialogue', 'caseFieldGuard', 'doc']);
+    expect(names).toEqual(['caseBlock', 'caseDescription', 'caseDialogue', 'caseFieldGuard', 'commentHighlight', 'doc']);
   });
 
   // Item 6 — an empty field keeps its label via a per-field placeholder.
