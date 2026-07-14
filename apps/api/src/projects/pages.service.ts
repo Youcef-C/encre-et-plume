@@ -21,9 +21,9 @@ export const WORKSPACE_PAGE_INCLUDE = {
   labels: { include: { label: true } },
   assignees: { include: { user: { select: { id: true, displayName: true, avatar: true } } } },
   checklistItems: { select: { done: true } },
-  // CS-3 assets linked to this card → derived linkedFiles (badge/chips/sections). One join on the
-  // already-indexed Asset.linkedPageId; no N+1.
-  assets: { select: { id: true, type: true, filename: true, currentVersion: true } },
+  // CS-3 assets linked to this card → derived linkedFiles (badge/chips/sections). Via the 2026-07-14
+  // AssetPageLink join (indexed on pageId); no N+1.
+  assetLinks: { include: { asset: { select: { id: true, type: true, filename: true, currentVersion: true } } } },
   _count: { select: { comments: true } },
 } as const;
 
@@ -39,7 +39,7 @@ type PageRow = {
   labels?: { label: { id: string; name: string; color: string } }[];
   assignees?: { user: { id: string; displayName: string; avatar: string | null } }[];
   checklistItems?: { done: boolean }[];
-  assets?: { id: string; type: AssetType; filename: string; currentVersion: number }[];
+  assetLinks?: { asset: { id: string; type: AssetType; filename: string; currentVersion: number } }[];
   _count?: { comments: number };
 };
 
@@ -57,7 +57,7 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     stage: p.stage,
     fileTags: p.fileTags as WorkspacePage['fileTags'],
     linkedFileIds: p.linkedFileIds,
-    linkedFiles: (p.assets ?? []).map((a) => ({ assetId: a.id, type: a.type, filename: a.filename, version: a.currentVersion })),
+    linkedFiles: (p.assetLinks ?? []).map(({ asset: a }) => ({ assetId: a.id, type: a.type, filename: a.filename, version: a.currentVersion })),
     dueDate: toDateOnly(p.dueDate),
     labels: (p.labels ?? []).map((l) => ({ id: l.label.id, name: l.label.name, color: l.label.color })),
     assignees: (p.assignees ?? []).map((a) => ({ accountId: a.user.id, displayName: a.user.displayName, avatar: a.user.avatar })),
@@ -130,7 +130,7 @@ export class PagesService {
     }
 
     // linkedFileIds is NOT writable here — CS-3's link endpoints own the link state (and the
-    // per-file version chain). A page PATCH never touches it (would drift from Asset.linkedPageId).
+    // per-file version chain). A page PATCH never touches it (would drift from the AssetPageLink join).
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (body.labelIds !== undefined) {
@@ -169,7 +169,7 @@ export class PagesService {
           orderBy: { createdAt: 'asc' },
           include: { author: { select: { id: true, displayName: true, avatar: true } } },
         },
-        assets: { select: { id: true, type: true, filename: true, currentVersion: true } },
+        assetLinks: { include: { asset: { select: { id: true, type: true, filename: true, currentVersion: true } } } },
         _count: { select: { comments: true } },
       },
     });

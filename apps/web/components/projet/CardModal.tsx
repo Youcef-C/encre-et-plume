@@ -12,6 +12,7 @@ import {
   PAGE_STAGES,
   LABEL_COLORS,
   LABEL_COLOR_NAMES,
+  MULTI_LINK_ASSET_TYPES,
   type PageStage,
   type PageFileTag,
   type WorkspaceMember,
@@ -32,6 +33,7 @@ import ConfirmDialog from './ConfirmDialog';
 import AssetPreviewOverlay from './AssetPreviewOverlay';
 import AssetVersionsModal from './AssetVersionsModal';
 import LinkAssetPicker from './LinkAssetPicker';
+import { FILE_TAG_COVERING_TYPES } from './KanbanBoard';
 import { relativeTime } from '../../lib/notifications';
 import {
   getPageDetail,
@@ -339,10 +341,21 @@ export default function CardModal({
 
   // Merge an asset (linked or re-versioned) into the FICHIERS state AND bubble the page so the board's
   // derived badge/chips re-render (D-D/D-E). De-dupe by id (a re-link replaces the same asset).
-  function applyAssets(next: AssetItem[]) {
+  // `removedType` (unlink/delete) mirrors the server's `detachFromPage` tag prune: drop the covered
+  // fileTag for that type when no remaining linked asset on THIS card still covers it. Without this the
+  // board flashes a stray bare tag (e.g. "scénario") until a reload (QA Finding 1 / ML-5-BUG).
+  function applyAssets(next: AssetItem[], removedType?: AssetType) {
     if (!detail) return;
     setAssets(next);
-    emit({ ...detail, linkedFiles: next.map(toRef), linkedFileIds: next.map((a) => a.id) });
+    let fileTags = detail.fileTags;
+    if (removedType) {
+      fileTags = fileTags.filter(
+        (tag) =>
+          !FILE_TAG_COVERING_TYPES[tag].includes(removedType) ||
+          next.some((a) => FILE_TAG_COVERING_TYPES[tag].includes(a.type)),
+      );
+    }
+    emit({ ...detail, fileTags, linkedFiles: next.map(toRef), linkedFileIds: next.map((a) => a.id) });
   }
   function upsertAsset(updated: AssetItem) {
     const base = assets ?? [];
@@ -352,9 +365,10 @@ export default function CardModal({
   async function unlinkAsset(a: AssetItem) {
     const base = assets ?? [];
     const prev = base;
-    applyAssets(base.filter((x) => x.id !== a.id)); // optimistic — drop the row + re-derive the badge
+    applyAssets(base.filter((x) => x.id !== a.id), a.type); // optimistic — drop the row + prune the tag
     try {
-      await unlinkAssetFromPage(a.id);
+      // Per-card unlink: remove only THIS card's link — a shared asset stays linked to its other cards.
+      await unlinkAssetFromPage(a.id, pageId);
     } catch {
       applyAssets(prev); // restore on failure
     }
@@ -492,7 +506,11 @@ export default function CardModal({
                               <button
                                 type="button"
                                 aria-label={`Lier un fichier (${sec.label})`}
-                                title="Lier · remplacer un fichier"
+                                title={
+                                  (MULTI_LINK_ASSET_TYPES as readonly AssetType[]).includes(sec.canonical)
+                                    ? 'Lier · ajouter un fichier'
+                                    : 'Lier · remplacer un fichier'
+                                }
                                 onClick={() => setLinkPicker({ types: sec.types, canonical: sec.canonical, label: sec.label })}
                                 style={{ ...plusBtn, marginLeft: 'auto' }}
                               >

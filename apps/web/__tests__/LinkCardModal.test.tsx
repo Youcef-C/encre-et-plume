@@ -37,7 +37,7 @@ const asset: AssetItem = {
   size: 2_400_000,
   thumbnailUrl: null,
   previewable: true,
-  linkedPage: null,
+  linkedPages: [],
   updatedAt: '2026-07-13T10:00:00.000Z',
 };
 
@@ -50,7 +50,7 @@ describe('LinkCardModal', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('lists project cards and links the chosen one', async () => {
-    const linked: AssetItem = { ...asset, linkedPage: { id: 'pg7', title: 'Page 7' } };
+    const linked: AssetItem = { ...asset, linkedPages: [{ id: 'pg7', title: 'Page 7' }] };
     vi.mocked(api.linkAssetToPage).mockResolvedValue(linked);
     const onLinked = vi.fn();
     render(

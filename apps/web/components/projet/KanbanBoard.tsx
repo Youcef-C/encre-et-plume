@@ -66,7 +66,7 @@ const LINKED_TYPE_META: Record<AssetType, { label: string; icon: 'doc' | 'img' }
 
 // A manual fileTag is hidden once a linked file of its mapped type exists (D-E). `double` is a
 // page-format flag, never a file type, so it maps to nothing and always renders.
-const FILE_TAG_COVERING_TYPES: Record<PageFileTag, AssetType[]> = {
+export const FILE_TAG_COVERING_TYPES: Record<PageFileTag, AssetType[]> = {
   scenario: ['scenario', 'texte'],
   nemu: ['dessin'],
   ref: ['ref'],

@@ -739,9 +739,13 @@ export const linkAssetToPage = (assetId: string, body: LinkAssetRequest): Promis
     body: JSON.stringify(body),
   });
 
-// Detach an asset from its linked card (member-gated). Returns the refreshed AssetItem (linkedPage null).
-export const unlinkAssetFromPage = (assetId: string): Promise<AssetItem> =>
-  request<AssetItem>(`/assets/${encodeURIComponent(assetId)}/link`, { method: 'DELETE' });
+// Detach an asset from ONE card (member-gated, per-card unlink). Returns the refreshed AssetItem —
+// its other cards keep the link (linkedPages drops only this pageId).
+export const unlinkAssetFromPage = (assetId: string, pageId: string): Promise<AssetItem> =>
+  request<AssetItem>(
+    `/assets/${encodeURIComponent(assetId)}/link?pageId=${encodeURIComponent(pageId)}`,
+    { method: 'DELETE' },
+  );
 
 // Hard-delete an asset + its whole version chain (member-gated). 204, no body.
 export const deleteAsset = (assetId: string): Promise<void> =>

@@ -22,7 +22,7 @@ const asset: AssetItem = {
   size: 2_400_000,
   thumbnailUrl: null,
   previewable: true,
-  linkedPage: null,
+  linkedPages: [],
   updatedAt: '2026-07-13T10:00:00.000Z',
 };
 

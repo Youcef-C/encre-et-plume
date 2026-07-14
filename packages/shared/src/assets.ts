@@ -8,6 +8,10 @@ export type AssetSort = (typeof ASSET_SORTS)[number];
 
 export const ASSETS_PAGE_SIZE = 24; // D13
 
+/** Types whose assets may link to MANY cards (2026-07-14 rule); dessin/page stay single-card
+ *  (re-link replaces). One source of truth shared by FE (add-vs-replace copy) and BE (cardinality). */
+export const MULTI_LINK_ASSET_TYPES = ['scenario', 'texte', 'ref'] as const satisfies readonly AssetType[];
+
 export interface AssetItem {
   id: string;
   type: AssetType;
@@ -16,7 +20,7 @@ export interface AssetItem {
   size: number; // bytes, current version — FE formats "2,4 Mo"
   thumbnailUrl: string | null; // resolved server-side (signed/public); null → FE placeholder tile
   previewable: boolean; // false only for psd (and unknown)
-  linkedPage: { id: string; title: string } | null;
+  linkedPages: { id: string; title: string }[]; // 2026-07-14 multi-card link; order = link createdAt asc; [] when unlinked
   updatedAt: string; // ISO
 }
 
@@ -54,7 +58,9 @@ export interface AddAssetVersionRequest {
 export interface LinkAssetRequest {
   pageId: string;
   type?: AssetType; // section-scoped re-type on link (D-I); absent → keep current type
-} // POST /assets/:id/link · DELETE /assets/:id/link → AssetItem · DELETE /assets/:id → 204
+} // POST /assets/:id/link (add for shared types / replace for single) → AssetItem
+// DELETE /assets/:id/link?pageId=<pageId> → AssetItem (per-card unlink; 400 if pageId missing; idempotent)
+// DELETE /assets/:id → 204 (removes asset + ALL its links + versions + blobs)
 
 export interface AssetVersionItem {
   version: number;

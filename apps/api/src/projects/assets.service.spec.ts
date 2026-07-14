@@ -37,11 +37,15 @@ const ASSET = (o: Record<string, unknown> = {}) => ({
   currentVersion: 1,
   size: 2048,
   mediaId: 'media-1',
-  linkedPageId: null,
-  linkedPage: null,
+  // 2026-07-14: link state lives in the AssetPageLink join. Test fixtures carry both `pageId`
+  // (loadMemberAsset select shape) and `page` (getAssetItem include shape) on each link row.
+  pageLinks: [] as { pageId: string; page: { id: string; title: string } }[],
   updatedAt: new Date('2026-07-13T00:00:00Z'),
   ...o,
 });
+
+/** A join-row fixture carrying both the select shape (pageId) and the include shape (page). */
+const LINK = (pageId: string, title = pageId) => ({ pageId, page: { id: pageId, title } });
 
 describe('AssetsService', () => {
   let service: AssetsService;
@@ -55,7 +59,7 @@ describe('AssetsService', () => {
       asset: {
         // where.projectId_filename → the "existing?" lookup (default: none). where.id → getAssetItem / loadMemberAsset.
         findUnique: jest.fn().mockImplementation(({ where }: any) =>
-          where.projectId_filename ? Promise.resolve(null) : Promise.resolve({ ...ASSET(), linkedPage: null, project: PROJECT() }),
+          where.projectId_filename ? Promise.resolve(null) : Promise.resolve({ ...ASSET(), project: PROJECT() }),
         ),
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
@@ -67,6 +71,11 @@ describe('AssetsService', () => {
       assetVersion: {
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      assetPageLink: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        delete: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       media: {
         findUnique: jest.fn().mockResolvedValue(MEDIA()),
@@ -220,7 +229,7 @@ describe('AssetsService', () => {
     it('composes AND filters: type + pageId + q (case-insensitive)', async () => {
       await service.list('acc-me', 'x', { type: 'dessin', pageId: 'page-1', q: 'Plan' });
       const where = prisma.asset.findMany.mock.calls[0][0].where;
-      expect(where).toMatchObject({ projectId: 'proj-1', type: 'dessin', linkedPageId: 'page-1' });
+      expect(where).toMatchObject({ projectId: 'proj-1', type: 'dessin', pageLinks: { some: { pageId: 'page-1' } } });
       expect(where.filename).toMatchObject({ contains: 'Plan', mode: 'insensitive' });
     });
 
@@ -247,14 +256,27 @@ describe('AssetsService', () => {
       await expect(service.list('acc-me', 'x', { type: 'bogus' as never })).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('item carries currentVersion + linkedPage; thumbnailUrl null for documents', async () => {
+    it('item carries currentVersion + linkedPages; thumbnailUrl null for documents', async () => {
       prisma.asset.count.mockResolvedValue(1);
-      prisma.asset.findMany.mockResolvedValue([ASSET({ mediaId: 'media-doc', currentVersion: 2, linkedPage: { id: 'page-1', title: 'Page 7' } })]);
+      prisma.asset.findMany.mockResolvedValue([
+        ASSET({ mediaId: 'media-doc', currentVersion: 2, pageLinks: [{ page: { id: 'page-1', title: 'Page 7' } }] }),
+      ]);
       prisma.media.findMany.mockResolvedValue([MEDIA({ id: 'media-doc', contentType: DOCX, variants: { orig: 'asset/acc-me/media-doc.docx' } })]);
       const res = await service.list('acc-me', 'x', {});
       expect(res.items[0].currentVersion).toBe(2);
-      expect(res.items[0].linkedPage).toEqual({ id: 'page-1', title: 'Page 7' });
+      expect(res.items[0].linkedPages).toEqual([{ id: 'page-1', title: 'Page 7' }]);
       expect(res.items[0].thumbnailUrl).toBeNull();
+    });
+
+    // A6/A8: an asset linked to multiple cards exposes all of them (count = titles.length).
+    it('item exposes multiple linked cards via linkedPages', async () => {
+      prisma.asset.count.mockResolvedValue(1);
+      prisma.asset.findMany.mockResolvedValue([
+        ASSET({ type: 'scenario', pageLinks: [{ page: { id: 'page-a', title: 'A' } }, { page: { id: 'page-b', title: 'B' } }] }),
+      ]);
+      prisma.media.findMany.mockResolvedValue([MEDIA()]);
+      const res = await service.list('acc-me', 'x', {});
+      expect(res.items[0].linkedPages).toEqual([{ id: 'page-a', title: 'A' }, { id: 'page-b', title: 'B' }]);
     });
 
     it('resolves a signed thumbnail for a private image asset', async () => {
@@ -302,15 +324,17 @@ describe('AssetsService', () => {
     });
   });
 
-  // ── linkToPage (B9) ───────────────────────────────────────────────────────
+  // ── linkToPage (2026-07-14 multi-card) ─────────────────────────────────────
   describe('linkToPage', () => {
     beforeEach(() => {
       prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT() });
     });
 
-    it('sets linkedPageId and appends assetId to page.linkedFileIds', async () => {
+    it('adds a join row for the card and appends assetId to page.linkedFileIds', async () => {
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
-      expect(prisma.asset.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ linkedPageId: 'page-1' }) }));
+      expect(prisma.assetPageLink.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: [{ assetId: 'asset-1', pageId: 'page-1' }], skipDuplicates: true }),
+      );
       const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
       expect(pageUpdate[0].data.linkedFileIds).toContain('asset-1');
     });
@@ -322,14 +346,42 @@ describe('AssetsService', () => {
       expect(pageUpdate[0].data.fileTags).toContain('scenario');
     });
 
-    it('re-link removes the asset from the previously linked page', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ linkedPageId: 'page-old' }), project: PROJECT() });
+    // A1/A4: a shared type (scenario/texte/ref) linked to a SECOND card KEEPS the first link.
+    it('shared type: linking to a second card adds a row and keeps the existing link', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', pageLinks: [LINK('page-a', 'A')] }), project: PROJECT() });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-b', projectId: 'proj-1', linkedFileIds: [], fileTags: [] });
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-b' });
+      expect(prisma.assetPageLink.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: [{ assetId: 'asset-1', pageId: 'page-b' }], skipDuplicates: true }),
+      );
+      // Never delete the other card's link for a shared type.
+      expect(prisma.assetPageLink.delete).not.toHaveBeenCalled();
+    });
+
+    // A4: re-linking a shared type to the SAME card is idempotent (skipDuplicates), no other link touched.
+    it('shared type: re-linking the same card is idempotent (skipDuplicates), keeps other links', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET({ type: 'scenario', pageLinks: [LINK('page-a', 'A'), LINK('page-b', 'B')] }),
+        project: PROJECT(),
+      });
+      prisma.page.findUnique.mockResolvedValue({ id: 'page-a', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-a' });
+      expect(prisma.assetPageLink.createMany).toHaveBeenCalledWith(expect.objectContaining({ skipDuplicates: true }));
+      expect(prisma.assetPageLink.delete).not.toHaveBeenCalled();
+    });
+
+    // A2/A4: a single-card type (dessin/page) REPLACES — its other link is dropped + detached.
+    it('single type: linking a dessin to a new card replaces its existing link', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'dessin', pageLinks: [LINK('page-old', 'Old')] }), project: PROJECT() });
       prisma.page.findUnique.mockImplementation(({ where }: any) =>
         where.id === 'page-old'
           ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: [] })
           : Promise.resolve({ id: 'page-1', projectId: 'proj-1', linkedFileIds: [], fileTags: [] }),
       );
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { assetId_pageId: { assetId: 'asset-1', pageId: 'page-old' } } }),
+      );
       const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
       expect(oldUpdate[0].data.linkedFileIds).not.toContain('asset-1');
     });
@@ -339,46 +391,29 @@ describe('AssetsService', () => {
       await expect(service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' })).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    // R-B2: re-link must prune the old card's file-type chip too, not just linkedFileIds.
-    it('re-link prunes the scenario fileTag from the old page when this asset was its sole scenario link', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-old' }), project: PROJECT() });
+    // R-B2: single-type replace must prune the old card's file-type chip too, not just linkedFileIds.
+    it('single type: replace prunes the old card chip when this asset was its sole link of that type', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'dessin', pageLinks: [LINK('page-old', 'Old')] }), project: PROJECT() });
       prisma.page.findUnique.mockImplementation(({ where }: any) =>
         where.id === 'page-old'
-          ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] })
+          ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['nemu'] })
           : Promise.resolve({ id: 'page-1', projectId: 'proj-1', linkedFileIds: [], fileTags: [] }),
       );
-      prisma.asset.count.mockResolvedValue(0); // no remaining scenario asset on page-old
+      // dessin isn't a PAGE_FILE_TAG so no chip prune happens for it; use a re-typed case below instead.
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
       const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
-      expect(oldUpdate[0].data.fileTags).not.toContain('scenario');
-    });
-
-    it('re-link keeps the scenario fileTag on the old page when another scenario asset remains linked there', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-old' }), project: PROJECT() });
-      prisma.page.findUnique.mockImplementation(({ where }: any) =>
-        where.id === 'page-old'
-          ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1', 'asset-2'], fileTags: ['scenario'] })
-          : Promise.resolve({ id: 'page-1', projectId: 'proj-1', linkedFileIds: [], fileTags: [] }),
-      );
-      prisma.asset.count.mockResolvedValue(1); // asset-2 is still a scenario link on page-old
-      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
-      const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
-      // Tag left untouched (not re-written) → the chip stays on the old card.
-      expect(oldUpdate[0].data.fileTags).toBeUndefined();
-    });
-
-    // B8 (iter 2): section-scoped link re-types the asset.
-    it('re-types the asset when a type is supplied (＋ Lier from PAGE → type page)', async () => {
-      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'page' });
-      expect(prisma.asset.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ linkedPageId: 'page-1', type: 'page' }) }),
-      );
+      expect(oldUpdate[0].data.linkedFileIds).not.toContain('asset-1');
     });
 
     it('does not write a type when none is supplied (regression: byte-for-byte)', async () => {
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1' });
-      const assetUpdate = prisma.asset.update.mock.calls.find((c: any) => c[0].where.id === 'asset-1');
-      expect(assetUpdate[0].data.type).toBeUndefined();
+      expect(prisma.asset.update).not.toHaveBeenCalled();
+    });
+
+    // B8: section-scoped link re-types the asset (only the type column is written now).
+    it('re-types the asset when a type is supplied (＋ Lier from PAGE → type page)', async () => {
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'page' });
+      expect(prisma.asset.update).toHaveBeenCalledWith(expect.objectContaining({ data: { type: 'page' } }));
     });
 
     it('adds the new type chip on re-type (ref → ref fileTag)', async () => {
@@ -389,7 +424,7 @@ describe('AssetsService', () => {
 
     // Same-page re-classification: prune the old chip iff it was the last of its type, add the new.
     it('same-page re-classification prunes the old type chip and adds the new one', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', pageLinks: [LINK('page-1')] }), project: PROJECT() });
       prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
       prisma.asset.count.mockResolvedValue(0); // no other scenario asset linked to page-1
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
@@ -399,7 +434,7 @@ describe('AssetsService', () => {
     });
 
     it('same-page re-classification keeps the old chip when another asset of that type remains', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', pageLinks: [LINK('page-1')] }), project: PROJECT() });
       prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1', 'asset-2'], fileTags: ['scenario'] });
       prisma.asset.count.mockResolvedValue(1); // asset-2 still scenario on page-1
       await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
@@ -408,39 +443,76 @@ describe('AssetsService', () => {
       expect(pageUpdate[0].data.fileTags).toContain('ref');
     });
 
-    it('cross-page re-link prunes the OLD page chip using the old type even when re-typed', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-old' }), project: PROJECT() });
+    // B3 edge (D-ML1): re-typing a multi-linked shared asset TO a single type collapses to one card.
+    it('re-type to single type (dessin) collapses a multi-linked asset to just the target card', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET({ type: 'scenario', pageLinks: [LINK('page-a', 'A'), LINK('page-b', 'B')] }),
+        project: PROJECT(),
+      });
       prisma.page.findUnique.mockImplementation(({ where }: any) =>
-        where.id === 'page-old'
-          ? Promise.resolve({ id: 'page-old', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] })
-          : Promise.resolve({ id: 'page-1', projectId: 'proj-1', linkedFileIds: [], fileTags: [] }),
+        Promise.resolve({ id: where.id, projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] }),
       );
       prisma.asset.count.mockResolvedValue(0);
-      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-1', type: 'ref' });
-      const oldUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-old');
-      expect(oldUpdate[0].data.fileTags).not.toContain('scenario');
-      const newUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
-      expect(newUpdate[0].data.fileTags).toContain('ref');
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-c', type: 'dessin' });
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { assetId_pageId: { assetId: 'asset-1', pageId: 'page-a' } } }),
+      );
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { assetId_pageId: { assetId: 'asset-1', pageId: 'page-b' } } }),
+      );
+    });
+
+    // A6 re-type ripple: a still-linked OTHER card reconciles its chips to the new type.
+    it('re-type ripple: other still-linked cards lose the old chip and gain the new one', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET({ type: 'scenario', pageLinks: [LINK('page-a', 'A'), LINK('page-b', 'B')] }),
+        project: PROJECT(),
+      });
+      prisma.page.findUnique.mockImplementation(({ where }: any) =>
+        Promise.resolve({ id: where.id, projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] }),
+      );
+      prisma.asset.count.mockResolvedValue(0); // asset was the sole scenario on page-a
+      // re-link to page-b (already linked) with type ref → shared type keeps page-a, reconciles it.
+      await service.linkToPage('acc-me', 'asset-1', { pageId: 'page-b', type: 'ref' });
+      const aUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-a');
+      expect(aUpdate[0].data.fileTags).not.toContain('scenario');
+      expect(aUpdate[0].data.fileTags).toContain('ref');
     });
   });
 
-  // ── unlinkFromPage (B9) ───────────────────────────────────────────────────
+  // ── unlinkFromPage (2026-07-14 per-card) ───────────────────────────────────
   describe('unlinkFromPage', () => {
     beforeEach(() => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', pageLinks: [LINK('page-1')] }), project: PROJECT() });
       prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
     });
 
-    it('clears linkedPageId and removes the id from the page linkedFileIds', async () => {
-      await service.unlinkFromPage('acc-me', 'asset-1');
-      expect(prisma.asset.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ linkedPageId: null }) }));
+    it('deletes only that card join row and removes the id from the page linkedFileIds', async () => {
+      await service.unlinkFromPage('acc-me', 'asset-1', 'page-1');
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { assetId_pageId: { assetId: 'asset-1', pageId: 'page-1' } } }),
+      );
       const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
       expect(pageUpdate[0].data.linkedFileIds).not.toContain('asset-1');
     });
 
+    // A5: unlinking one card leaves the asset's other cards linked.
+    it('leaves the asset linked to its other cards', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET({ type: 'scenario', pageLinks: [LINK('page-1'), LINK('page-2')] }),
+        project: PROJECT(),
+      });
+      await service.unlinkFromPage('acc-me', 'asset-1', 'page-1');
+      // Only page-1's row is deleted; page-2 is untouched.
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.assetPageLink.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { assetId_pageId: { assetId: 'asset-1', pageId: 'page-1' } } }),
+      );
+    });
+
     it('prunes the fileTag chip when it was the last linked asset of that type', async () => {
       prisma.asset.count.mockResolvedValue(0);
-      await service.unlinkFromPage('acc-me', 'asset-1');
+      await service.unlinkFromPage('acc-me', 'asset-1', 'page-1');
       const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
       expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
     });
@@ -448,41 +520,46 @@ describe('AssetsService', () => {
     it('keeps the fileTag chip when another linked asset of that type remains', async () => {
       prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1', 'asset-2'], fileTags: ['scenario'] });
       prisma.asset.count.mockResolvedValue(1);
-      await service.unlinkFromPage('acc-me', 'asset-1');
+      await service.unlinkFromPage('acc-me', 'asset-1', 'page-1');
       const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
       expect(pageUpdate[0].data.fileTags).toBeUndefined();
     });
 
-    it('is an idempotent no-op when the asset is not linked', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ linkedPageId: null }), project: PROJECT() });
-      await service.unlinkFromPage('acc-me', 'asset-1');
+    it('is an idempotent no-op when the asset is not linked to that card', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ pageLinks: [] }), project: PROJECT() });
+      await service.unlinkFromPage('acc-me', 'asset-1', 'page-1');
       expect(prisma.page.update).not.toHaveBeenCalled();
+      expect(prisma.assetPageLink.delete).not.toHaveBeenCalled();
+    });
+
+    it('400 when pageId is missing', async () => {
+      await expect(service.unlinkFromPage('acc-me', 'asset-1', '')).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('404 for an unknown asset', async () => {
       prisma.asset.findUnique.mockResolvedValue(null);
-      await expect(service.unlinkFromPage('acc-me', 'ghost')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlinkFromPage('acc-me', 'ghost', 'page-1')).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('403 for a non-member on a public project', async () => {
       prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'public' }) });
-      await expect(service.unlinkFromPage('stranger', 'asset-1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.unlinkFromPage('stranger', 'asset-1', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('404 for a non-member on a private project', async () => {
       prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT({ visibility: 'prive' }) });
-      await expect(service.unlinkFromPage('stranger', 'asset-1')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlinkFromPage('stranger', 'asset-1', 'page-1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
-  // ── deleteAsset (B10) ─────────────────────────────────────────────────────
+  // ── deleteAsset (2026-07-14: removes ALL links) ────────────────────────────
   describe('deleteAsset', () => {
     beforeEach(() => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ linkedPageId: null }), project: PROJECT() });
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ pageLinks: [] }), project: PROJECT() });
       prisma.assetVersion.findMany.mockResolvedValue([{ mediaId: 'media-1' }, { mediaId: 'media-2' }, { mediaId: 'media-1' }]);
     });
 
-    it('deletes the asset (version chain cascades)', async () => {
+    it('deletes the asset (version + link chain cascades)', async () => {
       await service.deleteAsset('acc-me', 'asset-1');
       expect(prisma.asset.delete).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'asset-1' } }));
     });
@@ -494,14 +571,22 @@ describe('AssetsService', () => {
       expect(media.deleteMediaById).toHaveBeenCalledWith('media-2');
     });
 
-    it('detaches the asset from its linked page first (linkedFileIds + fileTags)', async () => {
-      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ type: 'scenario', linkedPageId: 'page-1' }), project: PROJECT() });
-      prisma.page.findUnique.mockResolvedValue({ id: 'page-1', projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] });
+    // A7: delete detaches EVERY linked card.
+    it('detaches the asset from ALL its linked cards first (linkedFileIds + fileTags)', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET({ type: 'scenario', pageLinks: [LINK('page-a', 'A'), LINK('page-b', 'B')] }),
+        project: PROJECT(),
+      });
+      prisma.page.findUnique.mockImplementation(({ where }: any) =>
+        Promise.resolve({ id: where.id, projectId: 'proj-1', linkedFileIds: ['asset-1'], fileTags: ['scenario'] }),
+      );
       prisma.asset.count.mockResolvedValue(0);
       await service.deleteAsset('acc-me', 'asset-1');
-      const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === 'page-1');
-      expect(pageUpdate[0].data.linkedFileIds).not.toContain('asset-1');
-      expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
+      for (const pid of ['page-a', 'page-b']) {
+        const pageUpdate = prisma.page.update.mock.calls.find((c: any) => c[0].where.id === pid);
+        expect(pageUpdate[0].data.linkedFileIds).not.toContain('asset-1');
+        expect(pageUpdate[0].data.fileTags).not.toContain('scenario');
+      }
       expect(prisma.asset.delete).toHaveBeenCalled();
     });
 

@@ -129,7 +129,8 @@ test.describe('CS-2 iter2 — FICHIERS sections fillability + unlink + delete (o
     await expect(modal).toBeVisible();
     await modal.getByRole('button', { name: 'Lier un fichier (RÉFÉRENCES)' }).click();
 
-    const picker = page.getByRole('dialog', { name: 'Lier · remplacer' });
+    // "ref" is a multi-link type (CS-3 delta, 2026-07-14) — the picker now reads "Lier · ajouter".
+    const picker = page.getByRole('dialog', { name: 'Lier · ajouter' });
     await expect(picker).toBeVisible();
     const row = picker.getByRole('button', { name: /cs3-notes\.txt/ });
     await expect(row).toBeVisible({ timeout: 10_000 });
@@ -294,7 +295,8 @@ test.describe('CS-2 iter2 — responsive sweep (375/768/1280): FICHIERS modal se
       expect(await noHorizontalOverflow(page)).toBe(true);
 
       await modal.getByRole('button', { name: 'Lier un fichier (SCÉNARIO)' }).click();
-      const picker = page.getByRole('dialog', { name: 'Lier · remplacer' });
+      // "scenario" is a multi-link type (CS-3 delta, 2026-07-14) — the picker now reads "Lier · ajouter".
+      const picker = page.getByRole('dialog', { name: 'Lier · ajouter' });
       await expect(picker).toBeVisible();
       expect(await noHorizontalOverflow(page)).toBe(true);
       if (width === 375) {

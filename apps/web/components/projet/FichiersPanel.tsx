@@ -643,11 +643,15 @@ function AssetCard({
             v{asset.currentVersion}
           </button>
         </div>
-        {asset.linkedPage && (
-          <div style={linkedChip} title={`Liée à ${asset.linkedPage.title}`}>
-            {asset.linkedPage.title}
+        {asset.linkedPages.length === 1 ? (
+          <div style={linkedChip} title={`Liée à ${asset.linkedPages[0].title}`}>
+            {asset.linkedPages[0].title}
           </div>
-        )}
+        ) : asset.linkedPages.length > 1 ? (
+          <div style={linkedChip} title={asset.linkedPages.map((p) => p.title).join(' · ')}>
+            Liée à {asset.linkedPages.length} cartes
+          </div>
+        ) : null}
         {/* Bottom-pinned real on-brand buttons, equal height, ≥44px effective tap target. */}
         <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 10, flexWrap: 'wrap' }}>
           <button

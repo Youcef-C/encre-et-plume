@@ -198,8 +198,8 @@ export interface PageCommentItem {
 }
 
 /** A linked CS-3 file (Asset) resolved onto a board card, for the card's per-type FICHIERS sections,
- *  per-file chips, and the derived "⎘ vN" badge (max version). Derived server-side from
- *  `Asset.linkedPageId` — the FE never derives the rollup from a stored counter. */
+ *  per-file chips, and the derived "⎘ vN" badge (max version). Derived server-side from the
+ *  `AssetPageLink` join (2026-07-14) — the FE never derives the rollup from a stored counter. */
 export interface PageLinkedFileRef {
   assetId: string;
   type: AssetType;

@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetType } from '@encre-et-plume/shared';
+import { MULTI_LINK_ASSET_TYPES } from '@encre-et-plume/shared';
 import { listProjectAssets, linkAssetToPage } from '../../lib/api';
 import { XIcon } from '../icons';
 
@@ -36,6 +37,8 @@ const TYPE_LABEL: Record<AssetType, string> = {
 
 export default function LinkAssetPicker({ slug, pageId, types, canonicalType, sectionLabel, onClose, onLinked }: LinkAssetPickerProps) {
   useScrollLock();
+  // Shared types (scenario/texte/ref) ADD a card link; single types (dessin/page) REPLACE the one link.
+  const isMulti = (MULTI_LINK_ASSET_TYPES as readonly AssetType[]).includes(canonicalType);
   const [assets, setAssets] = useState<AssetItem[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState('');
@@ -117,7 +120,7 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
       >
         <div style={header}>
           <div id={titleId} style={{ fontFamily: 'var(--font-display)', fontSize: 20, textTransform: 'uppercase' }}>
-            Lier · remplacer
+            {isMulti ? 'Lier · ajouter' : 'Lier · remplacer'}
           </div>
           <span style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700, marginLeft: 8 }}>{sectionLabel}</span>
           <button ref={closeRef} type="button" aria-label="Fermer" onClick={onClose} style={closeBtn}>
@@ -153,14 +156,17 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
             ) : (
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {sorted.map((a) => {
-                  const elsewhere = a.linkedPage && a.linkedPage.id !== pageId;
                   const reclassify = !types.includes(a.type);
+                  const alreadyHere = a.linkedPages.some((p) => p.id === pageId);
+                  const others = a.linkedPages.filter((p) => p.id !== pageId);
+                  // Shared type already on this card = the add is a no-op → block it.
+                  const alreadyLinked = isMulti && alreadyHere;
                   return (
                     <li key={a.id}>
                       <button
                         type="button"
                         onClick={() => void pick(a)}
-                        disabled={busyId !== null}
+                        disabled={busyId !== null || alreadyLinked}
                         style={{
                           width: '100%',
                           display: 'flex',
@@ -173,7 +179,8 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
                           color: 'var(--ink)',
                           fontFamily: 'inherit',
                           padding: '10px 12px',
-                          cursor: busyId ? 'default' : 'pointer',
+                          cursor: busyId || alreadyLinked ? 'default' : 'pointer',
+                          opacity: alreadyLinked ? 0.6 : 1,
                           minHeight: 44,
                         }}
                       >
@@ -189,11 +196,20 @@ export default function LinkAssetPicker({ slug, pageId, types, canonicalType, se
                               sera reclassé « {TYPE_LABEL[canonicalType]} »
                             </span>
                           )}
-                          {elsewhere && (
-                            <span style={{ display: 'block', fontSize: 11, color: 'var(--accent)', fontWeight: 700, marginTop: 2 }}>
-                              liée à « {a.linkedPage!.title} » — sera re-liée
-                            </span>
-                          )}
+                          {/* Add-vs-replace hint. Shared type: adds — "sera aussi liée ici" (or a no-op
+                              block when already on this card). Single type: replaces — "sera re-liée". */}
+                          {isMulti
+                            ? alreadyHere
+                              ? (
+                                <span style={hintText}>déjà liée à cette carte</span>
+                              ) : others.length === 1 ? (
+                                <span style={hintText}>liée à « {others[0].title} » — sera aussi liée ici</span>
+                              ) : others.length > 1 ? (
+                                <span style={hintText}>liée à {others.length} cartes — sera aussi liée ici</span>
+                              ) : null
+                            : others.length > 0 && (
+                                <span style={hintText}>liée à « {others[0].title} » — sera re-liée</span>
+                              )}
                         </span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', flex: 'none' }}>
                           v{a.currentVersion} · {dateFr(a.updatedAt)}
@@ -281,6 +297,14 @@ const importLink: React.CSSProperties = {
   color: 'var(--accent)',
   fontWeight: 700,
   textDecoration: 'underline',
+};
+
+const hintText: React.CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  color: 'var(--accent)',
+  fontWeight: 700,
+  marginTop: 2,
 };
 
 const typeChip: React.CSSProperties = {

@@ -53,7 +53,7 @@ const dessin: AssetItem = {
   size: 2_400_000,
   thumbnailUrl: 'https://cdn/thumb.webp',
   previewable: true,
-  linkedPage: null,
+  linkedPages: [],
   updatedAt: '2026-07-13T10:00:00.000Z',
 };
 
@@ -135,6 +135,34 @@ describe('FichiersPanel', () => {
     expect(
       within(card).getByRole('button', { name: 'Lier ruelle-nemu.png à une carte' }),
     ).toBeInTheDocument();
+  });
+
+  it('shows a single card-title chip when linked to one card', async () => {
+    vi.mocked(api.listProjectAssets).mockResolvedValue(
+      listResponse([{ ...dessin, linkedPages: [{ id: 'pg7', title: 'Page 7' }] }]),
+    );
+    renderPanel();
+    const card = (await screen.findByText('ruelle-nemu.png')).closest('[data-asset-card]') as HTMLElement;
+    expect(within(card).getByText('Page 7')).toBeInTheDocument();
+  });
+
+  it('shows a "Liée à N cartes" chip when linked to several cards', async () => {
+    vi.mocked(api.listProjectAssets).mockResolvedValue(
+      listResponse([
+        {
+          ...dessin,
+          type: 'scenario',
+          linkedPages: [
+            { id: 'pg7', title: 'Page 7' },
+            { id: 'pg8', title: 'Page 8' },
+          ],
+        },
+      ]),
+    );
+    renderPanel();
+    const card = (await screen.findByText('ruelle-nemu.png')).closest('[data-asset-card]') as HTMLElement;
+    expect(within(card).getByText('Liée à 2 cartes')).toBeInTheDocument();
+    expect(within(card).getByTitle('Page 7 · Page 8')).toBeInTheDocument();
   });
 
   it('shows the empty state when there are no files', async () => {

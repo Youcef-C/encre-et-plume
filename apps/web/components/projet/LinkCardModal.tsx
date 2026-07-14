@@ -5,7 +5,8 @@
 // chrome (3px ink border, radius 12, hard offset shadow, ✕ close), Escape-dismissible, focus-trapped.
 import { useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
-import type { AssetItem, PageStage, WorkspacePage } from '@encre-et-plume/shared';
+import type { AssetItem, AssetType, PageStage, WorkspacePage } from '@encre-et-plume/shared';
+import { MULTI_LINK_ASSET_TYPES } from '@encre-et-plume/shared';
 import { linkAssetToPage } from '../../lib/api';
 import { XIcon } from '../icons';
 
@@ -83,8 +84,13 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
         <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 500, marginBottom: 12 }}>
             {asset.filename}
-            {asset.linkedPage && (
-              <> · actuellement liée à <b style={{ color: 'var(--ink)' }}>{asset.linkedPage.title}</b></>
+            {asset.linkedPages.length > 0 && (
+              <> · actuellement liée à{' '}
+                <b style={{ color: 'var(--ink)' }}>{asset.linkedPages.map((p) => p.title).join(' · ')}</b>
+              </>
+            )}
+            {(MULTI_LINK_ASSET_TYPES as readonly AssetType[]).includes(asset.type) && (
+              <div style={{ marginTop: 4 }}>Un scénario/une référence peut être liée à plusieurs cartes.</div>
             )}
           </div>
           {error && (
@@ -97,7 +103,7 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
           ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {pages.map((p) => {
-                const current = asset.linkedPage?.id === p.id;
+                const current = asset.linkedPages.some((lp) => lp.id === p.id);
                 return (
                   <li key={p.id}>
                     <button

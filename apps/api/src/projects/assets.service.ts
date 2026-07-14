@@ -21,6 +21,7 @@ import {
   DRAWING_SOURCE_CONTENT_TYPES,
   DRAWING_SOURCE_EXTENSIONS,
   MAX_UPLOAD_BYTES,
+  MULTI_LINK_ASSET_TYPES,
   PAGE_FILE_TAGS,
   PSD_CONTENT_TYPE,
 } from '@encre-et-plume/shared';
@@ -38,6 +39,12 @@ const DRAWING_CT_SET = new Set<string>(DRAWING_SOURCE_CONTENT_TYPES);
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
 const ASSET_SORT_SET = new Set<string>(ASSET_SORTS);
 const PAGE_TAG_SET = new Set<string>(PAGE_FILE_TAGS);
+const MULTI_LINK_SET = new Set<string>(MULTI_LINK_ASSET_TYPES); // scenario/texte/ref → many cards
+
+/** Include feeding AssetItem.linkedPages — every linked card in link order (createdAt asc). */
+const ASSET_PAGE_LINKS_INCLUDE = {
+  pageLinks: { include: { page: { select: { id: true, title: true } } }, orderBy: { createdAt: 'asc' } },
+} as const;
 
 type MediaRow = {
   id: string;
@@ -229,7 +236,7 @@ export class AssetsService {
     );
   }
 
-  // ── B9: link asset → card (one card max; re-link replaces; B8: optional re-type) ──
+  // ── link asset → card (2026-07-14: scenario/texte/ref = many cards; dessin/page = one; B8 re-type) ──
   async linkToPage(accountId: string, assetId: string, body: LinkAssetRequest): Promise<AssetItem> {
     const asset = await this.loadMemberAsset(accountId, assetId);
     const page = await this.prisma.page.findUnique({
@@ -240,27 +247,33 @@ export class AssetsService {
 
     const oldType = asset.type;
     const nextType = body.type ?? oldType; // B8: section-scoped link re-types the asset
+    // Cardinality is decided on the POST-re-type type: dessin/page always replace all other links
+    // ("re-link replaces"), scenario/texte/ref add (idempotent). D-ML1: no rejection path.
+    const isSingleCard = !MULTI_LINK_SET.has(nextType);
+    const alreadyLinkedHere = asset.pageLinks.some((l) => l.pageId === body.pageId);
+    const otherPageIds = asset.pageLinks.filter((l) => l.pageId !== body.pageId).map((l) => l.pageId);
+    const keptOtherPageIds = isSingleCard ? [] : otherPageIds;
 
     await this.prisma.$transaction(async (tx) => {
-      // Link + optional re-type FIRST, so type-based prune counts already reflect the new type.
-      await tx.asset.update({
-        where: { id: assetId },
-        data: { linkedPageId: body.pageId, ...(nextType !== oldType ? { type: nextType } : {}) },
-      });
-
-      // Re-link across cards (D12): detach from the previously linked page, pruning by the OLD type.
-      if (asset.linkedPageId && asset.linkedPageId !== body.pageId) {
-        await this.detachFromPage(tx, asset.linkedPageId, assetId, oldType);
+      // Re-type FIRST, so type-based prune counts already reflect the new type on every touched card.
+      if (nextType !== oldType) {
+        await tx.asset.update({ where: { id: assetId }, data: { type: nextType } });
       }
+
+      // Single-card types replace: drop every other link, pruning each old card by the OLD type.
+      if (isSingleCard) {
+        for (const otherId of otherPageIds) {
+          await tx.assetPageLink.delete({ where: { assetId_pageId: { assetId, pageId: otherId } } });
+          await this.detachFromPage(tx, otherId, assetId, oldType);
+        }
+      }
+
+      // Add this card's link (idempotent — same-page re-link is a no-op via skipDuplicates).
+      await tx.assetPageLink.createMany({ data: [{ assetId, pageId: body.pageId }], skipDuplicates: true });
 
       // Target-card fileTags: on same-page re-classification prune the old chip; then add the new chip.
       let fileTags = page.fileTags;
-      if (
-        asset.linkedPageId === body.pageId &&
-        nextType !== oldType &&
-        PAGE_TAG_SET.has(oldType) &&
-        fileTags.includes(oldType)
-      ) {
+      if (alreadyLinkedHere && nextType !== oldType && PAGE_TAG_SET.has(oldType) && fileTags.includes(oldType)) {
         // asset.type is now nextType → this count only sees OTHER linked assets of the old type.
         const stillJustified = await tx.asset.count({ where: { id: { in: page.linkedFileIds }, type: oldType } });
         if (stillJustified === 0) fileTags = fileTags.filter((t) => t !== oldType);
@@ -273,37 +286,46 @@ export class AssetsService {
       const data: Record<string, unknown> = { linkedFileIds };
       if (fileTags !== page.fileTags) data.fileTags = fileTags;
       await tx.page.update({ where: { id: body.pageId }, data });
+
+      // Re-type ripple (A6): the asset's stored type changed for EVERY card it stays linked to, so
+      // reconcile chips on the OTHER still-linked cards (shared types keep them).
+      if (nextType !== oldType) {
+        for (const otherId of keptOtherPageIds) {
+          await this.reconcileRetypeTags(tx, otherId, assetId, oldType, nextType);
+        }
+      }
     });
     return this.getAssetItem(assetId);
   }
 
-  // ── B9: unlink asset from its card (idempotent) ───────────────────────────
-  async unlinkFromPage(accountId: string, assetId: string): Promise<AssetItem> {
+  // ── per-card unlink (2026-07-14: removes just this card's link; idempotent) ──
+  async unlinkFromPage(accountId: string, assetId: string, pageId: string): Promise<AssetItem> {
+    if (!pageId) throw new BadRequestException('pageId requis');
     const asset = await this.loadMemberAsset(accountId, assetId);
-    if (!asset.linkedPageId) return this.getAssetItem(assetId); // idempotent no-op
-    const pageId = asset.linkedPageId;
+    if (!asset.pageLinks.some((l) => l.pageId === pageId)) return this.getAssetItem(assetId); // idempotent no-op
     await this.prisma.$transaction(async (tx) => {
-      await tx.asset.update({ where: { id: assetId }, data: { linkedPageId: null } });
+      await tx.assetPageLink.delete({ where: { assetId_pageId: { assetId, pageId } } });
       await this.detachFromPage(tx, pageId, assetId, asset.type);
     });
     return this.getAssetItem(assetId);
   }
 
-  // ── B10: delete an asset + its version chain + F-10 blobs ─────────────────
+  // ── delete an asset + ALL its links + its version chain + F-10 blobs ───────
   async deleteAsset(accountId: string, assetId: string): Promise<void> {
     const asset = await this.loadMemberAsset(accountId, assetId);
     const versions = await this.prisma.assetVersion.findMany({ where: { assetId }, select: { mediaId: true } });
     const mediaIds = [...new Set(versions.map((v) => (v as { mediaId: string }).mediaId))];
     await this.prisma.$transaction(async (tx) => {
-      if (asset.linkedPageId) await this.detachFromPage(tx, asset.linkedPageId, assetId, asset.type);
-      await tx.asset.delete({ where: { id: assetId } }); // AssetVersion chain cascades (onDelete: Cascade)
+      // A7: detach every linked card (linkedFileIds + chip prune) before the row cascades.
+      for (const { pageId } of asset.pageLinks) await this.detachFromPage(tx, pageId, assetId, asset.type);
+      await tx.asset.delete({ where: { id: assetId } }); // AssetVersion + AssetPageLink cascade (onDelete: Cascade)
     });
     // D-J: best-effort immediate blob cleanup — never fail the request on an S3/Media hiccup.
     for (const id of mediaIds) await this.media.deleteMediaById(id).catch(() => {});
   }
 
   /** Detach `assetId` from `pageId`: drop it from linkedFileIds and prune the `oldType` file-tag chip
-   *  iff no remaining linked asset still justifies it. Shared by re-link / unlink / delete. */
+   *  iff no remaining linked asset still justifies it. Shared by link-replace / unlink / delete. */
   private async detachFromPage(tx: Prisma.TransactionClient, pageId: string, assetId: string, oldType: AssetType): Promise<void> {
     const old = await tx.page.findUnique({ where: { id: pageId }, select: { linkedFileIds: true, fileTags: true } });
     if (!old) return;
@@ -316,6 +338,22 @@ export class AssetsService {
     await tx.page.update({ where: { id: pageId }, data });
   }
 
+  /** Re-type ripple helper: the asset STAYS linked to `pageId` but its type changed old→next. Prune
+   *  the old chip iff no remaining linked asset of the old type justifies it, add the new chip. Only
+   *  writes when a chip actually changes. */
+  private async reconcileRetypeTags(tx: Prisma.TransactionClient, pageId: string, assetId: string, oldType: AssetType, nextType: AssetType): Promise<void> {
+    const p = await tx.page.findUnique({ where: { id: pageId }, select: { linkedFileIds: true, fileTags: true } });
+    if (!p) return;
+    let fileTags = p.fileTags as string[];
+    if (PAGE_TAG_SET.has(oldType) && fileTags.includes(oldType)) {
+      // asset.type is already nextType in this tx → count sees only OTHER old-type assets.
+      const stillJustified = await tx.asset.count({ where: { id: { in: p.linkedFileIds as string[] }, type: oldType } });
+      if (stillJustified === 0) fileTags = fileTags.filter((t) => t !== oldType);
+    }
+    if (PAGE_TAG_SET.has(nextType) && !fileTags.includes(nextType)) fileTags = [...fileTags, nextType];
+    if (fileTags !== (p.fileTags as string[])) await tx.page.update({ where: { id: pageId }, data: { fileTags } });
+  }
+
   // ── B4: paginated, filterable list ────────────────────────────────────────
   async list(accountId: string, slug: string, query: AssetListQuery): Promise<AssetListResponse> {
     const project = await this.resolveMemberProject(accountId, slug);
@@ -325,7 +363,7 @@ export class AssetsService {
 
     const where: Record<string, unknown> = { projectId: project.id };
     if (query.type) where.type = query.type;
-    if (query.pageId) where.linkedPageId = query.pageId;
+    if (query.pageId) where.pageLinks = { some: { pageId: query.pageId } }; // via the join (@@index([pageId]))
     if (query.q) where.filename = { contains: query.q, mode: 'insensitive' };
 
     const orderBy =
@@ -338,7 +376,7 @@ export class AssetsService {
       orderBy,
       skip: (page - 1) * ASSETS_PAGE_SIZE,
       take: ASSETS_PAGE_SIZE,
-      include: { linkedPage: { select: { id: true, title: true } } },
+      include: ASSET_PAGE_LINKS_INCLUDE,
     });
 
     const mediaRows = await this.prisma.media.findMany({
@@ -384,14 +422,14 @@ export class AssetsService {
   private async getAssetItem(assetId: string): Promise<AssetItem> {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      include: { linkedPage: { select: { id: true, title: true } } },
+      include: ASSET_PAGE_LINKS_INCLUDE,
     });
     const media = (await this.prisma.media.findUnique({ where: { id: (asset as { mediaId: string }).mediaId } })) as unknown as MediaRow | null;
     return this.toAssetItem(asset as never, media ?? undefined);
   }
 
   private async toAssetItem(
-    asset: { id: string; type: AssetType; filename: string; currentVersion: number; size: number; updatedAt: Date; linkedPage: { id: string; title: string } | null },
+    asset: { id: string; type: AssetType; filename: string; currentVersion: number; size: number; updatedAt: Date; pageLinks: { page: { id: string; title: string } }[] },
     media: MediaRow | undefined,
   ): Promise<AssetItem> {
     const ct = media?.contentType ?? '';
@@ -404,7 +442,8 @@ export class AssetsService {
       thumbnailUrl: await this.resolveThumb(media),
       // Not previewable: psd, drawing-source formats (octet-stream / format-specific), and unknown.
       previewable: ct !== '' && ct !== PSD_CONTENT_TYPE && !DRAWING_CT_SET.has(ct),
-      linkedPage: asset.linkedPage ? { id: asset.linkedPage.id, title: asset.linkedPage.title } : null,
+      // 2026-07-14: all cards this asset links to, in link order (createdAt asc); [] when unlinked.
+      linkedPages: (asset.pageLinks ?? []).map((pl) => pl.page).filter((p): p is { id: string; title: string } => Boolean(p)),
       updatedAt: asset.updatedAt.toISOString(),
     };
   }
@@ -446,11 +485,14 @@ export class AssetsService {
     return project;
   }
 
-  /** Load an asset with its project membership context (for the /assets/:id routes). */
+  /** Load an asset with its project membership context + current link set (for the /assets/:id routes). */
   private async loadMemberAsset(accountId: string, assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
-      include: { project: { include: { work: { include: { creators: { select: { accountId: true } } } } } } },
+      include: {
+        project: { include: { work: { include: { creators: { select: { accountId: true } } } } } },
+        pageLinks: { select: { pageId: true } },
+      },
     });
     if (!asset) throw new NotFoundException('Fichier introuvable');
     const project = (asset as unknown as { project: { ownerId: string; visibility: string; work: { creators: { accountId: string }[] } | null } }).project;
@@ -458,7 +500,7 @@ export class AssetsService {
       if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
       throw new NotFoundException('Fichier introuvable');
     }
-    return asset as unknown as { id: string; projectId: string; type: AssetType; filename: string; currentVersion: number; mediaId: string; linkedPageId: string | null };
+    return asset as unknown as { id: string; projectId: string; type: AssetType; filename: string; currentVersion: number; mediaId: string; pageLinks: { pageId: string }[] };
   }
 }
 

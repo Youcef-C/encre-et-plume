@@ -20,7 +20,7 @@ function asset(over: Partial<AssetItem> = {}): AssetItem {
     size: 1024,
     thumbnailUrl: null,
     previewable: true,
-    linkedPage: null,
+    linkedPages: [],
     updatedAt: '2026-07-10T10:00:00.000Z',
     ...over,
   };
@@ -76,7 +76,7 @@ describe('LinkAssetPicker', () => {
   });
 
   it('picking a matching-type asset links it without a type override', async () => {
-    const linked = asset({ id: 'a1', linkedPage: { id: 'pg7', title: 'Page 7' } });
+    const linked = asset({ id: 'a1', linkedPages: [{ id: 'pg7', title: 'Page 7' }] });
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(listResponse([asset()]));
     (api.linkAssetToPage as ReturnType<typeof vi.fn>).mockResolvedValue(linked);
     const { onLinked } = mount({ types: ['scenario', 'texte'], canonicalType: 'scenario' });
@@ -87,10 +87,10 @@ describe('LinkAssetPicker', () => {
 
   it('reclassifies an out-of-section asset: shows the hint and sends the canonical type', async () => {
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
-      listResponse([asset({ id: 'a2', filename: 'planche.png', type: 'dessin', linkedPage: null })]),
+      listResponse([asset({ id: 'a2', filename: 'planche.png', type: 'dessin', linkedPages: [] })]),
     );
     (api.linkAssetToPage as ReturnType<typeof vi.fn>).mockResolvedValue(
-      asset({ id: 'a2', type: 'page', filename: 'planche.png', linkedPage: { id: 'pg7', title: 'Page 7' } }),
+      asset({ id: 'a2', type: 'page', filename: 'planche.png', linkedPages: [{ id: 'pg7', title: 'Page 7' }] }),
     );
     mount({ types: ['page'], canonicalType: 'page', sectionLabel: 'PAGE' });
     expect(await screen.findByText(/sera reclassé/)).toHaveTextContent('« Page »');
@@ -98,12 +98,42 @@ describe('LinkAssetPicker', () => {
     expect(api.linkAssetToPage).toHaveBeenCalledWith('a2', { pageId: 'pg7', type: 'page' });
   });
 
-  it('marks an asset already linked to another card as "sera re-liée"', async () => {
+  it('single type: header is "Lier · remplacer" and an asset linked elsewhere shows "sera re-liée"', async () => {
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
-      listResponse([asset({ linkedPage: { id: 'other', title: 'Page 3' } })]),
+      listResponse([asset({ id: 'a2', type: 'page', filename: 'planche.png', linkedPages: [{ id: 'other', title: 'Page 3' }] })]),
     );
-    mount({ types: ['scenario'] });
+    mount({ types: ['page'], canonicalType: 'page', sectionLabel: 'PAGE' });
+    expect(await screen.findByText('Lier · remplacer')).toBeInTheDocument();
     expect(await screen.findByText(/sera re-liée/)).toHaveTextContent('« Page 3 »');
+  });
+
+  it('shared type: header is "Lier · ajouter" and an asset linked to ONE other card shows "sera aussi liée ici"', async () => {
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
+      listResponse([asset({ linkedPages: [{ id: 'other', title: 'Page 3' }] })]),
+    );
+    mount({ types: ['scenario', 'texte'], canonicalType: 'scenario' });
+    expect(await screen.findByText('Lier · ajouter')).toBeInTheDocument();
+    expect(await screen.findByText(/sera aussi liée ici/)).toHaveTextContent('« Page 3 »');
+  });
+
+  it('shared type: an asset linked to N>1 other cards shows "liée à N cartes"', async () => {
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
+      listResponse([
+        asset({ linkedPages: [{ id: 'other', title: 'Page 3' }, { id: 'other2', title: 'Page 4' }] }),
+      ]),
+    );
+    mount({ types: ['scenario', 'texte'], canonicalType: 'scenario' });
+    expect(await screen.findByText(/liée à 2 cartes — sera aussi liée ici/)).toBeInTheDocument();
+  });
+
+  it('shared type: an asset already linked to THIS card is disabled with "déjà liée à cette carte"', async () => {
+    (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue(
+      listResponse([asset({ linkedPages: [{ id: 'pg7', title: 'Page 7' }] })]),
+    );
+    mount({ types: ['scenario', 'texte'], canonicalType: 'scenario' });
+    expect(await screen.findByText('déjà liée à cette carte')).toBeInTheDocument();
+    // The row button is disabled — the add would be a no-op.
+    expect(screen.getByText('scenario.txt').closest('button')).toBeDisabled();
   });
 
   it('shows an empty state pointing to the Fichiers tab', async () => {

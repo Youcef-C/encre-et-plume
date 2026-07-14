@@ -212,7 +212,7 @@ describe('PagesService', () => {
       comments: [
         { id: 'cm-1', authorId: 'acc-me', body: 'go', createdAt: new Date('2026-08-01'), editedAt: null, author: { id: 'acc-me', displayName: 'Moi', avatar: null } },
       ],
-      assets: [{ id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 }],
+      assetLinks: [{ asset: { id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 } }],
       _count: { comments: 1 },
       project: { ownerId: 'acc-me', visibility: 'prive', work: { creators: [{ accountId: 'acc-me' }, { accountId: 'acc-yuki' }] } },
       ...o,
@@ -310,14 +310,14 @@ describe('PagesService', () => {
     });
   });
 
-  // ── toWorkspacePage · derived linkedFiles (D-F) ──────────────────────────────
+  // ── toWorkspacePage · derived linkedFiles (2026-07-14: via the AssetPageLink join) ───────────
   describe('toWorkspacePage linkedFiles', () => {
-    it('maps the included assets relation to linkedFiles (version = currentVersion)', () => {
+    it('maps the included assetLinks join to linkedFiles (version = currentVersion)', () => {
       const res = toWorkspacePage({
         ...PAGE(),
-        assets: [
-          { id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 },
-          { id: 'as-2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 },
+        assetLinks: [
+          { asset: { id: 'as-1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 } },
+          { asset: { id: 'as-2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 } },
         ],
       } as never);
       expect(res.linkedFiles).toEqual([
@@ -326,9 +326,9 @@ describe('PagesService', () => {
       ]);
     });
 
-    it('is [] when the assets relation is absent or empty', () => {
+    it('is [] when the assetLinks join is absent or empty', () => {
       expect(toWorkspacePage(PAGE() as never).linkedFiles).toEqual([]);
-      expect(toWorkspacePage({ ...PAGE(), assets: [] } as never).linkedFiles).toEqual([]);
+      expect(toWorkspacePage({ ...PAGE(), assetLinks: [] } as never).linkedFiles).toEqual([]);
     });
   });
 });

@@ -930,7 +930,7 @@ model Page {
   assignees     PageAssignee[] // CS-2 card-modal: assigned members
   checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
   comments      PageComment[] // CS-2 card-modal: comments
-  assets        Asset[]       @relation("PageAssets") // CS-3 assets linked to this card
+  assetLinks    AssetPageLink[] // CS-3 assets linked to this card (2026-07-14 many-to-many join)
 
   @@index([projectId, chapterId, stage])
 }
@@ -1011,16 +1011,29 @@ model Asset {
   currentVersion Int            @default(1)
   size           Int // denormalized current-version size → sort=size is one indexed orderBy
   mediaId        String // current version's Media id (denormalized head of the chain)
-  linkedPageId   String?
-  linkedPage     Page?          @relation("PageAssets", fields: [linkedPageId], references: [id])
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   versions       AssetVersion[]
+  pageLinks      AssetPageLink[] // CS-3 cards this asset is linked to (2026-07-14; scenario/texte/ref = many, dessin/page = one)
 
   @@unique([projectId, filename]) // D10 re-import rule
   @@index([projectId, type])
   @@index([projectId, updatedAt]) // sort=recent
-  @@index([linkedPageId]) // pageId filter
+}
+
+// CS-3 (2026-07-14): asset↔card link join. Replaces the single Asset.linkedPageId. A scenario/texte/
+// ref asset may have many rows (shared across cards); a dessin/page asset keeps at most one (re-link
+// replaces). Both sides cascade-delete. `@@index([pageId])` backs the ?pageId= list filter + the
+// per-card derivation (Page.assetLinks).
+model AssetPageLink {
+  assetId   String
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([assetId, pageId])
+  @@index([pageId])
 }
 
 model AssetVersion {

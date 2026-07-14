@@ -79,8 +79,8 @@ export class AssetRootController {
   }
 
   @Delete(':id/link')
-  unlink(@Req() req: AuthRequest, @Param('id') id: string): Promise<AssetItem> {
-    return this.assets.unlinkFromPage(req.accountId, id);
+  unlink(@Req() req: AuthRequest, @Param('id') id: string, @Query('pageId') pageId: string): Promise<AssetItem> {
+    return this.assets.unlinkFromPage(req.accountId, id, pageId);
   }
 
   @Delete(':id')

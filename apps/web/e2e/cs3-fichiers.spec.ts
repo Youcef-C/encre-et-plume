@@ -211,7 +211,12 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     await expect(dialog).not.toBeVisible();
   });
 
-  test('CS3-E6: "＋ Lier à une carte" links an asset to a Tableau card; the scénario file tag surfaces on the kanban card; re-link replaces (one card max)', async ({ page }) => {
+  test('CS3-E6: "＋ Lier à une carte" links an asset to a Tableau card; the scénario file tag surfaces on the kanban card; re-linking a scénario (multi-link type, 2026-07-14) ADDS a second card', async ({ page }) => {
+    // NB: cs3-scenario-brief.txt derives to type "scenario", which the 2026-07-14 multi-card-linking
+    // rule makes a MULTI-LINK type (add, not replace) — see cs3-multilink.spec.ts for the full
+    // add/per-card-unlink/delete-removes-all-links/picker-copy acceptance suite. This test only
+    // re-verifies the base CS-3 "link a file to a card" flow still works and reflects the new rule
+    // instead of the pre-2026-07-14 "one card max" assumption it used to encode.
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}`);
 
@@ -234,23 +239,24 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     const page1Card = page.locator('div[draggable="true"]').filter({ hasText: 'Page 1' });
     await expect(page1Card.getByText('scénario')).toBeVisible({ timeout: 10_000 });
 
-    // Re-link to Page 2 replaces (one card max per asset) — Page 1 loses the tag, Page 2 gains it.
+    // Linking to Page 2 ADDS a second link (scenario = multi-link type, A1/A4) — Page 1 KEEPS the tag.
     await page.goto(`/projet/${slug}?tab=fichiers`);
     await assetCard(page, 'cs3-scenario-brief.txt').getByRole('button', { name: /Lier cs3-scenario-brief\.txt à une carte/ }).click();
     dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('actuellement liée à')).toBeVisible();
+    await expect(dialog.getByText('Un scénario/une référence peut être liée à plusieurs cartes.')).toBeVisible();
     await dialog.getByRole('button', { name: /Page 2/ }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
-    await expect(assetCard(page, 'cs3-scenario-brief.txt').getByText('Page 2')).toBeVisible();
+    await expect(assetCard(page, 'cs3-scenario-brief.txt').getByText('Liée à 2 cartes')).toBeVisible();
 
     await page.goto(`/projet/${slug}`);
     const page1CardAfter = page.locator('div[draggable="true"]').filter({ hasText: 'Page 1' });
     const page2CardAfter = page.locator('div[draggable="true"]').filter({ hasText: 'Page 2' });
-    await expect(page2CardAfter.getByText('scénario')).toBeVisible({ timeout: 10_000 });
-    await expect(page1CardAfter.getByText('scénario')).toHaveCount(0);
+    await expect(page1CardAfter.getByText('scénario')).toBeVisible({ timeout: 10_000 });
+    await expect(page2CardAfter.getByText('scénario')).toBeVisible();
 
-    // Filter-by-card composes: scoping the grid to "Page 2" shows the linked file.
+    // Filter-by-card composes: scoping the grid to EITHER card shows the (now dual-linked) file.
     await page.goto(`/projet/${slug}?tab=fichiers`);
     await page.getByLabel('Filtrer par carte').click();
     await page.getByRole('option', { name: 'Page 2' }).click();

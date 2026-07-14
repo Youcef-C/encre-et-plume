@@ -69,7 +69,7 @@ function asset(over: Partial<AssetItem> = {}): AssetItem {
     size: 1024,
     thumbnailUrl: null,
     previewable: true,
-    linkedPage: { id: 'pg7', title: 'Page 7' },
+    linkedPages: [{ id: 'pg7', title: 'Page 7' }],
     updatedAt: '2026-07-10T10:00:00.000Z',
     ...over,
   };
@@ -352,8 +352,9 @@ describe('CardModal', () => {
     // F8: the compact affordance is labelled "＋ Lier" (verbatim visible text).
     expect(linkButtons[0]).toHaveTextContent('＋ Lier');
     await userEvent.click(linkButtons[0]);
-    const picker = await screen.findByRole('dialog', { name: 'Lier · remplacer' });
-    // The import link lives inside the Lier/remplacer modal, pointing at the Fichiers tab.
+    // First section is SCÉNARIO — a shared (multi-card) type → the picker ADDS ("Lier · ajouter").
+    const picker = await screen.findByRole('dialog', { name: 'Lier · ajouter' });
+    // The import link lives inside the picker modal, pointing at the Fichiers tab.
     expect(within(picker).getByRole('link', { name: /Importer depuis Fichiers/ })).toHaveAttribute(
       'href',
       '/projet/nuit-blanche?tab=fichiers',
@@ -363,19 +364,56 @@ describe('CardModal', () => {
   // ── F7 · Retirer (unlink) ─────────────────────────────────────────────────────
   it('Retirer unlinks a file, removes the row and bubbles the page without it', async () => {
     (api.unlinkAssetFromPage as ReturnType<typeof vi.fn>).mockResolvedValue(
-      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', linkedPage: null }),
+      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', linkedPages: [] }),
     );
     const { onPageChange } = mount({}, {}, [
       asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 }),
     ]);
     await screen.findByText('scenario.txt');
     await userEvent.click(screen.getByRole('button', { name: 'Retirer scenario.txt de la carte' }));
-    expect(api.unlinkAssetFromPage).toHaveBeenCalledWith('a1');
+    expect(api.unlinkAssetFromPage).toHaveBeenCalledWith('a1', 'pg7');
     await waitFor(() => expect(screen.queryByText('scenario.txt')).not.toBeInTheDocument());
     // The last page bubble drops the file from linkedFiles/linkedFileIds.
     const last = (onPageChange as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
     expect(last.linkedFiles).toEqual([]);
     expect(last.linkedFileIds).toEqual([]);
+  });
+
+  // ML-5-BUG (QA Finding 1): the optimistic unlink patch must prune the card's fileTags the same way
+  // the server does, so no stray bare file-type tag reappears until reload.
+  it('ML-5-BUG: Retirer prunes the covered fileTag when no linked asset of that type remains', async () => {
+    (api.unlinkAssetFromPage as ReturnType<typeof vi.fn>).mockResolvedValue(
+      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', linkedPages: [] }),
+    );
+    const { onPageChange } = mount(
+      { fileTags: ['scenario'], linkedFileIds: ['a1'] },
+      {},
+      [asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 })],
+    );
+    await screen.findByText('scenario.txt');
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer scenario.txt de la carte' }));
+    const last = (onPageChange as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
+    expect(last.linkedFiles).toEqual([]);
+    expect(last.fileTags).toEqual([]); // 'scenario' pruned — no covering asset left on the card
+  });
+
+  it('ML-5-BUG: Retirer keeps a fileTag still covered by another linked asset of that type', async () => {
+    (api.unlinkAssetFromPage as ReturnType<typeof vi.fn>).mockResolvedValue(
+      asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', linkedPages: [] }),
+    );
+    const { onPageChange } = mount(
+      { fileTags: ['scenario'], linkedFileIds: ['a1', 'a2'] },
+      {},
+      [
+        asset({ id: 'a1', type: 'scenario', filename: 'scenario.txt', currentVersion: 3 }),
+        asset({ id: 'a2', type: 'texte', filename: 'notes.txt', currentVersion: 1 }),
+      ],
+    );
+    await screen.findByText('scenario.txt');
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer scenario.txt de la carte' }));
+    const last = (onPageChange as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
+    // 'texte' still covers the 'scenario' tag → tag stays.
+    expect(last.fileTags).toEqual(['scenario']);
   });
 
   it('read-only viewers get no Retirer', async () => {
