@@ -44,6 +44,9 @@ export interface EditorDocumentResponse {
   chapter: { id: string; number: number; title: string } | null;
   asset: { id: string; filename: string; currentVersion: number } | null; // null = blank, not yet materialized
   documentId: string | null;
+  ydocState: string | null; // base64 persisted Yjs state — applied to the client doc BEFORE the editor
+  // binds so a fresh open hydrates deterministically (no empty schema-default caseBlock racing the WS
+  // sync into a duplicate). null when the doc doesn't exist yet.
   contentJson: PlancheDocJson | null; // saved draft (null when never saved)
   initialHtml: string | null; // asset exists but never opened in editor: converted .txt/.docx content
   cases: CaseSummary[]; // derived from contentJson (story shape)

@@ -371,40 +371,94 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
   });
 });
 
-test.describe('CS-4 Éditeur — A4 overflow separators (item 24)', () => {
-  test('CS4-E24: content past one A4 page height shows page-boundary separators; caret + scroll stay put on Enter', async ({ page }) => {
+// Reads the live pagination geometry of CASE `no` from the DOM: the case-block's measured A4 page
+// height (`--ep-page-h`), the number of bordered A4 sheet frames (`.ep-page-frame`), the number of
+// non-zero reflow spacers (`.ep-page-spacer`), and the second frame's top offset (to prove the sheets
+// are stacked with a real inter-sheet gap, not overlaid).
+async function paginationGeometry(page: Page, no: number) {
+  return page.evaluate((caseNo) => {
+    const block = document.querySelector(`[data-case-block][data-case-no="${caseNo}"]`) as HTMLElement | null;
+    if (!block) return null;
+    const brect = block.getBoundingClientRect();
+    const frames = Array.from(block.querySelectorAll('.ep-page-frame')) as HTMLElement[];
+    const spacers = Array.from(block.querySelectorAll('.ep-page-spacer')) as HTMLElement[];
+    const pageH = parseFloat(getComputedStyle(block).getPropertyValue('--ep-page-h')) || 0;
+    return {
+      blockHeight: block.offsetHeight,
+      pageH,
+      frameCount: frames.length,
+      nonZeroSpacers: spacers.filter((s) => s.getBoundingClientRect().height > 1).length,
+      secondFrameTop: frames[1] ? Math.round(frames[1].getBoundingClientRect().top - brect.top) : 0,
+    };
+  }, no);
+}
+
+// Types `lines` Enter-separated single-line paragraphs into CASE `no`'s description — reliably taller
+// than one A4 page and, crucially, MADE OF MANY BLOCKS (so the paginator can break BETWEEN paragraphs;
+// a single giant block can't be split, that's the documented limit). Each line is its own block.
+async function fillPastOnePage(page: Page, no: number, lines: number) {
+  const content = caseBlock(page, no).locator('.ep-case-content').first();
+  await content.click({ position: { x: 40, y: 40 } });
+  for (let i = 0; i < lines; i++) {
+    await page.keyboard.type(`Ligne ${i} de description assez longue pour bien remplir la planche.`);
+    await page.keyboard.press('Enter');
+  }
+}
+
+// Asserts CASE 1 reflowed onto ≥2 bordered A4 sheets with a real gap and ≥1 reflow spacer. Retries the
+// read (pagination measures on rAF after the last keystroke settles) so the check is deterministic.
+async function expectMultiSheetReflow(page: Page) {
+  await expect
+    .poll(async () => (await paginationGeometry(page, 1))?.frameCount ?? 0, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(2);
+  const geo = (await paginationGeometry(page, 1))!;
+  expect(geo.pageH).toBeGreaterThan(0);
+  // Content grew past one page → the block is taller than a single A4 sheet.
+  expect(geo.blockHeight).toBeGreaterThan(geo.pageH);
+  // A block that would cross the page boundary was pushed down → at least one real reflow spacer.
+  expect(geo.nonZeroSpacers).toBeGreaterThanOrEqual(1);
+  // The 2nd sheet is stacked below the 1st with the inter-sheet gap (top ≈ one page + gap, > pageH).
+  expect(geo.secondFrameTop).toBeGreaterThan(geo.pageH);
+}
+
+test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 24)', () => {
+  test.describe.configure({ mode: 'serial' });
+  let slug = '';
+
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
     await login(page, OWNER_EMAIL);
-    const slug = await createProject(page, `E2E CS4 A4 ${Date.now()}`);
+    slug = await createProject(page, `E2E CS4 A4 ${Date.now()}`);
     await addCard(page);
+    await page.close();
+  });
+
+  test('CS4-E24: content past one A4 page reflows onto successive bordered sheets in BOTH Manga and Prose; caret stays put on Enter', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
     await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
 
-    const descriptionPara = caseBlock(page, 1).locator('[data-case-description] p').first();
-    await descriptionPara.click();
-    // A single long run that wraps across many lines — fast (no per-keystroke simulation) and reliably
-    // taller than one A4 page (width × 297/210) regardless of the sheet's actual rendered width.
-    const longRun = 'Une longue description qui continue encore et encore pour dépasser la hauteur A4. '.repeat(60);
-    await page.keyboard.insertText(longRun);
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 15_000 });
+    // Pick the Manga scheme, then fill past one page — content must reflow onto a 2nd bordered sheet.
+    await page.getByRole('button', { name: 'Manga', exact: true }).click();
+    await fillPastOnePage(page, 1, 55);
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await expectMultiSheetReflow(page);
 
-    const overflowed = await page.evaluate(() => {
-      const block = document.querySelector('[data-case-block][data-case-no="1"]') as HTMLElement | null;
-      const breaks = block?.querySelector('.ep-page-breaks') as HTMLElement | null;
-      if (!block || !breaks) return null;
-      const pageH = parseFloat(getComputedStyle(breaks).getPropertyValue('--ep-page-h')) || 0;
-      return { blockHeight: block.offsetHeight, pageH };
-    });
-    expect(overflowed).not.toBeNull();
-    expect(overflowed!.pageH).toBeGreaterThan(0);
-    // The case grew past one page height → the repeating separator background is visibly crossed at
-    // least once inside the block's rendered area.
-    expect(overflowed!.blockHeight).toBeGreaterThan(overflowed!.pageH);
+    // Switch to Prose — the SAME long document must paginate identically (this is the blocker-1 fix:
+    // prose hid the case chrome and pagination stopped reflowing; it must now behave like Manga).
+    await page.getByRole('button', { name: 'Prose', exact: true }).click();
+    await expect(page.locator('.ep-planche-canvas.ep-mode-prose')).toBeVisible({ timeout: 5_000 });
+    await expectMultiSheetReflow(page);
 
-    // Caret/scroll stability: press Enter (new paragraph) then type a marker — it must land right after
-    // the cursor, not jump elsewhere in the document (the overlay is a pure sibling, never touches the doc).
+    // Caret stability: with the doc paginated, press Enter then type a marker — it lands right after
+    // the caret (the frames/spacers are view-only decorations that never touch the doc position).
+    const lastPara = caseBlock(page, 1).locator('[data-case-description] p').last();
+    await lastPara.click();
+    await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('MARQUEUR-FIN', { delay: 20 });
-    await expect(caseBlock(page, 1)).toContainText('MARQUEUR-FIN');
     await expect(caseBlock(page, 1).locator('[data-case-description] p').last()).toHaveText('MARQUEUR-FIN');
   });
 });

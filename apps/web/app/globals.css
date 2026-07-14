@@ -1359,6 +1359,10 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   pointer-events: none;
   user-select: none;
 }
+/* pagination.ts collapses every spacer to 0 for one synchronous measure pass (pristine, spacer-free
+   geometry), then removes this class before paint — the zeroed state is never shown. !important beats
+   the inline height the spacer widget sets. */
+.ep-planche-canvas .ep-pag-measure .ep-page-spacer { height: 0 !important; }
 /* Item 5 — inline highlight for a range-anchored comment: a soft accent wash the reader can see in the
    canvas. Applied as a ProseMirror inline decoration (comment-highlight.ts), never serialized. */
 .ep-planche-canvas .ep-comment-highlight {

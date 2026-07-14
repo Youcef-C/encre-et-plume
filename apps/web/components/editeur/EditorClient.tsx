@@ -130,7 +130,26 @@ function EditorLoaded({
   // a brand-new blank card (no doc yet) is `null` → the writer must pick a scheme before adding cases.
   const [template, setTemplate] = useState<TemplateChoice>(initial.template);
 
-  const ydoc = useMemo(() => new Y.Doc(), []);
+  // F-I7 — the shared Yjs doc, seeded from the persisted CRDT bytes shipped on the initial load BEFORE
+  // the editor binds. This is the deterministic hydration fix: an empty Y.Doc makes the editor fill the
+  // schema-required first caseBlock (an EMPTY default), which y-prosemirror persists into the fragment;
+  // if the WS `editor:sync` then merges the server's real caseBlock in, the doc ends up with two CASE 1
+  // blocks (a fresh open renders empty content or duplicates — the flaky bug). Applying the server bytes
+  // here first means the fragment is already populated when the editor mounts (no default fill), and the
+  // later WS sync re-applies the SAME bytes (Yjs is idempotent), so there's nothing to duplicate.
+  // EditorLoaded is keyed by `${pageId}:${assetId}`, so this runs once per opened document.
+  const ydoc = useMemo(() => {
+    const d = new Y.Doc();
+    if (initial.ydocState) {
+      try {
+        Y.applyUpdate(d, decodeState(initial.ydocState));
+      } catch {
+        // Corrupt/partial snapshot → fall through to the empty-doc seed path (seedIfEmpty).
+      }
+    }
+    return d;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const seededRef = useRef(false);
   // Item 26 — the placeholder resolver reads the current template through a ref (the editor is created
   // once; a ref keeps the resolver live without recreating it). Prose mode → no case placeholders.
@@ -1080,6 +1099,14 @@ function encodeState(ydoc: Y.Doc): string {
   let s = '';
   for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
   return btoa(s);
+}
+
+// Inverse of encodeState — decode a base64 Yjs update (from the initial GET) into bytes.
+function decodeState(b64: string): Uint8Array {
+  const s = atob(b64);
+  const u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return u;
 }
 
 // B-2 — self-exclusion keys off the Yjs awareness clientID (stable), NOT user.id which

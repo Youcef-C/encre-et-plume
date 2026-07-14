@@ -114,6 +114,7 @@ describe('ScenarioDocumentsService.getDocument', () => {
     const res = await service.getDocument('acc-me', 'page-1');
     expect(res.asset).toBeNull();
     expect(res.contentJson).toBeNull();
+    expect(res.ydocState).toBeNull();
     expect(res.initialHtml).toBeNull();
     expect(res.cases).toEqual([]);
   });
@@ -129,11 +130,13 @@ describe('ScenarioDocumentsService.getDocument', () => {
   it('returns saved contentJson + derived cases when a document exists', async () => {
     const prisma = buildPrisma();
     prisma.assetPageLink.findFirst.mockResolvedValueOnce({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
-    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: CONTENT, comments: [] });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: CONTENT, ydocState: Buffer.from([1, 2, 3, 4]), comments: [] });
     const { service } = makeService(prisma);
     const res = await service.getDocument('acc-me', 'page-1');
     expect(res.asset).toEqual({ id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 });
     expect(res.documentId).toBe('doc-1');
+    // F-I7 — the persisted Yjs bytes ride the initial load (base64) so the client hydrates before first paint.
+    expect(res.ydocState).toBe(Buffer.from([1, 2, 3, 4]).toString('base64'));
     expect(res.cases).toEqual([
       { no: 1, description: 'Rue sous la pluie', dialogue: 'RIN — « Enfin. »' },
       { no: 2, description: 'Gros plan', dialogue: 'YUKI — « Attends. »' },

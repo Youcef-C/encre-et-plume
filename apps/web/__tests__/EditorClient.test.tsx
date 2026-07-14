@@ -99,6 +99,7 @@ function makeDoc(over: Partial<EditorDocumentResponse> = {}): EditorDocumentResp
     chapter: { id: 'c2', number: 2, title: 'La rencontre' },
     asset: null,
     documentId: null,
+    ydocState: null,
     contentJson: null,
     initialHtml: null,
     cases: [],

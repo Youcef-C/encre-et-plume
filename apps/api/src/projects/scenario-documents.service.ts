@@ -96,6 +96,7 @@ export class ScenarioDocumentsService {
     const asset = await this.resolveEditorAsset(page, assetId);
 
     let contentJson: PlancheDocJson | null = null;
+    let ydocState: string | null = null;
     let documentId: string | null = null;
     let initialHtml: string | null = null;
     let comments: CaseCommentDto[] = [];
@@ -107,12 +108,16 @@ export class ScenarioDocumentsService {
         select: {
           id: true,
           contentJson: true,
+          ydocState: true,
           template: true,
           comments: { include: { author: { select: { displayName: true } } }, orderBy: { createdAt: 'asc' } },
         },
       });
       if (doc) {
         contentJson = doc.contentJson as PlancheDocJson;
+        // F-I7 — ship the persisted CRDT bytes on the initial load so the client can hydrate the Yjs
+        // doc BEFORE the editor binds (deterministic; no empty-default caseBlock racing the WS sync).
+        ydocState = doc.ydocState && doc.ydocState.length > 0 ? Buffer.from(doc.ydocState).toString('base64') : null;
         documentId = doc.id;
         template = (doc.template as EditorTemplate) ?? 'manga';
         comments = doc.comments.map((c) => this.toCommentDto(c as never));
@@ -131,6 +136,7 @@ export class ScenarioDocumentsService {
       chapter: page.chapter ? { id: page.chapter.id, number: page.chapter.number, title: page.chapter.title } : null,
       asset: asset ? { id: asset.id, filename: asset.filename, currentVersion: asset.currentVersion } : null,
       documentId,
+      ydocState,
       contentJson,
       initialHtml,
       cases: deriveCases(contentJson),

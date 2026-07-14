@@ -157,26 +157,31 @@ function measureAll(view: EditorView): Spacer[] {
     const slot = pageH + gap;
     dom.style.setProperty('--ep-page-h', `${pageH}px`); // min-height for a near-empty single page
 
-    // Natural (spacer-free) coordinates: subtract the height of any spacer widgets physically above
-    // a block. Purely geometric, so it's immune to doc-position drift between measures.
-    const contentTop = contentEl.getBoundingClientRect().top;
-    const spacerEls = Array.from(contentEl.querySelectorAll<HTMLElement>('.ep-page-spacer')).map((s) => {
-      const r = s.getBoundingClientRect();
-      return { top: r.top, height: r.height };
-    });
-
+    // Measure blocks in a PRISTINE layout (spacers collapsed to 0), so a block's top is its true
+    // spacer-free position. Measuring while the previous pass's spacers still occupy space is a
+    // circular dependency that never converges (the reconstructed "natural" top drifts every pass,
+    // so the computed spacers oscillate). Zeroing them (a class beats the inline height via
+    // !important) and forcing one synchronous reflow via getBoundingClientRect breaks the loop; the
+    // class is removed before the function returns, so the collapsed state is never painted.
+    //
+    // The class MUST go on `dom` (the case-block's outer NodeView element), NOT `contentEl` (the
+    // ProseMirror contentDOM): a class mutation on the contentDOM is one the PM DOMObserver does NOT
+    // ignore, which retriggers a redraw → another measure → a tight rebuild loop. A mutation on the
+    // outer `dom` is discarded by the NodeView's ignoreMutation (see planche-schema.ts), so it's inert.
+    dom.classList.add('ep-pag-measure');
+    const contentTop = contentEl.getBoundingClientRect().top; // forces reflow with spacers at height 0
     const blocks: BlockMetrics[] = [];
     contentEl.querySelectorAll<HTMLElement>(':scope > .ep-case-description > *, :scope > .ep-case-dialogue > *').forEach((el) => {
       const r = el.getBoundingClientRect();
-      const above = spacerEls.reduce((sum, s) => (s.top < r.top - EPS ? sum + s.height : sum), 0);
       let pos: number;
       try {
         pos = view.posAtDOM(el, 0) - 1;
       } catch {
         return;
       }
-      blocks.push({ pos, top: r.top - contentTop - above, height: r.height });
+      blocks.push({ pos, top: r.top - contentTop, height: r.height });
     });
+    dom.classList.remove('ep-pag-measure');
 
     const { spacers, pageCount } = paginateBlocks(blocks, { pageH, gap, padY });
     syncFrames(framesEl, pageCount, pageH, slot);
