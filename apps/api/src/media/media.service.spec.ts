@@ -711,6 +711,28 @@ describe('MediaService', () => {
     });
   });
 
+  // ── CS-4: ingestAsset('text/html') — in-app scenario materialization + version snapshot ──
+
+  describe('CS-4 ingestAsset text/html', () => {
+    it('accepts a text/html scenario draft (does NOT throw "Format non pris en charge")', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', contentType: 'text/html' }));
+      const html = Buffer.from('<p>RIN — « Enfin. »</p>', 'utf8');
+
+      const res = await service.ingestAsset('acc-1', html, 'text/html');
+
+      expect(res.contentType).toBe('text/html');
+      expect(s3.putObject).toHaveBeenCalledWith(expect.stringMatching(/^asset\/acc-1\//), html, 'text/html', 'attachment');
+      expect(prisma.media.create).toHaveBeenCalled();
+    });
+
+    it('stores the html blob under a .html bucket key (not .bin)', async () => {
+      prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', contentType: 'text/html' }));
+      await service.ingestAsset('acc-1', Buffer.from('<p>x</p>'), 'text/html');
+      const key = s3.putObject.mock.calls.at(-1)![0] as string;
+      expect(key).toMatch(/^asset\/acc-1\/[a-f0-9]+\.html$/);
+    });
+  });
+
   // ── CS-3 (2026-07-13): drawing-source formats — extension-only, no download, 200 MB cap ──
 
   describe('CS-3 drawing-source formats', () => {

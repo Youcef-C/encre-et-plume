@@ -26,7 +26,7 @@ import {
   PSD_CONTENT_TYPE,
 } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { MediaService } from '../media/media.service';
+import { MediaService, sanitizeDocxHtml } from '../media/media.service';
 import { S3StorageService } from '../media/s3-storage.service';
 import { isMemberOf } from './projects.service';
 
@@ -407,6 +407,12 @@ export class AssetsService {
       const buf = await this.s3.getObjectBuffer(media.bucketKey);
       if (buf.length > TEXT_PREVIEW_CAP) return { mode: 'unavailable', ...base };
       return { mode: 'text', text: buf.toString('utf8'), ...base };
+    }
+    // CS-4: in-app scenario HTML — previewed inline but ALWAYS through the docx sanitizer, never raw (D11).
+    if (ct === 'text/html') {
+      const buf = await this.s3.getObjectBuffer(media.bucketKey);
+      if (buf.length > TEXT_PREVIEW_CAP) return { mode: 'unavailable', ...base };
+      return { mode: 'html', html: sanitizeDocxHtml(buf.toString('utf8')), ...base };
     }
     // psd + drawing-source formats: proprietary/binary → download-only, no inline viewer (CS-3).
     if (ct === PSD_CONTENT_TYPE || DRAWING_CT_SET.has(ct)) return { mode: 'unavailable', ...base };

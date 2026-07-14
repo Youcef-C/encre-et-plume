@@ -8,6 +8,7 @@
 // the columns narrows the board (auto-apply, combines with chapters).
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import {
   PAGE_STAGES,
   LABEL_COLORS,
@@ -452,6 +453,7 @@ export default function KanbanBoard({
         {PAGE_STAGES.map((stage) => (
           <Column
             key={stage}
+            slug={slug}
             stage={stage}
             cards={scopedPages.filter((p) => p.stage === stage)}
             readOnly={readOnly}
@@ -514,6 +516,7 @@ function StageLabel({ stage }: { stage: PageStage }) {
 }
 
 function Column({
+  slug,
   stage,
   cards,
   readOnly,
@@ -529,6 +532,7 @@ function Column({
   onMoveCard,
   onRemoveCard,
 }: {
+  slug: string;
   stage: PageStage;
   cards: WorkspacePage[];
   readOnly?: boolean;
@@ -600,6 +604,7 @@ function Column({
         {cards.map((card) => (
           <PageCard
             key={card.id}
+            slug={slug}
             card={card}
             readOnly={readOnly}
             dragging={dragId === card.id}
@@ -653,6 +658,7 @@ const iconBtnStyle: React.CSSProperties = {
 };
 
 function PageCard({
+  slug,
   card,
   readOnly,
   dragging,
@@ -662,6 +668,7 @@ function PageCard({
   onMove,
   onRemove,
 }: {
+  slug: string;
   card: WorkspacePage;
   readOnly?: boolean;
   dragging: boolean;
@@ -881,18 +888,18 @@ function PageCard({
         </div>
       )}
 
-      {/* Action row — ✎/👁/⚑ are CS-4/CS-5 placeholders (no-op); ⋯ opens the real move+delete menu. */}
+      {/* Action row — ✎ opens the CS-4 collaborative editor on this card's scenario; 👁/⚑ are CS-5
+          placeholders (no-op); ⋯ opens the real move+delete menu. */}
       <div style={{ display: 'flex', gap: 4, marginTop: 7, position: 'relative' }}>
-        <button
-          type="button"
-          title="Éditer"
-          aria-label="Éditer"
-          disabled={readOnly}
+        <Link
+          href={`/projet/${slug}/editeur/${card.id}`}
+          title="Éditer le scénario"
+          aria-label="Éditer le scénario"
           onClick={(e) => e.stopPropagation()}
-          style={iconBtnStyle}
+          style={{ ...iconBtnStyle, textDecoration: 'none' }}
         >
           <span aria-hidden="true">✎</span>
-        </button>
+        </Link>
         <button type="button" title="Aperçu" aria-label="Aperçu" onClick={(e) => e.stopPropagation()} style={iconBtnStyle}>
           <EyeIcon size={12} />
         </button>

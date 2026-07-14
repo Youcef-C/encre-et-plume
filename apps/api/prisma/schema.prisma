@@ -153,6 +153,7 @@ model Account {
   pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
   pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
   assetVersions           AssetVersion[]           @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
+  scenarioComments        ScenarioComment[]        @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -1015,6 +1016,7 @@ model Asset {
   updatedAt      DateTime       @updatedAt
   versions       AssetVersion[]
   pageLinks      AssetPageLink[] // CS-3 cards this asset is linked to (2026-07-14; scenario/texte/ref = many, dessin/page = one)
+  scenarioDoc    ScenarioDocument? // CS-4: the editor working draft backed by this scenario asset (1:1)
 
   @@unique([projectId, filename]) // D10 re-import rule
   @@index([projectId, type])
@@ -1049,4 +1051,46 @@ model AssetVersion {
   createdAt DateTime @default(now())
 
   @@unique([assetId, version]) // linear chain, no branching
+}
+
+// ── CS-4: collaborative script editor ──────────────────────────────────────────
+
+// The editor's working draft — 1:1 with a scenario Asset. ydocState = merged Yjs binary (opaque to
+// the API); contentJson = readable PlancheDoc projection (the PUB-1-exploitable structured artifact).
+// Both written by autosave PATCH — never touches the AssetVersion chain.
+model ScenarioDocument {
+  id          String            @id @default(cuid())
+  assetId     String            @unique
+  asset       Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  ydocState   Bytes
+  contentJson Json
+  updatedAt   DateTime          @updatedAt
+  updates     ScenarioUpdate[]
+  comments    ScenarioComment[]
+}
+
+// Append-only live-update log between autosaves (opaque Yjs update bytes). Cleared (compacted) by
+// each autosave PATCH in the same transaction.
+model ScenarioUpdate {
+  id         String           @id @default(cuid())
+  documentId String
+  document   ScenarioDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  update     Bytes
+  createdAt  DateTime         @default(now())
+
+  @@index([documentId, createdAt])
+}
+
+// Per-case comments (right sidebar), keyed by document + case number.
+model ScenarioComment {
+  id         String           @id @default(cuid())
+  documentId String
+  document   ScenarioDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  caseNo     Int
+  authorId   String
+  author     Account          @relation("ScenarioCommentAuthor", fields: [authorId], references: [id])
+  text       String
+  createdAt  DateTime         @default(now())
+
+  @@index([documentId, caseNo, createdAt])
 }

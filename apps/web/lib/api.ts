@@ -1036,6 +1036,59 @@ export const updateIllustration = (
 export const deleteIllustration = (id: string): Promise<void> =>
   request<void>(`/illustrations/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+// ─── Collaborative scenario editor "Éditeur" (CS-4) ───────────────────────────
+import type {
+  EditorDocumentResponse,
+  AutosaveDocumentRequest,
+  AutosaveDocumentResponse,
+  SnapshotVersionRequest,
+  SnapshotVersionResponse,
+  CaseCommentDto,
+  CreateCaseCommentRequest,
+  SharePageResponse,
+} from '@encre-et-plume/shared';
+
+// D9 — an optional `?asset=<id>` overrides the card's default linked scenario so the file dropdown /
+// CardModal "Éditer" / import can open a CHOSEN scenario/texte asset into the editor.
+const assetQuery = (assetId?: string) => (assetId ? `?asset=${encodeURIComponent(assetId)}` : '');
+
+export const getEditorDocument = (pageId: string, assetId?: string): Promise<EditorDocumentResponse> =>
+  request<EditorDocumentResponse>(`/pages/${encodeURIComponent(pageId)}/document${assetQuery(assetId)}`);
+
+export const autosaveEditorDocument = (
+  pageId: string,
+  body: AutosaveDocumentRequest,
+  assetId?: string,
+): Promise<AutosaveDocumentResponse> =>
+  request<AutosaveDocumentResponse>(`/pages/${encodeURIComponent(pageId)}/document${assetQuery(assetId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const snapshotEditorVersion = (
+  pageId: string,
+  body: SnapshotVersionRequest,
+  assetId?: string,
+): Promise<SnapshotVersionResponse> =>
+  request<SnapshotVersionResponse>(`/pages/${encodeURIComponent(pageId)}/document/versions${assetQuery(assetId)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const addCaseComment = (
+  pageId: string,
+  caseNo: number,
+  body: CreateCaseCommentRequest,
+  assetId?: string,
+): Promise<CaseCommentDto> =>
+  request<CaseCommentDto>(`/pages/${encodeURIComponent(pageId)}/cases/${caseNo}/comments${assetQuery(assetId)}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const sharePage = (pageId: string): Promise<SharePageResponse> =>
+  request<SharePageResponse>(`/pages/${encodeURIComponent(pageId)}/share`, { method: 'POST' });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

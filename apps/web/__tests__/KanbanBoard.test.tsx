@@ -109,7 +109,8 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('réf v1')).toBeInTheDocument();
     // manual scenario/ref fileTags are hidden (covered by a linked file); Double page still shows.
     expect(screen.getByText('Double')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Éditer' })).toBeInTheDocument();
+    // CS-4: the ✎ pen is now a link into the collaborative editor for this card's scenario.
+    expect(screen.getByRole('link', { name: 'Éditer le scénario' })).toHaveAttribute('href', '/projet/nuit-blanche/editeur/pg7');
     expect(screen.getByRole('button', { name: 'Aperçu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Corrections' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();

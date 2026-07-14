@@ -7,6 +7,7 @@
 // "Enregistré ✓" pattern; checklist/comment/assignee actions are immediate + optimistic (revert on
 // error). Comments/checklist are refetch-on-open (no realtime — deferred by the story).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useScrollLock } from '../../lib/useScrollLock';
 import {
   PAGE_STAGES,
@@ -533,7 +534,20 @@ export default function CardModal({
 
                           {/* Body: file rows (expanded) or empty state */}
                           {!has ? (
-                            <div style={{ ...mutedText, marginTop: 8 }}>Aucun fichier lié</div>
+                            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={mutedText}>Aucun fichier lié</div>
+                              {/* CS-4: author a brand-new scenario straight from the card (blank editor,
+                                  materialized as a scenario asset on first save). */}
+                              {sec.canonical === 'scenario' && memberOnly && (
+                                <Link
+                                  href={`/projet/${slug}/editeur/${pageId}`}
+                                  aria-label="Créer un nouveau scénario"
+                                  style={{ ...plusBtn, alignSelf: 'flex-start', textDecoration: 'none' }}
+                                >
+                                  ＋ Nouveau scénario
+                                </Link>
+                              )}
+                            </div>
                           ) : (
                             !isCollapsed && (
                               <div
@@ -577,6 +591,16 @@ export default function CardModal({
                                         >
                                           Historique
                                         </button>
+                                        {/* CS-4: open this scenario file in the collaborative editor. */}
+                                        {sec.canonical === 'scenario' && (
+                                          <Link
+                                            href={`/projet/${slug}/editeur/${pageId}?asset=${a.id}`}
+                                            aria-label={`Éditer ${a.filename}`}
+                                            style={{ ...rowBtn, textDecoration: 'none' }}
+                                          >
+                                            <FileTextIcon size={12} /> Éditer
+                                          </Link>
+                                        )}
                                         {memberOnly && (
                                           <button
                                             type="button"

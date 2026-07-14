@@ -87,7 +87,7 @@ function isVerifiedDocument(buffer: Buffer, contentType: string): boolean {
 // restricted subset (p / headings / lists / a / img / strong / em), but strip any script/style block,
 // on* handlers, and javascript:/data: URLs before the HTML is ever stored or returned.
 const DOCX_PREVIEW_CAP = 500 * 1024; // 500 KB
-function sanitizeDocxHtml(html: string): string {
+export function sanitizeDocxHtml(html: string): string {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -106,6 +106,7 @@ function extFromContentType(ct: string): string {
     'image/avif': 'avif',
     'application/pdf': 'pdf',
     'text/plain': 'txt',
+    'text/html': 'html',
     [DOCX_CONTENT_TYPE]: 'docx',
     [PSD_CONTENT_TYPE]: 'psd',
   };
@@ -567,7 +568,12 @@ export class MediaService {
             ? buffer.subarray(0, PSD_MAGIC.length).equals(PSD_MAGIC)
             : isVerifiedDocument(buffer, contentType);
       if (!ok) throw new BadRequestException('Ce document est invalide ou potentiellement dangereux.');
-      const disposition = contentType === DOCX_CONTENT_TYPE ? 'attachment' : contentType === PSD_CONTENT_TYPE ? undefined : 'inline';
+      const disposition =
+        contentType === DOCX_CONTENT_TYPE || contentType === 'text/html'
+          ? 'attachment' // CS-4: never render a stored scenario HTML inline on a direct signed-URL open
+          : contentType === PSD_CONTENT_TYPE
+            ? undefined
+            : 'inline';
       await this.s3.putObject(bucketKey, buffer, contentType, disposition);
     }
 

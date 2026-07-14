@@ -47,6 +47,10 @@ export const ASSET_ALLOWED_CONTENT_TYPES = [
   'image/avif',
   'application/pdf',
   'text/plain',
+  // CS-4: in-app scenario drafts are ingested as HTML (materialization + explicit version snapshot).
+  // Scoped to the `asset` kind like docx/psd. Rendered back ONLY through the docx sanitizer (never raw);
+  // stored with an attachment disposition so a direct signed-URL open never executes inline script.
+  'text/html',
   DOCX_CONTENT_TYPE,
   PSD_CONTENT_TYPE,
 ] as const;

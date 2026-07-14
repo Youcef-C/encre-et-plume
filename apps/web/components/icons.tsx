@@ -443,6 +443,128 @@ export function TrashIcon(p: IconProps) {
   );
 }
 
+// CS-4 (iter 2) — rich-text toolbar pictograms (strike, quote, link, undo/redo, highlight, lists,
+// text colour, clear formatting, alignment). Chunky ink strokes; no emojis.
+
+export function StrikeIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 12h16" />
+      <path d="M7 8.5C7 6 9 5 12 5c2.2 0 3.6.6 4.4 1.6" />
+      <path d="M9 15.5c.7 1.5 2 2.5 4 2.5 2.8 0 4-1.2 4-3" />
+    </Svg>
+  );
+}
+
+export function QuoteIcon(p: IconProps) {
+  return (
+    <Svg {...p} filled>
+      <path d="M6 6c-1.8 0-3 1.3-3 3.3 0 1.9 1.2 3.2 3 3.2.4 0 .8-.1 1-.2-.3 1.3-1.3 2.2-2.6 2.6l.7 1.4C10.4 15.5 12 13 12 9.9 12 7.4 10.6 6 8.4 6H6zm10 0c-1.8 0-3 1.3-3 3.3 0 1.9 1.2 3.2 3 3.2.4 0 .8-.1 1-.2-.3 1.3-1.3 2.2-2.6 2.6l.7 1.4C20.4 15.5 22 13 22 9.9 22 7.4 20.6 6 18.4 6H16z" />
+    </Svg>
+  );
+}
+
+export function LinkIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M9.5 14.5l5-5" />
+      <path d="M8 11L6 13a3.5 3.5 0 005 5l2-2" />
+      <path d="M16 13l2-2a3.5 3.5 0 00-5-5l-2 2" />
+    </Svg>
+  );
+}
+
+export function LinkOffIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 11L6 13a3.5 3.5 0 005 5l1-1" />
+      <path d="M16 13l2-2a3.5 3.5 0 00-5-5l-1 1" />
+      <path d="M4 4l16 16" />
+    </Svg>
+  );
+}
+
+export function UndoIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M7 7L3.5 10.5 7 14" />
+      <path d="M3.5 10.5H14a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H8" />
+    </Svg>
+  );
+}
+
+export function RedoIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M17 7l3.5 3.5L17 14" />
+      <path d="M20.5 10.5H10A5.5 5.5 0 004.5 16v0A5.5 5.5 0 0010 21.5h6" />
+    </Svg>
+  );
+}
+
+export function HighlightIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 20h6" />
+      <path d="M12.5 5.5l6 6-5 5-6-6z" fill="currentColor" stroke="none" opacity="0.25" />
+      <path d="M12.5 5.5l6 6-5 5-6-6z" />
+      <path d="M15 3l6 6" />
+    </Svg>
+  );
+}
+
+export function ListBulletIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M9 6.5h11M9 12h11M9 17.5h11" />
+      <circle cx="4.5" cy="6.5" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="17.5" r="1.3" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function ListOrderedIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M10 6.5h10M10 12h10M10 17.5h10" />
+      <path d="M4 5v3.5M3 5h1M3 8.5h2" strokeWidth={1.8} />
+      <path d="M3 14.5c0-.7.6-1.2 1.3-1.2s1.2.5 1.2 1.1c0 .5-.3.8-.8 1.2L3 17.5h2.5" strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+export function PaletteIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M12 3.5c-4.7 0-8.5 3.6-8.5 8 0 2.7 2.1 4.5 4.5 4.5H10c1 0 1.5.9 1.1 1.8-.3.7-.1 1.6.9 1.7 4.7 0 8-3.8 8-8.5 0-4.7-3.7-7.5-8-7.5z" />
+      <circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="11" cy="8" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="8.5" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="16.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function ClearFormatIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 6h11" />
+      <path d="M13.5 6l-3 9" />
+      <path d="M6 20h6" />
+      <path d="M4 4l16 16" />
+    </Svg>
+  );
+}
+
+export function AlignLeftIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4 6.5h16M4 12h10M4 17.5h13" />
+    </Svg>
+  );
+}
+
 // CS-3 — import/drop-zone glyph + "Télécharger" (replaces the prototype's ⤓): a downward arrow
 // dropping into a tray.
 export function DownloadIcon(p: IconProps) {

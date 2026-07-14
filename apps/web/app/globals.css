@@ -1290,3 +1290,97 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0 var(--shadow);
 }
+
+/* ── CS-4 Éditeur — collaborative script editor (replica of prototype data-page="editeur") ──── */
+
+/* Typing indicator dots (prototype: animation:epType 1.2s infinite). */
+@keyframes epType {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="epType"] { animation: none !important; }
+}
+
+/* Planche canvas — structured CASE blocks. "CASE N" accent label + italic "Description —" prefix
+   are CSS chrome (not editable document text), matching prototype lines 1051-1054. */
+.ep-planche-canvas .ProseMirror { outline: none; }
+.ep-planche-canvas .ep-case-block { margin-bottom: 16px; }
+.ep-planche-canvas .ep-case-block::before {
+  content: "CASE " attr(data-case-no);
+  display: block;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.ep-planche-canvas .ep-case-description > :first-child::before {
+  content: "Description — ";
+  font-style: italic;
+  color: var(--ink2);
+}
+.ep-planche-canvas .ep-case-dialogue { margin-top: 4px; }
+.ep-planche-canvas .ProseMirror p { margin: 0; }
+.ep-planche-canvas .ProseMirror ul { margin: 4px 0; padding-left: 20px; }
+
+/* Named collaborator carets (TipTap CollaborationCaret) — colored caret + name flag, matching
+   prototype line 1052. */
+.ep-planche-canvas .collaboration-cursor__caret,
+.ep-planche-canvas .collaboration-carets__caret {
+  border-left: 2px solid; margin-left: -1px; margin-right: -1px; pointer-events: none; position: relative; word-break: normal;
+}
+.ep-planche-canvas .collaboration-cursor__label,
+.ep-planche-canvas .collaboration-carets__label {
+  position: absolute; top: -1.2em; left: -1px; font-size: 10px; font-weight: 700; color: #fff;
+  padding: 0 5px; border-radius: 3px 3px 3px 0; white-space: nowrap; user-select: none;
+}
+
+/* U3 — A4-portrait "script page" sheet on the studio background. An empty page still shows a full
+   A4 portrait (aspect-ratio); longer content grows the sheet downward (height:auto lets min-content
+   win). Bold ink border + hard offset shadow, generous inner padding. */
+.ep-a4-sheet {
+  max-width: 800px;
+  margin: 0 auto;
+  aspect-ratio: 210 / 297;
+  height: auto;
+  background: var(--card);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--shadow);
+  border-radius: 4px;
+  padding: 44px 52px;
+}
+
+/* Placeholder guidance (TipTap Placeholder extension) — decoration only, never serialized. */
+.ep-planche-canvas .ProseMirror .is-empty::before,
+.ep-planche-canvas .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink2);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Toolbar wraps by default; scrolls horizontally without overflow on narrow widths. */
+.ep-rt-toolbar { max-width: 100%; }
+
+/* Responsive: sidebar drops below the canvas ≤980px so nothing overflows on tablet/mobile. */
+@media (max-width: 980px) {
+  .ep-editor-body { flex-direction: column !important; }
+  .ep-editor-sidebar {
+    width: 100% !important;
+    border-left: none !important;
+    border-top: 3px solid var(--ink) !important;
+  }
+}
+
+/* ≤768px: full-width A4 sheet (ratio kept, padding reduced); toolbar scrolls horizontally. */
+@media (max-width: 768px) {
+  .ep-a4-sheet { padding: 24px 20px; }
+  .ep-editor-main { padding: 16px 14px !important; }
+  .ep-rt-toolbar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+}

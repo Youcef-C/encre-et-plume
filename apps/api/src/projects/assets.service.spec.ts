@@ -699,6 +699,16 @@ describe('AssetsService', () => {
       expect(res.html).toBe('<p>hi</p>');
     });
 
+    // CS-4: a materialized in-app scenario is stored as text/html — previewed inline but ALWAYS sanitized.
+    it('text/html → mode html with <script> stripped (sanitize-on-render, D11)', async () => {
+      prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: 'text/html', variants: { orig: 'k.html' } }));
+      s3.getObjectBuffer.mockResolvedValue(Buffer.from('<p>ok</p><script>alert(1)</script>'));
+      const res = await service.getPreview('acc-me', 'asset-1');
+      expect(res.mode).toBe('html');
+      expect(res.html).toContain('<p>ok</p>');
+      expect(res.html).not.toContain('<script>');
+    });
+
     it('psd → mode unavailable', async () => {
       prisma.media.findUnique.mockResolvedValue(MEDIA({ contentType: PSD, variants: { orig: 'k.psd' } }));
       const res = await service.getPreview('acc-me', 'asset-1');
