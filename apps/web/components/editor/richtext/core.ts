@@ -7,7 +7,17 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import { Placeholder } from '@tiptap/extensions';
-import type { Extensions } from '@tiptap/react';
+import type { Extensions, Editor } from '@tiptap/react';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+
+/** Per-node placeholder resolver (TipTap Placeholder signature). CS-4 uses it so each empty case
+ *  field shows its own label ("Description…" / "Dialogue…"); AD-8 passes a plain string. */
+export type PlaceholderResolver = (props: {
+  editor: Editor;
+  node: ProseMirrorNode;
+  pos: number;
+  hasAnchor: boolean;
+}) => string;
 
 export interface RichTextCoreOptions {
   /** When collaborating, StarterKit's local undo/redo history MUST be off (Yjs owns history and
@@ -15,8 +25,9 @@ export interface RichTextCoreOptions {
   collab?: boolean;
   /** Disable StarterKit's Document node so a custom top-level schema (planche) can replace it. */
   ownDocument?: boolean;
-  /** Empty-state guidance shown by the Placeholder extension (decoration only, never serialized). */
-  placeholder?: string;
+  /** Empty-state guidance shown by the Placeholder extension (decoration only, never serialized).
+   *  A plain string shows on the first empty block; a resolver picks a label per empty node. */
+  placeholder?: string | PlaceholderResolver;
 }
 
 // Text-align applies to headings, paragraphs, and the planche case blocks.
@@ -34,6 +45,9 @@ export const HIGHLIGHT_DEFAULT = '#f5e663';
  * StarterKit v3 already bundles Underline, Link, Blockquote and the lists.
  */
 export function buildRichTextExtensions(opts: RichTextCoreOptions = {}): Extensions {
+  const ph = opts.placeholder;
+  const placeholder: string | PlaceholderResolver =
+    typeof ph === 'function' ? ph : ({ pos }) => (pos <= 2 ? (ph ?? '') : '');
   return [
     StarterKit.configure({
       // Yjs is the single source of truth for history when collaborating; its own undo/redo commands
@@ -49,10 +63,19 @@ export function buildRichTextExtensions(opts: RichTextCoreOptions = {}): Extensi
     Color,
     Highlight.configure({ multicolor: true }),
     Placeholder.configure({
-      // Show the guidance only on the first empty text block (pos 0-ish) so the sheet doesn't fill
-      // with ghost text in every empty case child. Decoration only — never serialized.
-      placeholder: ({ pos }) => (pos <= 2 ? (opts.placeholder ?? '') : ''),
+      // A resolver (CS-4) labels each empty field; a plain string (AD-8) shows only on the first
+      // empty block so the sheet doesn't fill with ghost text. Decoration only — never serialized.
+      // includeChildren:false → only leaf text blocks are decorated (no duplicate on the container).
+      placeholder,
       showOnlyWhenEditable: true,
+      // Decorate EVERY empty text block, not just the focused one, so each case field keeps its
+      // label persistently (item 6). Two nesting gotchas in @tiptap/extensions' Placeholder:
+      //  • showOnlyCurrent:true takes a "resolved depth-1" fast path that assumes a flat doc and
+      //    silently skips our nested planche (caseBlock at depth 1 isn't a textblock) → false.
+      //  • the full scan won't descend into non-textblock containers unless includeChildren:true;
+      //    our paragraphs live 3 deep under caseBlock/caseDescription, so it must recurse. Only
+      //    textblocks are decorated — containers are skipped before the decoration is pushed.
+      showOnlyCurrent: false,
       includeChildren: true,
     }),
   ];

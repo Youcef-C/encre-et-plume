@@ -1321,7 +1321,33 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 }
 .ep-planche-canvas .ep-case-dialogue { margin-top: 4px; }
 .ep-planche-canvas .ProseMirror p { margin: 0; }
-.ep-planche-canvas .ProseMirror ul { margin: 4px 0; padding-left: 20px; }
+
+/* Item 8 — Tailwind's preflight strips list-style; restore markers + indent inside the editor.
+   BulletList / OrderedList / ListItem ship in StarterKit; this is the missing content styling. */
+.ep-planche-canvas .ProseMirror ul,
+.ep-planche-canvas .ProseMirror ol {
+  margin: 4px 0;
+  padding-left: 26px;
+}
+.ep-planche-canvas .ProseMirror ul { list-style: disc; }
+.ep-planche-canvas .ProseMirror ol { list-style: decimal; }
+.ep-planche-canvas .ProseMirror li { display: list-item; margin: 2px 0; }
+.ep-planche-canvas .ProseMirror li > p { margin: 0; }
+
+/* Item 9 — on-brand blockquote (prototype line 3069: accent left border, indent, muted text). */
+.ep-planche-canvas .ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  color: var(--ink2);
+}
+
+/* Item 10 — visible link styling (accent + underline); the mark is applied by the Lien control. */
+.ep-planche-canvas .ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 /* Named collaborator carets (TipTap CollaborationCaret) — colored caret + name flag, matching
    prototype line 1052. */
@@ -1335,19 +1361,31 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   padding: 0 5px; border-radius: 3px 3px 3px 0; white-space: nowrap; user-select: none;
 }
 
-/* U3 — A4-portrait "script page" sheet on the studio background. An empty page still shows a full
-   A4 portrait (aspect-ratio); longer content grows the sheet downward (height:auto lets min-content
-   win). Bold ink border + hard offset shadow, generous inner padding. */
+/* U3 / Item 2 — A4-portrait "script page" sheet on the studio background, with Word-like page
+   separation: the sheet paints repeating A4 paper bands with a gap band (studio tone) between them,
+   so a long scenario reads as stacked pages instead of one endless block. An empty/short doc shows
+   exactly one clean A4 (min-height = one page); content beyond one page reveals the page break.
+   ponytail: true content-reflow pagination (breaking text across fixed pages) needs a ProseMirror
+   pagination plugin — this CSS band approximation is the smallest thing that reads as pages. */
 .ep-a4-sheet {
+  --ep-page-h: 1123px;
+  --ep-page-gap: 26px;
   max-width: 800px;
   margin: 0 auto;
-  aspect-ratio: 210 / 297;
-  height: auto;
-  background: var(--card);
+  min-height: var(--ep-page-h);
   border: 3px solid var(--ink);
   box-shadow: 5px 5px 0 var(--shadow);
   border-radius: 4px;
   padding: 44px 52px;
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--card) 0,
+    var(--card) var(--ep-page-h),
+    var(--tone) var(--ep-page-h),
+    var(--tone) calc(var(--ep-page-h) + var(--ep-page-gap))
+  );
+  background-origin: border-box;
 }
 
 /* Placeholder guidance (TipTap Placeholder extension) — decoration only, never serialized. */
@@ -1364,6 +1402,17 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Toolbar wraps by default; scrolls horizontally without overflow on narrow widths. */
 .ep-rt-toolbar { max-width: 100%; }
 
+/* Item 1 — sticky editor controls, WITHOUT an inner scroll frame. The whole page scrolls with the
+   window so every A4 page stays fully visible; the header + toolbar are position:sticky and pin just
+   below the global site header (which is sticky at top:0, height 68px). The card must NOT clip
+   (overflow:hidden would trap the sticky in a non-scrolling scrollport and break the pinning). */
+.ep-editor-sticky {
+  position: sticky;
+  top: 68px;
+  z-index: 20;
+  background: var(--card);
+}
+
 /* Responsive: sidebar drops below the canvas ≤980px so nothing overflows on tablet/mobile. */
 @media (max-width: 980px) {
   .ep-editor-body { flex-direction: column !important; }
@@ -1374,7 +1423,8 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   }
 }
 
-/* ≤768px: full-width A4 sheet (ratio kept, padding reduced); toolbar scrolls horizontally. */
+/* ≤768px: full-width A4 sheet (padding reduced); toolbar scrolls horizontally. The global header
+   stays 68px at every breakpoint, so the sticky controls' top:68px needs no override. */
 @media (max-width: 768px) {
   .ep-a4-sheet { padding: 24px 20px; }
   .ep-editor-main { padding: 16px 14px !important; }

@@ -24,7 +24,7 @@ import * as api from '../../lib/api';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
-import { plancheExtensions, blankPlancheDoc, appendCase } from '../editor/richtext/planche-schema';
+import { plancheExtensions, blankPlancheDoc, appendCase, casePlaceholder } from '../editor/richtext/planche-schema';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
 import { PenNibIcon, BrushIcon, FileTextIcon, ChatIcon } from '../icons';
@@ -181,7 +181,7 @@ function EditorLoaded({
     {
       immediatelyRender: false,
       extensions: [
-        ...buildRichTextExtensions({ collab: true, ownDocument: true, placeholder: 'Écrivez votre scénario…' }),
+        ...buildRichTextExtensions({ collab: true, ownDocument: true, placeholder: casePlaceholder }),
         ...plancheExtensions,
         Collaboration.configure({ document: ydoc }),
         ...(provider
@@ -294,32 +294,37 @@ function EditorLoaded({
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 28px 70px' }}>
       <ConnectionBanner status={status} />
-      <div style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 10, overflow: 'hidden', boxShadow: '6px 6px 0 var(--shadow)' }}>
-        <EditorHeader
-          slug={slug}
-          projectTitle={initial.project.title}
-          chapterTitle={initial.chapter?.title ?? null}
-          pageId={pageId}
-          saveState={saveState}
-          peers={peers}
-          selfColor={myColor}
-        />
-        <RichTextToolbar
-          editor={editor}
-          disabled={status !== 'connected'}
-          slot={
-            <ToolbarExtras
-              slug={slug}
-              pageId={pageId}
-              assetId={assetId}
-              currentAsset={asset}
-              onSnapshot={onVersionSaved}
-              onError={showToast}
-              onFocusComment={() => commentInputRef.current?.focus()}
-              editor={editor}
-            />
-          }
-        />
+      {/* Item 1 — the card must NOT clip (no overflow:hidden), or the sticky controls get trapped in
+          a non-scrolling scrollport. The whole page scrolls with the window; the header + toolbar are
+          sticky (see .ep-editor-sticky) so every A4 page stays fully visible while they stay pinned. */}
+      <div className="ep-editor-card" style={{ background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 10, boxShadow: '6px 6px 0 var(--shadow)' }}>
+        <div className="ep-editor-sticky">
+          <EditorHeader
+            slug={slug}
+            projectTitle={initial.project.title}
+            chapterTitle={initial.chapter?.title ?? null}
+            pageId={pageId}
+            saveState={saveState}
+            peers={peers}
+            selfColor={myColor}
+          />
+          <RichTextToolbar
+            editor={editor}
+            disabled={status !== 'connected'}
+            slot={
+              <ToolbarExtras
+                slug={slug}
+                pageId={pageId}
+                assetId={assetId}
+                currentAsset={asset}
+                onSnapshot={onVersionSaved}
+                onError={showToast}
+                onFocusComment={() => commentInputRef.current?.focus()}
+                editor={editor}
+              />
+            }
+          />
+        </div>
         <div className="ep-editor-body" style={{ display: 'flex' }}>
           <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--tone)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
@@ -746,7 +751,9 @@ function Sidebar({
       </ul>
 
       <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Commentaires</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0, overflow: 'auto' }}>
+      {/* Item 3 — the composer follows directly under the last comment (no flex:1 pushing it to the
+          bottom); the sidebar itself scrolls (.ep-editor-sidebar overflow-y:auto). */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucun commentaire</div>}
         {comments.map((c) => (
           <div key={c.id} style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 10px', fontSize: 12, background: 'var(--card)' }}>

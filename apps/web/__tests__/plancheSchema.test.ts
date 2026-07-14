@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { blankPlancheDoc, emptyCaseJson, plancheExtensions } from '../components/editor/richtext/planche-schema';
+import type { Editor } from '@tiptap/react';
+import { blankPlancheDoc, emptyCaseJson, plancheExtensions, casePlaceholder } from '../components/editor/richtext/planche-schema';
+
+// A fake editor whose resolve() returns a $pos with the given ancestor node-type chain
+// (index = depth), mimicking ProseMirror's ResolvedPos for the placeholder resolver.
+function fakeEditor(chain: string[]): Editor {
+  const $pos = { depth: chain.length - 1, node: (d: number) => ({ type: { name: chain[d] } }) };
+  return { state: { doc: { content: { size: 100 }, resolve: () => $pos } } } as unknown as Editor;
+}
 
 describe('planche schema', () => {
   it('blankPlancheDoc is a doc with a single CASE 1 (description + dialogue)', () => {
@@ -34,5 +42,21 @@ describe('planche schema', () => {
   it('exports the four planche nodes (doc, caseBlock, caseDescription, caseDialogue)', () => {
     const names = plancheExtensions.map((e) => e.name).sort();
     expect(names).toEqual(['caseBlock', 'caseDescription', 'caseDialogue', 'doc']);
+  });
+
+  // Item 6 — an empty field keeps its label via a per-field placeholder.
+  describe('casePlaceholder', () => {
+    it('labels an empty description field "Description…"', () => {
+      const editor = fakeEditor(['doc', 'caseBlock', 'caseDescription', 'paragraph']);
+      expect(casePlaceholder({ editor, pos: 3 })).toBe('Description…');
+    });
+    it('labels an empty dialogue field "Dialogue…"', () => {
+      const editor = fakeEditor(['doc', 'caseBlock', 'caseDialogue', 'paragraph']);
+      expect(casePlaceholder({ editor, pos: 7 })).toBe('Dialogue…');
+    });
+    it('falls back to the scenario guidance outside a case field', () => {
+      const editor = fakeEditor(['doc', 'paragraph']);
+      expect(casePlaceholder({ editor, pos: 1 })).toBe('Écrivez votre scénario…');
+    });
   });
 });

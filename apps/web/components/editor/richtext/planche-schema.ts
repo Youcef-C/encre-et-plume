@@ -61,6 +61,19 @@ export function appendCase(editor: Editor): void {
 /** Case-block schema extensions layered on top of the shared rich-text core. */
 export const plancheExtensions: Extensions = [PlancheDocument, CaseBlock, CaseDescription, CaseDialogue];
 
+/** Item 6 — per-field placeholder: an empty case description shows "Description…", an empty dialogue
+ *  shows "Dialogue…", so the field's purpose persists when it's blank. Walks up from the decorated
+ *  (leaf) node to find which case child it lives in. */
+export function casePlaceholder({ editor, pos }: { editor: Editor; pos: number }): string {
+  const $pos = editor.state.doc.resolve(Math.min(pos, editor.state.doc.content.size));
+  for (let d = $pos.depth; d >= 0; d--) {
+    const name = $pos.node(d).type.name;
+    if (name === 'caseDescription') return 'Description…';
+    if (name === 'caseDialogue') return 'Dialogue…';
+  }
+  return 'Écrivez votre scénario…';
+}
+
 /** A single empty case (used to seed a blank scenario and by addCase). */
 export function emptyCaseJson(no: number): JSONContent {
   return {
