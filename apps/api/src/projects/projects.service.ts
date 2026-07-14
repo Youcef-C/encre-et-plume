@@ -76,12 +76,14 @@ export function toProjectSummary(p: {
   genre: string | null;
   status: string;
   cover: string | null;
+  slug?: string | null;
 }): ProjectSummary {
   return {
     id: p.id,
     title: p.title,
     meta: [p.kind, p.genre, p.status].filter(Boolean).join(' · '),
     cover: p.cover,
+    slug: p.slug ?? null,
   };
 }
 

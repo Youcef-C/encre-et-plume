@@ -38,7 +38,7 @@ describe('InvitationsService', () => {
   let service: InvitationsService;
   let prisma: {
     account: { findFirst: jest.Mock };
-    project: { findFirst: jest.Mock };
+    project: { findFirst: jest.Mock; findUnique: jest.Mock };
     invitation: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -46,6 +46,11 @@ describe('InvitationsService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       update: jest.Mock;
+    };
+    workCreator: {
+      findFirst: jest.Mock;
+      count: jest.Mock;
+      create: jest.Mock;
     };
   };
   let notifications: { create: jest.Mock };
@@ -58,7 +63,10 @@ describe('InvitationsService', () => {
       account: {
         findFirst: jest.fn().mockImplementation(({ where }) => Promise.resolve(userRow(where.id))),
       },
-      project: { findFirst: jest.fn().mockResolvedValue({ id: 'proj-1', ownerId: 'acc-from' }) },
+      project: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'proj-1', ownerId: 'acc-from' }),
+        findUnique: jest.fn().mockResolvedValue({ workId: 'work-1' }),
+      },
       invitation: {
         findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn().mockResolvedValue(INV()),
@@ -77,6 +85,11 @@ describe('InvitationsService', () => {
         findMany: jest.fn().mockResolvedValue([INV()]),
         count: jest.fn().mockResolvedValue(1),
         update: jest.fn().mockResolvedValue(INV({ status: 'accepted', respondedAt: new Date() })),
+      },
+      workCreator: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        count: jest.fn().mockResolvedValue(1),
+        create: jest.fn().mockResolvedValue({}),
       },
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
@@ -265,7 +278,7 @@ describe('InvitationsService', () => {
       );
     });
 
-    it('accepts: sets status + respondedAt and notifies the sender', async () => {
+    it('accepts: sets status + respondedAt and notifies the sender with a distinct acceptance copy', async () => {
       await service.respond('acc-to', 'inv-1', { status: 'accepted' });
       expect(prisma.invitation.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -273,20 +286,63 @@ describe('InvitationsService', () => {
           data: expect.objectContaining({ status: 'accepted', respondedAt: expect.any(Date) }),
         }),
       );
+      // Acceptance notif to the SENDER must NOT read like an invite — carries a message override.
       expect(notifications.create).toHaveBeenCalledWith({
         recipientId: 'acc-from',
         type: 'invitation',
         refId: 'inv-1',
         sourceUserId: 'acc-to',
+        message: 'Name acc-to a accepté votre invitation à collaborer',
       });
       // MC-8 seam: accepting an invite creates the mutual connection (sender ↔ recipient).
       expect(connections.ensureConnected).toHaveBeenCalledWith('acc-from', 'acc-to');
     });
 
-    it('declines: does NOT create a connection', async () => {
+    it('declines: does NOT create a connection and notifies with a distinct decline copy', async () => {
       prisma.invitation.update.mockResolvedValue(INV({ status: 'declined', respondedAt: new Date() }));
       await service.respond('acc-to', 'inv-1', { status: 'declined' });
       expect(connections.ensureConnected).not.toHaveBeenCalled();
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: 'acc-from',
+          message: 'Name acc-to a décliné votre invitation à collaborer',
+        }),
+      );
+    });
+
+    it('accepts a project invite: adds the accepter as a WorkCreator (next order, role from profile)', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(
+        INV({ projectId: 'proj-1', toUser: userRow('acc-to', ['scenariste']) }),
+      );
+      prisma.workCreator.count.mockResolvedValue(2); // owner + one other → next order 2
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.project.findUnique).toHaveBeenCalledWith({
+        where: { id: 'proj-1' },
+        select: { workId: true },
+      });
+      expect(prisma.workCreator.create).toHaveBeenCalledWith({
+        data: { workId: 'work-1', accountId: 'acc-to', role: 'scenariste', order: 2 },
+      });
+    });
+
+    it('accepts a project invite when already a member: idempotent, no duplicate WorkCreator', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(INV({ projectId: 'proj-1' }));
+      prisma.workCreator.findFirst.mockResolvedValue({ id: 'wc-existing' });
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.workCreator.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a connection-only invite (projectId null): no WorkCreator write', async () => {
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.project.findUnique).not.toHaveBeenCalled();
+      expect(prisma.workCreator.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a project invite whose work is gone: no crash, no WorkCreator write', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(INV({ projectId: 'proj-1' }));
+      prisma.project.findUnique.mockResolvedValue({ workId: null });
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.workCreator.create).not.toHaveBeenCalled();
     });
   });
 });

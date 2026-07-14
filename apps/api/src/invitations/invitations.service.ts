@@ -48,7 +48,7 @@ type UserRow = {
   profile: { creatorRoles: string[] } | null;
 };
 
-type ProjectRow = { id: string; title: string; kind: string; genre: string | null; status: string; cover: string | null } | null;
+type ProjectRow = { id: string; title: string; kind: string; genre: string | null; status: string; cover: string | null; slug: string | null } | null;
 
 type InvitationRow = {
   id: string;
@@ -58,6 +58,7 @@ type InvitationRow = {
   respondedAt: Date | null;
   fromUserId: string;
   toUserId: string;
+  projectId: string | null;
   fromUser: UserRow;
   toUser: UserRow;
   project: ProjectRow;
@@ -222,19 +223,51 @@ export class InvitationsService {
       include: INVITATION_INCLUDE,
     })) as InvitationRow;
 
-    // MC-8: an accepted invite creates the mutual connection. CS-2 seam: collaboration records
-    // (the shared workspace) still land here later.
+    // MC-8: an accepted invite creates the mutual connection AND, for a project invite, grants the
+    // accepter workspace membership (a WorkCreator row on the project's Work) so /projet/{slug} and the
+    // kanban open for them. Decline does neither.
     if (dto.status === 'accepted') {
       await this.connections.ensureConnected(inv.fromUserId, accountId);
+      if (inv.projectId) {
+        await this.addProjectMembership(inv.projectId, accountId, inv.toUser.profile?.creatorRoles);
+      }
     }
 
+    // The sender's response notification must NOT read like an invite (bug): a message override makes
+    // it render "X a accepté/décliné votre invitation à collaborer" (FE prefers Notification.message).
+    const accepterName = inv.toUser.displayName;
+    const verb = dto.status === 'accepted' ? 'accepté' : 'décliné';
     await this.notifications.create({
       recipientId: inv.fromUserId,
       type: 'invitation',
       refId: inv.id,
       sourceUserId: accountId,
+      message: `${accepterName} a ${verb} votre invitation à collaborer`,
     });
 
     return toInvitationDto(updated);
+  }
+
+  /**
+   * Grant the accepter workspace membership on a project invite: a WorkCreator row on the project's
+   * linked Work. Idempotent (skips if already a member) and a no-op when the project/work is gone.
+   * ponytail: findFirst+count+create isn't a single tx — the @@unique([workId,accountId]) index is the
+   * real guard against duplicates; add a tx if concurrent double-accepts ever surface.
+   */
+  private async addProjectMembership(
+    projectId: string,
+    accountId: string,
+    creatorRoles: string[] | null | undefined,
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { workId: true } });
+    if (!project?.workId) return; // project or its seeded Work is gone — nothing to join
+    const workId = project.workId;
+
+    const existing = await this.prisma.workCreator.findFirst({ where: { workId, accountId } });
+    if (existing) return; // already a member — idempotent
+
+    const order = await this.prisma.workCreator.count({ where: { workId } });
+    const role = creatorRoles?.find((r) => r === 'scenariste' || r === 'dessinateur') ?? 'scenariste';
+    await this.prisma.workCreator.create({ data: { workId, accountId, role, order } });
   }
 }

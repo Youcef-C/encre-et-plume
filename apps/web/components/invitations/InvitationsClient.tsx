@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import type { InvitationDto, InvitationStatus, CreatorRole } from '@encre-et-plume/shared';
+import type { InvitationDto, InvitationDirection, InvitationStatus, CreatorRole } from '@encre-et-plume/shared';
 import { listInvitations, respondInvitation } from '../../lib/api';
 import { relativeTime } from '../../lib/notifications';
 import { BrushIcon, PenNibIcon, MailIcon } from '../icons';
@@ -101,14 +101,20 @@ function StatusBadge({ status }: { status: InvitationStatus }) {
 
 function InvitationRow({
   item,
+  direction,
   onRespond,
 }: {
   item: InvitationDto;
+  direction: InvitationDirection;
   onRespond: (id: string, status: 'accepted' | 'declined') => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const sent = direction === 'sent';
+  // Received → the person is the sender; sent → the recipient we invited. The complementary craft is
+  // always derived from the sender's role (item.from is the sender in both directions).
+  const person = sent ? item.to : item.from;
   const verb = item.from.role ? CRAFT_VERB[item.from.role] : 'collaborer';
   const Icon = item.from.role ? RoleIcon[item.from.role] : null;
   const isLong = item.message.length > MESSAGE_CLAMP;
@@ -145,27 +151,29 @@ function InvitationRow({
       }}
     >
       <Link
-        href={`/${item.from.slug}`}
-        aria-label={`Voir le profil de ${item.from.name}`}
+        href={`/${person.slug}`}
+        aria-label={`Voir le profil de ${person.name}`}
         style={{ textDecoration: 'none', flexShrink: 0 }}
       >
-        <HalftoneAvatar name={item.from.name} />
+        <HalftoneAvatar name={person.name} />
       </Link>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <Link
-            href={`/${item.from.slug}`}
+            href={`/${person.slug}`}
             className="ep-invite-sender"
             style={{ color: 'inherit', textDecoration: 'none' }}
           >
-            <b style={{ fontSize: 15 }}>{item.from.name}</b>
+            <b style={{ fontSize: 15 }}>{person.name}</b>
           </Link>
           {Icon && (
             <span aria-hidden="true" style={{ color: 'var(--ink2)', display: 'inline-flex' }}>
               <Icon size={14} />
             </span>
           )}
-          <span style={{ fontSize: 12, color: 'var(--ink2)' }}>vous invite à {verb}</span>
+          <span style={{ fontSize: 12, color: 'var(--ink2)' }}>
+            {sent ? `invité·e à ${verb}` : `vous invite à ${verb}`}
+          </span>
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink2)', marginTop: 2 }}>{metaBits.join(' · ')}</div>
         {item.message && (
@@ -204,7 +212,7 @@ function InvitationRow({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <StatusBadge status={item.status} />
-        {item.status === 'pending' && (
+        {item.status === 'pending' && !sent && (
           <>
             <button
               type="button"
@@ -249,10 +257,10 @@ function InvitationRow({
           </>
         )}
         {item.status === 'accepted' && item.project && (
-          // ponytail: no per-project workspace route yet (CS-2 owns it) — send "Ouvrir" to the
-          // "Mes projets" dashboard, same convention as the project_activity notification.
+          // Accepting granted WorkCreator membership → "Ouvrir" goes straight to the project kanban.
+          // Fallback to the dashboard if the slug is missing (older invites / non-project invite).
           <Link
-            href="/projets"
+            href={item.project.slug ? `/projet/${item.project.slug}` : '/projets'}
             style={{
               fontSize: 12,
               fontWeight: 700,
@@ -278,13 +286,15 @@ export default function InvitationsClient() {
   const [items, setItems] = useState<InvitationDto[] | null>(null);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<InvitationStatus | 'all'>('all');
+  const [direction, setDirection] = useState<InvitationDirection>('received');
 
   const load = useCallback(() => {
     setError(false);
-    listInvitations('received')
+    setItems(null);
+    listInvitations(direction)
       .then((r) => setItems(r.items))
       .catch(() => setError(true));
-  }, []);
+  }, [direction]);
 
   useEffect(() => {
     load();
@@ -331,7 +341,48 @@ export default function InvitationsClient() {
         Invitations
       </h1>
       <div style={{ fontSize: 15, color: 'var(--ink2)', fontWeight: 500, marginBottom: 20 }}>
-        Toutes les propositions de collaboration reçues.
+        {direction === 'received'
+          ? 'Toutes les propositions de collaboration reçues.'
+          : 'Toutes les propositions de collaboration que vous avez envoyées.'}
+      </div>
+
+      {/* Direction tabs — reçues vs envoyées (refetch on switch) */}
+      <div
+        role="group"
+        aria-label="Sens des invitations"
+        style={{ display: 'flex', gap: 8, marginBottom: 16, fontSize: 14, fontWeight: 700, flexWrap: 'wrap' }}
+      >
+        {([
+          { key: 'received', label: 'Reçues' },
+          { key: 'sent', label: 'Envoyées' },
+        ] as const).map(({ key, label }) => {
+          const active = direction === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => {
+                setFilter('all');
+                setDirection(key);
+              }}
+              style={{
+                background: active ? 'var(--ink)' : 'var(--card)',
+                color: active ? 'var(--paper)' : 'var(--ink)',
+                border: '3px solid var(--ink)',
+                borderRadius: 6,
+                padding: '8px 16px',
+                minHeight: 44,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Status filter chips — auto-apply on click, client-side over the fetched list */}
@@ -408,7 +459,7 @@ export default function InvitationsClient() {
       ) : (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {visible.map((item) => (
-            <InvitationRow key={item.id} item={item} onRespond={handleRespond} />
+            <InvitationRow key={item.id} item={item} direction={direction} onRespond={handleRespond} />
           ))}
         </ul>
       )}

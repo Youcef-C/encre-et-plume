@@ -46,6 +46,7 @@ describe('toProjectSummary', () => {
       title: 'Lames de Brume',
       meta: 'Manga · Seinen · en cours',
       cover: null,
+      slug: 'lames-de-brume',
     });
   });
 

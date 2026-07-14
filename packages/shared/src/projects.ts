@@ -14,6 +14,9 @@ export interface ProjectSummary {
   meta: string;
   /** Cover image URL; null -> FE halftone placeholder. */
   cover: string | null;
+  /** Project slug → builds the workspace route /projet/{slug}. Optional: the invite picker doesn't
+   *  need it; an accepted MC-3 invitation carries it so "Ouvrir" links to the project kanban. */
+  slug?: string | null;
 }
 
 // ── CS-12 · "Mes projets" dashboard ─────────────────────────────────────────

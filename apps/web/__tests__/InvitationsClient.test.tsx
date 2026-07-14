@@ -114,6 +114,45 @@ describe('InvitationsClient', () => {
     expect(avatarLink).toHaveAttribute('href', '/camille');
   });
 
+  it('switches to the Envoyées tab and lists sent invitations by recipient, no respond buttons', async () => {
+    const sent = inv({
+      id: 'sent1',
+      status: 'pending',
+      to: { userId: 'r1', name: 'Lina Dubois', slug: 'lina', avatarUrl: null, role: 'dessinateur' },
+    });
+    vi.mocked(api.listInvitations).mockImplementation((dir) =>
+      Promise.resolve(resp(dir === 'sent' ? [sent] : [pending])),
+    );
+    render(<InvitationsClient />);
+    await screen.findByText('Camille Roux'); // received view loads first
+    expect(api.listInvitations).toHaveBeenCalledWith('received');
+
+    await userEvent.click(screen.getByRole('button', { name: /Envoyées/ }));
+
+    // recipient (item.to) shown, linked to their profile
+    const recipient = await screen.findByRole('link', { name: 'Lina Dubois' });
+    expect(recipient).toHaveAttribute('href', '/lina');
+    expect(api.listInvitations).toHaveBeenCalledWith('sent');
+    // sender can't respond to their own sent invite
+    expect(screen.queryByRole('button', { name: 'Accepter' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refuser' })).not.toBeInTheDocument();
+    // status still surfaced
+    expect(screen.getByText('● En attente')).toBeInTheDocument();
+  });
+
+  it('accepted project invite: "Ouvrir" links to the project kanban /projet/{slug}', async () => {
+    const acceptedWithProject = inv({
+      id: 'accp',
+      status: 'accepted',
+      respondedAt: now,
+      project: { id: 'p1', title: 'Lames de Brume', meta: 'Manga · Seinen · en cours', cover: null, slug: 'lames-de-brume' },
+    });
+    vi.mocked(api.listInvitations).mockResolvedValue(resp([acceptedWithProject]));
+    render(<InvitationsClient />);
+    const open = await screen.findByRole('link', { name: 'Ouvrir' });
+    expect(open).toHaveAttribute('href', '/projet/lames-de-brume');
+  });
+
   it('shows the empty state', async () => {
     vi.mocked(api.listInvitations).mockResolvedValue(resp([]));
     render(<InvitationsClient />);
