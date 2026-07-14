@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetVersionItem } from '@encre-et-plume/shared';
-import { getAssetVersions, addAssetVersion } from '../../lib/api';
+import { getAssetVersions, addAssetVersion, setAssetActiveVersion } from '../../lib/api';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { XIcon } from '../icons';
 
@@ -34,6 +34,7 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
   const [loadError, setLoadError] = useState(false);
   const [note, setNote] = useState('');
   const [phase, setPhase] = useState<UploadPhase>({ kind: 'idle' });
+  const [switching, setSwitching] = useState<number | null>(null); // version being made active
   const inputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useRef(`versions-${Math.random().toString(36).slice(2)}`).current;
@@ -72,6 +73,19 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Échec de l’import. Réessayez.';
       setPhase({ kind: 'error', message: msg });
+    }
+  }
+
+  async function makeActive(version: number) {
+    setSwitching(version);
+    try {
+      const updated = await setAssetActiveVersion(asset.id, version);
+      onUpdated(updated); // bubble so the card/grid/kanban badge re-derive from currentVersion
+      loadVersions(); // refresh so the "Version active" badge follows the switch
+    } catch {
+      // Leave the list untouched; a transient failure keeps the previous active version.
+    } finally {
+      setSwitching(null);
     }
   }
 
@@ -127,6 +141,19 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
                       {v.authorName} · {dateFr(v.createdAt)}
                     </div>
                   </div>
+                  {v.active ? (
+                    <span style={activeBadge}>Version active</span>
+                  ) : !readOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => void makeActive(v.version)}
+                      disabled={switching !== null}
+                      aria-label={`Rendre active la version ${v.version}`}
+                      style={makeActiveBtn}
+                    >
+                      {switching === v.version ? 'Activation…' : 'Rendre active'}
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -241,6 +268,34 @@ const versionBadge: React.CSSProperties = {
   borderRadius: 5,
   padding: '2px 8px',
   background: 'var(--card)',
+};
+
+const activeBadge: React.CSSProperties = {
+  flex: 'none',
+  alignSelf: 'flex-start',
+  fontSize: 11,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 5,
+  padding: '2px 8px',
+  background: 'var(--accent-soft)',
+  color: 'var(--ink)',
+  whiteSpace: 'nowrap',
+};
+
+const makeActiveBtn: React.CSSProperties = {
+  flex: 'none',
+  alignSelf: 'flex-start',
+  fontSize: 12,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 6,
+  padding: '5px 10px',
+  cursor: 'pointer',
+  background: 'var(--card)',
+  color: 'var(--ink)',
+  fontFamily: 'inherit',
+  whiteSpace: 'nowrap',
 };
 
 const noteInput: React.CSSProperties = {

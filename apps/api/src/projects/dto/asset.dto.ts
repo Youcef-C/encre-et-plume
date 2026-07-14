@@ -1,10 +1,11 @@
-import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUrl, MaxLength, Min } from 'class-validator';
 import type {
   AddAssetVersionRequest,
   AssetType,
   CreateAssetFromUrlRequest,
   CreateAssetRequest,
   LinkAssetRequest,
+  SetActiveVersionRequest,
 } from '@encre-et-plume/shared';
 import { ASSET_TYPES } from '@encre-et-plume/shared';
 
@@ -51,6 +52,12 @@ export class AddAssetVersionDto implements AddAssetVersionRequest {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+export class SetActiveVersionDto implements SetActiveVersionRequest {
+  @IsInt()
+  @Min(1)
+  version!: number;
 }
 
 export class LinkAssetDto implements LinkAssetRequest {

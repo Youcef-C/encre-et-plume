@@ -71,6 +71,7 @@ describe('AssetsService', () => {
       assetVersion: {
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       assetPageLink: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -321,6 +322,64 @@ describe('AssetsService', () => {
       const res = await service.getVersions('acc-me', 'asset-1');
       expect(res.map((v) => v.version)).toEqual([2, 1]);
       expect(res[0].authorName).toBe('Yuki');
+    });
+
+    it('marks which version is active (version === asset.currentVersion)', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ currentVersion: 1 }), project: PROJECT() });
+      prisma.assetVersion.findMany.mockResolvedValue([
+        { version: 2, mediaId: 'm2', size: 10, note: 'v2', authorId: 'acc-me', createdAt: new Date('2026-07-13T00:00:00Z'), author: { displayName: 'Yuki' } },
+        { version: 1, mediaId: 'm1', size: 8, note: null, authorId: 'acc-me', createdAt: new Date('2026-07-12T00:00:00Z'), author: { displayName: 'Yuki' } },
+      ]);
+      prisma.media.findMany.mockResolvedValue([]);
+      const res = await service.getVersions('acc-me', 'asset-1');
+      expect(res.find((v) => v.version === 1)?.active).toBe(true);
+      expect(res.find((v) => v.version === 2)?.active).toBe(false);
+    });
+  });
+
+  // ── setActiveVersion (active-version switching) ────────────────────────────
+  describe('setActiveVersion', () => {
+    it('repoints currentVersion/mediaId/size to the chosen version without creating a version', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ currentVersion: 3, mediaId: 'media-3' }), project: PROJECT() });
+      prisma.assetVersion.findUnique.mockResolvedValue({ assetId: 'asset-1', version: 1, mediaId: 'media-1', size: 2048 });
+      await service.setActiveVersion('acc-me', 'asset-1', 1);
+      expect(prisma.asset.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'asset-1' }, data: { currentVersion: 1, mediaId: 'media-1', size: 2048 } }),
+      );
+      expect(prisma.assetVersion.create).not.toHaveBeenCalled();
+    });
+
+    it('is an idempotent no-op when the chosen version is already active', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ currentVersion: 2 }), project: PROJECT() });
+      await service.setActiveVersion('acc-me', 'asset-1', 2);
+      expect(prisma.asset.update).not.toHaveBeenCalled();
+    });
+
+    it('404 when the version does not exist on the asset', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ currentVersion: 3 }), project: PROJECT() });
+      prisma.assetVersion.findUnique.mockResolvedValue(null);
+      await expect(service.setActiveVersion('acc-me', 'asset-1', 9)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('400 on an invalid version number', async () => {
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET(), project: PROJECT() });
+      await expect(service.setActiveVersion('acc-me', 'asset-1', 0)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('404 for a non-member on a private project (no existence leak)', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET(),
+        project: PROJECT({ ownerId: 'acc-owner', work: { creators: [] } }),
+      });
+      await expect(service.setActiveVersion('acc-stranger', 'asset-1', 1)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('403 for a non-member on a public project', async () => {
+      prisma.asset.findUnique.mockResolvedValue({
+        ...ASSET(),
+        project: PROJECT({ ownerId: 'acc-owner', visibility: 'public', work: { creators: [] } }),
+      });
+      await expect(service.setActiveVersion('acc-stranger', 'asset-1', 1)).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 

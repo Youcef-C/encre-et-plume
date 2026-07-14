@@ -733,6 +733,14 @@ export const getAssetVersions = (assetId: string): Promise<AssetVersionItem[]> =
 export const getAssetPreview = (assetId: string): Promise<AssetPreviewResponse> =>
   request<AssetPreviewResponse>(`/assets/${encodeURIComponent(assetId)}/preview`);
 
+// Repoint the asset's active/current version to an existing version (member-gated). Returns the
+// refreshed AssetItem — currentVersion/size follow the switch, so the card/grid/badge re-derive.
+export const setAssetActiveVersion = (assetId: string, version: number): Promise<AssetItem> =>
+  request<AssetItem>(`/assets/${encodeURIComponent(assetId)}/active-version`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+
 export const linkAssetToPage = (assetId: string, body: LinkAssetRequest): Promise<AssetItem> =>
   request<AssetItem>(`/assets/${encodeURIComponent(assetId)}/link`, {
     method: 'POST',

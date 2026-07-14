@@ -6,6 +6,7 @@ import type { AssetItem, AssetVersionItem, MediaResponse } from '@encre-et-plume
 vi.mock('../lib/api', () => ({
   getAssetVersions: vi.fn(),
   addAssetVersion: vi.fn(),
+  setAssetActiveVersion: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -36,6 +37,7 @@ const versions: AssetVersionItem[] = [
     authorName: 'Camille',
     createdAt: '2026-07-13T10:00:00.000Z',
     thumbnailUrl: null,
+    active: true,
   },
   {
     version: 1,
@@ -46,6 +48,7 @@ const versions: AssetVersionItem[] = [
     authorName: 'Camille',
     createdAt: '2026-07-12T09:00:00.000Z',
     thumbnailUrl: null,
+    active: false,
   },
 ];
 
@@ -122,6 +125,37 @@ describe('AssetVersionsModal', () => {
       ),
     );
     expect(onUpdated).toHaveBeenCalledWith(updated);
+  });
+
+  it('marks the active version and offers "Rendre active" only on the others', async () => {
+    render(<AssetVersionsModal slug="s1" asset={asset} onClose={vi.fn()} onUpdated={vi.fn()} />);
+    await screen.findByText('v2');
+    // v2 is active → badge, no switch button; v1 is not → switch button, no badge.
+    expect(screen.getByText('Version active')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Rendre active la version 1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Rendre active la version 2/ })).not.toBeInTheDocument();
+  });
+
+  it('switches the active version: calls setAssetActiveVersion, bubbles the asset, reloads the list', async () => {
+    const updated: AssetItem = { ...asset, currentVersion: 1 };
+    vi.mocked(api.setAssetActiveVersion).mockResolvedValue(updated);
+    const onUpdated = vi.fn();
+    render(<AssetVersionsModal slug="s1" asset={asset} onClose={vi.fn()} onUpdated={onUpdated} />);
+    await screen.findByText('v2');
+
+    await userEvent.click(screen.getByRole('button', { name: /Rendre active la version 1/ }));
+
+    await waitFor(() => expect(api.setAssetActiveVersion).toHaveBeenCalledWith('a1', 1));
+    expect(onUpdated).toHaveBeenCalledWith(updated);
+    // The list is re-fetched so the active badge follows the switch.
+    expect(api.getAssetVersions).toHaveBeenCalledTimes(2);
+  });
+
+  it('read-only viewers cannot switch the active version', async () => {
+    render(<AssetVersionsModal slug="s1" asset={asset} readOnly onClose={vi.fn()} onUpdated={vi.fn()} />);
+    await screen.findByText('v2');
+    expect(screen.getByText('Version active')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Rendre active/ })).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {

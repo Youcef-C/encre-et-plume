@@ -25,7 +25,9 @@
       LIÉS" chip list with **one section per file type**: **Scénario**, **Dessin** (nemu/encrage),
       **Page** (planche finale) and **Références**. Each section lists that type's linked file(s) with
       its **current version** + an "👁 Aperçu" / "Lier · remplacer" action, and opens the file's
-      **version history** ([[CS-3]] per-file versioning). The sections map onto CS-3's asset `type`
+      **version history** ([[CS-3]] per-file versioning) — where you can also **see and switch which
+      version is active** ("Rendre active"), which re-derives the card's version badge/chip (2026-07-14).
+      The sections map onto CS-3's asset `type`
       vocabulary (`scenario`/`texte`, `dessin`, `ref`) plus the composed **page/planche** (see the CS-3
       type-alignment note); an empty section shows a "＋ Lier un fichier" affordance.
     - **ÉTIQUETTES** — user-created project labels (name ≤30 + a color from a fixed on-brand palette,

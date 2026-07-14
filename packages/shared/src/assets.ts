@@ -71,7 +71,12 @@ export interface AssetVersionItem {
   authorName: string;
   createdAt: string; // ISO
   thumbnailUrl: string | null;
+  active: boolean; // true iff version === asset.currentVersion — the version everything downstream shows
 }
+
+export interface SetActiveVersionRequest {
+  version: number; // an existing version number on the asset
+} // POST /assets/:id/active-version → AssetItem — repoints Asset.currentVersion/mediaId/size (no new version)
 
 export type AssetPreviewMode = 'image' | 'pdf' | 'text' | 'html' | 'processing' | 'unavailable';
 export interface AssetPreviewResponse {

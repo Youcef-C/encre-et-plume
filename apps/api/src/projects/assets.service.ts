@@ -204,9 +204,27 @@ export class AssetsService {
     return this.getAssetItem(asset.id);
   }
 
+  // ── set the active/current version (repoints the Asset head; does NOT create a version) ──
+  async setActiveVersion(accountId: string, assetId: string, version: number): Promise<AssetItem> {
+    const asset = await this.loadMemberAsset(accountId, assetId);
+    if (!Number.isInteger(version) || version < 1) throw new BadRequestException('Version invalide');
+    if (version === asset.currentVersion) return this.getAssetItem(assetId); // idempotent no-op
+    const target = (await this.prisma.assetVersion.findUnique({
+      where: { assetId_version: { assetId, version } },
+    })) as { mediaId: string; size: number } | null;
+    if (!target) throw new NotFoundException('Version introuvable');
+    // Repoint the denormalized head: currentVersion drives linkedFiles[].version, the "⎘ vN" badge,
+    // the preview (getPreview signs asset.mediaId), and the Fichiers grid.
+    await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { currentVersion: version, mediaId: target.mediaId, size: target.size },
+    });
+    return this.getAssetItem(assetId);
+  }
+
   // ── B6: version chain ─────────────────────────────────────────────────────
   async getVersions(accountId: string, assetId: string): Promise<AssetVersionItem[]> {
-    await this.loadMemberAsset(accountId, assetId);
+    const asset = await this.loadMemberAsset(accountId, assetId);
     const rows = await this.prisma.assetVersion.findMany({
       where: { assetId },
       orderBy: { version: 'desc' },
@@ -231,6 +249,7 @@ export class AssetsService {
           authorName: row.author.displayName,
           createdAt: row.createdAt.toISOString(),
           thumbnailUrl: await this.resolveThumb(mediaById.get(row.mediaId)),
+          active: row.version === asset.currentVersion,
         };
       }),
     );

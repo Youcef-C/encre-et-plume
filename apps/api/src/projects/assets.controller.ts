@@ -9,7 +9,7 @@ import type {
 } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { AssetsService } from './assets.service';
-import { AddAssetVersionDto, CreateAssetDto, CreateAssetFromUrlDto, LinkAssetDto } from './dto/asset.dto';
+import { AddAssetVersionDto, CreateAssetDto, CreateAssetFromUrlDto, LinkAssetDto, SetActiveVersionDto } from './dto/asset.dto';
 
 /**
  * CS-3 project asset routes. Project-scoped routes live under /projects/:slug/assets (mirroring
@@ -71,6 +71,11 @@ export class AssetRootController {
   @Get(':id/preview')
   preview(@Req() req: AuthRequest, @Param('id') id: string): Promise<AssetPreviewResponse> {
     return this.assets.getPreview(req.accountId, id);
+  }
+
+  @Post(':id/active-version')
+  setActiveVersion(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: SetActiveVersionDto): Promise<AssetItem> {
+    return this.assets.setActiveVersion(req.accountId, id, dto.version);
   }
 
   @Post(':id/link')
