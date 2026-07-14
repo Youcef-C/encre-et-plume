@@ -187,6 +187,43 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test('CS3-E4b: active-version switching (2026-07-14) — "Rendre active" on v1 repoints the card badge to v1 without creating v3', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}?tab=fichiers`);
+
+    const card = assetCard(page, 'avatar-50x50.jpg');
+    await expect(card.getByText('v2')).toBeVisible({ timeout: 10_000 }); // still v2/active from CS3-E4
+    const before = await page.locator('[data-asset-card]').count();
+
+    await card.getByText('v2').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const v2Row = dialog.locator('li').filter({ hasText: 'v2' });
+    const v1Row = dialog.locator('li').filter({ hasText: 'v1' });
+    await expect(v2Row.getByText('Version active')).toBeVisible();
+    await expect(v1Row.getByRole('button', { name: /Rendre active la version 1/ })).toBeVisible();
+    await expect(v2Row.getByRole('button', { name: /Rendre active/ })).toHaveCount(0);
+
+    await v1Row.getByRole('button', { name: /Rendre active la version 1/ }).click();
+    await expect(v1Row.getByText('Version active')).toBeVisible({ timeout: 10_000 });
+    await expect(v2Row.getByRole('button', { name: /Rendre active la version 2/ })).toBeVisible();
+
+    // Close via the "Fermer" button, not Escape: the clicked "Rendre active" button unmounts on switch
+    // (replaced by the "Version active" badge), dropping focus to <body> — a keydown there never bubbles
+    // through the dialog's onKeyDown handler, so Escape silently no-ops until focus re-enters the dialog
+    // (a minor keyboard/focus-management gap, noted for the backlog; not exercised further here).
+    await dialog.getByRole('button', { name: 'Fermer' }).click();
+    await expect(dialog).not.toBeVisible();
+
+    // The Fichiers grid card badge follows the switch to v1 — no new version (v3) was created.
+    await expect(card.getByText('v1')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-asset-card]')).toHaveCount(before);
+    await card.getByText('v1').click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('v3')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+  });
+
   test('CS3-E5: "Aperçu" opens an in-app preview overlay — image and .txt (no download required); Esc dismisses; "Télécharger" present', async ({ page }) => {
     // NB: the .docx→HTML preview mode is exercised in the isolated ".docx import" describe block
     // below — it currently can't even be uploaded (see that block), so it's not covered here.

@@ -65,6 +65,15 @@ function caseBlock(page: Page, no: number) {
   return page.locator(`[data-case-block][data-case-no="${no}"]`);
 }
 
+// Scoped to DIRECT children of the comments list (`.ep-comments-scroll > div`, one per comment) — NOT
+// `aside.locator('div', { hasText }).last()`, which over-matches: a case-level comment's own `{c.text}`
+// div also satisfies `hasText` and sits deeper in DOM order, so `.last()` resolves to that inner text-only
+// div instead of the comment card, silently losing the sibling "case N" / quote / "voir dans le texte"
+// markup the test actually wants to assert on.
+function commentItem(page: Page, text: string) {
+  return page.locator('aside .ep-comments-scroll > div').filter({ hasText: text }).last();
+}
+
 async function typeIntoCase(page: Page, no: number, text: string) {
   await caseBlock(page, no).locator('[data-case-description] p').first().click();
   await page.keyboard.type(text, { delay: 20 });
@@ -145,7 +154,7 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
 
     await commentBox.fill('On raccourcit la réplique ?');
     await page.getByRole('button', { name: '＋ Commentaire' }).click();
-    const posted = sidebar.locator('div', { hasText: 'On raccourcit la réplique ?' }).last();
+    const posted = commentItem(page, 'On raccourcit la réplique ?');
     await expect(posted).toBeVisible({ timeout: 10_000 });
     await expect(posted.getByText('case 1', { exact: true })).toBeVisible();
   });
@@ -258,6 +267,137 @@ test.describe('CS-4 Éditeur — entry point: "＋ Nouveau scénario" from an em
   });
 });
 
+test.describe('CS-4 Éditeur — version-note split button (item 22)', () => {
+  test('CS4-E22: the chevron opens a note form; submitting snapshots WITH the note, visible in the CS-3 version history', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const slug = await createProject(page, `E2E CS4 Note version ${Date.now()}`);
+    await addCard(page);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    await typeIntoCase(page, 1, 'Kenji observe le quartier depuis le pont.');
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 });
+
+    // Primary split-button click (no chevron) snapshots immediately, without a note — v1 → v2.
+    await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('v2')).toBeVisible();
+
+    // The attached chevron opens an inline "NOTE (optionnelle)" form; submitting snapshots WITH the note.
+    await page.getByRole('button', { name: 'Ajouter une note à la version' }).click();
+    const noteForm = page.getByRole('dialog', { name: 'Note de version' });
+    await expect(noteForm).toBeVisible();
+    await noteForm.getByLabel('NOTE (optionnelle)').fill('Version stable pour relecture');
+    await noteForm.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('v3')).toBeVisible();
+    await expect(noteForm).not.toBeVisible();
+
+    // The note rides onto the CS-3 AssetVersion — verify it in the Fichiers version-history modal.
+    await page.goto(`/projet/${slug}?tab=fichiers`);
+    const scenarioCard = page.locator('[data-asset-card]').filter({ hasText: 'scenario-page-1' });
+    await expect(scenarioCard).toBeVisible({ timeout: 10_000 });
+    await scenarioCard.getByText('v3').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Version stable pour relecture')).toBeVisible();
+    // v1/v2 have no note ("—" placeholder).
+    await expect(dialog.locator('li').filter({ hasText: 'v1' }).getByText('—')).toBeVisible();
+  });
+});
+
+test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
+  test('CS4-E5it: selecting text switches the composer to "Commenter la sélection", posts an anchored comment, paints an inline highlight, and "voir dans le texte" jumps to it', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const slug = await createProject(page, `E2E CS4 Highlight ${Date.now()}`);
+    await addCard(page);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    await typeIntoCase(page, 1, 'Rin observe la ville depuis le toit.');
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 }); // materialized → comments enabled
+
+    // Select the whole line the cursor is already on (typeIntoCase left the caret at its end).
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+End');
+
+    const sidebar = page.locator('aside');
+    await expect(sidebar.getByText('Commenter la sélection')).toBeVisible({ timeout: 5_000 });
+    await expect(sidebar.getByText('« Rin observe la ville depuis le toit. »')).toBeVisible();
+
+    const commentBox = page.getByLabel('Commenter la sélection');
+    await commentBox.fill('Préciser : quel toit ?');
+    await page.getByRole('button', { name: '＋ Commentaire' }).click();
+
+    const posted = commentItem(page, 'Préciser : quel toit ?');
+    await expect(posted).toBeVisible({ timeout: 10_000 });
+    await expect(posted.getByText('« Rin observe la ville depuis le toit. »')).toBeVisible();
+    const jumpBtn = posted.getByRole('button', { name: 'voir dans le texte' });
+    await expect(jumpBtn).toBeVisible();
+
+    // Inline highlight decoration painted in the canvas over the anchored run.
+    const highlight = caseBlock(page, 1).locator('.ep-comment-highlight');
+    await expect(highlight).toBeVisible({ timeout: 5_000 });
+    await expect(highlight).toHaveText('Rin observe la ville depuis le toit.');
+
+    // "voir dans le texte" re-selects the run and returns focus to the canvas without erroring.
+    await jumpBtn.click();
+    await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('.ProseMirror:focus, .ProseMirror-focused')).toHaveCount(1);
+
+    // Case-level (no-selection) comments still work unchanged (range optional): click into the
+    // (empty) dialogue field — a plain click collapses any active selection reliably, unlike a
+    // keyboard nav key on top of a decoration-driven ProseMirror selection.
+    await caseBlock(page, 1).locator('[data-case-dialogue] p').first().click();
+    await expect(sidebar.getByText('Commentaire — case 1')).toBeVisible({ timeout: 5_000 });
+    await page.getByLabel(/Ajouter un commentaire à la case 1/).fill('Commentaire de case, pas de sélection.');
+    await page.getByRole('button', { name: '＋ Commentaire' }).click();
+    const posted2 = commentItem(page, 'Commentaire de case, pas de sélection.');
+    await expect(posted2).toBeVisible({ timeout: 10_000 });
+    await expect(posted2.getByText('«', { exact: false })).toHaveCount(0); // no quote block for a case-level comment
+  });
+});
+
+test.describe('CS-4 Éditeur — A4 overflow separators (item 24)', () => {
+  test('CS4-E24: content past one A4 page height shows page-boundary separators; caret + scroll stay put on Enter', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const slug = await createProject(page, `E2E CS4 A4 ${Date.now()}`);
+    await addCard(page);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    const descriptionPara = caseBlock(page, 1).locator('[data-case-description] p').first();
+    await descriptionPara.click();
+    // A single long run that wraps across many lines — fast (no per-keystroke simulation) and reliably
+    // taller than one A4 page (width × 297/210) regardless of the sheet's actual rendered width.
+    const longRun = 'Une longue description qui continue encore et encore pour dépasser la hauteur A4. '.repeat(60);
+    await page.keyboard.insertText(longRun);
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 15_000 });
+
+    const overflowed = await page.evaluate(() => {
+      const block = document.querySelector('[data-case-block][data-case-no="1"]') as HTMLElement | null;
+      const breaks = block?.querySelector('.ep-page-breaks') as HTMLElement | null;
+      if (!block || !breaks) return null;
+      const pageH = parseFloat(getComputedStyle(breaks).getPropertyValue('--ep-page-h')) || 0;
+      return { blockHeight: block.offsetHeight, pageH };
+    });
+    expect(overflowed).not.toBeNull();
+    expect(overflowed!.pageH).toBeGreaterThan(0);
+    // The case grew past one page height → the repeating separator background is visibly crossed at
+    // least once inside the block's rendered area.
+    expect(overflowed!.blockHeight).toBeGreaterThan(overflowed!.pageH);
+
+    // Caret/scroll stability: press Enter (new paragraph) then type a marker — it must land right after
+    // the cursor, not jump elsewhere in the document (the overlay is a pure sibling, never touches the doc).
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('MARQUEUR-FIN', { delay: 20 });
+    await expect(caseBlock(page, 1)).toContainText('MARQUEUR-FIN');
+    await expect(caseBlock(page, 1).locator('[data-case-description] p').last()).toHaveText('MARQUEUR-FIN');
+  });
+});
+
 test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)', () => {
   let pageId = '';
 
@@ -341,7 +481,7 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await a.getByLabel(/Ajouter un commentaire à la case/).fill('Yuki: on garde cette version ?');
     await a.getByRole('button', { name: '＋ Commentaire' }).click();
     await expect(a.getByText('Yuki: on garde cette version ?')).toBeVisible({ timeout: 10_000 });
-    const postedInB = b.locator('aside').locator('div', { hasText: 'Yuki: on garde cette version ?' }).last();
+    const postedInB = commentItem(b, 'Yuki: on garde cette version ?');
     await expect(postedInB).toBeVisible({ timeout: 10_000 });
     await expect(postedInB.getByText('case 1', { exact: true })).toBeVisible();
 
