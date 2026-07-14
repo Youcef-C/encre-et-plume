@@ -479,9 +479,21 @@ export class MediaService {
 
     const buffer = await this.s3.getObjectBuffer(bucketKey);
     // mammoth's default style map already keeps bold (<strong>), italic (<em>), headings (<h1..h6>)
-    // and lists (<ul>/<ol>/<li>); its only formatting gap is underline, which it drops unless mapped.
-    // The custom map is merged on top of the defaults, so all the other semantics are preserved.
-    const result = await mammoth.convertToHtml({ buffer }, { styleMap: ['u => u'] });
+    // and lists (<ul>/<ol>/<li>); its gaps are underline and Word's quote paragraph styles (which
+    // default to plain <p>, so citations never render as <blockquote>). Map them here so the preview
+    // shows citations. The custom map merges on top of the defaults, preserving the other semantics.
+    const result = await mammoth.convertToHtml(
+      { buffer },
+      {
+        styleMap: [
+          'u => u',
+          "p[style-name='Quote'] => blockquote",
+          "p[style-name='Intense Quote'] => blockquote",
+          "p[style-name='Block Text'] => blockquote",
+          "p[style-name='Citation'] => blockquote",
+        ],
+      },
+    );
     let html = sanitizeDocxHtml(result.value ?? '');
     if (Buffer.byteLength(html) > DOCX_PREVIEW_CAP) {
       html = Buffer.from(html).subarray(0, DOCX_PREVIEW_CAP).toString('utf8');
