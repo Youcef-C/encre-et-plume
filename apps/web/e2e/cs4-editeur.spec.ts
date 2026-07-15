@@ -1214,19 +1214,30 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 20_000 });
 
     // B types INSIDE the highlighted run → the highlight grows to cover the inserted text in BOTH clients.
+    // Place the caret DETERMINISTICALLY strictly inside the range: a pixel-center click on a full-width
+    // paragraph with short text lands PAST the text (caret at the line end = the `to` boundary), where an
+    // insertion correctly does NOT extend the highlight (see the next case) — that's rendering-dependent
+    // and flaked on CI. Home→3×ArrowRight is font/width-independent and lands at offset 3, strictly
+    // inside "Le chat dort ici." [from=0, to=17].
     const pB = caseBlock(b, 1).locator('[data-case-description] p').first();
-    const boxB = await pB.boundingBox();
-    await pB.click({ position: { x: boxB!.width / 2, y: boxB!.height / 2 } });
+    await pB.click();
+    await b.keyboard.press('Home');
+    await b.keyboard.press('ArrowRight');
+    await b.keyboard.press('ArrowRight');
+    await b.keyboard.press('ArrowRight');
     await b.keyboard.type('MIAOU');
     // Cross-client WS propagation under CI 2-worker load — generous margin (this is the exact wait
-    // the coordinator's CI failure named as timing out).
-    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 20_000 });
-    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 20_000 });
+    // the coordinator's CI failure named as timing out). Assert by CONTENT, not by a single span: a
+    // mid-range insertion splits the ProseMirror decoration into 2 adjacent .ep-comment-highlight spans
+    // (cosmetically seamless), so match the highlight span that carries MIAOU rather than the whole set.
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight', { hasText: 'MIAOU' })).toBeVisible({ timeout: 20_000 });
+    await expect(caseBlock(a, 1).locator('.ep-comment-highlight', { hasText: 'MIAOU' })).toBeVisible({ timeout: 20_000 });
 
-    // Typing at the very START of the range stays OUTSIDE it (from is right-associated).
+    // Typing at the very START of the range stays OUTSIDE it (from is right-associated) → no highlight
+    // span carries AVANT.
     await b.keyboard.press('Home');
     await b.keyboard.type('AVANT');
-    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).not.toContainText('AVANT', { timeout: 10_000 });
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight', { hasText: 'AVANT' })).toHaveCount(0, { timeout: 10_000 });
 
     // CS15-E2 (AC-2): now that the anchored text differs from the stored quote, A's sidebar comment
     // shows the "· modifié" marker + the current text; the original quote line is still present.
