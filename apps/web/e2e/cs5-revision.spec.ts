@@ -18,10 +18,16 @@
  * now restyled with a status stripe/pill); (A5) a "＋ Nouvelle version du dessin" upload refreshes the
  * old↔new compare; (B6) the delete-confirmation "Supprimer" button uses the on-brand accent red.
  *
- * Real backend (no mocks). Reuses the e2e-cs2-multi fixture project (CS12_OWNER scénariste +
- * CS12_COLLAB dessinateur — 2 real WorkCreators) so the authz negative checks (forged status change by
- * a member who is neither author nor assignee; validate by a true non-member) exercise a REAL second
- * member and a REAL stranger, not a mock. e2e-seed.js resets that project's pages on every run.
+ * CI fix (2026-07-15): this spec used to reuse the `e2e-cs2-multi` fixture project, ALSO shared by
+ * `cs2-card-modal.spec.ts` and `cs4-editeur.spec.ts`. Under CI's file-level parallelism (workers:2), two
+ * of those specs could run CONCURRENTLY against the SAME kanban board, each mutating it (adding "Page
+ * N" cards, importing files) while another read it — duplicate/contended DOM elements → strict-mode
+ * "resolved to 2 elements" failures in ALL THREE specs' setup (reproduced live: 6 failures under
+ * `--workers=2 --repeat-each=2` across cs2/cs4/cs5). Fix: this spec now runs against its OWN dedicated
+ * fixture project (`e2e-cs5-review`, `e2e-seed.js`) that no other spec touches — never a shared mutable
+ * board, so cross-spec parallelism can't contend on it. Same shape as e2e-cs2-multi (owner = CS12
+ * scénariste, a second real member = CS12 dessinateur) so the authz-negative checks (forged status
+ * change by a member who is neither author nor assignee; validate by a true non-member) are unchanged.
  *
  * Hermeticity traps heeded (repo memory): kill a stale API on :3001 + flush `rl:*` before running.
  * Split-test convention (CLAUDE.md): this spec + the auth/nav smoke only, not the full e2e suite.
@@ -30,10 +36,10 @@ import { test, expect, type Page } from '@playwright/test';
 import * as path from 'path';
 
 const PASSWORD = 'password123';
-const OWNER_EMAIL = 'qa_e2e_cs12_owner@test.com'; // scénariste, owner of e2e-cs2-multi — files every correction
+const OWNER_EMAIL = 'qa_e2e_cs12_owner@test.com'; // scénariste, owner of e2e-cs5-review — files every correction
 const COLLAB_EMAIL = 'qa_e2e_cs12_collab@test.com'; // dessinateur, a REAL member — neither author nor assignee
 const STRANGER_EMAIL = 'qa_e2e_cs13_stranger@test.com'; // signed-in, NOT a project member
-const MULTI_SLUG = 'e2e-cs2-multi';
+const MULTI_SLUG = 'e2e-cs5-review'; // this spec's OWN dedicated fixture — never shared with another spec
 const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 
 const IMAGE_FIXTURE = path.join(__dirname, 'fixtures/avatar-50x50.jpg');
@@ -54,14 +60,15 @@ function noVerticalOverflow(page: Page) {
   return page.evaluate(() => document.scrollingElement!.scrollHeight <= window.innerHeight + 1);
 }
 
-// CI retry-hardening: `e2e-cs2-multi` is a SHARED fixture project that e2e-seed.js resets only ONCE at
-// suite start, never between a Playwright RETRY of this whole serial block. A failed attempt's `addCard`
-// calls already created "Page 1"/"Page 2" before the failure — without this reset, the retry's `addCard`
-// would create a SECOND "Page 2" card, and `scenarioCol.getByText('Page 2', { exact: true })` (and every
-// downstream `kanbanCard` lookup) would resolve to 2 elements → a strict-mode violation, not a real bug.
-// Delete any pre-existing card with this exact title FIRST (looping — a card could exist 0, 1, or more
-// times if several retries stacked before this fix existed) so every attempt — first try or retry —
-// starts from the same clean slate. Cheap and safe even with nothing to delete (loop runs 0 times).
+// CI retry-hardening: `e2e-cs5-review` (this spec's own dedicated fixture, never shared with another
+// spec — see the file header) is still only reset by e2e-seed.js ONCE at suite start, never between a
+// Playwright RETRY of this whole serial block. A failed attempt's `addCard` calls already created
+// "Page 1"/"Page 2" before the failure — without this reset, the retry's `addCard` would create a
+// SECOND "Page 2" card, and `scenarioCol.getByText('Page 2', { exact: true })` (and every downstream
+// `kanbanCard` lookup) would resolve to 2 elements → a strict-mode violation, not a real bug. Delete any
+// pre-existing card with this exact title FIRST (looping — a card could exist 0, 1, or more times if
+// several retries stacked before this fix existed) so every attempt — first try or retry — starts from
+// the same clean slate. Cheap and safe even with nothing to delete (loop runs 0 times).
 async function resetCard(page: Page, title: string): Promise<void> {
   const scenarioCol = page.getByRole('group').filter({ hasText: /^Scénario/ });
   while ((await scenarioCol.getByText(title, { exact: true }).count()) > 0) {

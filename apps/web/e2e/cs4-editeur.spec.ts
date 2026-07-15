@@ -10,10 +10,19 @@
  * Fixture accounts:
  *  - qa_e2e_cs12_owner@test.com / qa_e2e_cs13_stranger@test.com (existing fixtures, reused for the
  *    single-member blank/version/comments/entry-point flows + the non-member authz check).
- *  - The seeded `e2e-cs2-multi` project (CS12_OWNER scénariste + CS12_COLLAB dessinateur — 2 real
- *    WorkCreators, `apps/api/prisma/e2e-seed.js`) is the ONLY fixture with a second real project
- *    member, so it's reused for the two-context realtime collaboration block. e2e-seed.js resets
- *    that project's pages on every run, so each run gets a fresh card.
+ *  - The seeded `e2e-cs4-multi` project (CS12_OWNER scénariste + CS12_COLLAB dessinateur — 2 real
+ *    WorkCreators, `apps/api/prisma/e2e-seed.js`) is this spec's OWN dedicated 2-real-member fixture,
+ *    used for the two-context realtime collaboration block. e2e-seed.js resets that project's pages on
+ *    every run, so each run gets a fresh card.
+ *
+ * CI fix (2026-07-15): this spec used to reuse `e2e-cs2-multi`, ALSO used by cs2-card-modal.spec.ts.
+ * Under CI's file-level parallelism (workers:2) the two specs could run CONCURRENTLY and mutate the
+ * SAME kanban board (cs2 assigning/commenting, cs4 adding cards) → duplicate/contended DOM elements →
+ * strict-mode "resolved to 2 elements" in both specs' setup (reproduced live even after giving
+ * cs5-revision its own separate fixture — cs2/cs4 still contended with EACH OTHER). This spec's
+ * realtime tests only need a project with 2 real members for the join/awareness/attribution mechanic,
+ * not cs2-card-modal's specific card/assignment state, so it now gets its OWN dedicated project
+ * (`e2e-cs4-multi`) instead, leaving `e2e-cs2-multi` exclusively to cs2-card-modal.spec.ts.
  *
  * Split-test convention (CLAUDE.md): this spec + the auth/nav smoke only, not the full e2e suite.
  */
@@ -24,7 +33,7 @@ const PASSWORD = 'password123';
 const OWNER_EMAIL = 'qa_e2e_cs12_owner@test.com';
 const COLLAB_EMAIL = 'qa_e2e_cs12_collab@test.com';
 const STRANGER_EMAIL = 'qa_e2e_cs13_stranger@test.com';
-const MULTI_SLUG = 'e2e-cs2-multi';
+const MULTI_SLUG = 'e2e-cs4-multi'; // this spec's OWN dedicated fixture — never shared with another spec
 const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 
 const SCENARIO_TXT_FIXTURE = path.join(__dirname, 'fixtures/cs3-scenario-brief.txt');

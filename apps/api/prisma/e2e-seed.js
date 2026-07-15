@@ -445,6 +445,86 @@ async function main() {
     });
   }
 
+  // ── CS-5 review fixture: OWN dedicated 2-member workspace (QA, 2026-07-15) ─────────────────────
+  // cs5-revision.spec.ts used to share `e2e-cs2-multi` with cs2-card-modal.spec.ts + cs4-editeur.spec.ts.
+  // Under CI's file-level parallelism (workers:2), two of those specs can run CONCURRENTLY against the
+  // SAME kanban board, each mutating it (adding "Page 1/2/3" cards, importing files) while the other
+  // reads it — duplicate/contended DOM elements → strict-mode "resolved to 2 elements" failures in
+  // ALL THREE specs' setup, not just cs5's. Giving cs5-revision its own project (never shared) removes
+  // the cross-spec mutable-board contention entirely. Same shape as e2e-cs2-multi (owner = CS12
+  // scénariste, a second real member = CS12 dessinateur for the authz-negative "member who is neither
+  // author nor assignee" check) so the spec's authz coverage is unchanged. Hermetic: reset pages/labels
+  // first, then upsert (idempotent, safe to rerun).
+  {
+    const owner = accounts.CS12_OWNER.id;
+    const collab = accounts.CS12_COLLAB.id;
+    const workData = {
+      slug: 'e2e-cs5-review', title: 'E2E CS5 · Révision', format: 'Manga', genre: 'Seinen',
+      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+    };
+    const work = await prisma.work.upsert({ where: { slug: 'e2e-cs5-review' }, create: workData, update: workData });
+    await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
+    await prisma.projectLabel.deleteMany({ where: { project: { workId: work.id } } });
+    const projectData = {
+      ownerId: owner, title: 'E2E CS5 · Révision', kind: 'Manga', genre: 'Seinen', status: 'en cours',
+      slug: 'e2e-cs5-review', workId: work.id, visibility: 'prive',
+    };
+    const project = await prisma.project.upsert({ where: { slug: 'e2e-cs5-review' }, create: projectData, update: projectData });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: owner } },
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
+      update: {},
+    });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: collab } },
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
+      update: {},
+    });
+    await prisma.notification.deleteMany({
+      where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
+    });
+  }
+
+  // ── CS-4 realtime fixture: OWN dedicated 2-member workspace (QA, 2026-07-15) ────────────────────
+  // cs4-editeur.spec.ts's two-context (editor realtime collaboration + CS-15) tests used to reuse
+  // `e2e-cs2-multi`, ALSO used by cs2-card-modal.spec.ts — under CI's file-level parallelism they still
+  // contended with each other even after cs5-revision was given its own fixture (reproduced live:
+  // `--workers=2 --repeat-each=2` on cs2+cs4+cs5 still failed on cs2/cs4's shared board). cs4-editeur
+  // only needs a project with 2 real members for the realtime mechanic (join/awareness/attribution) —
+  // it doesn't depend on cs2-card-modal's specific card/assignment state — so it gets its own dedicated
+  // project instead, leaving `e2e-cs2-multi` exclusively to cs2-card-modal.spec.ts. Same shape (owner =
+  // CS12 scénariste, second member = CS12 dessinateur) so CS4-RT/RT2/CS15's authz + attribution coverage
+  // is unchanged.
+  {
+    const owner = accounts.CS12_OWNER.id;
+    const collab = accounts.CS12_COLLAB.id;
+    const workData = {
+      slug: 'e2e-cs4-multi', title: 'E2E CS4 · Multi-membre', format: 'Manga', genre: 'Seinen',
+      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+    };
+    const work = await prisma.work.upsert({ where: { slug: 'e2e-cs4-multi' }, create: workData, update: workData });
+    await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
+    await prisma.projectLabel.deleteMany({ where: { project: { workId: work.id } } });
+    const projectData = {
+      ownerId: owner, title: 'E2E CS4 · Multi-membre', kind: 'Manga', genre: 'Seinen', status: 'en cours',
+      slug: 'e2e-cs4-multi', workId: work.id, visibility: 'prive',
+    };
+    const project = await prisma.project.upsert({ where: { slug: 'e2e-cs4-multi' }, create: projectData, update: projectData });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: owner } },
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
+      update: {},
+    });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: collab } },
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
+      update: {},
+    });
+    await prisma.notification.deleteMany({
+      where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
+    });
+  }
+
   // ── CS-13: "Modifier une illustration" fixtures for the dedicated CS13_OWNER account ───────────
   // 5 published, standalone illustrations owned by CS13_OWNER: "e2e-cs13-illu-main" is the edit
   // target (PATCH-able, incl. a Licence value the test changes); the other 4 exist purely so
