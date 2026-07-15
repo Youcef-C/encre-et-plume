@@ -64,10 +64,18 @@ jobs:
         run: pnpm build
 
   e2e:
-    name: E2E (Playwright)
+    name: E2E (Playwright) ${{ matrix.shard }}/4
     needs: validate
     if: needs.validate.outputs.has_app == 'true'
     runs-on: ubuntu-latest
+    # Shard the suite across 4 parallel runners, 1 worker each. Cross-machine parallelism (not multiple
+    # workers on one machine) keeps the realtime two-context tests free of the WS contention that made
+    # them flake, while cutting wall-clock to ~1/4 of the serial run + per-job setup. fail-fast:false so
+    # one shard failing still lets the others finish and report.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       # NOTE: Postgres is NOT a service container — it's started via `docker run` below so we can pass
       # `-c max_connections=300`. Service containers can't override the server command, and the default
@@ -176,15 +184,15 @@ jobs:
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm --filter api exec node prisma/seed.js
 
-      - name: Run e2e
+      - name: Run e2e (shard ${{ matrix.shard }}/4)
         if: steps.webcheck.outputs.ok == 'true'
-        run: pnpm e2e
+        run: pnpm --filter web exec playwright test --shard=${{ matrix.shard }}/4
 
       - name: Upload Playwright report
         if: ${{ steps.webcheck.outputs.ok == 'true' && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: "**/playwright-report"
           retention-days: 7
           if-no-files-found: ignore
