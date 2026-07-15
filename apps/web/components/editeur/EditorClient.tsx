@@ -2,22 +2,26 @@
 
 // CS-4 — collaborative script editor "Éditeur". Replica of prototype `data-page="editeur"` (header,
 // toolbar, planche/case A4 canvas, right sidebar). Real wiring: TipTap v3 + Yjs over the /editor WS
-// namespace, in-place autosave ("Enregistré ✓"), explicit version snapshots, per-case comments,
+// namespace, explicit content save (« Enregistrer » / Ctrl+S — FR9, no autosave), explicit version
+// snapshots («Enregistrer une nouvelle version»), per-case comments,
 // live presence + named colored carets + typing. Iter 2: StrictMode-safe provider lifecycle,
 // clientID-keyed presence, fuller toolbar, A4 sheet, working file open/import, chapter/page switcher.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import * as Y from 'yjs';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import {
   COLLAB_COLORS,
+  CORRECTION_STATUS_LABELS,
+  type CorrectionStatus,
   type EditorDocumentResponse,
   type CaseCommentDto,
   type EditorAwarenessState,
   type AssetItem,
+  type AssetVersionItem,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
@@ -28,8 +32,15 @@ import { plancheExtensions, blankPlancheDoc, casePlaceholder } from '../editor/r
 import { commentRangesFrom, commentColor, resolveCommentTexts, quoteChanged } from '../editor/richtext/comment-highlight';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
+import VersionSheet from './VersionSheet';
+import CompareVersionsModal from './CompareVersionsModal';
 import ConfirmDialog from '../projet/ConfirmDialog';
-import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon } from '../icons';
+import OnBrandSelect from '../form/OnBrandSelect';
+import { NEXT_STATUS } from '../revision/shared';
+import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, SaveIcon, CompareIcon } from '../icons';
+
+// CS-5 Fb-2 — a comment row's «Correction» tag colours: accent for open, green for resolved.
+const CORRECTION_TAG_GREEN = '#1f8a5b';
 
 const colorForId = (id: string): string => {
   let h = 0;
@@ -37,7 +48,9 @@ const colorForId = (id: string): string => {
   return COLLAB_COLORS[h % COLLAB_COLORS.length];
 };
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+// FR9 (r3) — explicit save model: 'dirty' = there are unsaved edits (no more autosave timer). Save is
+// an explicit action (« Enregistrer » button + Ctrl/Cmd-S); it persists content, never a new version.
+type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 interface Peer {
   id: string;
@@ -109,7 +122,9 @@ export default function EditorClient({ pageId, slug, assetId }: EditorClientProp
     );
   }
 
-  return <EditorLoaded key={`${pageId}:${assetId ?? ''}`} pageId={pageId} slug={slug} assetId={assetId ?? undefined} initial={doc} account={account} />;
+  // Fb-8 — key on the account id too: if the session identity changes (shared cookie jar / focus
+  // revalidation in session.tsx), remount so awareness/meId/attribution pick up the acting account.
+  return <EditorLoaded key={`${pageId}:${assetId ?? ''}:${account.id}`} pageId={pageId} slug={slug} assetId={assetId ?? undefined} initial={doc} account={account} />;
 }
 
 function EditorLoaded({
@@ -126,6 +141,22 @@ function EditorLoaded({
   account: { id: string; displayName: string; role: string; avatar?: string | null };
 }) {
   const [asset, setAsset] = useState(initial.asset);
+  // CS-5 QA F1 / FR7 — the scenario document id, reactive: a same-session autosave materializes the doc
+  // and returns its id, so "Demander une correction" enables without a page reload.
+  const [documentId, setDocumentId] = useState(initial.documentId);
+  // CS-5 Fb-5 — in-editor version switcher: the asset's versions, the version being viewed (null = live
+  // head / normal editing), and the read-only HTML fetched for an older version.
+  const [versions, setVersions] = useState<AssetVersionItem[]>([]);
+  const [viewVersion, setViewVersion] = useState<number | null>(null);
+  const [viewHtml, setViewHtml] = useState<string | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  // CS-5 — deep-link from the review screen: `?from=&to=` selects and reveals that scenario range.
+  const searchParams = useSearchParams();
+  const deepLink = useMemo(() => {
+    const f = Number(searchParams.get('from'));
+    const t = Number(searchParams.get('to'));
+    return Number.isInteger(f) && Number.isInteger(t) && t > f ? { from: f, to: t } : null;
+  }, [searchParams]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [status, setStatus] = useState<CollabStatus>('connecting');
   const [synced, setSynced] = useState(false);
@@ -158,7 +189,9 @@ function EditorLoaded({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const seededRef = useRef(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // FR9 — counts editor `update`s (local + remote). save() records the count before its await and only
+  // resolves to «Enregistré ✓» if no further edit landed meanwhile (else back to dirty). No save timer.
+  const editCountRef = useRef(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -323,11 +356,15 @@ function EditorLoaded({
   // (immediatelyRender:false), and `editor.commands` throws while the view is still null.
   useEffect(() => {
     if (!editor || editor.isDestroyed || !editor.view) return;
-    // Colour each highlight by the comment's MESSAGE ORDER (index in the list), matching the sidebar.
+    // Colour each highlight by the comment's MESSAGE ORDER (index in the FULL list), matching the sidebar.
+    // FR15 (r4) — one plain list: paint every comment (no per-version scoping). FR14 — flag correction
+    // comments so their highlight is tagged (`ep-correction-highlight`) distinctly from a plain comment.
     const order = new Map(comments.map((c, i) => [c.id, i]));
+    const correctionOf = new Map(comments.map((c) => [c.id, !!c.correction]));
     const ranges = commentRangesFrom(comments, editor.state.doc.content.size).map((r) => ({
       ...r,
       color: commentColor(order.get(r.id) ?? 0),
+      correction: correctionOf.get(r.id) ?? false,
     }));
     editor.commands.setCommentHighlights(ranges);
   }, [editor, comments, synced]);
@@ -362,9 +399,39 @@ function EditorLoaded({
     [pageId, assetId, pushToast],
   );
 
-  // ── Autosave (2s debounce) + typing awareness ────────────────────────────────
-  const flushSave = useCallback(async () => {
+  // CS-5 r4 (FR14) — step a scenario correction's status from the editor comment panel (the revision
+  // page is dessin-only now, so scenario corrections are managed here). Author/assignee-only in the UI;
+  // the server re-enforces on PATCH /corrections/:id. No optimistic flip — reflect only the response.
+  const changeCorrectionStatus = useCallback(
+    async (c: CaseCommentDto, status: CorrectionStatus) => {
+      if (!c.correction) return;
+      try {
+        const updated = await api.updateCorrection(c.correction.id, { status });
+        setComments((list) =>
+          list.map((x) => (x.id === c.id && x.correction ? { ...x, correction: { ...x.correction, status: updated.status } } : x)),
+        );
+      } catch {
+        pushToast('Changement de statut refusé.');
+      }
+    },
+    [pushToast],
+  );
+
+  // ── FR9 — explicit content save (« Enregistrer » / Ctrl+S). Persists the CURRENT page content via the
+  // existing document-persist endpoint; it does NOT create a new AssetVersion («Enregistrer une nouvelle
+  // version» stays the only version-creating action). No debounce, no timer — the user saves explicitly.
+  const save = useCallback(async () => {
     if (!editor) return;
+    const html = editor.getHTML();
+    // Bug (scenario version off-by-one) — never persist a blank document. An empty first Save would
+    // materialize an EMPTY v1 (the reported v1=empty / v1==v2 shift), and an on-mount/early Ctrl+S could
+    // race the imported content before it seeds. Mirror the server's isBlankHtml and no-op silently (the
+    // server guards this too, but suppressing the request means the empty save never even tries).
+    if (isBlankHtml(html)) {
+      setSaveState('idle');
+      return;
+    }
+    const countAtStart = editCountRef.current;
     setSaveState('saving');
     try {
       const res = await api.autosaveEditorDocument(
@@ -372,56 +439,128 @@ function EditorLoaded({
         {
           ydocState: encodeState(ydoc),
           contentJson: editor.getJSON() as Record<string, unknown>,
-          html: editor.getHTML(),
+          html,
           // Prose-only editor: `template` is no longer sent (the backend column defaults to 'prose').
         },
-        assetId,
+        // Bug (off-by-one) — target the OPENED/loaded asset so an imported or ?asset-opened file is
+        // edited IN PLACE (server resolveEditorAsset) instead of materializing a duplicate / wrong-target
+        // version; fall back to the ?asset URL param, then to none (create-when-none for a brand-new page).
+        asset?.id ?? assetId,
       );
       if (res.materialized) {
         setAsset((a) => a ?? { id: res.materialized!.assetId, filename: res.materialized!.filename, currentVersion: 1 });
+        // FR7 — capture the freshly materialized document id so "Demander une correction" works now.
+        setDocumentId((d) => d ?? res.materialized!.documentId);
       }
-      setSaveState('saved');
+      // An edit that landed DURING the save leaves the draft dirty again (the just-saved bytes are stale).
+      setSaveState(editCountRef.current === countAtStart ? 'saved' : 'dirty');
     } catch {
-      // Surface the failure (B-1 UX half); the next edit's debounce retries.
       setSaveState('error');
     }
-  }, [editor, pageId, ydoc, assetId]);
+  }, [editor, pageId, ydoc, asset, assetId]);
 
+  // Typing awareness + dirty tracking. `update` fires on local AND remote edits; either legitimately
+  // marks THIS client's persisted draft stale. (ponytail: a peer's own save doesn't clear my dirty flag —
+  // there's no WS "saved" event; add one only if it ever matters.)
   useEffect(() => {
     if (!editor) return;
     const onUpdate = () => {
       provider?.setLocalUser('typing', true);
       if (typingTimer.current) clearTimeout(typingTimer.current);
       typingTimer.current = setTimeout(() => provider?.setLocalUser('typing', false), 1500);
-      setSaveState('saving');
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => void flushSave(), 2000);
+      editCountRef.current += 1;
+      setSaveState('dirty');
     };
     editor.on('update', onUpdate);
     return () => {
       editor.off('update', onUpdate);
     };
-  }, [editor, flushSave, provider]);
+  }, [editor, provider]);
 
-  // Flush on unmount / tab hide so nothing is lost.
+  useEffect(() => () => { if (typingTimer.current) clearTimeout(typingTimer.current); }, []);
+
+  // Ctrl/Cmd-S saves (capture phase so it works with focus inside ProseMirror or the sidebar).
   useEffect(() => {
-    const onHide = () => {
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        void flushSave();
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        void save();
       }
     };
-    document.addEventListener('visibilitychange', onHide);
-    return () => {
-      document.removeEventListener('visibilitychange', onHide);
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (typingTimer.current) clearTimeout(typingTimer.current);
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [save]);
+
+  // FR9 — a native unload confirm while there are unsaved edits (the data-loss net that replaces the
+  // deleted flush-on-hide). No custom modal — the browser prompt is enough.
+  useEffect(() => {
+    if (saveState !== 'dirty' && saveState !== 'saving') return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
     };
-  }, [flushSave]);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [saveState]);
 
   const onVersionSaved = (updated: AssetItem) => {
+    // Fb-6 — the server no-ops an identical snapshot (returns the unchanged head). Detect that (the
+    // version didn't advance) and tell the user nothing was saved instead of a false "new version" toast.
+    const unchanged = asset != null && updated.currentVersion === asset.currentVersion;
     setAsset({ id: updated.id, filename: updated.filename, currentVersion: updated.currentVersion });
-    pushToast('Nouvelle version enregistrée');
+    pushToast(unchanged ? `Aucune modification depuis la v${updated.currentVersion}` : 'Nouvelle version enregistrée');
+  };
+
+  // Fb-5 — load the asset's version list (for the switcher), refreshed when the head advances.
+  useEffect(() => {
+    if (!asset) {
+      setVersions([]);
+      return;
+    }
+    let alive = true;
+    api
+      .getAssetVersions(asset.id)
+      .then((v) => alive && setVersions(v))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [asset]);
+
+  // Fb-5 — switch the viewed version. Head (or null) → live editing; an older version → fetch its HTML
+  // via the existing review endpoint (from=to=v) and render it read-only (no Yjs binding to a snapshot).
+  const onSelectVersion = useCallback(
+    async (v: number | null) => {
+      if (!asset || v == null || v === asset.currentVersion) {
+        setViewVersion(null);
+        setViewHtml(null);
+        return;
+      }
+      setViewVersion(v);
+      setViewLoading(true);
+      try {
+        const review = await api.getReview(pageId, { file: asset.id, from: v, to: v });
+        setViewHtml(review.selected?.fromHtml ?? null);
+      } catch {
+        setViewHtml(null);
+      } finally {
+        setViewLoading(false);
+      }
+    },
+    [asset, pageId],
+  );
+  const backToLive = () => {
+    setViewVersion(null);
+    setViewHtml(null);
+  };
+  const restoreIntoDraft = () => {
+    if (viewHtml != null && editor) editor.commands.setContent(viewHtml);
+    // FR9 — restoring replaces the live draft: mark it dirty so the user saves explicitly (setContent
+    // fires `update` in the real editor; set it here too so the indicator is reliable across renders).
+    editCountRef.current += 1;
+    setSaveState('dirty');
+    backToLive();
+    pushToast('Version restaurée dans le brouillon');
   };
 
   const typingPeer = peers.find((p) => p.typing);
@@ -459,6 +598,7 @@ function EditorLoaded({
             }
             pageId={pageId}
             saveState={saveState}
+            onSave={save}
             peers={peers}
             selfColor={myColor}
             selfAvatar={account.avatar ?? null}
@@ -475,6 +615,9 @@ function EditorLoaded({
                 onSnapshot={onVersionSaved}
                 onError={pushToast}
                 editor={editor}
+                versions={versions}
+                viewVersion={viewVersion}
+                onSelectVersion={onSelectVersion}
               />
             }
           />
@@ -482,12 +625,34 @@ function EditorLoaded({
         <div className="ep-editor-body" style={{ display: 'flex' }}>
           <div className="ep-editor-main" style={{ flex: 1, padding: '24px 30px', minWidth: 0, background: 'var(--card)' }}>
             {/* Prose-only editor: the planche caseBlock schema is the writing-sheet container, always
-                rendered in prose form (case chrome hidden in CSS) so it reads as one rich-text page. */}
-            <div className="ep-a4-sheet">
-              <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
-                <EditorContent editor={editor} />
+                rendered in prose form (case chrome hidden in CSS) so it reads as one rich-text page.
+                Fb-5 — viewing an older version replaces the live editor with a read-only snapshot. */}
+            {viewVersion != null ? (
+              <div className="ep-a4-sheet">
+                <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14, background: 'var(--accent-soft)', border: '2px solid var(--ink)', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                  <span>Lecture seule — v{viewVersion}</span>
+                  <button type="button" onClick={backToLive} style={{ border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 10px', minHeight: 32, background: 'var(--card)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink)' }}>
+                    Revenir à la version actuelle
+                  </button>
+                  <button type="button" onClick={restoreIntoDraft} disabled={viewLoading || viewHtml == null} style={{ border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 10px', minHeight: 32, background: viewLoading || viewHtml == null ? 'var(--tone)' : 'var(--accent)', color: viewLoading || viewHtml == null ? 'var(--ink2)' : '#fff', fontSize: 12, fontWeight: 700, cursor: viewLoading || viewHtml == null ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                    Restaurer dans le brouillon
+                  </button>
+                </div>
+                {viewLoading ? (
+                  <div style={{ fontSize: 13, color: 'var(--ink2)' }}>Chargement de la version…</div>
+                ) : viewHtml == null ? (
+                  <div style={{ fontSize: 13, color: 'var(--ink2)', fontStyle: 'italic' }}>Aperçu indisponible pour cette version.</div>
+                ) : (
+                  <VersionSheet html={viewHtml} />
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="ep-a4-sheet">
+                <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
+                  <EditorContent editor={editor} />
+                </div>
+              </div>
+            )}
           </div>
           <Sidebar
             comments={comments}
@@ -495,12 +660,16 @@ function EditorLoaded({
             canComment={!!asset}
             editor={editor}
             pageId={pageId}
+            documentId={documentId}
             assetId={assetId}
+            deepLink={deepLink}
             commentInputRef={commentInputRef}
             onCommentAdded={(c) => setComments((list) => mergeComment(list, c))}
             meId={account.id}
             liveTexts={liveTexts}
             onDelete={deleteComment}
+            onCorrectionStatus={changeCorrectionStatus}
+            notify={pushToast}
           />
         </div>
       </div>
@@ -524,6 +693,7 @@ function EditorHeader({
   switcherLabel,
   pageId,
   saveState,
+  onSave,
   peers,
   selfColor,
   selfAvatar,
@@ -533,6 +703,7 @@ function EditorHeader({
   switcherLabel: string;
   pageId: string;
   saveState: SaveState;
+  onSave: () => void;
   peers: Peer[];
   selfColor: string;
   selfAvatar: string | null;
@@ -543,14 +714,19 @@ function EditorHeader({
       <Link href={`/projet/${slug}`} style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>‹ Projet</Link>
       <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{projectTitle}</span>
       <PageSwitcher slug={slug} currentPageId={pageId} label={switcherLabel} />
-      <span role="status" aria-live="polite" style={{ fontSize: 12, color: saveState === 'error' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' ? 700 : 500 }}>
+      {/* Item 2 (iter 5) — icon-only Save, co-located with the chapter/page switcher. Accent when there
+          are unsaved edits; persists content only (no new version). Ctrl/Cmd-S does the same (see save()). */}
+      <SaveButton saveState={saveState} onSave={onSave} />
+      <span role="status" aria-live="polite" style={{ fontSize: 12, color: saveState === 'error' || saveState === 'dirty' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' || saveState === 'dirty' ? 700 : 500 }}>
         {saveState === 'saving'
           ? 'Enregistrement…'
           : saveState === 'saved'
             ? 'Enregistré ✓'
-            : saveState === 'error'
-              ? 'Échec de l’enregistrement — nouvel essai…'
-              : ''}
+            : saveState === 'dirty'
+              ? 'Modifications non enregistrées'
+              : saveState === 'error'
+                ? 'Échec de l’enregistrement'
+                : ''}
       </span>
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -562,6 +738,41 @@ function EditorHeader({
       </div>
       <SharePopover pageId={pageId} />
     </div>
+  );
+}
+
+// Item 2 (iter 5) — icon-only Save button, sitting next to the chapter/page switcher in the header.
+// State-reactive: accent fill when there are unsaved edits (dirty), "wait" cursor while saving. Keeps
+// the r3 behaviour (persists content only, no new version); Ctrl/Cmd-S triggers the same save().
+function SaveButton({ saveState, onSave }: { saveState: SaveState; onSave: () => void }) {
+  const dirty = saveState === 'dirty' || saveState === 'error';
+  const saving = saveState === 'saving';
+  return (
+    <button
+      type="button"
+      onClick={onSave}
+      disabled={saving}
+      aria-label="Enregistrer"
+      aria-keyshortcuts="Meta+S Control+S"
+      title="Enregistrer (⌘S / Ctrl+S)"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 36,
+        height: 36,
+        flex: 'none',
+        border: '2px solid var(--ink)',
+        borderRadius: 6,
+        background: dirty ? 'var(--accent)' : 'var(--card)',
+        color: dirty ? '#fff' : 'var(--ink)',
+        cursor: saving ? 'wait' : 'pointer',
+        boxShadow: dirty ? '2px 2px 0 var(--shadow)' : 'none',
+        padding: 0,
+      }}
+    >
+      <SaveIcon size={17} />
+    </button>
   );
 }
 
@@ -649,6 +860,9 @@ function ToolbarExtras({
   onSnapshot,
   onError,
   editor,
+  versions,
+  viewVersion,
+  onSelectVersion,
 }: {
   slug: string;
   pageId: string;
@@ -657,35 +871,92 @@ function ToolbarExtras({
   onSnapshot: (a: AssetItem) => void;
   onError: (msg: string) => void;
   editor: Editor | null;
+  versions: AssetVersionItem[];
+  viewVersion: number | null;
+  onSelectVersion: (v: number | null) => void;
 }) {
   const [snapping, setSnapping] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  // Item 1 (iter 5) — the reviewable asset id for the compare modal. Use the loaded asset's own id
+  // (the `assetId` prop is only the optional URL param and is absent for a page's default asset).
+  const compareAssetId = currentAsset?.id;
+  // Fb-6 (client half) — a ref-based in-flight guard: `snapping` state races a double-click (two POSTs
+  // fire before the re-render disables the button). The ref flips synchronously so the second click is
+  // dropped; the server-side dedupe is the ultimate authority, this just avoids the wasted round-trip.
+  const snappingRef = useRef(false);
   const version = currentAsset?.currentVersion ?? null;
 
   // Item 22 — snapshot the current draft as a new version, optionally with a note. The version endpoint
   // accepts the note; it rides onto the CS-3 AssetVersion (same note UX as the history modal).
   const snapshot = async (note?: string) => {
-    if (!editor || snapping) return;
+    if (!editor || snappingRef.current) return;
+    snappingRef.current = true;
     setSnapping(true);
     try {
-      const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML(), ...(note ? { note } : {}) }, assetId);
+      // Bug (off-by-one) — snapshot the OPENED/loaded asset in place (fall back to the ?asset URL param)
+      // so "Enregistrer une nouvelle version" versions the right file instead of a materialized duplicate.
+      const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML(), ...(note ? { note } : {}) }, currentAsset?.id ?? assetId);
       onSnapshot(updated);
     } catch (err) {
       onError((err as { message?: string })?.message ?? 'Impossible d’enregistrer la version');
     } finally {
+      snappingRef.current = false;
       setSnapping(false);
     }
   };
 
+  // Fb-5 — versions for the switcher (head first); fall back to the head-only entry before they load.
+  const switcherOptions = versions.length > 0 ? [...versions].sort((a, b) => b.version - a.version) : version != null ? [{ version, note: null } as Pick<AssetVersionItem, 'version' | 'note'>] : [];
+
   return (
     <>
       <FileDropdown slug={slug} pageId={pageId} currentAssetId={assetId} onError={onError} />
-      {/* Commenting lives ONLY in the sidebar composer — no toolbar comment button (coordinator req). */}
+      {/* Commenting lives ONLY in the sidebar composer — no toolbar comment button (coordinator req).
+          FR9 Save now lives in the header next to the chapter switcher (Item 2, iter 5). */}
       {version != null && (
         <>
-          <span title="Version courante" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', border: '2px solid var(--ink)', borderRadius: 6, padding: '3px 8px' }}>v{version}</span>
+          {/* Fb-5 — version switcher: head = live editing, an older version = read-only view. */}
+          <div style={{ minWidth: 120 }}>
+            <OnBrandSelect
+              aria-label="Version affichée"
+              value={String(viewVersion ?? version)}
+              onChange={(e) => onSelectVersion(Number(e.target.value))}
+            >
+              {switcherOptions.map((v) => (
+                <option key={v.version} value={String(v.version)}>
+                  {`v${v.version}${v.note ? ` · ${v.note}` : ''}`}
+                </option>
+              ))}
+            </OnBrandSelect>
+          </div>
+          {/* Item 1 (iter 5) — compare two scenario versions side by side (A4 sheet) in a modal. */}
+          {versions.length >= 2 && compareAssetId && (
+            <button
+              type="button"
+              onClick={() => setComparing(true)}
+              title="Comparer les versions"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 10px', minHeight: 32, background: 'var(--card)', color: 'var(--ink)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <CompareIcon size={15} />
+              Comparer
+            </button>
+          )}
           <VersionSplitButton snapping={snapping} onSnapshot={snapshot} />
         </>
       )}
+      {comparing && compareAssetId && version != null && (
+        <CompareVersionsModal
+          pageId={pageId}
+          assetId={compareAssetId}
+          versions={versions}
+          headVersion={version}
+          onClose={() => setComparing(false)}
+        />
+      )}
+      {/* FR1 mirror — cross-link to the review screen (the review toolbar links back to the editor). */}
+      <Link href={`/projet/${slug}/revision/${pageId}`} style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', textDecoration: 'none', border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 10px', minHeight: 32, display: 'inline-flex', alignItems: 'center' }}>
+        Révision · corrections →
+      </Link>
     </>
   );
 }
@@ -896,19 +1167,27 @@ function Sidebar({
   canComment,
   editor,
   pageId,
+  documentId,
   assetId,
+  deepLink,
   commentInputRef,
   onCommentAdded,
   meId,
   liveTexts,
   onDelete,
+  onCorrectionStatus,
+  notify,
 }: {
   comments: CaseCommentDto[];
   typingPeer: Peer | null;
   canComment: boolean;
   editor: Editor | null;
   pageId: string;
+  /** CS-5 — the scenario document id (null before first autosave materializes it). */
+  documentId: string | null;
   assetId?: string;
+  /** CS-5 — deep-link range from the review screen; revealed once the editor is ready. */
+  deepLink: { from: number; to: number } | null;
   commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
   onCommentAdded: (c: CaseCommentDto) => void;
   /** CS-15 — the current account id: only the author of a comment sees its trash affordance. */
@@ -917,14 +1196,23 @@ function Sidebar({
   liveTexts: Map<string, string>;
   /** CS-15 — optimistic author-only delete, owned by the parent (mutates the shared comment list). */
   onDelete: (c: CaseCommentDto) => Promise<void>;
+  /** CS-5 r4 (FR14) — step a correction-comment's status; author/assignee-only (server re-enforced). */
+  onCorrectionStatus: (c: CaseCommentDto, status: CorrectionStatus) => Promise<void>;
+  /** Toast seam owned by the parent (correction-filed confirmation). */
+  notify: (msg: string) => void;
 }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // CS-5 — "Demander une correction" (scenario): busy while the request is in flight.
+  const [correctionBusy, setCorrectionBusy] = useState(false);
   const [, forceRender] = useState(0);
+
   // CS-15 — the comment awaiting the confirm dialog, and the id whose delete is in flight (disabled trash).
   const [confirmDelete, setConfirmDelete] = useState<CaseCommentDto | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // CS-5 r4 (FR14) — the correction whose status change is in flight (one guard per row, no optimism).
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
   // Item 5 — the highlighted text range the next comment will anchor to. Captured whenever the editor
   // holds a non-empty selection; cleared when the selection collapses to a caret. Persists while the
   // user types in the textarea (ProseMirror keeps its selection in state even when the DOM blurs).
@@ -978,6 +1266,40 @@ function Sidebar({
     }
   };
 
+  // CS-5 — "Demander une correction": create a scenario Correction reusing the comment text-anchor.
+  // Sibling of "Commenter la sélection"; requires an active selection + a materialized documentId.
+  const requestCorrection = async () => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setError('Décrivez la correction demandée');
+      return;
+    }
+    if (!range || !documentId) {
+      setError('Sélectionnez le passage à corriger');
+      return;
+    }
+    setCorrectionBusy(true);
+    setError(null);
+    try {
+      // Fb-2 — one write path: the server creates a tagged ScenarioComment + Correction and fans the
+      // comment out over the existing `editor:comment` WS event, so it appears here as a highlighted
+      // sidebar row (with a «Correction» tag) exactly like a normal comment — no parallel control.
+      await api.createCorrection(pageId, {
+        type: 'scenario',
+        anchor: { documentId, from: range.from, to: range.to, quote: range.quote },
+        description: trimmed,
+        caseNo: currentCaseNo,
+        caseRef: `case ${currentCaseNo}`,
+      });
+      setText('');
+      notify('Demande de correction envoyée — suivez-la dans Révision · corrections');
+    } catch (err) {
+      setError((err as { message?: string })?.message ?? 'Impossible d’envoyer la demande de correction');
+    } finally {
+      setCorrectionBusy(false);
+    }
+  };
+
   // Item 5 — "voir dans le texte": select the comment's stored range and reveal it. We do NOT use
   // PM's .scrollIntoView() here — that routes through the typing caret-band handler keyed on the
   // selection HEAD (the range END), which parks the end at ~78% and pushes the highlighted run up out
@@ -997,6 +1319,18 @@ function Sidebar({
     const target = Math.max(CARET_TOP_MARGIN + 24, window.innerHeight * 0.22); // sit clear of the header
     window.scrollTo({ top: Math.max(0, window.scrollY + (top - target)), behavior: 'smooth' });
   };
+
+  // CS-5 — reveal the deep-linked range once the editor is ready (best-effort, same caveat as comments).
+  const deepLinkDone = useRef(false);
+  useEffect(() => {
+    if (!editor || !deepLink || deepLinkDone.current) return;
+    deepLinkDone.current = true;
+    revealRange(deepLink.from, deepLink.to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, deepLink]);
+
+  // Stable colour ordering from the comment list (matches the in-canvas highlight order).
+  const order = new Map(comments.map((c, i) => [c.id, i]));
 
   return (
     <aside className="ep-editor-sidebar" aria-label="Commentaires" style={{ width: 256, borderLeft: '3px solid var(--ink)', background: 'var(--paper)' }}>
@@ -1019,16 +1353,34 @@ function Sidebar({
       {/* Item 16 — the comments list scrolls internally (flex:1) so the composer below stays pinned. */}
       <div className="ep-comments-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {comments.length === 0 && <div style={{ fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucun commentaire</div>}
-        {comments.map((c, i) => {
+        {comments.map((c) => {
+          const i = order.get(c.id) ?? 0;
+          // FR14 — the author or assignee of a correction-comment can step its status from here.
+          const canStatus = c.correction != null && (c.authorId === meId || c.correction.assigneeId === meId);
           // CS-15 — "· modifié": the live anchored text differs from the stored quote (whitespace-tolerant).
           // undefined = case-level comment (no anchor) → never modified. '' = the range was fully deleted.
           const current = liveTexts.get(c.id);
           const changed = c.quote != null && current !== undefined && quoteChanged(c.quote, current);
           return (
           <div key={c.id} style={{ border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 10px', fontSize: 12, background: 'var(--card)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
               <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--tone) radial-gradient(var(--ink) 1.4px,transparent 1.5px) 0 0 / 5px 5px', border: '1.5px solid var(--ink)', display: 'block' }} />
               <b>{c.authorName}</b>
+              {/* Fb-2 — a tagged correction comment carries a «Correction» chip + its current status. */}
+              {c.correction && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    border: `1.5px solid ${c.correction.status === 'corrige' ? CORRECTION_TAG_GREEN : 'var(--accent)'}`,
+                    color: c.correction.status === 'corrige' ? CORRECTION_TAG_GREEN : 'var(--accent)',
+                  }}
+                >
+                  Correction · {CORRECTION_STATUS_LABELS[c.correction.status]}
+                </span>
+              )}
               {/* CS-15 — author-only delete. Real <button> (keyboard-operable), labelled with intent; no emoji. */}
               {c.authorId === meId && (
                 <button
@@ -1070,6 +1422,24 @@ function Sidebar({
               </div>
             )}
             <div style={{ color: 'var(--ink)', lineHeight: 1.3 }}>{c.text}</div>
+            {/* FR14 — author/assignee-only correction status stepper (à corriger → en cours → corrigé →
+                reopen). Persists via PATCH /corrections/:id; the server re-enforces the authz. */}
+            {canStatus && c.correction && (
+              <button
+                type="button"
+                disabled={statusBusyId === c.id}
+                onClick={() => {
+                  setStatusBusyId(c.id);
+                  void onCorrectionStatus(c, NEXT_STATUS[c.correction!.status]).finally(() =>
+                    setStatusBusyId((id) => (id === c.id ? null : id)),
+                  );
+                }}
+                aria-label={`Statut de la correction : ${CORRECTION_STATUS_LABELS[c.correction.status]} — passer à « ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.correction.status]]} »`}
+                style={{ marginTop: 6, fontSize: 11, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 5, padding: '3px 8px', minHeight: 30, background: 'var(--card)', color: 'var(--ink)', cursor: statusBusyId === c.id ? 'default' : 'pointer', fontFamily: 'inherit' }}
+              >
+                {statusBusyId === c.id ? '…' : `→ ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.correction.status]]}`}
+              </button>
+            )}
           </div>
           );
         })}
@@ -1111,9 +1481,21 @@ function Sidebar({
             style={{ width: '100%', marginTop: 4, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)' }}
           />
           {error && <div role="alert" style={{ color: 'var(--accent)', fontSize: 11, fontWeight: 700, marginTop: 4 }}>{error}</div>}
-          <button type="submit" disabled={busy} style={{ marginTop: 6, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-            ＋ Commentaire
-          </button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <button type="submit" disabled={busy || correctionBusy} style={{ background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              ＋ Commentaire
+            </button>
+            {/* CS-5 — sibling of "Commenter": file a scenario Correction from the selected passage. */}
+            <button
+              type="button"
+              onClick={() => void requestCorrection()}
+              disabled={busy || correctionBusy || !range || !documentId}
+              title={!documentId ? 'Enregistrez d’abord le scénario' : !range ? 'Sélectionnez un passage à corriger' : undefined}
+              style={{ background: 'var(--card)', color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: !range || !documentId ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: !range || !documentId ? 0.55 : 1 }}
+            >
+              {correctionBusy ? 'Envoi…' : 'Demander une correction'}
+            </button>
+          </div>
         </form>
       ) : (
         <p className="ep-comment-composer" style={{ fontSize: 11, color: 'var(--ink2)', fontStyle: 'italic' }}>Enregistrez d’abord le scénario pour commenter.</p>
@@ -1201,6 +1583,13 @@ function scrollCaretIntoView(view: { state: { selection: { head: number } }; coo
   }
   if (delta !== 0) window.scrollTo({ top: Math.max(0, window.scrollY + delta), behavior: 'auto' });
   return true; // we own scroll-to-selection (suppresses PM's abrupt edge jump when already in view)
+}
+
+// Bug (scenario version off-by-one) — mirrors the server's isBlankHtml: strip tags + &nbsp; + whitespace
+// and treat the result as blank ('', '   ', <p></p>, <p><br></p>, <p>&nbsp;</p>, and the empty planche
+// chrome). A blank Save is suppressed so it can never materialize an empty v1.
+function isBlankHtml(html: string): boolean {
+  return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, '').replace(/\s+/g, '').length === 0;
 }
 
 function encodeState(ydoc: Y.Doc): string {

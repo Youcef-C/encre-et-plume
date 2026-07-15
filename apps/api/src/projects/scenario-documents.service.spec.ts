@@ -72,6 +72,8 @@ function buildPrisma(over: Record<string, any> = {}) {
       update: jest.fn().mockResolvedValue({ id: 'doc-1' }),
     },
     scenarioUpdate: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    assetVersion: { findUnique: jest.fn().mockResolvedValue(null) },
+    media: { findUnique: jest.fn().mockResolvedValue(null) },
     scenarioComment: {
       create: jest.fn().mockImplementation(({ data }: any) =>
         Promise.resolve({ id: 'cmt-1', createdAt: new Date('2026-07-14T00:00:00Z'), ...data, author: { displayName: 'Moi' } }),
@@ -94,13 +96,15 @@ function makeService(prisma: any, over: Record<string, any> = {}) {
     getPreview: jest.fn().mockResolvedValue({ mode: 'text', text: 'Ligne un\n\nLigne deux', downloadUrl: 'x', filename: 'f', version: 1 }),
   };
   const gateway = over.gateway ?? { emitMaterialized: jest.fn(), emitComment: jest.fn(), emitCommentDeleted: jest.fn() };
+  const s3 = over.s3 ?? { getObjectBuffer: jest.fn().mockResolvedValue(Buffer.from('<p>head</p>')) };
   const service = new ScenarioDocumentsService(
     prisma as unknown as PrismaService,
     media as unknown as MediaService,
     assets as unknown as AssetsService,
     gateway as unknown as EditorGateway,
+    s3 as unknown as S3StorageService,
   );
-  return { service, media, assets, gateway };
+  return { service, media, assets, gateway, s3 };
 }
 
 describe('ScenarioDocumentsService.getDocument', () => {
@@ -143,6 +147,27 @@ describe('ScenarioDocumentsService.getDocument', () => {
       { no: 1, description: 'Rue sous la pluie', dialogue: 'RIN — « Enfin. »' },
       { no: 2, description: 'Gros plan', dialogue: 'YUKI — « Attends. »' },
     ]);
+  });
+
+  // B8 (Fb-2/Fb-7) — a comment that IS a tagged correction surfaces its version + { id, status } in the DTO.
+  it('surfaces a linked correction (id + status) and version on a comment DTO', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValueOnce({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({
+      id: 'doc-1',
+      contentJson: CONTENT,
+      ydocState: null,
+      comments: [
+        {
+          id: 'cmt-1', caseNo: 1, authorId: 'acc-me', text: 'Reformuler', createdAt: new Date('2026-07-14T00:00:00Z'),
+          author: { displayName: 'Moi' }, anchorFrom: 3, anchorTo: 10, quote: 'texte', version: 2,
+          correction: { id: 'corr-1', status: 'a_corriger', assigneeId: 'acc-yuki' },
+        },
+      ],
+    });
+    const { service } = makeService(prisma);
+    const res = await service.getDocument('acc-me', 'page-1');
+    expect(res.comments[0]).toMatchObject({ version: 2, correction: { id: 'corr-1', status: 'a_corriger', assigneeId: 'acc-yuki' } });
   });
 
   it('converts a linked .txt asset (no document yet) to initialHtml paragraphs', async () => {
@@ -250,6 +275,24 @@ describe('ScenarioDocumentsService.autosave', () => {
     expect(res.materialized).toBeNull();
   });
 
+  // Bug (v1 empty / v1=v2 shift): a stray on-mount/initial save can fire with empty html BEFORE the
+  // Yjs doc is populated. Materializing then would burn v1 on an empty document and shift the real
+  // first content into v2. The blank-html save must be a no-op — NO asset, NO version, NO doc.
+  it.each([[''], ['   '], ['<p></p>'], ['<p><br></p>'], ['<p>&nbsp;</p>']])(
+    'does NOT materialize a v1 for a blank-html save (%p) — no empty v1, no v1=v2 shift',
+    async (html) => {
+      const prisma = buildPrisma(); // no linked asset → create-when-none branch
+      const { service, media, assets, gateway } = makeService(prisma);
+      const res = await service.autosave('acc-me', 'page-1', { ydocState: 'AA==', contentJson: { type: 'doc', content: [] }, html });
+      expect(media.ingestAsset).not.toHaveBeenCalled();
+      expect(assets.createAsset).not.toHaveBeenCalled();
+      expect(assets.linkToPage).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+      expect(gateway.emitMaterialized).not.toHaveBeenCalled();
+      expect(res.materialized).toBeNull();
+    },
+  );
+
   it('materializes a scenario asset + link + document on the first save of a blank card', async () => {
     const prisma = buildPrisma(); // no linked asset, no existing filename
     const { service, media, assets, gateway } = makeService(prisma);
@@ -294,6 +337,46 @@ describe('ScenarioDocumentsService.snapshotVersion', () => {
     await expect(service.snapshotVersion('acc-me', 'page-1', { html: '<p>x</p>' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  // B11 (Fb-6) — dedupe guard: an identical-to-head snapshot creates NO version (autosave already
+  // advanced the head; a re-click without edits must be a no-op).
+  function withHtmlHead(prisma: any, headHtml: string) {
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.html', currentVersion: 3 } });
+    prisma.assetVersion.findUnique.mockResolvedValue({ mediaId: 'media-head' });
+    prisma.media.findUnique.mockResolvedValue({ bucketKey: 'k-head', contentType: 'text/html' });
+    return { getObjectBuffer: jest.fn().mockResolvedValue(Buffer.from(headHtml, 'utf8')) };
+  }
+
+  it('creates NO new version when the snapshot html is identical to the head version', async () => {
+    const prisma = buildPrisma();
+    const s3 = withHtmlHead(prisma, '<p>same</p>');
+    const assets = { getAssetItem: jest.fn().mockResolvedValue({ id: 'asset-1', currentVersion: 3 }), addVersion: jest.fn() };
+    const { service } = makeService(prisma, { s3, assets });
+    const res = await service.snapshotVersion('acc-me', 'page-1', { html: '<p>same</p>' });
+    expect(assets.addVersion).not.toHaveBeenCalled();
+    expect(assets.getAssetItem).toHaveBeenCalledWith('asset-1');
+    expect(res.currentVersion).toBe(3); // unchanged head
+  });
+
+  it('creates a new version when the snapshot html differs from the head version', async () => {
+    const prisma = buildPrisma();
+    const s3 = withHtmlHead(prisma, '<p>old</p>');
+    const { service, assets } = makeService(prisma, { s3 });
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>NEW content</p>' });
+    expect(assets.addVersion).toHaveBeenCalledWith('acc-me', 'lames-de-brume', 'asset-1', { mediaId: 'media-html' });
+  });
+
+  it('skips the dedupe guard when the head version media is not text/html (imported .docx head)', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    prisma.assetVersion.findUnique.mockResolvedValue({ mediaId: 'media-head' });
+    prisma.media.findUnique.mockResolvedValue({ bucketKey: 'k-head', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const s3 = { getObjectBuffer: jest.fn() };
+    const { service, assets } = makeService(prisma, { s3 });
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>anything</p>' });
+    expect(s3.getObjectBuffer).not.toHaveBeenCalled(); // binary head → any editor snapshot is new
+    expect(assets.addVersion).toHaveBeenCalled();
+  });
+
   // Item 22 — a version note rides through to the CS-3 AssetVersion.
   it('forwards a version note to addVersion', async () => {
     const prisma = buildPrisma();
@@ -328,6 +411,20 @@ describe('ScenarioDocumentsService.addComment', () => {
     expect(res.caseNo).toBe(2);
     expect(res.authorName).toBe('Moi');
     expect(gateway.emitComment).toHaveBeenCalledWith('asset-1', expect.objectContaining({ text: 'Revoir ce dialogue' }));
+  });
+
+  // B8 (Fb-7) — the created comment is stamped with the asset's current head version and the DTO surfaces it.
+  it('stamps the comment version = asset head and returns it in the DTO', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'x', currentVersion: 4 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1' });
+    const { service } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 1, { text: 'À revoir' });
+    expect(prisma.scenarioComment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ version: 4 }) }),
+    );
+    expect(res.version).toBe(4);
+    expect(res.correction).toBeNull();
   });
 
   // Item 5 — a range-anchored comment persists anchorFrom/anchorTo/quote and returns them.
@@ -462,6 +559,7 @@ describe('ScenarioDocumentsService — text/html allowlist (un-mocked MediaServi
       media,
       assets as unknown as AssetsService,
       { emitMaterialized: jest.fn(), emitComment: jest.fn() } as unknown as EditorGateway,
+      { getObjectBuffer: jest.fn() } as unknown as S3StorageService,
     );
     const res = await service.autosave('acc-me', 'page-1', {
       ydocState: Buffer.from('y').toString('base64'),
@@ -481,6 +579,7 @@ describe('ScenarioDocumentsService — text/html allowlist (un-mocked MediaServi
       media,
       assets as unknown as AssetsService,
       { emitMaterialized: jest.fn(), emitComment: jest.fn() } as unknown as EditorGateway,
+      { getObjectBuffer: jest.fn() } as unknown as S3StorageService,
     );
     const res = await service.snapshotVersion('acc-me', 'page-1', { html: '<p>final</p>' });
     expect(res.currentVersion).toBe(4);

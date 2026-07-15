@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type {
   AddAssetVersionRequest,
   AssetItem,
@@ -28,6 +28,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService, sanitizeDocxHtml } from '../media/media.service';
 import { S3StorageService } from '../media/s3-storage.service';
+import { CorrectionsService } from './corrections.service';
 import { isMemberOf } from './projects.service';
 
 const SIGNED_URL_TTL = () => Number(process.env['MEDIA_SIGNED_URL_TTL'] ?? 300);
@@ -98,6 +99,9 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly s3: S3StorageService,
+    // CS-5: optional so the direct-construction specs (new AssetsService(prisma, media, s3)) still work;
+    // Nest injects it in production. No import cycle — CorrectionsService never imports AssetsService.
+    @Optional() private readonly corrections?: CorrectionsService,
   ) {}
 
   // ── B2: register (or D10 re-import → append version) ──────────────────────
@@ -201,6 +205,8 @@ export class AssetsService {
         data: { currentVersion: nextVersion, mediaId: media.id, size: media.size },
       });
     });
+    // CS-5 B5: a new version lands → notify authors of this file's open corrections (never throws).
+    await this.corrections?.notifyNewVersion(asset.id, accountId);
     return this.getAssetItem(asset.id);
   }
 
@@ -444,7 +450,8 @@ export class AssetsService {
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
-  private async getAssetItem(assetId: string): Promise<AssetItem> {
+  // Public: reused by ScenarioDocumentsService.snapshotVersion's dedupe no-op (return the unchanged head).
+  async getAssetItem(assetId: string): Promise<AssetItem> {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
       include: ASSET_PAGE_LINKS_INCLUDE,

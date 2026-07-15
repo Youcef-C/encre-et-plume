@@ -247,6 +247,22 @@ describe('CardModal', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  // CS-5 F5 — when the card is in Corrections, deep-link to the review screen (mirrors KanbanBoard's ⚑).
+  it('shows the "Voir les corrections →" link on a Corrections card, pointing at the revision route', async () => {
+    mount({ stage: 'corrections' });
+    await screen.findByLabelText('TITRE');
+    expect(screen.getByRole('link', { name: 'Voir les corrections →' })).toHaveAttribute(
+      'href',
+      '/projet/nuit-blanche/revision/pg7',
+    );
+  });
+
+  it('hides the "Voir les corrections →" link when the card is not in Corrections', async () => {
+    mount({ stage: 'scenario' });
+    await screen.findByLabelText('TITRE');
+    expect(screen.queryByRole('link', { name: 'Voir les corrections →' })).not.toBeInTheDocument();
+  });
+
   it('read-only viewers get no composer, no add controls and no Supprimer', async () => {
     (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue(detail());
     render(

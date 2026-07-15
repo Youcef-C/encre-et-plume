@@ -5,7 +5,7 @@
  */
 
 import { BadRequestException, ForbiddenException, NotFoundException, HttpException } from '@nestjs/common';
-import { MediaService, sanitizeDocxHtml } from './media.service';
+import { MediaService, sanitizeDocxHtml, sanitizeScenarioHtml } from './media.service';
 import { S3StorageService } from './s3-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -842,6 +842,70 @@ describe('sanitizeDocxHtml', () => {
     expect(out).not.toContain('<script>');
     expect(out).not.toContain('onclick');
     expect(out).not.toContain('javascript:');
+  });
+});
+
+// CS-5 security — no code injection possible. sanitizeScenarioHtml is the single allowlist DOM sanitizer
+// for ALL scenario/docx HTML that leaves the API (review payload version content + docx preview). It must
+// kill every XSS vector the old regex sanitizer missed, while keeping the editor's rich-text + A4 markup.
+describe('sanitizeScenarioHtml (allowlist DOM sanitizer)', () => {
+  // Battery of real XSS vectors — including mutation-XSS + malformed/nested that a regex misses.
+  const VECTORS = [
+    '<script>alert(1)</script>',
+    '<img src=x onerror=alert(1)>',
+    '<svg onload=alert(1)>',
+    '<svg/onload=alert(1)>',
+    '<a href="javascript:alert(1)">x</a>',
+    '<iframe src=javascript:alert(1)></iframe>',
+    '<div style="background:url(javascript:alert(1))">x</div>',
+    '<noscript><p title="</noscript><img src=x onerror=alert(1)>">',
+    '<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>',
+    '<scr<script>ipt>alert(1)</scr</script>ipt>',
+    '<object data="javascript:alert(1)"></object>',
+    '<embed src="javascript:alert(1)">',
+    '<form action="javascript:alert(1)"><button>x</button></form>',
+    '<a href="vbscript:msgbox(1)">x</a>',
+    '<body onload=alert(1)>',
+  ];
+
+  it.each(VECTORS)('neutralizes %s (no script/handler/js-url survives)', (vector) => {
+    const out = sanitizeScenarioHtml(vector).toLowerCase();
+    expect(out).not.toContain('<script');
+    expect(out).not.toContain('onerror');
+    expect(out).not.toContain('onload');
+    expect(out).not.toContain('onclick');
+    expect(out).not.toContain('javascript:');
+    expect(out).not.toContain('vbscript:');
+    expect(out).not.toContain('<iframe');
+    expect(out).not.toContain('<object');
+    expect(out).not.toContain('<embed');
+    expect(out).not.toContain('<form');
+    expect(out).not.toContain('<svg');
+    expect(out).not.toContain('<style');
+    expect(out).not.toMatch(/\son\w+\s*=/); // no residual on* handler
+  });
+
+  it('preserves rich-text formatting: bold, em, headings, lists, safe links', () => {
+    const html =
+      '<h1>Titre</h1><h2>Sous</h2><p><strong>gras</strong> <em>italique</em></p>' +
+      '<ul><li>un</li></ul><ol><li>deux</li></ol><blockquote>cite</blockquote>' +
+      '<a href="https://example.com">lien</a>';
+    const out = sanitizeScenarioHtml(html);
+    for (const tag of ['<h1>', '<h2>', '<strong>', '<em>', '<ul>', '<li>', '<ol>', '<blockquote>', '<a ']) {
+      expect(out).toContain(tag);
+    }
+    expect(out).toContain('href="https://example.com"');
+  });
+
+  it('preserves the editor A4 case-block structure (class + data attribute)', () => {
+    const html =
+      '<div data-case-block class="ep-case-block"><div class="ep-case-description">desc</div>' +
+      '<div class="ep-case-dialogue">dialogue</div></div>';
+    const out = sanitizeScenarioHtml(html);
+    expect(out).toContain('ep-case-block');
+    expect(out).toContain('ep-case-description');
+    expect(out).toContain('ep-case-dialogue');
+    expect(out).toContain('data-case-block');
   });
 });
 

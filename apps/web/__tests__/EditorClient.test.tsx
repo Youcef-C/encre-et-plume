@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EditorDocumentResponse, CaseCommentDto } from '@encre-et-plume/shared';
 
@@ -66,7 +66,9 @@ const fakeEditor = {
   off: () => {},
   setEditable: vi.fn(),
   getJSON: () => ({ type: 'doc', content: [] }),
-  getHTML: () => '<div data-case-block></div>',
+  // Non-blank by default so the save/materialize tests exercise a real persist. The blank-gate test
+  // overrides this to an empty document to assert the no-op (version off-by-one fix).
+  getHTML: () => '<div data-case-block><p>Rin entre dans le sanctuaire.</p></div>',
   // A truthy `view` lets the highlight-repaint + CS-15 liveTexts effects run (both guard on editor.view).
   view: {},
   isDestroyed: false,
@@ -87,7 +89,10 @@ vi.mock('@tiptap/react', () => ({
 vi.mock('../lib/session', () => ({
   useSession: () => ({ account: { id: 'me', displayName: 'Moi', role: 'utilisateur' }, loading: false }),
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -101,6 +106,10 @@ vi.mock('../lib/api', async (importOriginal) => {
     sharePage: vi.fn(),
     getProjectWorkspace: vi.fn(),
     listProjectAssets: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+    getAssetVersions: vi.fn().mockResolvedValue([]),
+    getReview: vi.fn(),
+    createCorrection: vi.fn(),
+    updateCorrection: vi.fn(),
   };
 });
 
@@ -141,6 +150,7 @@ describe('EditorClient (Éditeur shell)', () => {
     for (const k of Object.keys(editorHandlers)) delete editorHandlers[k];
     for (const k of Object.keys(editorListeners)) delete editorListeners[k];
     (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 });
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   });
 
   it('renders the header replica: back link, title, "Ch. X — Page Y" switcher, Partager', async () => {
@@ -231,19 +241,92 @@ describe('EditorClient (Éditeur shell)', () => {
     await waitFor(() => expect(screen.getByText('2 en ligne')).toBeInTheDocument());
   });
 
-  it('flips the save indicator to "Enregistré ✓" after autosave', async () => {
+  // ── FR9 (r3) — explicit save model: NO autosave; typing marks dirty; Save button + Ctrl/Cmd-S persist. ──
+
+  it('FR9: typing does NOT autosave — it marks the draft dirty and no timer ever persists', async () => {
     vi.useFakeTimers();
     (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
     render(<EditorClient slug="lames" pageId="pg1" />);
     await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
     act(() => editorHandlers['update']?.());
-    expect(screen.getByText('Enregistrement…')).toBeInTheDocument();
+    // The dirty indicator shows immediately; NO "Enregistrement…" auto-kicks in.
+    expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2100);
+      await vi.advanceTimersByTimeAsync(5000);
     });
-    expect(screen.getByText('Enregistré ✓')).toBeInTheDocument();
+    expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
+    expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument();
     vi.useRealTimers();
+  });
+
+  it('FR9: Ctrl+S persists the current content (no new version) and flips to "Enregistré ✓"', async () => {
+    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    render(<EditorClient slug="lames" pageId="pg1" />);
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    act(() => editorHandlers['update']?.());
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    // Save persists content, it does NOT create a version.
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('Enregistré ✓')).toBeInTheDocument());
+  });
+
+  it('FR9: the toolbar « Enregistrer » button persists the current content', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+  });
+
+  // Item 2 (iter 5) — Save relocated next to the chapter switcher as an icon-only button. It carries an
+  // aria-label so it stays operable/named, and it goes accent when there are unsaved edits (dirty).
+  it('Item2: the icon-only Save button sits by the switcher and turns accent when dirty', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    const save = screen.getByRole('button', { name: 'Enregistrer' });
+    // Icon-only: no visible "Enregistrer" text label, but a title tooltip is present.
+    expect(save).toHaveAttribute('title', expect.stringContaining('Enregistrer'));
+    // Not dirty yet → card background (not accent).
+    expect(save.style.background).not.toContain('accent');
+    act(() => editorHandlers['update']?.());
+    await waitFor(() => expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Enregistrer' }).style.background).toContain('accent');
+  });
+
+  // Item 1 (iter 5) — compare two scenario versions side by side in a modal (A4 sheets), sourced from
+  // api.getReview → fromHtml/toHtml (server-sanitized).
+  it('Item1: "Comparer" opens the side-by-side compare modal fed by getReview', async () => {
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { version: 1, mediaId: 'm1', size: 10, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-10', thumbnailUrl: null, active: false },
+      { version: 2, mediaId: 'm2', size: 12, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-11', thumbnailUrl: null, active: true },
+    ]);
+    (api.getReview as ReturnType<typeof vi.fn>).mockResolvedValue({
+      selected: { fromHtml: '<p>Contenu v1</p>', toHtml: '<p>Contenu v2</p>' },
+    });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 } }));
+    await userEvent.click(await screen.findByRole('button', { name: /Comparer/ }));
+    expect(await screen.findByRole('dialog', { name: /Comparer les versions/i })).toBeInTheDocument();
+    // C8 (iter 6) — "Contenu v1" vs "Contenu v2" is a changed line: the differing word is wrapped
+    // as <del>/<ins>, so query those rather than the (now split) full line text.
+    await waitFor(() => expect(document.querySelector('del')?.textContent).toBe('v1'));
+    expect(document.querySelector('ins')?.textContent).toBe('v2');
+    expect(api.getReview).toHaveBeenCalledWith('pg1', { file: 'a1', from: 1, to: 2 });
+  });
+
+  it('FR9: restoring an older version into the draft marks it dirty (unsaved)', async () => {
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { version: 1, mediaId: 'm1', size: 10, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-10', thumbnailUrl: null, active: false },
+      { version: 2, mediaId: 'm2', size: 12, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-11', thumbnailUrl: null, active: true },
+    ]);
+    (api.getReview as ReturnType<typeof vi.fn>).mockResolvedValue({ selected: { fromHtml: '<p>Ancienne version</p>', comments: [] } });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 } }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Version affichée' }));
+    await userEvent.click(screen.getByRole('option', { name: 'v1' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Restaurer dans le brouillon' }));
+    expect(await screen.findByText('Modifications non enregistrées')).toBeInTheDocument();
   });
 
   it('F-I1: StrictMode double-mount leaves a live provider (fresh one not destroyed)', async () => {
@@ -303,6 +386,8 @@ describe('EditorClient (Éditeur shell)', () => {
     anchorFrom: 4,
     anchorTo: 12,
     quote: 'bonjour le monde',
+    version: null,
+    correction: null,
     ...over,
   });
 
@@ -386,5 +471,228 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(screen.getByText('Note distante')).toBeInTheDocument();
     act(() => getProvider().handlers.onCommentDeleted!('gone'));
     await waitFor(() => expect(screen.queryByText('Note distante')).not.toBeInTheDocument());
+  });
+
+  // ── CS-5 iter 2 ──
+
+  const mkCorrection = (over: Partial<NonNullable<CaseCommentDto['correction']>> = {}) => ({
+    id: 'x1',
+    status: 'a_corriger' as const,
+    assigneeId: null,
+    ...over,
+  });
+
+  // Fb-2 — a tagged correction comment shows a «Correction» chip + status; a plain comment doesn't.
+  it('Fb-2: renders a «Correction» tag + status on a correction comment, none on a plain comment', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', text: 'Trop chargé', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection() }),
+          mkComment({ id: 'plain', text: 'Juste un mot', quote: null, anchorFrom: null, anchorTo: null }),
+        ],
+      }),
+    );
+    expect(screen.getByText(/Correction · À corriger/)).toBeInTheDocument();
+    // Only the tagged one carries the chip.
+    expect(screen.getAllByText(/Correction ·/)).toHaveLength(1);
+  });
+
+  // FR15 (r4) — REVERT: no per-version filter combobox; comments render as ONE plain list regardless of
+  // their `version`, and all paint highlights.
+  it('FR15: mixed-version comments ALL render in one plain list (no version filter combobox)', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 },
+        comments: [
+          mkComment({ id: 'legacy', text: 'Legacy plain', quote: null, anchorFrom: null, anchorTo: null, version: null }),
+          mkComment({ id: 'v1c', text: 'Note v1', quote: null, anchorFrom: null, anchorTo: null, version: 1 }),
+          mkComment({ id: 'v2c', text: 'Note v2', quote: null, anchorFrom: null, anchorTo: null, version: 2 }),
+        ],
+      }),
+    );
+    expect(screen.getByText('Legacy plain')).toBeInTheDocument();
+    expect(screen.getByText('Note v1')).toBeInTheDocument();
+    expect(screen.getByText('Note v2')).toBeInTheDocument();
+    // The version-filter combobox is gone (reverted) — no comment-list filter anywhere.
+    expect(screen.queryByRole('combobox', { name: /Filtrer les commentaires par version/ })).not.toBeInTheDocument();
+  });
+
+  // FR15 — the version switcher + its read-only view still work (untouched security path).
+  it('FR15: the version switcher still shows an older version read-only (VersionSheet, no filter)', async () => {
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { version: 1, mediaId: 'm1', size: 10, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-10', thumbnailUrl: null, active: false },
+      { version: 2, mediaId: 'm2', size: 12, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-11', thumbnailUrl: null, active: true },
+    ]);
+    (api.getReview as ReturnType<typeof vi.fn>).mockResolvedValue({ selected: { fromHtml: '<p>Ancienne version</p>' } });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 } }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Version affichée' }));
+    await userEvent.click(screen.getByRole('option', { name: 'v1' }));
+    expect(await screen.findByText('Lecture seule — v1')).toBeInTheDocument();
+    expect(screen.getByText('Ancienne version')).toBeInTheDocument();
+  });
+
+  // FR14 (r4) — the in-canvas highlight for a correction comment carries the `correction` flag so it can
+  // be tagged distinctly (ep-correction-highlight); a plain comment does not.
+  it('FR14: correction comments paint with correction:true, plain comments with correction:false', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', quote: 'x', anchorFrom: 1, anchorTo: 3, correction: mkCorrection() }),
+          mkComment({ id: 'plain', quote: 'y', anchorFrom: 1, anchorTo: 3 }),
+        ],
+      }),
+    );
+    await waitFor(() => {
+      const calls = (fakeEditor.commands.setCommentHighlights as ReturnType<typeof vi.fn>).mock.calls;
+      const last = calls[calls.length - 1][0] as { id: string; correction: boolean }[];
+      expect(last.find((r) => r.id === 'corr')?.correction).toBe(true);
+      expect(last.find((r) => r.id === 'plain')?.correction).toBe(false);
+    });
+  });
+
+  // FR14 — the author sees a status stepper on a correction comment; steps via PATCH /corrections/:id.
+  it('FR14: the author steps a correction-comment status from the editor panel', async () => {
+    (api.updateCorrection as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'x1', status: 'en_cours' });
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', authorId: 'me', text: 'À revoir', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection({ status: 'a_corriger' }) }),
+        ],
+      }),
+    );
+    const stepper = screen.getByRole('button', { name: /Statut de la correction/i });
+    await userEvent.click(stepper);
+    await waitFor(() => expect(api.updateCorrection).toHaveBeenCalledWith('x1', { status: 'en_cours' }));
+    // The chip reflects the server response.
+    await waitFor(() => expect(screen.getByText(/Correction · En cours/)).toBeInTheDocument());
+  });
+
+  // FR14 — the assignee (not the author) also sees the stepper (gated on correction.assigneeId).
+  it('FR14: the assignee sees the stepper even when not the author', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', authorId: 'someone', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection({ assigneeId: 'me' }) }),
+        ],
+      }),
+    );
+    expect(screen.getByRole('button', { name: /Statut de la correction/i })).toBeInTheDocument();
+  });
+
+  it('FR14: a member who is neither author nor assignee sees no status stepper', async () => {
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', authorId: 'someone', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection({ assigneeId: 'other' }) }),
+        ],
+      }),
+    );
+    expect(screen.queryByRole('button', { name: /Statut de la correction/i })).not.toBeInTheDocument();
+  });
+
+  // FR14 — a failed status change toasts and leaves the chip unchanged (no optimistic flip).
+  it('FR14: a rejected status change toasts and keeps the chip status', async () => {
+    (api.updateCorrection as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 403 });
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', authorId: 'me', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection({ status: 'a_corriger' }) }),
+        ],
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Statut de la correction/i }));
+    expect(await screen.findByText('Changement de statut refusé.')).toBeInTheDocument();
+    expect(screen.getByText(/Correction · À corriger/)).toBeInTheDocument();
+  });
+
+  // Fb-6 — an identical snapshot the server no-ops reports "Aucune modification depuis la v{n}".
+  it('Fb-6: an unchanged snapshot (same head version) toasts "Aucune modification depuis la v1"', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 1 });
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    expect(await screen.findByText('Aucune modification depuis la v1')).toBeInTheDocument();
+  });
+
+  // Fb-5 — the version switcher shows an older version read-only, with a way back + restore.
+  it('Fb-5: viewing an older version renders it read-only with «Lecture seule — v1»', async () => {
+    (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { version: 1, mediaId: 'm1', size: 10, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-10', thumbnailUrl: null, active: false },
+      { version: 2, mediaId: 'm2', size: 12, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-11', thumbnailUrl: null, active: true },
+    ]);
+    (api.getReview as ReturnType<typeof vi.fn>).mockResolvedValue({ selected: { fromHtml: '<p>Ancienne version</p>' } });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 } }));
+    await waitFor(() => expect(api.getAssetVersions).toHaveBeenCalledWith('a1'));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Version affichée' }));
+    await userEvent.click(screen.getByRole('option', { name: 'v1' }));
+    expect(await screen.findByText('Lecture seule — v1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Revenir à la version actuelle' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Restaurer dans le brouillon' })).toBeInTheDocument();
+    expect(api.getReview).toHaveBeenCalledWith('pg1', { file: 'a1', from: 1, to: 1 });
+  });
+
+  // ── Bug (scenario version off-by-one, FE half): never fire a Save with blank html, and target the
+  //    opened/loaded asset in place so an import isn't materialized as a duplicate / empty v1. ──
+
+  it('version off-by-one: a blank editor Save is a silent no-op (no autosave request)', async () => {
+    const originalGetHTML = fakeEditor.getHTML;
+    // Mirror the server's isBlankHtml: '', whitespace, <p></p>, <p><br></p>, <p>&nbsp;</p> all count blank.
+    fakeEditor.getHTML = () => '<div data-case-block><p></p></div>';
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc({ asset: null, documentId: null }));
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+      act(() => editorHandlers['update']?.());
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+      // Give any pending microtasks a beat, then assert the endpoint was never hit.
+      await act(async () => { await Promise.resolve(); });
+      expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
+    } finally {
+      fakeEditor.getHTML = originalGetHTML;
+    }
+  });
+
+  it('version off-by-one: Save targets the loaded asset id (edits in place, no duplicate)', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, documentId: 'doc-1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    // The third arg (assetId) must be the loaded asset so resolveEditorAsset edits it in place.
+    expect(api.autosaveEditorDocument).toHaveBeenCalledWith('pg1', expect.any(Object), 'a1');
+  });
+
+  it('version off-by-one: "Enregistrer une nouvelle version" POST carries the loaded asset id', async () => {
+    (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
+    expect(api.snapshotEditorVersion).toHaveBeenCalledWith('pg1', expect.any(Object), 'a1');
+  });
+
+  // FR7 / QA F1 — after a same-session materialization, "Demander une correction" is no longer blocked
+  // on a missing documentId (its disabled reason shifts from "Enregistrez d'abord" to "Sélectionnez…").
+  it('FR7: captures the materialized documentId (via explicit save) so "Demander une correction" works without reload', async () => {
+    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc({ asset: null, documentId: null }));
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({
+      savedAt: 'now',
+      materialized: { assetId: 'a1', filename: 'scenario.html', documentId: 'doc-1' },
+    });
+    render(<EditorClient slug="lames" pageId="pg1" />);
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    // Blank card: no composer yet.
+    expect(screen.queryByRole('button', { name: 'Demander une correction' })).not.toBeInTheDocument();
+    // FR9 — an explicit save materializes the document (no autosave tick).
+    act(() => editorHandlers['update']?.());
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    const btn = await screen.findByRole('button', { name: 'Demander une correction' });
+    // documentId is now set → the disabled reason is the missing selection, not the missing document.
+    expect(btn).toHaveAttribute('title', 'Sélectionnez un passage à corriger');
   });
 });

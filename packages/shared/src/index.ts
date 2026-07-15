@@ -31,6 +31,8 @@ export * from './locations.js';
 export * from './projects.js';
 export * from './assets.js';
 export * from './editor.js';
+export * from './corrections.js';
+export * from './textdiff.js';
 export * from './invitations.js';
 export * from './calls.js';
 export * from './applications.js';

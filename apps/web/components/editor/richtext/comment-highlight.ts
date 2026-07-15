@@ -19,6 +19,9 @@ export interface CommentRange {
   to: number;
   /** Highlight colour, assigned by message order (commentColor). Falls back to the first hue. */
   color?: string;
+  /** CS-5 r4 (FR14) — this comment IS a scenario correction request → tag its highlight distinctly
+   *  (`ep-correction-highlight`, colour-plus-shape, not colour-only). */
+  correction?: boolean;
 }
 
 // Item 5 (batch) — one distinct highlight colour per comment, assigned by MESSAGE ORDER (not a hash of
@@ -79,6 +82,7 @@ export const commentHighlightKey = new PluginKey<HighlightState>('commentHighlig
 interface Anchor {
   id: string;
   color: string;
+  correction: boolean;
   from: Y.RelativePosition;
   to: Y.RelativePosition;
 }
@@ -203,17 +207,31 @@ export function quoteChanged(quote: string, current: string): boolean {
   return normalizeQuote(quote) !== normalizeQuote(current);
 }
 
+// A comment always anchors to a contiguous run inside ONE text block (a case field). But `to` is
+// left-associated, so when it sits at a block boundary an insert into the FOLLOWING block grows it to
+// swallow that new text (CS-5 mis-tag bug: a correction filed on the description then overshoots into
+// the dialogue, and ProseMirror merges the correction's `ep-correction-highlight` class onto a plain
+// comment's span there). Cap `to` at the end of the text block that contains `from` so a highlight can
+// never bleed into an adjacent field — keeping every comment's tag on its own text only.
+function clampHighlightToBlock(doc: PMNode, from: number, to: number): number {
+  const $from = doc.resolve(from);
+  const blockEnd = $from.end($from.depth); // end of `from`'s enclosing textblock content
+  return Math.min(to, blockEnd);
+}
+
 function buildDecos(anchors: Anchor[], y: YSyncState, doc: PMNode): DecorationSet {
   const size = doc.content.size;
   const decos: Decoration[] = [];
   for (const a of anchors) {
     const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
-    const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+    let to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
     if (from == null || to == null || to <= from || from < 0 || to > size) continue;
+    to = clampHighlightToBlock(doc, from, to);
+    if (to <= from) continue;
     // keep .ep-comment-highlight for shape (radius, wrap cloning); override the wash + underline colour.
     decos.push(
       Decoration.inline(from, to, {
-        class: 'ep-comment-highlight',
+        class: a.correction ? 'ep-comment-highlight ep-correction-highlight' : 'ep-comment-highlight',
         style: `background:color-mix(in srgb, ${a.color} 24%, transparent);border-bottom-color:${a.color}`,
       }),
     );
@@ -228,11 +246,14 @@ function buildAbsolute(ranges: CommentRange[], doc: PMNode): DecorationSet {
     .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
     .map((r) => {
       const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
-      return Decoration.inline(r.from, r.to, {
-        class: 'ep-comment-highlight',
+      const to = clampHighlightToBlock(doc, r.from, r.to);
+      if (to <= r.from) return null;
+      return Decoration.inline(r.from, to, {
+        class: r.correction ? 'ep-comment-highlight ep-correction-highlight' : 'ep-comment-highlight',
         style: `background:color-mix(in srgb, ${c} 24%, transparent);border-bottom-color:${c}`,
       });
-    });
+    })
+    .filter((d): d is Decoration => d !== null);
   return DecorationSet.create(doc, decos);
 }
 
@@ -287,12 +308,14 @@ export const CommentHighlight = Extension.create({
                 .map((r) => {
                   const prev = byId.get(r.id);
                   const color = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
-                  if (prev) return { ...prev, color }; // keep the anchor, refresh its colour/order
+                  const correction = r.correction ?? false;
+                  if (prev) return { ...prev, color, correction }; // keep the anchor, refresh colour/tag
                   // CS-15 — `from` right-associated, `to` left-associated: typing inside the range grows
                   // the highlight; typing at either outer boundary stays outside (Docs-like).
                   return {
                     id: r.id,
                     color,
+                    correction,
                     from: absPosToRelPos(r.from, y.type, y.binding!.mapping, 0),
                     to: absPosToRelPos(r.to, y.type, y.binding!.mapping, -1),
                   };
@@ -325,7 +348,8 @@ export function resolveCommentTexts(state: EditorState): Map<string, string> {
   const size = state.doc.content.size;
   for (const a of hs.anchors) {
     const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
-    const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+    const rawTo = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+    const to = from != null && rawTo != null ? clampHighlightToBlock(state.doc, from, rawTo) : rawTo;
     out.set(a.id, from == null || to == null || to <= from || from < 0 || to > size ? '' : state.doc.textBetween(from, to, ' '));
   }
   return out;

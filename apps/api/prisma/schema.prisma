@@ -154,6 +154,7 @@ model Account {
   pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
   assetVersions           AssetVersion[]           @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
   scenarioComments        ScenarioComment[]        @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
+  corrections             Correction[]             @relation("CorrectionAuthor") // CS-5: review corrections this account filed
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -932,6 +933,7 @@ model Page {
   checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
   comments      PageComment[] // CS-2 card-modal: comments
   assetLinks    AssetPageLink[] // CS-3 assets linked to this card (2026-07-14 many-to-many join)
+  corrections   Correction[] // CS-5 review corrections filed against this card
 
   @@index([projectId, chapterId, stage])
 }
@@ -1017,6 +1019,7 @@ model Asset {
   versions       AssetVersion[]
   pageLinks      AssetPageLink[] // CS-3 cards this asset is linked to (2026-07-14; scenario/texte/ref = many, dessin/page = one)
   scenarioDoc    ScenarioDocument? // CS-4: the editor working draft backed by this scenario asset (1:1)
+  corrections    Correction[] // CS-5 review corrections filed against this file
 
   @@unique([projectId, filename]) // D10 re-import rule
   @@index([projectId, type])
@@ -1098,7 +1101,53 @@ model ScenarioComment {
   anchorFrom Int?
   anchorTo   Int?
   quote      String?
+  // CS-5 Fb-7 — the asset version the comment was filed against (null for pre-CS-5-r2 rows).
+  version    Int?
+  // CS-5 Fb-2 — 1:1 back-relation when this comment IS a tagged scenario correction request.
+  correction Correction?
   createdAt  DateTime         @default(now())
 
   @@index([documentId, caseNo, createdAt])
+}
+
+// ── CS-5: review corrections ───────────────────────────────────────────────────
+
+enum CorrectionType {
+  scenario
+  dessin
+}
+
+enum CorrectionStatus {
+  a_corriger
+  en_cours
+  corrige
+}
+
+// One unified correction with a polymorphic anchor. scenario → { documentId, from, to, quote }
+// (the CS-4 comment text-anchor); dessin → { region: { x, y, w, h } } normalized 0–1. Filed against a
+// CS-3 AssetVersion (head at creation), addressed when a newer version resolves it (resolvedInVersion).
+model Correction {
+  id                  String           @id @default(cuid())
+  pageId              String
+  page                Page             @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type                CorrectionType
+  anchor              Json
+  assetId             String // the file under review (scenario doc's backing asset | dessin image asset)
+  asset               Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  caseRef             String? // optional "case N" tag shown in the list row
+  description         String // "what specifically" — required
+  status              CorrectionStatus @default(a_corriger)
+  authorId            String
+  author              Account          @relation("CorrectionAuthor", fields: [authorId], references: [id])
+  assigneeId          String?
+  filedAgainstVersion Int // AssetVersion.version reviewed (head at creation)
+  resolvedInVersion   Int? // stamped when marked corrige
+  // CS-5 Fb-2 — a scenario correction IS a tagged CS-4 comment. 1:1 link; deleting the comment (editor
+  // path) cascades this correction. Legacy scenario corrections keep commentId = null (no comment).
+  commentId           String?          @unique
+  comment             ScenarioComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt           DateTime         @default(now())
+
+  @@index([pageId, type, status, createdAt])
+  @@index([assetId, status])
 }

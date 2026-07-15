@@ -109,14 +109,16 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
+            // B6 (CS-5 iter 6) — the destructive action uses the design-system accent red
+            // (--accent #e8261c), not the off-brand muted #c0392b.
             style={{
               fontSize: 13,
               fontWeight: 700,
-              border: '2px solid #c0392b',
+              border: '2px solid var(--ink)',
               borderRadius: 7,
               padding: '8px 16px',
               cursor: 'pointer',
-              background: '#c0392b',
+              background: 'var(--accent)',
               color: '#fff',
               fontFamily: 'inherit',
               minHeight: 40,

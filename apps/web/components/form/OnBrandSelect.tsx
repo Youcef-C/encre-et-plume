@@ -254,7 +254,8 @@ export default function OnBrandSelect({
             position: 'absolute',
             top: 'calc(100% + 6px)',
             left: 0,
-            zIndex: 30,
+            // CS-5 Fb-3 — clear sibling surface panels + the Comptoir widget (z 40); modals sit at 70–95.
+            zIndex: 60,
             minWidth: '100%',
             background: 'var(--card)',
             border: '2px solid var(--ink)',

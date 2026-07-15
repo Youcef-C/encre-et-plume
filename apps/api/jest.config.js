@@ -13,6 +13,13 @@ module.exports = {
     }],
   },
   testEnvironment: 'node',
+  // sanitize-html (CS-5 XSS sanitizer) depends on htmlparser2@12 and its parser-stack majors
+  // (dom-serializer@3 / domelementtype@3 / domhandler@6 / domutils@4 / entities@8), all ESM-only
+  // ("type":"module"). Node runs them natively; ts-jest must transpile them, so exclude that stack from
+  // the node_modules transform-ignore (everything else under .pnpm stays ignored for speed).
+  transformIgnorePatterns: [
+    '/node_modules/.pnpm/(?!(htmlparser2|dom-serializer|domelementtype|domhandler|domutils|entities)@)',
+  ],
   maxWorkers: '25%', // ponytail: cap worker pool so parallel/agent test runs don't flood the machine
   // H1: ENABLE_DEV_AUTH_SEAMS opt-in for the dev-latest/token-stash test seams (see test/jest.env.setup.js)
   setupFiles: ['<rootDir>/../test/jest.env.setup.js'],

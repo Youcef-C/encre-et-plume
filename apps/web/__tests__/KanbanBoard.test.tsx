@@ -112,7 +112,7 @@ describe('KanbanBoard', () => {
     // CS-4: the ✎ pen is now a link into the collaborative editor for this card's scenario.
     expect(screen.getByRole('link', { name: 'Éditer le scénario' })).toHaveAttribute('href', '/projet/nuit-blanche/editeur/pg7');
     expect(screen.getByRole('button', { name: 'Aperçu' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Corrections' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Corrections' })).toHaveAttribute('href', '/projet/nuit-blanche/revision/pg7');
     expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
   });
 

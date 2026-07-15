@@ -4,6 +4,7 @@
 // CRDT (Yjs) + awareness bytes are relayed opaquely over WS namespace '/editor' — the API never decodes them.
 
 import type { AssetItem } from './assets.js';
+import type { CorrectionStatus } from './corrections.js';
 
 /** Named-caret palette; a stable hash of accountId picks the index (client-side). */
 export const COLLAB_COLORS = ['#2a6fdb', '#1f8a5b', '#e8261c', '#8a3fc4', '#c47a1f', '#1f8a8a'] as const;
@@ -33,6 +34,13 @@ export interface CaseCommentDto {
   anchorFrom: number | null;
   anchorTo: number | null;
   quote: string | null;
+  // CS-5 Fb-7 — the asset version this comment was filed against (null for pre-CS-5-r2 rows: no chip).
+  version: number | null;
+  // CS-5 Fb-2 — set when this comment IS a scenario correction request (a tagged CS-4 comment). The
+  // sidebar renders a «Correction» chip + the status; null for an ordinary comment. `assigneeId` is
+  // display data only (CS-5 r4): the editor shows the status control to the author OR assignee — server
+  // authz on PATCH /corrections/:id is unchanged (author/assignee enforced there).
+  correction: { id: string; status: CorrectionStatus; assigneeId: string | null } | null;
 }
 
 export interface EditorDocumentResponse {

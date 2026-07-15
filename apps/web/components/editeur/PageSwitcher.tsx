@@ -29,11 +29,14 @@ export default function PageSwitcher({
   slug,
   currentPageId,
   label,
+  hrefFor,
 }: {
   slug: string;
   currentPageId: string;
   /** The trigger label — the current chapter's title, or "Hors chapitre". */
   label: string;
+  /** CS-5 — optional destination override (e.g. the revision route) instead of the editor route. */
+  hrefFor?: (pageId: string) => string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -75,7 +78,7 @@ export default function PageSwitcher({
 
   const go = (pageId: string) => {
     setOpen(false);
-    if (pageId !== currentPageId) router.push(`/projet/${slug}/editeur/${pageId}`);
+    if (pageId !== currentPageId) router.push(hrefFor ? hrefFor(pageId) : `/projet/${slug}/editeur/${pageId}`);
   };
 
   // Arrow-key navigation across the flat option list.

@@ -15,8 +15,10 @@ import type {
 } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import { S3StorageService } from '../media/s3-storage.service';
 import { AssetsService } from './assets.service';
 import { EditorGateway } from './editor.gateway';
+import { toCommentDto, type CommentRow } from './comment-mapper';
 import { isMemberOf } from './projects.service';
 
 const HTML = 'text/html';
@@ -39,6 +41,14 @@ function slugify(s: string): string {
 }
 
 const escapeHtml = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+
+/** True when the editor HTML carries no visible content — empty string, whitespace, or empty
+ *  paragraphs (`<p></p>`, `<p><br></p>`, `<p>&nbsp;</p>`). Guards create-when-none materialize so a
+ *  stray on-mount/initial save (fired before the Yjs doc is populated) never burns v1 on an empty
+ *  document — the classic "v1 empty / real content lands in v2" off-by-one. */
+function isBlankHtml(html: string): boolean {
+  return (html ?? '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, '').trim() === '';
+}
 
 /** Convert plain text (.txt asset) into paragraph HTML for the editor seed (blank lines split paragraphs). */
 function textToHtml(text: string): string {
@@ -89,6 +99,7 @@ export class ScenarioDocumentsService {
     private readonly media: MediaService,
     private readonly assets: AssetsService,
     private readonly gateway: EditorGateway,
+    private readonly s3: S3StorageService,
   ) {}
 
   async getDocument(accountId: string, pageId: string, assetId?: string): Promise<EditorDocumentResponse> {
@@ -111,7 +122,10 @@ export class ScenarioDocumentsService {
           contentJson: true,
           ydocState: true,
           template: true,
-          comments: { include: { author: { select: { displayName: true } } }, orderBy: { createdAt: 'asc' } },
+          comments: {
+            include: { author: { select: { displayName: true } }, correction: { select: { id: true, status: true, assigneeId: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
         },
       });
       if (doc) {
@@ -172,6 +186,10 @@ export class ScenarioDocumentsService {
     }
 
     // Create-when-none: materialize a scenario asset from the draft HTML, link it to the card, seed the doc.
+    // Guard: NEVER materialize an empty document. A stray on-mount/initial save (before the imported
+    // initialHtml / typed content reaches the Yjs doc) would otherwise create an empty v1 and shift the
+    // real first content into v2. Skip; the next save with real content materializes v1 correctly.
+    if (isBlankHtml(body.html)) return { savedAt: new Date().toISOString(), materialized: null };
     const media = await this.media.ingestAsset(accountId, Buffer.from(body.html, 'utf8'), HTML);
     const filename = await this.uniqueScenarioFilename(page.projectId, page.title);
     const created = await this.assets.createAsset(accountId, page.project.slug, { mediaId: media.id, filename, type: 'scenario' });
@@ -186,6 +204,11 @@ export class ScenarioDocumentsService {
     const page = await this.resolveMemberPage(accountId, pageId);
     const asset = await this.resolveEditorAsset(page, assetId);
     if (!asset) throw new BadRequestException('Aucun scénario à versionner');
+    // Fb-6 — dedupe guard: autosave writes the draft in place but does NOT bump the head; a re-click of
+    // "Enregistrer une nouvelle version" without edits would otherwise clone the head (V3 == V4). If this
+    // snapshot's bytes equal the current head version's (only comparable when the head is text/html — an
+    // imported .docx/.txt head is never byte-equal to editor HTML), create nothing and return the head.
+    if (await this.snapshotEqualsHead(asset, body.html)) return this.assets.getAssetItem(asset.id);
     const media = await this.media.ingestAsset(accountId, Buffer.from(body.html, 'utf8'), HTML);
     // Item 22 — carry the optional note onto the AssetVersion (omit the key entirely when absent).
     const note = body.note?.trim();
@@ -213,8 +236,10 @@ export class ScenarioDocumentsService {
         anchorFrom: hasRange ? body.anchorFrom! : null,
         anchorTo: hasRange ? body.anchorTo! : null,
         quote: hasRange && quote ? quote : null,
+        // Fb-7 — stamp the version the comment was filed against (head at creation).
+        version: asset?.currentVersion ?? null,
       },
-      include: { author: { select: { displayName: true } } },
+      include: { author: { select: { displayName: true } }, correction: { select: { id: true, status: true, assigneeId: true } } },
     });
     const dto = this.toCommentDto(created as never);
     this.gateway.emitComment(asset!.id, dto);
@@ -245,6 +270,20 @@ export class ScenarioDocumentsService {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
+
+  /** Fb-6 — true when the editor snapshot html is byte-identical to the head AssetVersion's media (only
+   *  compared when that media is text/html; a binary head is treated as always-different). */
+  private async snapshotEqualsHead(asset: LinkedAsset, html: string): Promise<boolean> {
+    const head = await this.prisma.assetVersion.findUnique({
+      where: { assetId_version: { assetId: asset.id, version: asset.currentVersion } },
+      select: { mediaId: true },
+    });
+    if (!head) return false;
+    const media = await this.prisma.media.findUnique({ where: { id: head.mediaId }, select: { bucketKey: true, contentType: true } });
+    if (!media || media.contentType !== HTML) return false;
+    const headBytes = await this.s3.getObjectBuffer(media.bucketKey);
+    return headBytes.equals(Buffer.from(html, 'utf8'));
+  }
 
   /** Resolve page + membership; unknown OR non-member → 404 (no existence leak — editor is reachable
    *  only to members). */
@@ -336,27 +375,7 @@ export class ScenarioDocumentsService {
     return null;
   }
 
-  private toCommentDto(c: {
-    id: string;
-    caseNo: number;
-    authorId: string;
-    text: string;
-    createdAt: Date;
-    author: { displayName: string };
-    anchorFrom?: number | null;
-    anchorTo?: number | null;
-    quote?: string | null;
-  }): CaseCommentDto {
-    return {
-      id: c.id,
-      caseNo: c.caseNo,
-      authorId: c.authorId,
-      authorName: c.author.displayName,
-      text: c.text,
-      createdAt: c.createdAt.toISOString(),
-      anchorFrom: c.anchorFrom ?? null,
-      anchorTo: c.anchorTo ?? null,
-      quote: c.quote ?? null,
-    };
+  private toCommentDto(c: CommentRow): CaseCommentDto {
+    return toCommentDto(c);
   }
 }

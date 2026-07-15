@@ -75,6 +75,13 @@ function commentItem(page: Page, text: string) {
   return page.locator('aside .ep-comments-scroll > div').filter({ hasText: text }).last();
 }
 
+// R2-8 (critical author-identity regression) — the bold `<b>{authorName}</b>` element inside a
+// comment card (EditorClient.tsx:1325), so a test can assert WHOSE name is attached, not just that
+// some comment with the right text exists.
+function commentAuthor(page: Page, text: string) {
+  return commentItem(page, text).locator('b').first();
+}
+
 async function typeIntoCase(page: Page, no: number, text: string) {
   // A plain click lands the caret wherever it hits (the paragraph's centre when the line already has
   // text) — appending to a non-empty case would then splice the new run mid-word. `End` is NOT a
@@ -86,6 +93,22 @@ async function typeIntoCase(page: Page, no: number, text: string) {
   if (box) await para.click({ position: { x: box.width - 2, y: box.height - 2 } });
   else await para.click();
   await page.keyboard.type(text, { delay: 20 });
+}
+
+// FR9 (r3) — the editor no longer autosaves; persist the current content explicitly via the toolbar
+// « Enregistrer » button (Ctrl/Cmd-S does the same). Waits for the «Enregistré ✓» confirmation.
+async function saveDoc(page: Page) {
+  await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+}
+
+// The toolbar's version-switcher combobox (`aria-label="Version affichée"`, e.g. "v1") — a bare
+// `page.getByText('v1')` becomes ambiguous once ANY comment on the page also carries a per-row
+// `v{n}` version chip (Fb-7), so scope to the toolbar specifically wherever a comment may already
+// exist on the page.
+function toolbarVersion(page: Page) {
+  return page.getByRole('combobox', { name: 'Version affichée' });
 }
 
 test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', () => {
@@ -139,13 +162,48 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
 
     await typeIntoCase(page, 1, 'Rin pénètre dans le sanctuaire abandonné.');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await saveDoc(page);
     await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Enregistrer une nouvelle version' })).toBeVisible();
 
     await page.goto(`/projet/${slug}`);
     await expect(kanbanCard(page, 'Page 1').getByText('scénario')).toBeVisible({ timeout: 10_000 });
     await expect(kanbanCard(page, 'Page 1').getByLabel('Version 1')).toBeVisible();
+  });
+
+  // A (r3) — autosave is REMOVED: typing alone, even past the old 2s debounce window, must never
+  // fire the persist endpoint on its own; only the explicit Save (button / Ctrl+S) does, and it never
+  // creates a version.
+  test('CS4-E2b (A): typing alone never autosaves; only explicit Save persists, and it creates NO version', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    // The content-persist endpoint is `PATCH /pages/:id/document` (see `autosaveEditorDocument` in
+    // lib/api.ts) — a PATCH, not a POST, and no literal "/autosave" path segment. The version-creating
+    // endpoint is `POST /pages/:id/document/versions`.
+    const autosavePosts: string[] = [];
+    const versionPosts: string[] = [];
+    page.on('request', (req) => {
+      const url = req.url();
+      if (req.method() === 'PATCH' && /\/pages\/[^/]+\/document(\?|$)/.test(url)) autosavePosts.push(url);
+      if (req.method() === 'POST' && url.includes('/document/versions')) versionPosts.push(url);
+    });
+
+    await typeIntoCase(page, 1, ' Une phrase de plus pour tester le non-autosave.');
+    await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 5_000 });
+    await page.waitForTimeout(3_500); // past the OLD 2s debounce window — must still be dirty, no request sent
+    await expect(page.getByText('Modifications non enregistrées')).toBeVisible();
+    expect(autosavePosts.length).toBe(0);
+    // Screenshot evidence: the "Enregistrer" toolbar button + the dirty indicator, for the qa-report.
+    await page.screenshot({ path: 'e2e/screenshots/cs4-save-dirty-indicator.png' });
+
+    // Now save explicitly — exactly one persist call, and it does NOT create a version.
+    await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    expect(autosavePosts.length).toBe(1);
+    expect(versionPosts.length).toBe(0);
   });
 
   test('CS4-E3: comment validation (empty rejected) + a valid per-case comment persists and anchors to the caret\'s case', async ({ page }) => {
@@ -173,16 +231,19 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
 
-    await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 });
+    // Scoped to the toolbar (not a bare getByText): CS4-E3 already posted a plain comment, which
+    // carries its own "v1" per-row chip in the sidebar (Fb-7) — a bare `getByText('v1')` is ambiguous
+    // once that chip exists. Bug found in the PRE-EXISTING test (fixed here, test-only).
+    await expect(toolbarVersion(page)).toContainText('v1', { timeout: 10_000 });
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
     await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('v2')).toBeVisible();
+    await expect(toolbarVersion(page)).toContainText('v2');
 
-    // Another autosave (plain edit, no explicit version action) must NOT bump the chip past v2.
+    // Another explicit content save (no version action) must NOT bump the chip past v2.
     await typeIntoCase(page, 1, ' Encore une phrase.');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('v2')).toBeVisible();
-    await expect(page.getByText('v3')).toHaveCount(0);
+    await saveDoc(page);
+    await expect(toolbarVersion(page)).toContainText('v2');
+    await expect(toolbarVersion(page)).not.toContainText('v3');
 
     await page.goto(`/projet/${slug}`);
     await expect(kanbanCard(page, 'Page 1').getByLabel('Version 2')).toBeVisible({ timeout: 10_000 });
@@ -196,6 +257,180 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
 
     await expect(caseBlock(page, 1)).toContainText('Rin pénètre dans le sanctuaire abandonné.', { timeout: 10_000 });
     await expect(caseBlock(page, 1)).toContainText('Encore une phrase.');
+  });
+
+  // r4 (FR15, revert) — no version filter/chips anywhere: comments render as ONE plain list, mixing
+  // plain and correction-tagged rows. r4 (FR14, Option B) — a correction-comment's highlight is tagged
+  // distinctly (`ep-correction-highlight`) and its status (à corriger→en cours→corrigé) is now stepped
+  // from THIS panel (the revision page no longer lists scenario corrections at all).
+  test('CS4-E9 (r4 FR14/FR15): plain + correction comments coexist in ONE list (no version filter); the correction highlight is tagged; the panel status stepper moves it to Corrigé', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+    await expect(toolbarVersion(page)).toContainText('v2', { timeout: 10_000 }); // head is v2 (bumped in CS4-E4)
+
+    // FR15 — the per-version comment filter is GONE (r2/r3 revert).
+    await expect(page.getByLabel('Filtrer les commentaires par version')).toHaveCount(0);
+    await expect(page.getByText('Toutes les versions')).toHaveCount(0);
+
+    const plainComment = commentItem(page, 'On raccourcit la réplique ?'); // filed in CS4-E3, while head was v1
+    await expect(plainComment).toBeVisible({ timeout: 10_000 });
+
+    // File a scenario correction via "Demander une correction" — a tagged comment (FR14). This
+    // paragraph now holds THREE concatenated sentences (built up across CS4-E2/E2b/E4) — a triple-click
+    // only selects the SENTENCE under the click point in this Chromium build, not the whole paragraph
+    // (bug found while writing this test — matches CS4-E5it's own comment about relying on Home/Shift+End
+    // rather than triple-click for reliable whole-line selection); use Home/Shift+End instead.
+    const descPara = caseBlock(page, 1).locator('[data-case-description] p').first();
+    await descPara.click();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Shift+End');
+    await page.getByLabel('Commenter la sélection').fill('Correction sur la v2.');
+    const createCorrectionResp = page.waitForResponse(
+      (r) => r.url().includes('/corrections') && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Demander une correction' }).click();
+    expect((await createCorrectionResp).status()).toBe(201);
+    await expect(page.getByText('Demande de correction envoyée')).toBeVisible({ timeout: 10_000 });
+
+    // The tagged comment arrives via the `editor:comment` WS fan-out (B9) — same live-echo mechanism
+    // already exercised by CS4-RT's cross-context comment check, just echoed back to the SAME emitting
+    // client here; give it a generous margin.
+    const correctionComment = commentItem(page, 'Correction sur la v2.');
+    await expect(correctionComment).toBeVisible({ timeout: 20_000 });
+    await expect(correctionComment.getByText('Correction · À corriger')).toBeVisible();
+
+    // File a genuine RANGE-ANCHORED plain comment on the DIALOGUE block (a separate leaf from the
+    // description paragraph the correction just anchored to) so its highlight can be contrasted
+    // against the correction's tagged one, without the two decorations overlapping on the same text.
+    //
+    // Bug 2 fix (2026-07-15, `clampHighlightToBlock`) — a correction filed on a whole line landed its
+    // `to` at the following (empty) field's block boundary; typing there used to grow the correction's
+    // decoration into the dialogue and overshoot onto the plain comment's own range (ProseMirror merges
+    // overlapping decorations' classes) — the exact QA-found cross-comment mis-tag. Keep a brief settle
+    // after the click as defensive margin for the WS echo, then assert the fix HARD (no more soft/scoped
+    // workarounds): the plain highlight must NEVER carry the correction class, and there must be exactly
+    // ONE `.ep-correction-highlight` on the whole page (the description's own, not a bled-over copy).
+    const dialogue = caseBlock(page, 1).locator('[data-case-dialogue] p').first();
+    await dialogue.click();
+    await page.waitForTimeout(500);
+    await page.keyboard.type('Une réplique à commenter.');
+    // A single short sentence with nothing else in the paragraph — a real triple-click reliably selects
+    // the whole (only) sentence here (unlike the multi-sentence description paragraph elsewhere in this
+    // file, where triple-click only grabs the sentence under the click point).
+    await dialogue.click({ clickCount: 3 });
+    await page.getByLabel('Commenter la sélection').fill('Simple commentaire ancré, pas une correction.');
+    await page.getByRole('button', { name: '＋ Commentaire' }).click();
+    await expect(commentItem(page, 'Simple commentaire ancré, pas une correction.')).toBeVisible({ timeout: 10_000 });
+    const plainHighlight = dialogue.locator('.ep-comment-highlight').first();
+    await expect(plainHighlight).toBeVisible({ timeout: 5_000 });
+    await expect(plainHighlight).not.toHaveClass(/ep-correction-highlight/);
+    await expect(caseBlock(page, 1).locator('.ep-correction-highlight')).toHaveCount(1);
+
+    // B3/FR14 — BOTH the plain and the correction comment render fully (author, quote, text) in the
+    // SAME single list — the exact regression FR14/FR15 must not reproduce.
+    await expect(plainComment).toBeVisible();
+    await expect(correctionComment).toBeVisible();
+
+    // FR14 — the correction's in-canvas highlight IS visually tagged (double-underline class), distinct
+    // from a plain comment highlight (colour-plus-shape, not colour-only — a11y); with Bug 2 fixed this
+    // is the ONLY `.ep-correction-highlight` on the page (already proven above), on its real anchor.
+    const correctionHighlight = caseBlock(page, 1).locator('[data-case-description] .ep-correction-highlight');
+    await expect(correctionHighlight).toBeVisible({ timeout: 5_000 });
+
+    // FR14 — the author (owner, filing their own correction) sees a status stepper on the row; step
+    // à corriger → en cours → corrigé; the chip updates each time via PATCH /corrections/:id.
+    const stepper = correctionComment.getByRole('button', { name: /Statut de la correction/ });
+    await expect(stepper).toBeVisible();
+    await stepper.click();
+    await expect(correctionComment.getByText('Correction · En cours')).toBeVisible({ timeout: 10_000 });
+    await stepper.click();
+    await expect(correctionComment.getByText('Correction · Corrigé')).toBeVisible({ timeout: 10_000 });
+  });
+
+  // Item 1 (r5) — "Comparer les versions" side-by-side modal: both scenario versions on the A4 sheet,
+  // default N-1↔N, pickers, Escape/backdrop close.
+  test('CS4-E10 (r5 Item 1): "Comparer" opens a modal with both versions on the A4 sheet, defaults N-1↔N, and closes on Escape', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+    await expect(toolbarVersion(page)).toContainText('v2', { timeout: 10_000 }); // ≥2 versions exist (CS4-E4)
+
+    const compareBtn = page.getByRole('button', { name: 'Comparer' });
+    await expect(compareBtn).toBeVisible();
+    await compareBtn.click();
+
+    const modal = page.getByRole('dialog', { name: 'Comparer les versions' });
+    await expect(modal).toBeVisible({ timeout: 5_000 });
+    // Default pickers read v1 ↔ v2 (N-1 ↔ N, head = v2).
+    await expect(modal.getByLabel('Version à gauche')).toContainText('v1');
+    await expect(modal.getByLabel('Version à droite')).toContainText('v2');
+    // Both panes render on the A4 sheet (VersionSheet — `.ep-case-block`), with real content.
+    const sheets = modal.locator('.ep-compare-sheet .ep-case-block');
+    await expect(sheets).toHaveCount(2, { timeout: 10_000 });
+    await expect(modal).toContainText('Rin pénètre dans le sanctuaire abandonné.');
+
+    // r6 C7 — the modal is portalled to <body> (a direct child, escaping the editor's own sticky-header
+    // stacking context) and renders ABOVE the top nav banner at every breakpoint, header included.
+    const isBodyChild = await modal.evaluate((el) => {
+      let n: Node | null = el;
+      while (n && n.parentElement !== document.body) n = n.parentElement;
+      return n?.parentElement === document.body;
+    });
+    expect(isBodyChild).toBe(true);
+    const modalZ = await modal.evaluate((el) => Number(getComputedStyle(el.parentElement!).zIndex));
+    const navZ = await page.locator('banner, header').first().evaluate((el) => Number(getComputedStyle(el).zIndex) || 0);
+    expect(modalZ).toBeGreaterThan(navZ);
+    // Visually: the title, at the very top of the panel, must not be covered by the nav banner —
+    // its bounding box top must sit at/after the nav's own bottom edge (nothing overlapping above it).
+    const titleBox = (await modal.getByText('Comparer les versions').boundingBox())!;
+    const navBox = (await page.locator('banner, header').first().boundingBox())!;
+    expect(titleBox.y).toBeGreaterThanOrEqual(navBox.y + navBox.height - 2);
+
+    // r6 C8 — diff highlighting: v2 appends text to the same paragraph as v1 (a "changed" leaf block),
+    // so the right pane must show word-level `<ins>` runs over the sanitized HTML (not colour-only —
+    // `<ins>`/`<del>` are real semantic tags, not just a CSS colour). The sr-only "Ajouté :"/"Supprimé :"
+    // label applies to WHOLE added/removed blocks (covered at the unit level in version-compare.test.ts);
+    // this fixture only exercises a word-level change, so assert the `<ins>` runs themselves here.
+    const insRuns = modal.locator('.ep-compare-sheet ins');
+    await expect(insRuns.first()).toBeVisible({ timeout: 5_000 });
+    await expect(insRuns.first()).toHaveText(/./); // carries real (non-empty) added text, not colour-only
+
+    await page.screenshot({ path: 'e2e/screenshots/cs4-compare-modal.png', fullPage: true });
+
+    // Escape closes it.
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+
+    // Re-open, close via backdrop click (mousedown on the overlay itself, not the panel). Compute a
+    // point definitely OUTSIDE the centered panel's bounding box (rather than guessing a fixed corner,
+    // which can land inside the panel depending on the actual viewport/panel geometry).
+    await compareBtn.click();
+    const reopened = page.getByRole('dialog', { name: 'Comparer les versions' });
+    await expect(reopened).toBeVisible({ timeout: 5_000 });
+    const panelBox = (await reopened.boundingBox())!;
+    const outsideX = panelBox.x > 20 ? panelBox.x - 10 : panelBox.x + panelBox.width + 10;
+    await page.mouse.click(outsideX, panelBox.y + panelBox.height / 2);
+    await expect(reopened).toHaveCount(0);
+  });
+
+  // Item 2 (r5) — the Save button is now ICON-ONLY next to the chapter/page switcher: no visible
+  // "Enregistrer" text node, only the accessible name (aria-label) — `saveDoc()` throughout this file
+  // already resolves it by accessible name (role-based), proving real users relying on a screen reader
+  // or the accessible-name tooltip reach it the same way a sighted mouse user does.
+  test('CS4-E11 (r5 Item 2): the Save button is icon-only (no visible "Enregistrer" text) but keeps its accessible name', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    const saveBtn = page.getByRole('button', { name: 'Enregistrer', exact: true });
+    await expect(saveBtn).toBeVisible();
+    // No visible text content — icon-only (the accessible name comes from aria-label, not text).
+    expect((await saveBtn.textContent())?.trim()).toBe('');
+    await expect(saveBtn).toHaveAttribute('title', /⌘S|Ctrl\+S/);
   });
 });
 
@@ -216,6 +451,78 @@ test.describe('CS-4 Éditeur — presence count (single connected user)', () => 
     // bug) readPeers would leak the self clientID back in and the header would read "2 en ligne".
     await expect(page.getByText('1 en ligne')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('2 en ligne')).toHaveCount(0);
+  });
+});
+
+// Bug fix (2026-07-15) — scenario version off-by-one: a blank/on-mount Save used to materialize an
+// EMPTY v1, shifting all real content one version late (v1 empty, first real content lands in v2, etc).
+// The server (`isBlankHtml` guard in `autosave`) and the client (`save()`'s own blank-html no-op) both
+// now refuse to persist a blank document. This is the LIVE, real-API, real-browser proof the coordinator
+// asked for — no mocks — reading each version's actual content back via the editor's own version
+// switcher (Fb-5, read-only view) so the observed version↔content mapping is exactly what a real user
+// would see.
+test.describe('CS-4 Éditeur — bug fix: scenario version off-by-one (real content, no shifted versions)', () => {
+  test('CS4-E12: a blank/stray Save is a no-op (no empty v1); v1 = the first real content; "Enregistrer une nouvelle version" makes v2 = the snapshot, v1 stays unchanged', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const slug = await createProject(page, `E2E CS4 Versioning ${Date.now()}`);
+    await addCard(page);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
+
+    // 1) A stray Save on a genuinely blank document (nothing typed yet) must be a silent no-op: no
+    // network POST to the autosave endpoint, no "v1" ever appears, no materialization at all. The doc
+    // starts un-dirty (nothing typed), so there is nothing to click — assert the pre-conditions the
+    // no-op protects instead: no version chip, comments still gated on "save first".
+    await expect(toolbarVersion(page)).toHaveCount(0);
+    await expect(page.getByText('Enregistrez d’abord le scénario pour commenter.')).toBeVisible();
+    // A real Ctrl+S keypress on the blank doc (the exact "reflexive stray save" the bug report
+    // described) must not materialize anything either — watch the network: no autosave request fires.
+    let strayRequestFired = false;
+    const onReq = (req: import('@playwright/test').Request) => {
+      if (req.url().includes('/document/autosave') && req.method() === 'POST') strayRequestFired = true;
+    };
+    page.on('request', onReq);
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(800); // give a real (wrongly-fired) request time to show up
+    page.off('request', onReq);
+    expect(strayRequestFired).toBe(false);
+    await expect(toolbarVersion(page)).toHaveCount(0); // still not materialized
+
+    // 2) Real content in, explicit Save → v1 = exactly this content (never empty, never shifted). v1 IS
+    // the head at this point, so the version switcher's "v1" option is live-editing, not a distinct
+    // read-only snapshot (selecting the current head is a no-op per `onSelectVersion`) — read v1's
+    // content straight off the live canvas, which is exactly what a head version's content is.
+    const v1Text = `CONTENU-V1-UNIQUE-${Date.now()}`;
+    await typeIntoCase(page, 1, v1Text);
+    await saveDoc(page);
+    await expect(toolbarVersion(page)).toContainText('v1', { timeout: 10_000 });
+    // The off-by-one symptom would show v1 EMPTY (content shifted into v2 on the NEXT save) — assert
+    // the head's own content is present now, before any second version exists.
+    await expect(caseBlock(page, 1)).toContainText(v1Text);
+
+    // 3) Add more content, snapshot an explicit v2 — v1 must NOT have shifted to include it.
+    const v2Extra = ` SUITE-V2-${Date.now()}`;
+    await typeIntoCase(page, 1, v2Extra);
+    await saveDoc(page);
+    await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
+    await expect(toolbarVersion(page)).toContainText('v2', { timeout: 10_000 });
+    // v2 IS the head now — its content is the live canvas: v1's text + the new sentence (the real
+    // snapshot taken at v2-creation time), not shifted/duplicated.
+    await expect(caseBlock(page, 1)).toContainText(v1Text + v2Extra);
+
+    // v1, re-read via the version switcher NOW that it's no longer head (a genuine read-only snapshot),
+    // is STILL exactly the original — no off-by-one shift occurred
+    // (the classic symptom was "v1 = v2, v2 = v3": re-reading v1 here would show the SUITE-V2 text too).
+    await toolbarVersion(page).click();
+    await page.getByRole('option', { name: 'v1' }).click();
+    await expect(page.getByText('Lecture seule — v1')).toBeVisible({ timeout: 10_000 });
+    const v1Again = page.locator('.ep-version-sheet');
+    await expect(v1Again).toContainText(v1Text, { timeout: 10_000 });
+    await expect(v1Again).not.toContainText(v2Extra.trim());
+
+    await page.screenshot({ path: 'e2e/screenshots/cs4-version-offbyone-v1.png', fullPage: true });
   });
 });
 
@@ -254,7 +561,7 @@ test.describe('CS-4 Éditeur — edit an existing linked scenario file (no dupli
     await expect(caseBlock(page, 1)).toContainText('Brief de scenario e2e CS-3.', { timeout: 10_000 });
 
     await typeIntoCase(page, 1, ' Ajout édition.');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await saveDoc(page);
 
     await page.goto(`/projet/${slug}?tab=fichiers`);
     await expect(page.locator('[data-asset-card]').filter({ hasText: 'cs3-scenario-brief.txt' })).toHaveCount(1, { timeout: 10_000 });
@@ -287,14 +594,22 @@ test.describe('CS-4 Éditeur — version-note split button (item 22)', () => {
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
 
     await typeIntoCase(page, 1, 'Kenji observe le quartier depuis le pont.');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await saveDoc(page);
     await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 });
 
+    // B11 (the server-side snapshot dedupe guard) refuses to create a version identical to the
+    // head — a real content change is required before EACH version-bump, not just a save. Bug found
+    // in the PRE-EXISTING test (fixed here, test-only): it used to request v1→v2 with unchanged
+    // content, which the guard correctly no-ops.
+    await typeIntoCase(page, 1, ' Encore une phrase avant la deuxième version.');
+    await saveDoc(page);
     // Primary split-button click (no chevron) snapshots immediately, without a note — v1 → v2.
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
     await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('v2')).toBeVisible();
 
+    await typeIntoCase(page, 1, ' Et encore une phrase avant la troisième version.');
+    await saveDoc(page);
     // The attached chevron opens an inline "NOTE (optionnelle)" form; submitting snapshots WITH the note.
     await page.getByRole('button', { name: 'Ajouter une note à la version' }).click();
     const noteForm = page.getByRole('dialog', { name: 'Note de version' });
@@ -327,9 +642,14 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
 
     await typeIntoCase(page, 1, 'Rin observe la ville depuis le toit.');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await saveDoc(page);
     await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 }); // materialized → comments enabled
 
+    // saveDoc() clicks the toolbar "Enregistrer" button, which steals DOM focus away from the
+    // ProseMirror editor (pre-r3 autosave never required a click, so focus always stayed put — bug
+    // found in this PRE-EXISTING test, fixed here, test-only). Click back into the editor content
+    // before selecting, or Home/Shift+End apply to whatever currently has focus (the button).
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click();
     // Select the whole line the cursor is already on (typeIntoCase left the caret at its end).
     await page.keyboard.press('Home');
     await page.keyboard.press('Shift+End');
@@ -457,7 +777,7 @@ test.describe('CS-4 Éditeur — A4 content reflow across bordered sheets (item 
 
     // Fill past one page — content must reflow onto a 2nd bordered sheet.
     await fillPastOnePage(page, 1, 55);
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await saveDoc(page);
     await expectMultiSheetReflow(page);
     await expectContentInsideSheet(page); // content stays on the page
 
@@ -525,7 +845,7 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     }
     // …then a run of trailing BLANK lines (the classic phantom-page trigger).
     for (let i = 0; i < 15; i++) await page.keyboard.press('Enter');
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await saveDoc(page);
 
     // Exactly ONE page (no page-break spacer), sheet no taller than one A4, content on the page.
     await expect.poll(async () => (await paginationGeometry(page, 1))?.pages ?? 0, { timeout: 10_000 }).toBe(1);
@@ -540,7 +860,7 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
     await openFreshEditor(page);
     await fillPastOnePage(page, 1, 60); // well past one page → plenty of scroll room
     await page.keyboard.type('POSITION-CARET'); // one more keystroke so a scroll-to-selection fires
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await saveDoc(page);
 
     const y = await caretViewportY(page);
     expect(y).not.toBeNull();
@@ -553,7 +873,7 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
   test('CS4-E24d: clicking the page-break gap lands the caret on real content, never in the gap (delete-keeps-caret is covered by CS4-E24f)', async ({ page }) => {
     await openFreshEditor(page);
     await fillPastOnePage(page, 1, 55);
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await saveDoc(page);
     await expectMultiSheetReflow(page);
     // Evidence: a clean sheet with a partly-filled 2nd page below the page-break rule, content inside.
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -586,7 +906,7 @@ test.describe('CS-4 Éditeur — A4 pagination edge cases (caret + phantom-page 
   test('CS4-E24e: editing at the bottom of a paginated doc scrolls the view to follow the caret (no manual scroll needed)', async ({ page }) => {
     await openFreshEditor(page);
     await fillPastOnePage(page, 1, 55); // ≥ 2 sheets
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 20_000 });
+    await saveDoc(page);
     await expectMultiSheetReflow(page);
 
     // Force the viewport to the very top, then edit at the END of the doc: the view must follow the
@@ -680,6 +1000,14 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await a.waitForTimeout(1500);
     await b.waitForTimeout(1500);
 
+    // Root-caused (systematic-debugging): a bare `waitForTimeout` isn't a reliable settle-gate for the
+    // WS awareness/room join under a cold `node dist/main.js` start — this real, polling assertion
+    // (both sides see "2 en ligne") IS the settle-gate; without it the CRDT-merge check below raced
+    // the join and flaked (received "" on B). Confirmed via isolated diagnostic run: A's own typing
+    // always worked immediately; only B's *mirror* needed this extra join-settle margin.
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+
     // CRDT merge: A types into CASE 1 → the text (and A's named colored caret) appear live in B,
     // with no error UI (conflict is a merge, not a rejection). Asserted BEFORE the presence-count
     // block below so a failure there can't cascade-skip this coverage.
@@ -703,12 +1031,14 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     // user.id. If it regressed to id-keyed exclusion each client would re-count itself and read "3 en
     // ligne". (The named presence roster was removed — presence now lives in the header count + the avatar
     // stack; see EditorClient.test.tsx "the En ligne presence roster is intentionally gone".)
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 15_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 15_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
     await expect(a.getByText('3 en ligne')).toHaveCount(0);
     await expect(b.getByText('3 en ligne')).toHaveCount(0);
 
-    // A's autosave materializes the scenario (v1) — B's toolbar picks up the version chip too.
+    // A saves explicitly (FR9 — no autosave) → materializes the scenario (v1); B's toolbar picks up the
+    // version chip too. B's own edit left A's draft dirty (shared doc changed), so the Save button is armed.
+    await a.getByRole('button', { name: 'Enregistrer', exact: true }).click();
     await expect(a.getByText('Enregistré ✓')).toBeVisible({ timeout: 15_000 });
     await expect(a.getByText('v1')).toBeVisible({ timeout: 10_000 });
 
@@ -718,6 +1048,70 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await expect(a.getByText('Yuki: on garde cette version ?')).toBeVisible({ timeout: 10_000 });
     const postedInB = commentItem(b, 'Yuki: on garde cette version ?');
     await expect(postedInB).toBeVisible({ timeout: 10_000 });
+
+    await ctxA.close();
+    await ctxB.close();
+  });
+
+  // R2-8 — CRITICAL, blocking regression: "creating a new version and editing it directly creates a
+  // comment attributed to ANOTHER user account linked to the project." Two truly isolated browser
+  // contexts (own cookie jar each, per Playwright) — the FE fix (SessionProvider re-fetches /auth/me
+  // on focus/visibilitychange) plus the server's authoritative `req.accountId` stamping (B12) must
+  // together guarantee: whoever creates a version and comments is attributed to THEMSELVES, never to
+  // the other real project member, even right after a version bump in the same live session.
+  test('CS4-RT2 (R2-8, CRITICAL): creating a new version then commenting attributes the comment to the ACTING user, never another member', async ({ browser }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const a = await ctxA.newPage();
+    const b = await ctxB.newPage();
+    await login(a, OWNER_EMAIL); // "E2E CS12_OWNER"
+    await login(b, COLLAB_EMAIL); // "E2E CS12_COLLAB"
+
+    await a.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
+    await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
+    await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
+    // Real settle-gate (not a bare sleep — see CS4-RT) so the WS awareness join is actually done
+    // before the version/comment flow below.
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+
+    // B11 (the server-side snapshot dedupe guard) refuses to create a version identical to the head.
+    // Self-sufficient regardless of run order/filtering (don't assume the sibling CS4-RT test ran
+    // first and already materialized v1 on this shared `pageId` — e.g. `-g CS4-RT2` alone matches
+    // only this test, so the page starts blank): materialize with an initial edit, THEN make a
+    // SECOND, different edit so the version-bump click snapshots real content, not a no-op.
+    await typeIntoCase(a, 1, ' Contenu initial.');
+    await saveDoc(a);
+    await typeIntoCase(a, 1, ' Avant la nouvelle version.');
+    await saveDoc(a);
+    // A creates a new version, then edits DIRECTLY (same session, right after the version bump) and
+    // comments — the exact repro shape from the original bug report.
+    await a.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    await expect(a.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
+    await typeIntoCase(a, 1, ' Ajout de A juste après la nouvelle version.');
+    await saveDoc(a);
+    await caseBlock(a, 1).locator('[data-case-description] p').first().click();
+    await a.getByLabel('Ajouter un commentaire').fill('Commentaire posté par A après la nouvelle version.');
+    await a.getByRole('button', { name: '＋ Commentaire' }).click();
+    const aComment = commentItem(a, 'Commentaire posté par A après la nouvelle version.');
+    await expect(aComment).toBeVisible({ timeout: 10_000 });
+    // Attribution check IN A's OWN VIEW — must read A, never B.
+    await expect(commentAuthor(a, 'Commentaire posté par A après la nouvelle version.')).toHaveText('E2E CS12_OWNER');
+
+    // B, in a fully isolated context/session, also edits directly and comments right after.
+    await typeIntoCase(b, 1, ' Ajout de B.');
+    await saveDoc(b);
+    await b.getByLabel('Ajouter un commentaire').fill('Commentaire posté par B.');
+    await b.getByRole('button', { name: '＋ Commentaire' }).click();
+    const bComment = commentItem(b, 'Commentaire posté par B.');
+    await expect(bComment).toBeVisible({ timeout: 10_000 });
+    await expect(commentAuthor(b, 'Commentaire posté par B.')).toHaveText('E2E CS12_COLLAB');
+
+    // Cross-check: A's comment as seen live in B's view is STILL attributed to A (never swapped to B),
+    // and vice versa — the WS fan-out must carry the true author, not whichever client rendered it.
+    await expect(commentAuthor(b, 'Commentaire posté par A après la nouvelle version.')).toHaveText('E2E CS12_OWNER', { timeout: 10_000 });
+    await expect(commentAuthor(a, 'Commentaire posté par B.')).toHaveText('E2E CS12_COLLAB', { timeout: 10_000 });
 
     await ctxA.close();
     await ctxB.close();
@@ -777,16 +1171,23 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
 
     await a.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
-    await a.waitForTimeout(1000);
     await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
-    await a.waitForTimeout(1500);
+    // Real settle-gate (see CS4-RT) so the WS awareness join is actually done before editing.
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
 
-    // A types a line, materializing the scenario (comments enabled), then comments the whole line.
+    // A types a line, then SAVES EXPLICITLY (r3 — no autosave) to materialize the scenario (comments
+    // enabled), then comments the whole line. Bug found in the PRE-EXISTING test (fixed here,
+    // test-only): it used to expect 'v1' right after typing, with no save.
     await typeIntoCase(a, 1, 'Le chat dort ici.');
+    await saveDoc(a);
     await expect(a.getByText('v1')).toBeVisible({ timeout: 15_000 });
     await expect(caseBlock(b, 1)).toContainText('Le chat dort ici.', { timeout: 15_000 });
 
+    // saveDoc()'s button click steals focus from the editor — click back into the line before
+    // selecting it (same fix as CS4-E5it).
+    await caseBlock(a, 1).locator('[data-case-description] p').first().click();
     await a.keyboard.press('Home');
     await a.keyboard.press('Shift+End');
     await a.getByLabel('Commenter la sélection').fill('Vérifier ce passage');
@@ -829,12 +1230,16 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
 
     await a.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(a, 1)).toBeVisible({ timeout: 10_000 });
-    await a.waitForTimeout(1000);
     await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
-    await a.waitForTimeout(1500);
+    // Real settle-gate (see CS4-RT) so the WS awareness join is actually done before editing.
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
 
+    // r3 — no autosave; save explicitly before expecting materialization (bug found in the
+    // PRE-EXISTING test, fixed here, test-only).
     await typeIntoCase(a, 1, 'Réplique à supprimer plus tard.');
+    await saveDoc(a);
     await expect(a.getByText('v1')).toBeVisible({ timeout: 15_000 });
 
     // A posts a case-level comment and captures its id from the POST response (for the forged DELETE).

@@ -1109,6 +1109,60 @@ export const deleteCaseComment = (
 export const sharePage = (pageId: string): Promise<SharePageResponse> =>
   request<SharePageResponse>(`/pages/${encodeURIComponent(pageId)}/share`, { method: 'POST' });
 
+// ─── CS-5 Révision & corrections ──────────────────────────────────────────────
+import type {
+  ReviewPayload,
+  CorrectionDto,
+  CreateCorrectionRequest,
+  UpdateCorrectionRequest,
+  CorrectionListQuery,
+  CorrectionListResponse,
+  ValidateReviewResponse,
+} from '@encre-et-plume/shared';
+
+// Two-version review payload. `file` picks the reviewed asset; `from`/`to` override the auto-picked
+// filedAgainstVersion↔head pair. All params optional (server auto-selects).
+export const getReview = (
+  pageId: string,
+  opts?: { file?: string; from?: number; to?: number },
+): Promise<ReviewPayload> => {
+  const q = new URLSearchParams();
+  if (opts?.file) q.set('file', opts.file);
+  if (opts?.from != null) q.set('from', String(opts.from));
+  if (opts?.to != null) q.set('to', String(opts.to));
+  const qs = q.toString();
+  return request<ReviewPayload>(`/pages/${encodeURIComponent(pageId)}/review${qs ? `?${qs}` : ''}`);
+};
+
+export const createCorrection = (pageId: string, body: CreateCorrectionRequest): Promise<CorrectionDto> =>
+  request<CorrectionDto>(`/pages/${encodeURIComponent(pageId)}/corrections`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const listCorrections = (pageId: string, query?: CorrectionListQuery): Promise<CorrectionListResponse> => {
+  const q = new URLSearchParams();
+  if (query?.type) q.set('type', query.type);
+  if (query?.status) q.set('status', query.status);
+  if (query?.page != null) q.set('page', String(query.page));
+  const qs = q.toString();
+  return request<CorrectionListResponse>(
+    `/pages/${encodeURIComponent(pageId)}/corrections${qs ? `?${qs}` : ''}`,
+  );
+};
+
+export const updateCorrection = (id: string, body: UpdateCorrectionRequest): Promise<CorrectionDto> =>
+  request<CorrectionDto>(`/corrections/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const deleteCorrection = (id: string): Promise<void> =>
+  request<void>(`/corrections/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const validateReview = (pageId: string): Promise<ValidateReviewResponse> =>
+  request<ValidateReviewResponse>(`/pages/${encodeURIComponent(pageId)}/review/validate`, { method: 'POST' });
+
 // ─── Support & contact (F-21) ─────────────────────────────────────────────────
 import type { CreateSupportTicketRequest, CreateSupportTicketResponse } from '@encre-et-plume/shared';
 

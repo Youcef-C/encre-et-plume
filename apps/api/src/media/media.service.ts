@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import sharp from 'sharp';
 import mammoth from 'mammoth';
+import sanitizeHtml from 'sanitize-html';
 import { randomUUID } from 'node:crypto';
 import {
   MEDIA_KINDS,
@@ -83,19 +84,48 @@ function isVerifiedDocument(buffer: Buffer, contentType: string): boolean {
   return true;
 }
 
-// CS-3 (D5): defense-in-depth sanitizer for the docx→HTML derivative. mammoth already emits a
-// restricted subset (p / headings / lists / a / img / strong / em), but strip any script/style block,
-// on* handlers, and javascript:/data: URLs before the HTML is ever stored or returned.
 const DOCX_PREVIEW_CAP = 500 * 1024; // 500 KB
+
+// CS-5 security ("no code injection possible"): the SINGLE allowlist sanitizer for every scenario / docx
+// HTML string that leaves the API — the review-payload version content (attacker-controlled: in-app
+// scenario HTML is editor.getHTML(), a member can POST arbitrary HTML) AND the docx preview derivative.
+// sanitize-html parses with a real HTML tokenizer (htmlparser2) and keeps ONLY allowlisted tags/attrs —
+// immune to the mutation-XSS / malformed-tag / unquoted-attr bypasses a regex blocklist can never cover.
+// (DOMPurify was the first choice but its jsdom dep chain is ESM-only and won't load under the repo's
+// ts-jest CJS test runner — see backend-notes; sanitize-html is an equivalent parser-based allowlist,
+// not a regex, and is pure CommonJS.)
+const SCENARIO_SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote',
+    'strong', 'em', 'b', 'i', 'u', 's', 'a', 'img', 'span', 'div', 'hr',
+    'table', 'thead', 'tbody', 'tr', 'td', 'th', 'pre', 'code',
+  ],
+  // class carries the editor's ep-* A4 + prose styling; data-case-block is the A4 sheet marker. Inline
+  // `style` is deliberately NOT allowed (the A4/prose look is CSS-class-driven — FR10) so no CSS-injection
+  // surface (url(javascript:)/expression) exists at all. script/style-blocks/iframe/object/embed/form/svg/
+  // math and every on* handler are dropped (not in the allowlist).
+  allowedAttributes: {
+    a: ['href', 'title'],
+    img: ['src', 'alt', 'title'],
+    td: ['colspan', 'rowspan'],
+    th: ['colspan', 'rowspan'],
+    '*': ['class', 'data-case-block'],
+  },
+  // Only http/https/mailto + relative on href; http/https on img src. Blocks javascript:/vbscript:/data:.
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesByTag: { img: ['http', 'https'] },
+  allowProtocolRelative: false,
+  disallowedTagsMode: 'discard',
+};
+
+export function sanitizeScenarioHtml(html: string): string {
+  return sanitizeHtml(html, SCENARIO_SANITIZE_OPTS);
+}
+
+// CS-3 (D5) docx-preview path — now DELEGATES to the allowlist sanitizer above (regex impl killed) so
+// every scenario/docx HTML surface shares one robust sanitizer.
 export function sanitizeDocxHtml(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
-    .replace(/(href|src)\s*=\s*"(?:\s*(?:javascript|data|vbscript):)[^"]*"/gi, '$1="#"')
-    .replace(/(href|src)\s*=\s*'(?:\s*(?:javascript|data|vbscript):)[^']*'/gi, "$1='#'");
+  return sanitizeScenarioHtml(html);
 }
 
 function extFromContentType(ct: string): string {

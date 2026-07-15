@@ -565,6 +565,27 @@ export function AlignLeftIcon(p: IconProps) {
   );
 }
 
+// CS-5 (iter 5) — "Enregistrer" glyph: a floppy disk (save). Chunky ink strokes; no emoji.
+export function SaveIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M4.5 4.5h11l4 4v11a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1z" />
+      <path d="M8 4.5v5h7v-5" />
+      <rect x="8" y="13" width="8" height="6.5" />
+    </Svg>
+  );
+}
+
+// CS-5 (iter 5) — "Comparer les versions" glyph: two overlapping sheets (side-by-side compare).
+export function CompareIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="5.5" width="10" height="14" rx="1.5" />
+      <path d="M16 8.5h3a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-6" />
+    </Svg>
+  );
+}
+
 // CS-3 — import/drop-zone glyph + "Télécharger" (replaces the prototype's ⤓): a downward arrow
 // dropping into a tray.
 export function DownloadIcon(p: IconProps) {

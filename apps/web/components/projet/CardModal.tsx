@@ -455,6 +455,18 @@ export default function CardModal({
           </div>
         </div>
 
+        {/* CS-5 — when the card is in Corrections, deep-link to the review screen. */}
+        {detail.stage === 'corrections' && (
+          <div style={{ marginTop: 12 }}>
+            <Link
+              href={`/projet/${slug}/revision/${pageId}`}
+              style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', textDecoration: 'none' }}
+            >
+              Voir les corrections →
+            </Link>
+          </div>
+        )}
+
         {/* FICHIERS (par type) — Scénario / Dessin / Page / Références, wired to CS-3 assets.
             One category card per section in a single vertical list (Modal accessible v2 layout). */}
         <div style={{ marginTop: 16 }}>

@@ -903,16 +903,15 @@ function PageCard({
         <button type="button" title="Aperçu" aria-label="Aperçu" onClick={(e) => e.stopPropagation()} style={iconBtnStyle}>
           <EyeIcon size={12} />
         </button>
-        <button
-          type="button"
+        <Link
+          href={`/projet/${slug}/revision/${card.id}`}
           title="Corrections"
           aria-label="Corrections"
-          disabled={readOnly}
           onClick={(e) => e.stopPropagation()}
-          style={iconBtnStyle}
+          style={{ ...iconBtnStyle, textDecoration: 'none' }}
         >
           <span aria-hidden="true">⚑</span>
-        </button>
+        </Link>
         {!readOnly && (
           <button
             type="button"
