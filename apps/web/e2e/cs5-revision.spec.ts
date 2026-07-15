@@ -54,16 +54,41 @@ function noVerticalOverflow(page: Page) {
   return page.evaluate(() => document.scrollingElement!.scrollHeight <= window.innerHeight + 1);
 }
 
+// CI retry-hardening: `e2e-cs2-multi` is a SHARED fixture project that e2e-seed.js resets only ONCE at
+// suite start, never between a Playwright RETRY of this whole serial block. A failed attempt's `addCard`
+// calls already created "Page 1"/"Page 2" before the failure — without this reset, the retry's `addCard`
+// would create a SECOND "Page 2" card, and `scenarioCol.getByText('Page 2', { exact: true })` (and every
+// downstream `kanbanCard` lookup) would resolve to 2 elements → a strict-mode violation, not a real bug.
+// Delete any pre-existing card with this exact title FIRST (looping — a card could exist 0, 1, or more
+// times if several retries stacked before this fix existed) so every attempt — first try or retry —
+// starts from the same clean slate. Cheap and safe even with nothing to delete (loop runs 0 times).
+async function resetCard(page: Page, title: string): Promise<void> {
+  const scenarioCol = page.getByRole('group').filter({ hasText: /^Scénario/ });
+  while ((await scenarioCol.getByText(title, { exact: true }).count()) > 0) {
+    await kanbanCard(page, title).first().click();
+    const cardModal = page.getByRole('dialog', { name: title });
+    await expect(cardModal).toBeVisible({ timeout: 10_000 });
+    await cardModal.getByRole('button', { name: 'Supprimer la carte' }).click();
+    // ConfirmDialog portals to <body> (a sibling of the card modal's own portal target, not a DOM
+    // descendant of it) — scope to the page, not to `cardModal`.
+    await page.getByRole('alertdialog', { name: 'Supprimer la carte ?' }).getByRole('button', { name: 'Supprimer', exact: true }).click();
+    await expect(cardModal).toHaveCount(0, { timeout: 10_000 });
+  }
+}
+
 async function addCard(page: Page, index: number): Promise<string> {
   const title = `Page ${index}`;
   const scenarioCol = page.getByRole('group').filter({ hasText: /^Scénario/ });
   await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
-  await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 });
+  await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 10_000 });
   return title;
 }
 
+// `.first()` — a defensive backstop: even if a duplicate ever slipped through (e.g. some OTHER spec
+// file sharing this fixture project left a stray card), any locator built on top of `kanbanCard` stays
+// single-element instead of hitting Playwright's strict-mode violation.
 function kanbanCard(page: Page, title: string) {
-  return page.locator('div[draggable="true"]').filter({ hasText: title });
+  return page.locator('div[draggable="true"]').filter({ hasText: title }).first();
 }
 
 function caseBlock(page: Page, no: number) {
@@ -106,6 +131,10 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     const page = await browser.newPage();
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${MULTI_SLUG}`);
+    // CI retry-hardening (see `resetCard`) — always start from zero "Page 1"/"Page 2" cards, whether
+    // this is the first attempt or a Playwright retry of this whole serial block after a prior failure.
+    await resetCard(page, 'Page 1');
+    await resetCard(page, 'Page 2');
     await addCard(page, 1);
     await addCard(page, 2);
     pageId1 = await pageIdOf(page, 'Page 1');
@@ -359,14 +388,27 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     const body409 = await forbiddenValidate.json();
     expect(body409.unresolved).toBeGreaterThanOrEqual(2);
 
-    // Resolve the DESSIN correction here on the revision page. Wait for the FIRST PATCH's client-visible
-    // "En cours" state before the second click — the stepper button is disabled mid-flight (busyId), but
-    // an explicit intermediate assertion (rather than relying purely on Playwright's actionability wait)
-    // makes the two-step transition deterministic under load, avoiding a click racing an in-flight PATCH.
+    // Resolve the DESSIN correction here on the revision page. The list shows the OPTIMISTIC status
+    // text the instant a click fires — waiting on that text alone doesn't prove the PATCH actually
+    // committed server-side yet (only `busyId`/disabled-button state does, and that's a subtler thing to
+    // assert reliably under load). Wait on the real PATCH response instead, so the second click can never
+    // race the first one's server-side commit — the exact condition the `unresolved` count below depends on.
     const stepperOnDessinRow = () => dessinRow.getByRole('button', { name: /Statut de la correction/ });
+    const patchResp = (status: string) =>
+      page.waitForResponse(
+        async (r) => {
+          if (!/\/corrections\/[^/]+$/.test(r.url()) || r.request().method() !== 'PATCH') return false;
+          const body = r.request().postDataJSON() as { status?: string };
+          return body.status === status;
+        },
+      );
+    const toEnCours = patchResp('en_cours');
     await stepperOnDessinRow().click(); // à corriger → en cours
+    expect((await toEnCours).status()).toBe(200);
     await expect(dessinRow.getByText('En cours', { exact: true })).toBeVisible({ timeout: 10_000 });
+    const toCorrige = patchResp('corrige');
     await stepperOnDessinRow().click(); // en cours → corrigé
+    expect((await toCorrige).status()).toBe(200);
     await expect(dessinRow.getByText('✓ Corrigé')).toBeVisible({ timeout: 10_000 });
 
     // Valider STAYS blocked — the scenario correction (not shown here) is still à corriger.
@@ -447,7 +489,10 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
 
     // Fresh card + fresh scenario correction (filed from the editor, r4) so this test doesn't depend on
     // the CS5-1..4 chain's final state (that page is already validated/Propre by the time this runs).
+    // CI retry-hardening (see `resetCard`) — this test is itself part of the serial block, so a whole-
+    // group retry re-runs it too; without a reset, `addCard(owner, 3)` would create a 2nd "Page 3".
     await owner.goto(`/projet/${MULTI_SLUG}`);
+    await resetCard(owner, 'Page 3');
     await addCard(owner, 3);
     const pid = await pageIdOf(owner, 'Page 3');
     await owner.goto(`/projet/${MULTI_SLUG}/editeur/${pid}`);

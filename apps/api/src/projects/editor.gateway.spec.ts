@@ -44,19 +44,39 @@ function serverOf(gateway: EditorGateway, peers = 1) {
   return { emit, to };
 }
 
-describe('EditorGateway.handleConnection (fail closed)', () => {
-  it('disconnects a handshake with no cookie', async () => {
+// Regression (QA, 2026-07-15): the OLD `handleConnection` (an `OnGatewayConnection` lifecycle hook) is
+// NOT awaited by Socket.IO before the SAME socket's first message is dispatched — the client emits
+// `editor:join` immediately on 'connect' (lib/editor-collab.ts), which can reach `handleJoin` BEFORE
+// this async handler finishes setting `socket.data.accountId`, silently dropping the join forever (no
+// client-side retry) — reproduced live via a two-context Playwright test staying stuck at "1 en ligne"
+// for 60s+. Socket.IO connection MIDDLEWARE (`server.use(...)`, wired in `afterInit`) IS awaited before
+// 'connection'/any message fires for that socket, closing the race at its source.
+describe('EditorGateway.authenticate (Socket.IO connection middleware, fail closed)', () => {
+  it('rejects a handshake with no cookie via next(error) — the socket never reaches "connection"', async () => {
     const { gateway } = build();
     const socket = makeSocket(undefined);
-    await gateway.handleConnection(socket as never);
-    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    const next = jest.fn();
+    await gateway.authenticate(socket as never, next);
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
+    expect(socket.data['accountId']).toBeUndefined();
   });
 
-  it('stores accountId for a valid handshake', async () => {
+  it('rejects when session verification throws (Redis outage) — fails closed', async () => {
+    const jwt = { verify: jest.fn(() => { throw new Error('boom'); }) };
+    const { gateway } = build({ jwt });
+    const socket = makeSocket('ep_session=good');
+    const next = jest.fn();
+    await gateway.authenticate(socket as never, next);
+    expect(next).toHaveBeenCalledWith(expect.any(Error));
+    expect(socket.data['accountId']).toBeUndefined();
+  });
+
+  it('stores accountId and calls next() with no error for a valid handshake', async () => {
     const { gateway } = build();
     const socket = makeSocket('ep_session=good');
-    await gateway.handleConnection(socket as never);
-    expect(socket.disconnect).not.toHaveBeenCalled();
+    const next = jest.fn();
+    await gateway.authenticate(socket as never, next);
+    expect(next).toHaveBeenCalledWith();
     expect(socket.data['accountId']).toBe('acc-me');
   });
 });

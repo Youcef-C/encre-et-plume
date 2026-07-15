@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  type OnGatewayConnection,
+  type OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -48,7 +48,7 @@ const assetRoom = (assetId: string) => `editor:asset:${assetId}`;
  */
 @Injectable()
 @WebSocketGateway({ namespace: 'editor', cors: { origin: webOrigins(), credentials: true } })
-export class EditorGateway implements OnGatewayConnection {
+export class EditorGateway implements OnGatewayInit {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(EditorGateway.name);
 
@@ -58,17 +58,29 @@ export class EditorGateway implements OnGatewayConnection {
     private readonly prisma: PrismaService,
   ) {}
 
-  async handleConnection(socket: Socket): Promise<void> {
+  // Regression fix (2026-07-15): auth used to run in `handleConnection` (an `OnGatewayConnection`
+  // lifecycle hook), which Socket.IO does NOT await before dispatching that SAME socket's first
+  // message — the client emits `editor:join` immediately on 'connect' (editor-collab.ts), which could
+  // reach `handleJoin` before this async check finished setting `socket.data.accountId`, silently
+  // dropping the join forever (no client-side retry/timeout) — reproduced live as a two-context test
+  // stuck at "1 en ligne" for 60s+ straight. Socket.IO connection MIDDLEWARE (`server.use`) IS awaited
+  // before 'connection'/any message fires for that socket, closing the race at its source.
+  afterInit(server: Server): void {
+    server.use((socket, next) => void this.authenticate(socket as Socket, next));
+  }
+
+  async authenticate(socket: Socket, next: (err?: Error) => void): Promise<void> {
     const token = readCookie(socket.handshake.headers.cookie, 'ep_session');
-    if (!token) return void socket.disconnect(true);
+    if (!token) return next(new Error('unauthorized'));
     let verified;
     try {
       verified = await verifySessionToken(this.jwt, this.redis, token);
     } catch {
-      return void socket.disconnect(true); // Redis outage → fail closed
+      return next(new Error('unauthorized')); // Redis outage → fail closed
     }
-    if (!verified) return void socket.disconnect(true);
+    if (!verified) return next(new Error('unauthorized'));
     socket.data['accountId'] = verified.accountId;
+    next();
   }
 
   @SubscribeMessage(EDITOR_WS_EVENTS.join)

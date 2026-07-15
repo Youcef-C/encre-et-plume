@@ -982,6 +982,11 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
   });
 
   test('CS4-RT: presence, named colored carets, live CRDT merge, typing indicator, live comment', async ({ browser }) => {
+    // Two real WS contexts doing a long sequence of joins/edits/assertions — under CI's 2-worker
+    // config another spec file's own two-context test can be hammering the SAME single API's WS
+    // gateway concurrently. Triple the per-test budget (30s → 90s) so a slow-but-correct settle
+    // never blows the overall test timeout on top of each individual wait's own timeout.
+    test.slow();
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const a = await ctxA.newPage();
@@ -1005,8 +1010,8 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     // (both sides see "2 en ligne") IS the settle-gate; without it the CRDT-merge check below raced
     // the join and flaked (received "" on B). Confirmed via isolated diagnostic run: A's own typing
     // always worked immediately; only B's *mirror* needed this extra join-settle margin.
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
 
     // CRDT merge: A types into CASE 1 → the text (and A's named colored caret) appear live in B,
     // with no error UI (conflict is a merge, not a rejection). Asserted BEFORE the presence-count
@@ -1031,8 +1036,8 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     // user.id. If it regressed to id-keyed exclusion each client would re-count itself and read "3 en
     // ligne". (The named presence roster was removed — presence now lives in the header count + the avatar
     // stack; see EditorClient.test.tsx "the En ligne presence roster is intentionally gone".)
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
     await expect(a.getByText('3 en ligne')).toHaveCount(0);
     await expect(b.getByText('3 en ligne')).toHaveCount(0);
 
@@ -1060,6 +1065,8 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
   // together guarantee: whoever creates a version and comments is attributed to THEMSELVES, never to
   // the other real project member, even right after a version bump in the same live session.
   test('CS4-RT2 (R2-8, CRITICAL): creating a new version then commenting attributes the comment to the ACTING user, never another member', async ({ browser }) => {
+    // See CS4-RT's comment — triple the per-test budget for CI 2-worker WS contention.
+    test.slow();
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const a = await ctxA.newPage();
@@ -1073,8 +1080,8 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
     // Real settle-gate (not a bare sleep — see CS4-RT) so the WS awareness join is actually done
     // before the version/comment flow below.
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
 
     // B11 (the server-side snapshot dedupe guard) refuses to create a version identical to the head.
     // Self-sufficient regardless of run order/filtering (don't assume the sibling CS4-RT test ran
@@ -1162,6 +1169,8 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
   // CS15-E1 (AC-1) + CS15-E2 (AC-2): typing INSIDE an anchored range extends the highlight in BOTH
   // clients; typing at the outer boundaries stays outside; the author's sidebar then shows "· modifié".
   test('CS15-E1/E2: inside-edit extends the highlight live (two clients); the sidebar shows "· modifié"', async ({ browser }) => {
+    // See CS4-RT's comment — triple the per-test budget for CI 2-worker WS contention.
+    test.slow();
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const a = await ctxA.newPage();
@@ -1174,8 +1183,8 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
     // Real settle-gate (see CS4-RT) so the WS awareness join is actually done before editing.
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
 
     // A types a line, then SAVES EXPLICITLY (r3 — no autosave) to materialize the scenario (comments
     // enabled), then comments the whole line. Bug found in the PRE-EXISTING test (fixed here,
@@ -1192,16 +1201,18 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     await a.keyboard.press('Shift+End');
     await a.getByLabel('Commenter la sélection').fill('Vérifier ce passage');
     await a.getByRole('button', { name: '＋ Commentaire' }).click();
-    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 10_000 });
-    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 10_000 });
+    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 20_000 });
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toHaveText('Le chat dort ici.', { timeout: 20_000 });
 
     // B types INSIDE the highlighted run → the highlight grows to cover the inserted text in BOTH clients.
     const pB = caseBlock(b, 1).locator('[data-case-description] p').first();
     const boxB = await pB.boundingBox();
     await pB.click({ position: { x: boxB!.width / 2, y: boxB!.height / 2 } });
     await b.keyboard.type('MIAOU');
-    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 10_000 });
-    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 10_000 });
+    // Cross-client WS propagation under CI 2-worker load — generous margin (this is the exact wait
+    // the coordinator's CI failure named as timing out).
+    await expect(caseBlock(b, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 20_000 });
+    await expect(caseBlock(a, 1).locator('.ep-comment-highlight')).toContainText('MIAOU', { timeout: 20_000 });
 
     // Typing at the very START of the range stays OUTSIDE it (from is right-associated).
     await b.keyboard.press('Home');
@@ -1211,7 +1222,7 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     // CS15-E2 (AC-2): now that the anchored text differs from the stored quote, A's sidebar comment
     // shows the "· modifié" marker + the current text; the original quote line is still present.
     const posted = commentItem(a, 'Vérifier ce passage');
-    await expect(posted.getByText('· modifié')).toBeVisible({ timeout: 10_000 });
+    await expect(posted.getByText('· modifié')).toBeVisible({ timeout: 20_000 });
     await expect(posted.getByText(/maintenant :/)).toBeVisible();
     await expect(posted.getByText('« Le chat dort ici. »')).toBeVisible();
 
@@ -1221,6 +1232,8 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
 
   // CS15-E3 (AC-3) + CS15-E4 (AC-4) + CS15-E5 (AC-5): author-only delete, non-author 403, live removal.
   test('CS15-E3/E4/E5: only the author can delete; a forged non-author DELETE is 403; the removal is live + survives refetch', async ({ browser }) => {
+    // See CS4-RT's comment — triple the per-test budget for CI 2-worker WS contention.
+    test.slow();
     const ctxA = await browser.newContext();
     const ctxB = await browser.newContext();
     const a = await ctxA.newPage();
@@ -1233,8 +1246,8 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     await b.goto(`/projet/${MULTI_SLUG}/editeur/${pageId}`);
     await expect(caseBlock(b, 1)).toBeVisible({ timeout: 10_000 });
     // Real settle-gate (see CS4-RT) so the WS awareness join is actually done before editing.
-    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
-    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 30_000 });
+    await expect(a.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
+    await expect(b.getByText('2 en ligne')).toBeVisible({ timeout: 45_000 });
 
     // r3 — no autosave; save explicitly before expecting materialization (bug found in the
     // PRE-EXISTING test, fixed here, test-only).
@@ -1251,7 +1264,7 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     const commentId = (await postResp.json()).id as string;
 
     const inB = commentItem(b, 'Note à supprimer');
-    await expect(inB).toBeVisible({ timeout: 10_000 });
+    await expect(inB).toBeVisible({ timeout: 15_000 });
 
     // CS15-E4 (AC-4, client): the non-author sees NO trash affordance on the author's comment.
     await expect(b.getByRole('button', { name: 'Supprimer le commentaire' })).toHaveCount(0);
@@ -1273,8 +1286,9 @@ test.describe('CS-4 Éditeur — CS-15 change-tracking & delete (two browser con
     await a.getByRole('button', { name: 'Supprimer', exact: true }).click();
     await expect(a.getByText('Note à supprimer')).toHaveCount(0, { timeout: 10_000 });
 
-    // CS15-E5 (AC-5): the deletion propagates live to B without a reload.
-    await expect(commentItem(b, 'Note à supprimer')).toHaveCount(0, { timeout: 10_000 });
+    // CS15-E5 (AC-5): the deletion propagates live to B without a reload — the exact class of
+    // cross-client WS wait that flakes under CI 2-worker load, generous margin.
+    await expect(commentItem(b, 'Note à supprimer')).toHaveCount(0, { timeout: 20_000 });
 
     // CS15-E3 refetch: reloading A keeps it gone (server-side delete committed).
     await a.reload();
