@@ -207,12 +207,14 @@ export function quoteChanged(quote: string, current: string): boolean {
   return normalizeQuote(quote) !== normalizeQuote(current);
 }
 
-// A comment always anchors to a contiguous run inside ONE text block (a case field). But `to` is
+// CS-5 mis-tag fix — cap a highlight's `to` at the end of the text block that contains `from`. `to` is
 // left-associated, so when it sits at a block boundary an insert into the FOLLOWING block grows it to
-// swallow that new text (CS-5 mis-tag bug: a correction filed on the description then overshoots into
-// the dialogue, and ProseMirror merges the correction's `ep-correction-highlight` class onto a plain
-// comment's span there). Cap `to` at the end of the text block that contains `from` so a highlight can
-// never bleed into an adjacent field — keeping every comment's tag on its own text only.
+// swallow that new text; a CORRECTION filed on the description then overshoots into the dialogue and
+// ProseMirror merges its `ep-correction-highlight` class onto a plain comment's span there.
+//   IMPORTANT: this is applied ONLY to correction highlights. A correction can't legitimately extend the
+// tag into a neighbouring field, so bounding it to its own block removes the bleed with no downside. A
+// PLAIN comment keeps the Docs-like "typing inside grows the highlight" contract completely untouched
+// (CS-15 inside-edit-extends), because a plain highlight never carries the tag and so can never mis-tag.
 function clampHighlightToBlock(doc: PMNode, from: number, to: number): number {
   const $from = doc.resolve(from);
   const blockEnd = $from.end($from.depth); // end of `from`'s enclosing textblock content
@@ -226,7 +228,7 @@ function buildDecos(anchors: Anchor[], y: YSyncState, doc: PMNode): DecorationSe
     const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
     let to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
     if (from == null || to == null || to <= from || from < 0 || to > size) continue;
-    to = clampHighlightToBlock(doc, from, to);
+    if (a.correction) to = clampHighlightToBlock(doc, from, to); // corrections only — see helper note
     if (to <= from) continue;
     // keep .ep-comment-highlight for shape (radius, wrap cloning); override the wash + underline colour.
     decos.push(
@@ -246,7 +248,7 @@ function buildAbsolute(ranges: CommentRange[], doc: PMNode): DecorationSet {
     .filter((r) => r.from >= 0 && r.to <= size && r.to > r.from)
     .map((r) => {
       const c = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
-      const to = clampHighlightToBlock(doc, r.from, r.to);
+      const to = r.correction ? clampHighlightToBlock(doc, r.from, r.to) : r.to; // corrections only
       if (to <= r.from) return null;
       return Decoration.inline(r.from, to, {
         class: r.correction ? 'ep-comment-highlight ep-correction-highlight' : 'ep-comment-highlight',
@@ -348,8 +350,7 @@ export function resolveCommentTexts(state: EditorState): Map<string, string> {
   const size = state.doc.content.size;
   for (const a of hs.anchors) {
     const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
-    const rawTo = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
-    const to = from != null && rawTo != null ? clampHighlightToBlock(state.doc, from, rawTo) : rawTo;
+    const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
     out.set(a.id, from == null || to == null || to <= from || from < 0 || to > size ? '' : state.doc.textBetween(from, to, ' '));
   }
   return out;
