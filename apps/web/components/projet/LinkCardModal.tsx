@@ -159,7 +159,7 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
         </div>
 
         <div style={footer}>
-          <button type="button" onClick={onClose} style={doneBtn}>
+          <button type="button" onClick={onClose} className="ep-btn-primary" style={doneBtn}>
             Terminé
           </button>
         </div>
@@ -223,8 +223,6 @@ const footer: React.CSSProperties = {
 const doneBtn: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  background: 'var(--accent)',
-  color: '#fff',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 18px',

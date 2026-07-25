@@ -124,13 +124,11 @@ export default function CallsPreview({
                   <span>{callMeta(call)}</span>
                   <button
                     type="button"
+                    className="ep-btn-dark"
                     onClick={() => {}}
                     style={{
                       marginLeft: 'auto',
-                      background: 'var(--ink)',
-                      color: 'var(--paper)',
                       border: '2px solid var(--ink)',
-                      borderRadius: 6,
                       padding: '8px 14px',
                       minHeight: 40,
                       fontWeight: 700,

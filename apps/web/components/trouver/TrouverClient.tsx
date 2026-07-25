@@ -189,14 +189,12 @@ export default function TrouverClient() {
         </p>
         <Link
           href="/connexion?redirect=/trouver"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '10px 20px',
             textDecoration: 'none',
           }}
@@ -301,13 +299,11 @@ export default function TrouverClient() {
               <button
                 type="button"
                 onClick={() => setRetryKey((k) => k + 1)}
+                className="ep-btn-primary"
                 style={{
                   fontSize: 13,
                   fontWeight: 700,
-                  background: 'var(--accent)',
-                  color: '#fff',
                   border: '2px solid var(--ink)',
-                  borderRadius: 6,
                   padding: '8px 16px',
                   cursor: 'pointer',
                 }}
@@ -348,12 +344,11 @@ export default function TrouverClient() {
                   <button
                     type="button"
                     onClick={loadMore}
+                    className="ep-btn-secondary"
                     style={{
                       fontSize: 13,
                       fontWeight: 700,
-                      background: 'var(--card)',
                       border: '2px solid var(--ink)',
-                      borderRadius: 6,
                       padding: '10px 20px',
                       cursor: 'pointer',
                       boxShadow: '2px 2px 0 var(--shadow)',

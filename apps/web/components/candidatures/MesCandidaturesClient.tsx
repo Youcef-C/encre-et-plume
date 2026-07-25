@@ -81,15 +81,13 @@ const placeholderThumb: React.CSSProperties = {
   backgroundSize: 'var(--dot) var(--dot),cover',
 };
 
+// Layout-only; color/border idiom via .ep-btn-secondary (or -primary) at each call site.
 const actionBtn: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   border: '2px solid var(--ink)',
-  borderRadius: 6,
   padding: '7px 13px',
   minHeight: 44,
-  background: 'var(--card)',
-  color: 'var(--ink)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   textDecoration: 'none',
@@ -225,10 +223,10 @@ function ApplicationRow({
         {app.status !== 'rejected' &&
           (confirming ? (
             <span role="group" aria-label="Confirmer le retrait de la candidature" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button type="button" onClick={confirmWithdraw} disabled={busy} style={{ ...actionBtn, background: 'var(--accent)', color: '#fff' }}>
+              <button type="button" onClick={confirmWithdraw} disabled={busy} className="ep-btn-primary" style={actionBtn}>
                 Confirmer le retrait
               </button>
-              <button type="button" onClick={() => setConfirming(false)} disabled={busy} style={actionBtn}>
+              <button type="button" onClick={() => setConfirming(false)} disabled={busy} className="ep-btn-secondary" style={actionBtn}>
                 Annuler
               </button>
               {error && (
@@ -238,7 +236,7 @@ function ApplicationRow({
               )}
             </span>
           ) : (
-            <button type="button" onClick={() => setConfirming(true)} style={actionBtn}>
+            <button type="button" onClick={() => setConfirming(true)} className="ep-btn-secondary" style={actionBtn}>
               Retirer
             </button>
           ))}
@@ -247,14 +245,15 @@ function ApplicationRow({
             type="button"
             onClick={() => void openDm(app.ownerId as string)}
             aria-label={`Message à ${app.ownerName}`}
-            style={{ ...actionBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)' }}
+            className="ep-btn-primary"
+            style={{ ...actionBtn, boxShadow: '2px 2px 0 var(--shadow)' }}
           >
             Message
           </button>
         )}
 
         {/* MC-6 amendment: "Voir" (detail, all statuses) + "Modifier" (pending only). */}
-        <button type="button" onClick={() => setDetailOpen(true)} style={actionBtn}>
+        <button type="button" onClick={() => setDetailOpen(true)} className="ep-btn-secondary" style={actionBtn}>
           Voir
         </button>
         {app.status === 'pending' && (
@@ -263,13 +262,14 @@ function ApplicationRow({
             onClick={() => void openEdit()}
             disabled={editState === 'loading'}
             aria-label={`Modifier ma candidature pour « ${app.callTitle} »`}
+            className="ep-btn-secondary"
             style={{ ...actionBtn, opacity: editState === 'loading' ? 0.6 : 1 }}
           >
             {editState === 'loading' ? 'Ouverture…' : 'Modifier'}
           </button>
         )}
 
-        <Link href={`/appels?call=${app.callId}`} aria-label={`Voir l'appel « ${app.callTitle} »`} style={actionBtn}>
+        <Link href={`/appels?call=${app.callId}`} aria-label={`Voir l'appel « ${app.callTitle} »`} className="ep-btn-secondary" style={actionBtn}>
           Voir l&apos;appel
         </Link>
       </div>
@@ -388,14 +388,11 @@ export default function MesCandidaturesClient() {
         </p>
         <Link
           href="/connexion?redirect=/mes-candidatures"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
-            fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '10px 20px',
             textDecoration: 'none',
           }}
@@ -455,15 +452,11 @@ export default function MesCandidaturesClient() {
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
-              fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: '8px 16px',
-              cursor: 'pointer',
               fontFamily: 'inherit',
             }}
           >
@@ -500,14 +493,11 @@ export default function MesCandidaturesClient() {
               <button
                 type="button"
                 onClick={loadMore}
+                className="ep-btn-secondary"
                 style={{
                   fontSize: 13,
-                  fontWeight: 700,
-                  background: 'var(--card)',
                   border: '2px solid var(--ink)',
-                  borderRadius: 6,
                   padding: '10px 20px',
-                  cursor: 'pointer',
                   boxShadow: '2px 2px 0 var(--shadow)',
                   fontFamily: 'inherit',
                 }}

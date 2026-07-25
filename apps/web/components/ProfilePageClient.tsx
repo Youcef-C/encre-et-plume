@@ -563,11 +563,10 @@ export default function ProfilePageClient({ slug }: Props) {
                 <button
                   type="button"
                   onClick={handleStartEdit}
+                  className="ep-btn-dark"
                   style={{
                     fontSize: 13,
                     fontWeight: 700,
-                    background: 'var(--ink)',
-                    color: 'var(--paper)',
                     border: '2px solid var(--ink)',
                     borderRadius: 6,
                     padding: '7px 14px',

@@ -664,18 +664,16 @@ export default function PostCallModal({
             background: 'var(--paper)',
           }}
         >
-          <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+          <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
             Annuler
           </button>
           <button
             type="button"
             onClick={() => void handleSubmit()}
             disabled={pending}
+            className="ep-btn-primary"
             style={{
               ...footerBtn,
-              background: 'var(--accent)',
-              color: '#fff',
-              boxShadow: '3px 3px 0 var(--shadow)',
               opacity: pending ? 0.6 : 1,
             }}
           >

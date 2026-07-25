@@ -26,7 +26,7 @@ Skip any story already marked `passed` in `_batch.json`, or whose `.claude/pipel
 
 ## 2 · Per story — run the /build-story loop
 For each remaining story **in order**, execute the `/build-story <ID>` playbook
-(`.claude/commands/build-story.md`): Manager → Backend → Frontend → QA → Reviewer, looping back to the
+(`.claude/commands/build-story.md`): Manager → Full-Stack Dev → QA → Reviewer, looping back to the
 Manager on a blocking FAIL, capped at 3 rounds. Announce each story as you start it (e.g.
 "[3/65] DR-3 — Work page…").
 

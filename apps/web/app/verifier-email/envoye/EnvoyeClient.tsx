@@ -14,7 +14,6 @@ const OUTER: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: '40px 16px',
-  background: 'var(--paper)',
 };
 
 const CARD: React.CSSProperties = {
@@ -105,7 +104,7 @@ export default function EnvoyeClient() {
             <button
               onClick={handleResend}
               disabled={resend === 'pending' || !email}
-              className="ep-btn"
+              className="ep-btn-primary"
               style={{ minHeight: 44 }}
             >
               Renvoyer l&apos;e-mail

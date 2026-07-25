@@ -101,7 +101,8 @@ function SuggestionCard({
           type="button"
           onClick={() => onProposer(item)}
           aria-label={`Proposer une collaboration à ${name}`}
-          style={{ ...actionBase, background: 'var(--accent)', color: '#fff', border: '2px solid var(--accent)' }}
+          className="ep-btn-primary"
+          style={{ ...actionBase, border: '2px solid var(--accent)' }}
         >
           Proposer
         </button>
@@ -178,11 +179,10 @@ export default function SuggestionsAside({
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
+            className="ep-btn-primary"
             style={{
               fontSize: 12,
               fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--accent)',
               borderRadius: 5,
               padding: '8px 16px',

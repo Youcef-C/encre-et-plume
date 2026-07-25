@@ -34,6 +34,10 @@ write a verdict that either ships the story or sends it back to the Manager with
 - The QA report shows a FAIL/BLOCKED, or its PASS claims aren't backed by real evidence.
 - A blocking correctness or **security** issue exists (broken authz, missing validation at a trust
   boundary, leaked secret, money-path error).
+- **Incomplete CRUD:** the story introduces a resource users can create/edit but an operation of its
+  lifecycle is missing — most often **Delete** (no backend route, no owner/role authz on it, or no UI
+  affordance/confirmation). Blocking unless the plan explicitly scoped that operation out. Check the create
+  path has a matching delete before you pass.
 - The build, typecheck, lint, or tests don't actually pass. **Run the full CI command set yourself on
   Node 24** (`nvm use` → `.nvmrc`=24): `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test` — these are
   what CI runs; a non-zero exit in ANY is blocking (don't trust QA's prose; re-run). A green `pnpm test`

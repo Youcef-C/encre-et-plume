@@ -150,6 +150,20 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 5px 5px 0 var(--shadow);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   BUTTON COLOR SCHEME — the fixed set. Every button in the app uses ONE of
+   these intent classes; never hand-style a button's colors inline.
+     .ep-btn-primary    accent red  → main call-to-action (submit, confirm-primary)
+     .ep-btn-secondary  white/card  → cancel / alternate / dismiss
+     .ep-btn-dark       ink/black   → neutral high-contrast action
+     .ep-btn-success    green       → confirm / accept / validate (positive)
+     .ep-btn-danger     red #c0392b → delete / leave / destroy (destructive)
+                        + .ep-btn-danger-outline for a two-step delete affordance
+   All share the manga-zine idiom (3px ink border, 6px radius, hard offset
+   shadow, translate on hover/press). Compact size: .ep-btn-compact--<intent>.
+   Per-instance layout (width, min-height, padding, letter-spacing) stays inline.
+   ──────────────────────────────────────────────────────────────────────── */
+
 /* Primary button: accent fill, ink border, hard shadow */
 .ep-btn-primary {
   background-color: var(--accent);
@@ -199,6 +213,58 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--accent-soft);
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0 var(--shadow);
+}
+
+/* Dark / Success / Danger — same box model as .ep-btn-primary; intent fill only.
+   .ep-btn-dark uses --ink fill + --paper text so it stays high-contrast in BOTH
+   themes (dark-on-light in light mode, light-on-dark in dark mode). Green/danger
+   are fixed saturated hexes with white text — legible in both themes. */
+.ep-btn-dark,
+.ep-btn-success,
+.ep-btn-danger,
+.ep-btn-danger-outline {
+  border: 3px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow);
+  transition: transform 0.08s, box-shadow 0.08s, background-color 0.08s, color 0.08s;
+}
+.ep-btn-dark { background-color: var(--ink); color: var(--paper); }
+.ep-btn-success { background-color: #1f8a5b; color: #fff; }
+.ep-btn-danger { background-color: #c0392b; color: #fff; }
+.ep-btn-danger-outline { background-color: var(--card); color: #c0392b; border-color: #c0392b; }
+
+.ep-btn-dark:hover,
+.ep-btn-success:hover,
+.ep-btn-danger:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+/* Two-step delete: outline fills to solid danger on hover. */
+.ep-btn-danger-outline:hover {
+  background-color: #c0392b;
+  color: #fff;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+.ep-btn-dark:active,
+.ep-btn-success:active,
+.ep-btn-danger:active,
+.ep-btn-danger-outline:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.ep-btn-dark:disabled,
+.ep-btn-success:disabled,
+.ep-btn-danger:disabled,
+.ep-btn-danger-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 3px 3px 0 var(--shadow);
 }
 
 /* MC-3: sender name on the invitations list reads as a link to the profile. */
@@ -1575,8 +1641,14 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-btn-compact--ghost:hover {
   background: var(--accent-soft);
 }
+/* Compact intents mirroring the full-size scheme (compact is only a size). */
+.ep-btn-compact--dark { background: var(--ink); color: var(--paper); }
+.ep-btn-compact--success { background: #1f8a5b; color: #fff; }
+.ep-btn-compact--danger { background: #c0392b; color: #fff; }
 
-/* Green "Valider les modifications" CTA — the app button idiom in the resolved-green semantic. */
+/* Green "Valider les modifications" CTA — legacy compact-green used in the editor/revision
+   surfaces. Equivalent intent to .ep-btn-success (the canonical green); kept at its tuned
+   smaller sizing so the dense toolbars don't reflow. Prefer .ep-btn-success in new code. */
 .ep-btn-validate {
   background: #1f8a5b;
   color: #fff;

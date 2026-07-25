@@ -26,11 +26,16 @@ export default function GlobalError({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Erreur — Encre &amp; Plume</title>
         <style>{`
-          :root { --ink: #16130f; --paper: #f1ece1; --accent: #e8261c; --shadow: #16130f; }
+          :root { --ink: #16130f; --paper: #f1ece1; --card: #fffefb; --accent: #e8261c; --shadow: #16130f; }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: 'Zen Kaku Gothic New', system-ui, sans-serif;
             background-color: #fbfaf6;
+            background-image:
+              radial-gradient(rgba(22, 19, 15, 0.04) 1.2px, transparent 1.3px),
+              radial-gradient(rgba(22, 19, 15, 0.028) 1.2px, transparent 1.3px);
+            background-size: 12px 12px, 12px 12px;
+            background-position: 0 0, 6px 6px;
             color: var(--ink);
             min-height: 100dvh;
             display: grid;
@@ -38,9 +43,9 @@ export default function GlobalError({
             padding: 1.5rem;
           }
           .error-card {
-            background: var(--paper);
+            background: var(--card);
             border: 3px solid var(--ink);
-            border-radius: 4px;
+            border-radius: 8px;
             box-shadow: 5px 5px 0 var(--shadow);
             padding: 2.5rem 2rem;
             max-width: 420px;
@@ -76,22 +81,22 @@ export default function GlobalError({
             display: inline-flex;
             align-items: center;
             gap: 0.375rem;
-            background: var(--ink);
+            background: var(--accent);
             color: #fff;
             border: 3px solid var(--ink);
-            border-radius: 2px;
-            box-shadow: 3px 3px 0 var(--accent);
+            border-radius: 6px;
+            box-shadow: 3px 3px 0 var(--shadow);
             padding: 0.625rem 1.5rem;
             font-family: 'Anton', sans-serif;
             font-size: 0.875rem;
             letter-spacing: 0.1em;
             text-transform: uppercase;
             cursor: pointer;
-            transition: box-shadow 0.1s, transform 0.1s;
+            transition: box-shadow 0.08s, transform 0.08s;
             min-height: 44px;
           }
-          .retry-btn:hover { box-shadow: 5px 5px 0 var(--accent); }
-          .retry-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--accent); }
+          .retry-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow); }
+          .retry-btn:active { transform: translate(1px, 1px); box-shadow: 2px 2px 0 var(--shadow); }
           .retry-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
         `}</style>
       </head>

@@ -530,13 +530,14 @@ export default function ApplyCallModal({
             <button
               type="button"
               onClick={onClose}
-              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)' }}
+              className="ep-btn-primary"
+              style={footerBtn}
             >
               Fermer
             </button>
           ) : (
             <>
-              <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+              <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
                 Annuler
               </button>
               <button
@@ -546,11 +547,9 @@ export default function ApplyCallModal({
                 // so a lingering uploadBusy can never clear — ignore it once the cap is reached (only
                 // the "add more" affordance is gated by atMax). ≥1 sample is enforced in handleSubmit.
                 disabled={pending || (uploadBusy && !atMax)}
+                className="ep-btn-primary"
                 style={{
                   ...footerBtn,
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  boxShadow: '3px 3px 0 var(--shadow)',
                   opacity: pending || (uploadBusy && !atMax) ? 0.6 : 1,
                 }}
               >

@@ -153,6 +153,7 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
                       onClick={() => void makeActive(v.version)}
                       disabled={switching !== null}
                       aria-label={`Rendre active la version ${v.version}`}
+                      className="ep-btn-secondary"
                       style={makeActiveBtn}
                     >
                       {switching === v.version ? 'Activation…' : 'Rendre active'}
@@ -208,7 +209,7 @@ export default function AssetVersionsModal({ slug, asset, readOnly = false, onCl
           {phase.kind === 'saving' && (
             <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>Enregistrement…</div>
           )}
-          <button type="button" onClick={() => inputRef.current?.click()} disabled={busy} style={primaryBtn}>
+          <button type="button" onClick={() => inputRef.current?.click()} disabled={busy} className="ep-btn-primary" style={primaryBtn}>
             ＋ Nouvelle version
           </button>
         </div>
@@ -296,8 +297,6 @@ const makeActiveBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '5px 10px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   whiteSpace: 'nowrap',
 };
@@ -318,8 +317,6 @@ const primaryBtn: React.CSSProperties = {
   alignSelf: 'flex-start',
   fontSize: 14,
   fontWeight: 700,
-  background: 'var(--accent)',
-  color: '#fff',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 16px',

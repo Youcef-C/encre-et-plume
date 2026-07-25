@@ -204,7 +204,7 @@ export default function SecuritySessions() {
               type="button"
               onClick={() => void handleRevoke(s.id)}
               disabled={s.current || revoking === s.id}
-              className="ep-btn-secondary"
+              className="ep-btn-danger"
               style={{ fontSize: 13, padding: '8px 14px', minHeight: 44 }}
               aria-label={`Déconnecter la session ${parseDevice(s.userAgent)}`}
             >
@@ -220,7 +220,7 @@ export default function SecuritySessions() {
           ref={triggerOthersRef}
           type="button"
           onClick={() => setConfirmOthers(true)}
-          className="ep-btn-secondary"
+          className="ep-btn-danger"
           style={{ fontSize: 14, padding: '10px 16px', minHeight: 44 }}
         >
           Déconnecter toutes les autres sessions

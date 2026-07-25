@@ -140,15 +140,13 @@ export function SupportCard({ account }: { account: AccountSummary | null }) {
       <button
         type="button"
         onClick={trigger}
+        className="ep-btn-primary"
         style={{
           marginTop: 10,
           width: '100%',
           textAlign: 'center',
           fontWeight: 700,
-          background: 'var(--accent)',
-          color: '#fff',
           border: '2px solid var(--ink)',
-          borderRadius: 6,
           padding: 8,
           cursor: 'pointer',
           boxShadow: '2px 2px 0 var(--shadow)',

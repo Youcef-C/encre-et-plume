@@ -126,15 +126,13 @@ export default function ArtistSidebar({
           <button
             type="button"
             onClick={trigger}
+            className="ep-btn-primary"
             style={{
               flex: 1,
               textAlign: 'center',
               fontSize: 13,
               fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: 8,
               cursor: 'pointer',
               boxShadow: '2px 2px 0 var(--shadow)',
@@ -151,6 +149,7 @@ export default function ArtistSidebar({
         <button
           type="button"
           onClick={handleProposer}
+          className="ep-btn-dark"
           style={{
             display: 'flex',
             width: '100%',
@@ -158,10 +157,7 @@ export default function ArtistSidebar({
             marginTop: 8,
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--ink)',
-            color: 'var(--paper)',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: 8,
             cursor: 'pointer',
             boxShadow: '2px 2px 0 var(--accent)',

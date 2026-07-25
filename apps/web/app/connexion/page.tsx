@@ -12,7 +12,6 @@ export default function ConnexionPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 16px',
-        background: 'var(--paper)',
       }}
     >
       <div

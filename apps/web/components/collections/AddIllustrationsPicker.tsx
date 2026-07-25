@@ -167,14 +167,15 @@ export default function AddIllustrationsPicker({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
-          <button type="button" onClick={close} disabled={posting} style={{ ...footerBtn, background: 'var(--card)' }}>
+          <button type="button" onClick={close} disabled={posting} className="ep-btn-secondary" style={footerBtn}>
             Annuler
           </button>
           <button
             type="button"
             onClick={() => void confirm()}
             disabled={selected.length === 0 || posting}
-            style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: selected.length === 0 || posting ? 0.6 : 1 }}
+            className="ep-btn-primary"
+            style={{ ...footerBtn, opacity: selected.length === 0 || posting ? 0.6 : 1 }}
           >
             {posting ? 'Ajout…' : `Ajouter (${selected.length})`}
           </button>

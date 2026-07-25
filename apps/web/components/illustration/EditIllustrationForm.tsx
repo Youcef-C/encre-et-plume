@@ -189,19 +189,21 @@ export default function EditIllustrationForm({
               setConfirmingDelete(true);
             }}
             disabled={deleting || pending}
-            style={{ ...footerBtn, background: 'var(--card)', color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            className="ep-btn-danger-outline"
+            style={{ ...footerBtn, borderColor: '#c0392b' }}
           >
             Supprimer l’illustration
           </button>
           <div style={{ display: 'flex', gap: 10, marginLeft: 'auto' }}>
-            <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+            <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
               Annuler
             </button>
             <button
               type="button"
               onClick={() => void handleSubmit()}
               disabled={pending || deleting || uploadBusy}
-              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: pending || uploadBusy ? 0.6 : 1 }}
+              className="ep-btn-primary"
+              style={{ ...footerBtn, opacity: pending || uploadBusy ? 0.6 : 1 }}
             >
               {pending ? 'Enregistrement…' : 'Enregistrer'}
             </button>
@@ -235,14 +237,15 @@ export default function EditIllustrationForm({
               </p>
             )}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting} style={{ ...footerBtn, background: 'var(--card)' }}>
+              <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting} className="ep-btn-secondary" style={footerBtn}>
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={() => void handleDelete()}
                 disabled={deleting}
-                style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: deleting ? 0.6 : 1 }}
+                className="ep-btn-danger"
+                style={{ ...footerBtn, opacity: deleting ? 0.6 : 1 }}
               >
                 {deleting ? 'Suppression…' : 'Supprimer'}
               </button>

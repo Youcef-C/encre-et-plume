@@ -47,6 +47,7 @@ const footerBtn: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
+// Layout-only base for the compact row buttons; color comes from .ep-btn-secondary.
 const rowBtn: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
@@ -56,8 +57,6 @@ const rowBtn: React.CSSProperties = {
   minHeight: 36,
   cursor: 'pointer',
   fontFamily: 'inherit',
-  background: 'var(--card)',
-  color: 'var(--ink)',
 };
 const sectionLabel: React.CSSProperties = {
   display: 'block',
@@ -281,7 +280,7 @@ export default function ManageCollectionsModal({
             {loadState === 'error' && (
               <div role="alert">
                 <p style={{ ...errText, marginTop: 0 }}>Impossible de charger vos collections.</p>
-                <button type="button" onClick={() => setRetryKey((k) => k + 1)} style={{ ...rowBtn, marginTop: 10 }}>
+                <button type="button" onClick={() => setRetryKey((k) => k + 1)} className="ep-btn-secondary" style={{ ...rowBtn, marginTop: 10 }}>
                   Réessayer
                 </button>
               </div>
@@ -306,6 +305,7 @@ export default function ManageCollectionsModal({
                                 type="button"
                                 onClick={() => toggle(c.id, !kept)}
                                 aria-label={`${kept ? 'Retirer de' : 'Ajouter à'} « ${c.title} »`}
+                                className="ep-btn-secondary"
                                 style={{ ...rowBtn, color: kept ? 'var(--accent)' : 'var(--ink)', borderColor: kept ? 'var(--accent)' : 'var(--ink)' }}
                               >
                                 {kept ? 'Retirer' : 'Ajouter'}
@@ -351,7 +351,7 @@ export default function ManageCollectionsModal({
                   )}
                 </div>
 
-                <button type="button" onClick={() => setShowCreate(true)} style={{ ...rowBtn }}>
+                <button type="button" onClick={() => setShowCreate(true)} className="ep-btn-secondary" style={rowBtn}>
                   ＋ Nouvelle collection
                 </button>
 
@@ -365,14 +365,15 @@ export default function ManageCollectionsModal({
           </div>
 
           <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
-            <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+            <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
               Annuler
             </button>
             <button
               type="button"
               onClick={() => void handleSave()}
               disabled={saving || loadState !== 'ready'}
-              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: saving || loadState !== 'ready' ? 0.6 : 1 }}
+              className="ep-btn-primary"
+              style={{ ...footerBtn, opacity: saving || loadState !== 'ready' ? 0.6 : 1 }}
             >
               {saving ? 'Enregistrement…' : 'Sauvegarder'}
             </button>

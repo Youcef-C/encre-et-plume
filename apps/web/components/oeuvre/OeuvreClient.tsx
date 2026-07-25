@@ -103,13 +103,11 @@ export default function OeuvreClient({ slug }: { slug: string }) {
         <button
           type="button"
           onClick={() => setRetryKey((k) => k + 1)}
+          className="ep-btn-primary"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '8px 16px',
             cursor: 'pointer',
           }}

@@ -137,7 +137,8 @@ export default function ReactionsAside({ workSlug, chapterId, likeCount, favorit
           type="button"
           onClick={trigger}
           aria-label="Envoyer le commentaire"
-          style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: 'var(--accent)', border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 11px', cursor: 'pointer' }}
+          className="ep-btn-primary"
+          style={{ fontSize: 12, fontWeight: 700, border: '2px solid var(--ink)', padding: '6px 11px', cursor: 'pointer' }}
         >
           <ArrowUpIcon size={12} />
         </button>

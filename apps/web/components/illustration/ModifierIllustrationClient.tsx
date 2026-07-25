@@ -162,7 +162,8 @@ export default function ModifierIllustrationClient({ id }: { id: string }) {
           <button
             type="button"
             onClick={() => router.push('/illustration/' + id)}
-            style={{ ...footerBtn, background: 'var(--card)' }}
+            className="ep-btn-secondary"
+            style={footerBtn}
           >
             Annuler
           </button>
@@ -170,7 +171,8 @@ export default function ModifierIllustrationClient({ id }: { id: string }) {
             type="button"
             onClick={() => void handleSubmit()}
             disabled={pending || uploadBusy}
-            style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: pending || uploadBusy ? 0.6 : 1 }}
+            className="ep-btn-primary"
+            style={{ ...footerBtn, opacity: pending || uploadBusy ? 0.6 : 1 }}
           >
             {pending ? 'Enregistrement…' : 'Enregistrer'}
           </button>

@@ -124,7 +124,7 @@ export default function CollectionOeuvre({ work, account }: { work: WorkDetail; 
           )}
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Link href={`/galerie?collection=${work.id}`} style={{ ...actionBase, background: 'var(--accent)', color: '#fff' }}>
+            <Link href={`/galerie?collection=${work.id}`} className="ep-btn-primary" style={actionBase}>
               Voir la galerie
             </Link>
             <button
@@ -164,7 +164,7 @@ export default function CollectionOeuvre({ work, account }: { work: WorkDetail; 
               {save.active ? 'Dans ma liste' : 'Ma liste'}
             </button>
             {isOwner && (
-              <Link href={`/collection/${work.id}/gerer`} style={{ ...actionBase, background: 'var(--ink)', color: 'var(--paper)', boxShadow: '3px 3px 0 var(--accent)' }}>
+              <Link href={`/collection/${work.id}/gerer`} className="ep-btn-dark" style={{ ...actionBase, boxShadow: '3px 3px 0 var(--accent)' }}>
                 Gérer la collection
               </Link>
             )}

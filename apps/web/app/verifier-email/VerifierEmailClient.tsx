@@ -66,7 +66,6 @@ export default function VerifierEmailClient() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 16px',
-        background: 'var(--paper)',
       }}
     >
       <div
@@ -152,7 +151,7 @@ export default function VerifierEmailClient() {
                 <button
                   onClick={handleResend}
                   disabled={resend === 'pending' || !resendEmail.trim()}
-                  className="ep-btn"
+                  className="ep-btn-primary"
                   style={{ minHeight: 44, width: '100%' }}
                 >
                   Renvoyer l&apos;e-mail

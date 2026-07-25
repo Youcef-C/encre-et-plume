@@ -42,10 +42,9 @@ export default function CommunityBand() {
       </div>
       <Link
         href="/partenaires"
+        className="ep-btn-secondary"
         style={{
           position: 'relative',
-          background: 'var(--card)',
-          color: 'var(--ink)',
           border: '3px solid var(--ink)',
           borderRadius: 6,
           padding: '14px 24px',

@@ -50,11 +50,10 @@ export default function IllustrationComments({ account }: { account: AccountSumm
           <button
             type="button"
             onClick={trigger}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
               fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
               borderRadius: 7,
               padding: '9px 16px',

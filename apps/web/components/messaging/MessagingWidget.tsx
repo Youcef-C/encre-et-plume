@@ -338,7 +338,8 @@ function ChatThread({
             onClick={() => setShowMembers(true)}
             aria-label="Gérer le groupe"
             title="Gérer le groupe"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, minHeight: 44, border: '2px solid var(--ink)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--ink)', color: '#fff', flex: 'none' }}
+            className="ep-btn-dark"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, minHeight: 44, border: '2px solid var(--ink)', cursor: 'pointer', fontFamily: 'inherit', flex: 'none' }}
           >
             <GearIcon size={18} />
           </button>
@@ -517,11 +518,10 @@ function RequestActionBar({
           type="button"
           onClick={() => void respond('accept')}
           disabled={busy}
+          className="ep-btn-primary"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
             borderRadius: 8,
             padding: '8px 14px',
@@ -538,11 +538,10 @@ function RequestActionBar({
           type="button"
           onClick={() => void respond('decline')}
           disabled={busy}
+          className="ep-btn-secondary"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--card)',
-            color: 'var(--ink)',
             border: '2px solid var(--ink)',
             borderRadius: 8,
             padding: '8px 14px',
@@ -767,7 +766,8 @@ function Composer({
       <button
         type="submit"
         disabled={uploading}
-        style={{ fontSize: 13, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 8, padding: '7px 13px', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.55 : 1, boxShadow: '2px 2px 0 var(--shadow)', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+        className="ep-btn-primary"
+        style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 8, padding: '7px 13px', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.55 : 1, boxShadow: '2px 2px 0 var(--shadow)', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
       >
         Envoyer
       </button>
@@ -1005,7 +1005,7 @@ export default function MessagingWidget() {
                 {conversationsState === 'error' && (
                   <div role="alert" style={{ padding: 16, textAlign: 'center' }}>
                     <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '0 0 10px' }}>Impossible de charger vos messages.</p>
-                    <button type="button" onClick={reloadConversations} style={{ fontSize: 13, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <button type="button" onClick={reloadConversations} className="ep-btn-primary" style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>
                       Réessayer
                     </button>
                   </div>

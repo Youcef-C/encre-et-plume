@@ -91,6 +91,7 @@ export default function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
+            className="ep-btn-secondary"
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -98,8 +99,6 @@ export default function ConfirmDialog({
               borderRadius: 7,
               padding: '8px 16px',
               cursor: 'pointer',
-              background: 'var(--card)',
-              color: 'var(--ink)',
               fontFamily: 'inherit',
               minHeight: 40,
             }}
@@ -110,7 +109,8 @@ export default function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             // B6 (CS-5 iter 6) — the destructive action uses the design-system accent red
-            // (--accent #e8261c), not the off-brand muted #c0392b.
+            // (--accent #e8261c via .ep-btn-primary), not the off-brand muted #c0392b.
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -118,8 +118,6 @@ export default function ConfirmDialog({
               borderRadius: 7,
               padding: '8px 16px',
               cursor: 'pointer',
-              background: 'var(--accent)',
-              color: '#fff',
               fontFamily: 'inherit',
               minHeight: 40,
             }}

@@ -167,14 +167,15 @@ export default function GroupCreateModal({
         </div>
 
         <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
-          <button type="button" onClick={onClose} style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)' }}>
+          <button type="button" onClick={onClose} className="ep-btn-secondary" style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit' }}>
             Annuler
           </button>
           <button
             type="button"
             onClick={() => void handleSubmit()}
             disabled={submitting}
-            style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: submitting ? 0.6 : 1 }}
+            className="ep-btn-primary"
+            style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', padding: '9px 18px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', opacity: submitting ? 0.6 : 1 }}
           >
             {submitting ? 'Création…' : 'Créer le groupe'}
           </button>

@@ -349,12 +349,12 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           </OnBrandSelect>
         </div>
         {hasFilters && (
-          <button type="button" onClick={resetFilters} style={resetBtn}>
+          <button type="button" onClick={resetFilters} className="ep-btn-secondary" style={resetBtn}>
             Réinitialiser
           </button>
         )}
         {!readOnly && (
-          <button type="button" onClick={() => fileInputRef.current?.click()} style={importBtn}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="ep-btn-primary" style={importBtn}>
             ＋ Importer
           </button>
         )}
@@ -413,16 +413,16 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           </span>
         </button>
         <div style={{ display: 'flex', gap: 9, justifyContent: 'center', flexWrap: 'wrap', marginTop: 14 }}>
-          <button type="button" onClick={() => fileInputRef.current?.click()} style={sourcePrimary}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="ep-btn-primary" style={sourcePrimary}>
             Parcourir…
           </button>
-          <button type="button" aria-disabled disabled title="Bientôt disponible" style={sourceDisabled}>
+          <button type="button" aria-disabled disabled title="Bientôt disponible" className="ep-btn-secondary" style={sourceDisabled}>
             Tablette
           </button>
-          <button type="button" onClick={() => setUrlOpen((v) => !v)} aria-expanded={urlOpen} style={sourceSecondary}>
+          <button type="button" onClick={() => setUrlOpen((v) => !v)} aria-expanded={urlOpen} className="ep-btn-secondary" style={sourceSecondary}>
             Lien · URL
           </button>
-          <button type="button" aria-disabled disabled title="Bientôt disponible" style={sourceDisabled}>
+          <button type="button" aria-disabled disabled title="Bientôt disponible" className="ep-btn-secondary" style={sourceDisabled}>
             Cloud
           </button>
         </div>
@@ -454,7 +454,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
               required
               style={{ ...searchInput, minWidth: 240, flex: '1 1 240px', maxWidth: 420 }}
             />
-            <button type="submit" disabled={urlBusy} style={sourcePrimary}>
+            <button type="submit" disabled={urlBusy} className="ep-btn-primary" style={sourcePrimary}>
               {urlBusy ? 'Import…' : 'Importer'}
             </button>
           </form>
@@ -485,10 +485,10 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
               {u.status === 'error' && (
                 <>
                   <span role="alert" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>{u.message}</span>
-                  <button type="button" onClick={() => retryUpload(u)} style={smallBtn}>
+                  <button type="button" onClick={() => retryUpload(u)} className="ep-btn-secondary" style={smallBtn}>
                     Réessayer
                   </button>
-                  <button type="button" onClick={() => dismissUpload(u.id)} aria-label={`Retirer ${u.name}`} style={smallBtn}>
+                  <button type="button" onClick={() => dismissUpload(u.id)} aria-label={`Retirer ${u.name}`} className="ep-btn-secondary" style={smallBtn}>
                     Retirer
                   </button>
                 </>
@@ -538,13 +538,13 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
           </div>
           {data && data.totalPages > 1 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'center', marginTop: 20 }}>
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} style={smallBtn}>
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="ep-btn-secondary" style={smallBtn}>
                 ‹ Précédent
               </button>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
                 Page {data.page} / {data.totalPages}
               </span>
-              <button type="button" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)} style={smallBtn}>
+              <button type="button" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)} className="ep-btn-secondary" style={smallBtn}>
                 Suivant ›
               </button>
             </div>
@@ -660,6 +660,7 @@ function AssetCard({
             type="button"
             onClick={onPreview}
             disabled={!asset.previewable}
+            className="ep-btn-secondary"
             style={{ ...cardActionBtn, opacity: asset.previewable ? 1 : 0.5 }}
             aria-label={`Aperçu de ${asset.filename}`}
           >
@@ -667,14 +668,15 @@ function AssetCard({
           </button>
           {!readOnly && (
             <>
-              <button type="button" onClick={onLink} aria-label={`Lier ${asset.filename} à une carte`} style={cardActionBtn}>
+              <button type="button" onClick={onLink} aria-label={`Lier ${asset.filename} à une carte`} className="ep-btn-secondary" style={cardActionBtn}>
                 ＋ Lier à une carte
               </button>
               <button
                 type="button"
                 onClick={onDelete}
                 aria-label={`Supprimer ${asset.filename}`}
-                style={{ ...cardActionBtn, color: '#c0392b', borderColor: '#c0392b' }}
+                className="ep-btn-danger-outline"
+                style={{ ...cardActionBtn, border: '2px solid #c0392b' }}
               >
                 <TrashIcon size={13} /> Supprimer
               </button>
@@ -722,8 +724,6 @@ const searchInput: React.CSSProperties = {
 const importBtn: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  background: 'var(--accent)',
-  color: '#fff',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 16px',
@@ -740,8 +740,6 @@ const resetBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '8px 14px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 44,
 };
@@ -749,8 +747,6 @@ const resetBtn: React.CSSProperties = {
 const sourcePrimary: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  background: 'var(--accent)',
-  color: '#fff',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 16px',
@@ -763,8 +759,6 @@ const sourcePrimary: React.CSSProperties = {
 const sourceSecondary: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  background: 'var(--card)',
-  color: 'var(--ink)',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 16px',
@@ -773,6 +767,7 @@ const sourceSecondary: React.CSSProperties = {
   minHeight: 44,
 };
 
+// Disabled source buttons keep .ep-btn-secondary's card fill (from the class) but dim + muted text.
 const sourceDisabled: React.CSSProperties = {
   ...sourceSecondary,
   color: 'var(--ink2)',
@@ -844,8 +839,6 @@ const cardActionBtn: React.CSSProperties = {
   flex: '1 1 auto',
   fontSize: 11,
   fontWeight: 700,
-  color: 'var(--ink)',
-  background: 'var(--card)',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   cursor: 'pointer',
@@ -872,8 +865,6 @@ const smallBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '6px 12px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 36,
 };

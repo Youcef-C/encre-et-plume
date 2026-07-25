@@ -80,6 +80,7 @@ const roleChip: React.CSSProperties = {
   padding: '1px 8px',
 };
 
+// Layout-only base — colour comes from the .ep-btn-* class applied alongside at each call site.
 const actionBtn: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
@@ -87,8 +88,6 @@ const actionBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '7px 13px',
   minHeight: 44,
-  background: 'var(--card)',
-  color: 'var(--ink)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   textDecoration: 'none',
@@ -96,20 +95,10 @@ const actionBtn: React.CSSProperties = {
   alignItems: 'center',
 };
 
-const primaryBtn = (background: string): React.CSSProperties => ({
-  ...actionBtn,
-  background,
-  color: '#fff',
-  boxShadow: '2px 2px 0 var(--shadow)',
-});
-
 const retryBtn: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  background: 'var(--accent)',
-  color: '#fff',
   border: '2px solid var(--ink)',
-  borderRadius: 6,
   padding: '8px 16px',
   cursor: 'pointer',
   fontFamily: 'inherit',
@@ -141,7 +130,7 @@ function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div role="alert" style={{ padding: '20px 0' }}>
       <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>{message}</p>
-      <button type="button" onClick={onRetry} style={retryBtn}>
+      <button type="button" onClick={onRetry} className="ep-btn-primary" style={retryBtn}>
         Réessayer
       </button>
     </div>
@@ -193,7 +182,8 @@ function RequestRow({
           type="button"
           onClick={() => onDecide(req, 'accepted')}
           aria-label={`Accepter la demande de ${req.from.name}`}
-          style={primaryBtn('#1f8a5b')}
+          className="ep-btn-success"
+          style={actionBtn}
         >
           Accepter
         </button>
@@ -201,7 +191,8 @@ function RequestRow({
           type="button"
           onClick={() => onDecide(req, 'declined')}
           aria-label={`Refuser la demande de ${req.from.name}`}
-          style={primaryBtn('var(--accent)')}
+          className="ep-btn-danger"
+          style={actionBtn}
         >
           Refuser
         </button>
@@ -245,6 +236,7 @@ function SentRequestRow({ req, onWithdraw }: { req: ConnectionRequestItem; onWit
           type="button"
           onClick={() => onWithdraw(req)}
           aria-label={`Retirer la demande envoyée à ${req.from.name}`}
+          className="ep-btn-secondary"
           style={actionBtn}
         >
           Retirer
@@ -319,10 +311,10 @@ function ContactRow({
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>
         {confirming ? (
           <span role="group" aria-label={`Confirmer le retrait de ${contact.name}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button type="button" onClick={() => onRemove(contact)} style={primaryBtn('var(--accent)')}>
+            <button type="button" onClick={() => onRemove(contact)} className="ep-btn-danger" style={actionBtn}>
               Confirmer
             </button>
-            <button type="button" onClick={() => setConfirming(false)} style={actionBtn}>
+            <button type="button" onClick={() => setConfirming(false)} className="ep-btn-secondary" style={actionBtn}>
               Annuler
             </button>
           </span>
@@ -332,6 +324,7 @@ function ContactRow({
             <button
               type="button"
               aria-label={`Message à ${contact.name}`}
+              className="ep-btn-secondary"
               style={actionBtn}
               onClick={() => void openDm(contact.userId)}
             >
@@ -344,6 +337,7 @@ function ContactRow({
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((o) => !o)}
+                className="ep-btn-secondary"
                 style={{ ...actionBtn, padding: '7px 12px', fontSize: 16, lineHeight: 1 }}
               >
                 <span aria-hidden="true">⋯</span>
@@ -456,7 +450,8 @@ function SuggestionCard({
         type="button"
         onClick={() => onConnect(item)}
         aria-label={`Se connecter avec ${item.name}`}
-        style={{ ...primaryBtn('var(--accent)'), justifyContent: 'center' }}
+        className="ep-btn-primary"
+        style={{ ...actionBtn, justifyContent: 'center' }}
       >
         ＋ Se connecter
       </button>
@@ -479,19 +474,19 @@ function SearchResultRow({
     switch (state) {
       case 'none':
         return (
-          <button type="button" onClick={() => onConnect(item)} aria-label={`Se connecter avec ${item.name}`} style={primaryBtn('var(--accent)')}>
+          <button type="button" onClick={() => onConnect(item)} aria-label={`Se connecter avec ${item.name}`} className="ep-btn-primary" style={actionBtn}>
             ＋ Se connecter
           </button>
         );
       case 'pending_out':
         return (
-          <button type="button" disabled aria-label={`Demande envoyée à ${item.name}`} style={{ ...actionBtn, opacity: 0.6, cursor: 'default' }}>
+          <button type="button" disabled aria-label={`Demande envoyée à ${item.name}`} className="ep-btn-secondary" style={{ ...actionBtn, opacity: 0.6, cursor: 'default' }}>
             Demande envoyée
           </button>
         );
       case 'pending_in':
         return (
-          <button type="button" onClick={onRespond} aria-label={`Répondre à la demande de ${item.name}`} style={actionBtn}>
+          <button type="button" onClick={onRespond} aria-label={`Répondre à la demande de ${item.name}`} className="ep-btn-secondary" style={actionBtn}>
             Répondre
           </button>
         );
@@ -781,7 +776,8 @@ export default function ContactsClient() {
         </p>
         <Link
           href="/connexion?redirect=/contacts"
-          style={{ display: 'inline-block', fontSize: 14, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '10px 20px', textDecoration: 'none' }}
+          className="ep-btn-primary"
+          style={{ display: 'inline-block', fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', padding: '10px 20px', textDecoration: 'none' }}
         >
           Se connecter
         </Link>
@@ -809,13 +805,15 @@ export default function ContactsClient() {
         <button
           type="button"
           onClick={() => searchInputRef.current?.focus()}
-          style={{ ...primaryBtn('var(--accent)'), whiteSpace: 'nowrap' }}
+          className="ep-btn-primary"
+          style={{ ...actionBtn, whiteSpace: 'nowrap' }}
         >
           ＋ Ajouter un contact
         </button>
         <button
           type="button"
           onClick={() => setInviteOpen(true)}
+          className="ep-btn-secondary"
           style={{ ...actionBtn, whiteSpace: 'nowrap' }}
         >
           Proposer une collab

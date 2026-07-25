@@ -14,6 +14,7 @@ import * as api from '../../lib/api';
 import { HeartIcon, PlusIcon, CheckIcon, FullscreenIcon, ShareIcon, FlagIcon, ShieldIcon, BanIcon } from '../icons';
 import IllustrationFullscreen from './IllustrationFullscreen';
 
+// Layout-only base for the action-bar buttons; color comes from .ep-btn-primary/.ep-btn-secondary.
 const actionBase: React.CSSProperties = {
   border: '2px solid var(--ink)',
   borderRadius: 7,
@@ -26,8 +27,6 @@ const actionBase: React.CSSProperties = {
   alignItems: 'center',
   gap: 7,
   fontFamily: 'inherit',
-  background: 'var(--card)',
-  color: 'var(--ink)',
 };
 
 export default function IllustrationViewer({ detail, account }: { detail: IllustrationDetail; account: AccountSummary | null }) {
@@ -104,7 +103,8 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
           onClick={like.toggle}
           aria-pressed={like.active}
           aria-label={like.active ? "Retirer le j'aime" : "J'aime"}
-          style={{ ...actionBase, background: like.active ? 'var(--accent)' : 'var(--card)', color: like.active ? '#fff' : 'var(--ink)' }}
+          className={like.active ? 'ep-btn-primary' : 'ep-btn-secondary'}
+          style={actionBase}
         >
           <HeartIcon size={14} /> J&apos;aime · {formatLikeCount(like.count)}
         </button>
@@ -113,7 +113,8 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
           onClick={save.toggle}
           aria-pressed={save.active}
           aria-label={save.active ? 'Retirer de ma liste' : 'Ajouter à ma liste'}
-          style={{ ...actionBase, background: save.active ? 'var(--accent)' : 'var(--card)', color: save.active ? '#fff' : 'var(--ink)' }}
+          className={save.active ? 'ep-btn-primary' : 'ep-btn-secondary'}
+          style={actionBase}
         >
           {save.active ? (
             <CheckIcon key="check" size={14} className="ep-icon-pop" />
@@ -122,13 +123,13 @@ export default function IllustrationViewer({ detail, account }: { detail: Illust
           )}{' '}
           {save.active ? 'Enregistré' : 'Enregistrer'}
         </button>
-        <button type="button" onClick={() => setFullscreen(true)} style={actionBase}>
+        <button type="button" onClick={() => setFullscreen(true)} className="ep-btn-secondary" style={actionBase}>
           <FullscreenIcon size={14} /> Plein écran
         </button>
-        <button type="button" onClick={trigger} style={actionBase}>
+        <button type="button" onClick={trigger} className="ep-btn-secondary" style={actionBase}>
           <ShareIcon size={14} /> Partager
         </button>
-        <button type="button" onClick={trigger} style={actionBase}>
+        <button type="button" onClick={trigger} className="ep-btn-secondary" style={actionBase}>
           <FlagIcon size={14} /> Signaler
         </button>
       </div>

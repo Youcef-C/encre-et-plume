@@ -143,13 +143,11 @@ export default function ReviewsSection({ work, account }: { work: WorkDetail; ac
           <button
             type="button"
             onClick={trigger}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
               fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: '8px 18px',
               cursor: 'pointer',
               boxShadow: '2px 2px 0 var(--shadow)',

@@ -12,7 +12,6 @@ export default function InscriptionPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 16px',
-        background: 'var(--paper)',
       }}
     >
       <div

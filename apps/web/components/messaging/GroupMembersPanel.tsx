@@ -97,7 +97,8 @@ function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)' }}
+            className="ep-btn-secondary"
+            style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '8px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Annuler
           </button>
@@ -106,7 +107,8 @@ function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 14px', minHeight: 44, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: busy ? 0.6 : 1 }}
+            className="ep-btn-danger"
+            style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '8px 14px', minHeight: 44, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: '2px 2px 0 var(--shadow)', opacity: busy ? 0.6 : 1 }}
           >
             {confirmLabel}
           </button>
@@ -247,7 +249,8 @@ export default function GroupMembersPanel({
                     onClick={() => setConfirm({ kind: 'kick', userId: p.userId, name: p.name })}
                     disabled={kicking}
                     aria-label={`Retirer ${p.name} du groupe`}
-                    style={{ fontSize: 12, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 12px', minHeight: 44, cursor: kicking ? 'not-allowed' : 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)', opacity: kicking ? 0.55 : 1, whiteSpace: 'nowrap' }}
+                    className="ep-btn-danger-outline"
+                    style={{ fontSize: 12, fontWeight: 700, padding: '8px 12px', minHeight: 44, cursor: kicking ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: kicking ? 0.55 : 1, whiteSpace: 'nowrap' }}
                   >
                     {kicking ? 'Retrait…' : 'Retirer'}
                   </button>
@@ -264,7 +267,8 @@ export default function GroupMembersPanel({
           type="button"
           onClick={() => setConfirm({ kind: 'leave' })}
           disabled={busy === 'leave'}
-          style={{ width: '100%', fontSize: 13, fontWeight: 700, border: '2px solid var(--accent)', borderRadius: 6, padding: '10px 14px', minHeight: 44, cursor: busy === 'leave' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--accent)', opacity: busy === 'leave' ? 0.55 : 1 }}
+          className="ep-btn-danger-outline"
+          style={{ width: '100%', fontSize: 13, fontWeight: 700, padding: '10px 14px', minHeight: 44, cursor: busy === 'leave' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: busy === 'leave' ? 0.55 : 1 }}
         >
           {busy === 'leave' ? 'Départ…' : 'Quitter le groupe'}
         </button>

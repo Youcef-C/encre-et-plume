@@ -13,7 +13,7 @@ The Creation Studio is where Creators, Writers, and Illustrators turn an idea in
 - [[CS-2]] — Project workspace "Espace projet"
 - [[CS-3]] — Import files "Importer dessins & textes"
 - [[CS-4]] — Real-time collaborative script editor "Éditeur"
-- [[CS-5]] — Nemu review & corrections "Révision de nemu & corrections"
+- [[CS-5]] — Review & corrections "Révision & corrections" (version-based review round)
 - [[CS-6]] — Page arrangement before publish "Réorganiser les pages"
 - [[CS-7]] — Chapter management (Chapitres tab)
 - [[CS-8]] — Project discussion chat (Discussion tab)
@@ -21,6 +21,12 @@ The Creation Studio is where Creators, Writers, and Illustrators turn an idea in
 - [[CS-10]] — Co-author permissions & revenue split "Gérer le groupe"
 - [[CS-11]] — Collaboration rights & licensing agreement "Droits & licence"
 - [[CS-12]] — Projects dashboard "Mes projets"
+- [[CS-13]] — Modify an illustration
+- [[CS-14]] — Œuvre completion status
+- [[CS-15]] — Comment change-tracking & delete
+- [[CS-16]] — Delete a project "Supprimer le projet"
+- [[CS-17]] — Zoom in the editor "Zoom dans l'éditeur"
+- [[CS-18]] — Scenario version comparison "Comparer les versions"
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-3]] Profile, [[F-5]] Notifications

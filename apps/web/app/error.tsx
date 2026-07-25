@@ -33,11 +33,8 @@ export default function Error({
       role="alert"
     >
       <div
+        className="ep-card"
         style={{
-          background: 'var(--paper)',
-          border: '3px solid var(--ink)',
-          borderRadius: '4px',
-          boxShadow: '5px 5px 0 var(--shadow)',
           padding: '2rem 1.5rem',
           maxWidth: '400px',
           width: '100%',
@@ -66,18 +63,10 @@ export default function Error({
         </p>
         <button
           onClick={reset}
+          className="ep-btn-primary"
           style={{
-            background: 'var(--ink)',
-            color: '#fff',
-            border: '3px solid var(--ink)',
-            borderRadius: '2px',
-            boxShadow: '3px 3px 0 var(--accent)',
-            padding: '0.625rem 1.5rem',
-            fontFamily: 'var(--font-display, Anton, sans-serif)',
-            fontSize: '0.875rem',
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
-            cursor: 'pointer',
             minHeight: '44px',
           }}
         >

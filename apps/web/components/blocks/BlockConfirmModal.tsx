@@ -163,7 +163,7 @@ export default function BlockConfirmModal({
             background: 'var(--paper)',
           }}
         >
-          <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+          <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
             Annuler
           </button>
           <button
@@ -171,11 +171,9 @@ export default function BlockConfirmModal({
             onClick={() => void handleBlock()}
             disabled={pending}
             aria-describedby={error ? errorId : undefined}
+            className="ep-btn-primary"
             style={{
               ...footerBtn,
-              background: 'var(--accent)',
-              color: '#fff',
-              boxShadow: '3px 3px 0 var(--shadow)',
               opacity: pending ? 0.6 : 1,
             }}
           >

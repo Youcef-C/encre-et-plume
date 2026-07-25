@@ -218,13 +218,11 @@ function InvitationRow({
               type="button"
               onClick={() => handle('accepted')}
               disabled={busy}
+              className="ep-btn-success"
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                background: '#1f8a5b',
-                color: '#fff',
                 border: '2px solid var(--ink)',
-                borderRadius: 6,
                 padding: '8px 12px',
                 minHeight: 44,
                 cursor: busy ? 'default' : 'pointer',
@@ -238,13 +236,11 @@ function InvitationRow({
               type="button"
               onClick={() => handle('declined')}
               disabled={busy}
+              className="ep-btn-danger"
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                background: 'var(--accent)',
-                color: '#fff',
                 border: '2px solid var(--ink)',
-                borderRadius: 6,
                 padding: '8px 12px',
                 minHeight: 44,
                 cursor: busy ? 'default' : 'pointer',
@@ -261,16 +257,15 @@ function InvitationRow({
           // Fallback to the dashboard if the slug is missing (older invites / non-project invite).
           <Link
             href={item.project.slug ? `/projet/${item.project.slug}` : '/projets'}
+            className="ep-btn-secondary"
             style={{
               fontSize: 12,
               fontWeight: 700,
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: '8px 12px',
               minHeight: 44,
               display: 'inline-flex',
               alignItems: 'center',
-              color: 'var(--ink)',
               textDecoration: 'none',
             }}
           >

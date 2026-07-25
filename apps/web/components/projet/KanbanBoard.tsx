@@ -1153,6 +1153,7 @@ function LabelCreatePopover({ slug, onCreated }: { slug: string; onCreated: (l: 
           <button
             type="button"
             onClick={() => void create()}
+            className="ep-btn-primary"
             style={{
               alignSelf: 'flex-start',
               fontSize: 13,
@@ -1161,8 +1162,6 @@ function LabelCreatePopover({ slug, onCreated }: { slug: string; onCreated: (l: 
               borderRadius: 7,
               padding: '7px 14px',
               cursor: 'pointer',
-              background: 'var(--accent)',
-              color: '#fff',
               fontFamily: 'inherit',
               minHeight: 36,
             }}

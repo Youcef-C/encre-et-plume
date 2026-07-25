@@ -498,15 +498,10 @@ function summaryLine(summary: MyProjectsSummary | undefined): string {
 
 const newProjectBtn: React.CSSProperties = {
   marginLeft: 'auto',
-  background: 'var(--accent)',
-  color: '#fff',
-  border: '3px solid var(--ink)',
-  borderRadius: 6,
   padding: '11px 20px',
   fontSize: 15,
   fontWeight: 700,
   cursor: 'pointer',
-  boxShadow: '3px 3px 0 var(--shadow)',
   fontFamily: 'inherit',
   minHeight: 44,
 };
@@ -613,12 +608,11 @@ export default function ProjetsClient() {
         </p>
         <Link
           href="/connexion?redirect=/projets"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
             borderRadius: 6,
             padding: '10px 20px',
@@ -641,7 +635,7 @@ export default function ProjetsClient() {
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
           Mes projets
         </h1>
-        <button type="button" onClick={() => router.push('/creer')} style={newProjectBtn}>
+        <button type="button" onClick={() => router.push('/creer')} className="ep-btn-primary" style={newProjectBtn}>
           ＋ Nouveau projet
         </button>
       </div>
@@ -700,11 +694,10 @@ export default function ProjetsClient() {
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
               fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
               borderRadius: 6,
               padding: '8px 16px',
@@ -724,7 +717,7 @@ export default function ProjetsClient() {
           ) : (
             <>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Aucun projet — créez-en un</div>
-              <button type="button" onClick={() => router.push('/creer')} style={{ ...newProjectBtn, marginLeft: 0 }}>
+              <button type="button" onClick={() => router.push('/creer')} className="ep-btn-primary" style={{ ...newProjectBtn, marginLeft: 0 }}>
                 ＋ Nouveau projet
               </button>
             </>
@@ -744,10 +737,10 @@ export default function ProjetsClient() {
               <button
                 type="button"
                 onClick={loadMore}
+                className="ep-btn-secondary"
                 style={{
                   fontSize: 13,
                   fontWeight: 700,
-                  background: 'var(--card)',
                   border: '2px solid var(--ink)',
                   borderRadius: 6,
                   padding: '10px 20px',

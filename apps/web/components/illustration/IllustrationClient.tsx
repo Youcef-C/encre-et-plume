@@ -93,13 +93,11 @@ export default function IllustrationClient({ id }: { id: string }) {
         <button
           type="button"
           onClick={() => setRetryKey((k) => k + 1)}
+          className="ep-btn-primary"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '8px 16px',
             cursor: 'pointer',
           }}
@@ -170,7 +168,8 @@ export default function IllustrationClient({ id }: { id: string }) {
                 type="button"
                 onClick={() => setEditOpen(true)}
                 aria-label="Modifier l'illustration"
-                style={{ display: 'block', width: '100%', fontSize: 14, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '3px solid var(--ink)', borderRadius: 6, padding: '10px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '4px 4px 0 var(--shadow)' }}
+                className="ep-btn-primary"
+                style={{ display: 'block', width: '100%', fontSize: 14, fontWeight: 700, padding: '10px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '4px 4px 0 var(--shadow)' }}
               >
                 Modifier
               </button>

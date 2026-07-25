@@ -142,7 +142,8 @@ export default function PartnerCard({
           <Link
             href={`/${slug}`}
             aria-label={`Profil de ${name}`}
-            style={{ ...button, textDecoration: 'none', color: 'var(--ink)' }}
+            className="ep-btn-secondary"
+            style={{ ...button, textDecoration: 'none' }}
           >
             Profil
           </Link>
@@ -150,7 +151,8 @@ export default function PartnerCard({
             type="button"
             onClick={() => onProposer(partner)}
             aria-label={`Proposer une collaboration à ${name}`}
-            style={{ ...button, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)' }}
+            className="ep-btn-primary"
+            style={button}
           >
             Proposer
           </button>

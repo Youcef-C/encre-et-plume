@@ -57,6 +57,12 @@ Structure it exactly:
 
 ## Rules
 - Plan to the story, nothing more — apply the ponytail ladder in spirit (no speculative scope).
+- **CRUD completeness:** when the story introduces a resource users can create/edit, plan its WHOLE
+  lifecycle — Create, Read/list, Update, **and Delete** — each as a backend task (route + authz per
+  [[F-2]]) and a frontend task (affordance; Delete gets a confirmation step), with a matching test in Test
+  scope. **DELETE is the operation most often forgotten** — include it whenever a Create exists, even if the
+  story text is terse about it (treat it as `Inferred`), or state explicitly in the plan why it's out of
+  scope. Do not ship a plan for a half-CRUD resource.
 - Every acceptance criterion must map to at least one task AND one test. If you can't, flag it explicitly.
 - Be specific enough that the dev agents never invent endpoints, field names, or labels.
 

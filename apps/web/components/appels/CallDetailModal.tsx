@@ -246,15 +246,11 @@ export default function CallDetailModal({
             <button
               type="button"
               onClick={() => setReloadKey((k) => k + 1)}
+              className="ep-btn-primary"
               style={{
                 fontSize: 13,
-                fontWeight: 700,
-                background: 'var(--accent)',
-                color: '#fff',
                 border: '2px solid var(--ink)',
-                borderRadius: 6,
                 padding: '8px 16px',
-                cursor: 'pointer',
               }}
             >
               Réessayer
@@ -453,12 +449,10 @@ export default function CallDetailModal({
                       </div>
                       <Link
                         href={`/${member.slug}`}
+                        className="ep-btn-secondary"
                         style={{
                           fontSize: 12,
-                          fontWeight: 700,
-                          color: 'var(--ink)',
                           border: '2px solid var(--ink)',
-                          borderRadius: 6,
                           padding: '6px 12px',
                           minHeight: 44,
                           display: 'inline-flex',
@@ -513,7 +507,8 @@ export default function CallDetailModal({
                     type="button"
                     onClick={() => void handleDelete()}
                     disabled={deleting}
-                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: deleting ? 0.6 : 1 }}
+                    className="ep-btn-danger"
+                    style={{ ...footerBtn, boxShadow: '2px 2px 0 var(--shadow)', opacity: deleting ? 0.6 : 1 }}
                   >
                     Confirmer la suppression
                   </button>
@@ -524,7 +519,8 @@ export default function CallDetailModal({
                       setDeleteError(null);
                     }}
                     disabled={deleting}
-                    style={{ ...footerBtn, background: 'var(--card)' }}
+                    className="ep-btn-secondary"
+                    style={footerBtn}
                   >
                     Annuler
                   </button>
@@ -548,7 +544,8 @@ export default function CallDetailModal({
                     type="button"
                     onClick={() => void handleCloseCall()}
                     disabled={closing}
-                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)', opacity: closing ? 0.6 : 1 }}
+                    className="ep-btn-primary"
+                    style={{ ...footerBtn, boxShadow: '2px 2px 0 var(--shadow)', opacity: closing ? 0.6 : 1 }}
                   >
                     {closing ? 'Clôture…' : 'Confirmer la clôture'}
                   </button>
@@ -559,7 +556,8 @@ export default function CallDetailModal({
                       setCloseError(null);
                     }}
                     disabled={closing}
-                    style={{ ...footerBtn, background: 'var(--card)' }}
+                    className="ep-btn-secondary"
+                    style={footerBtn}
                   >
                     Annuler
                   </button>
@@ -572,7 +570,7 @@ export default function CallDetailModal({
               </div>
             ) : (
               <>
-                <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+                <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
                   Fermer
                 </button>
 
@@ -581,7 +579,7 @@ export default function CallDetailModal({
                   <>
                     {closed && <span style={closedBadge}>Clôturé</span>}
                     {!closed && (
-                      <button type="button" onClick={() => setEditing(true)} style={{ ...footerBtn, background: 'var(--card)' }}>
+                      <button type="button" onClick={() => setEditing(true)} className="ep-btn-secondary" style={footerBtn}>
                         Éditer
                       </button>
                     )}
@@ -593,7 +591,8 @@ export default function CallDetailModal({
                           setCloseError(null);
                           setCloseConfirming(true);
                         }}
-                        style={{ ...footerBtn, background: 'var(--accent)', color: '#fff' }}
+                        className="ep-btn-primary"
+                        style={footerBtn}
                       >
                         Clôturer l&apos;appel
                       </button>
@@ -604,7 +603,8 @@ export default function CallDetailModal({
                         setDeleteError(null);
                         setConfirming(true);
                       }}
-                      style={{ ...footerBtn, background: 'var(--card)', border: '2px solid var(--accent)', color: 'var(--accent)' }}
+                      className="ep-btn-danger-outline"
+                      style={{ fontSize: 14, fontWeight: 700, padding: '9px 18px', minHeight: 44, fontFamily: 'inherit' }}
                     >
                       Supprimer
                     </button>
@@ -638,7 +638,8 @@ export default function CallDetailModal({
                   <button
                     type="button"
                     onClick={() => onCandidater(call)}
-                    style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)' }}
+                    className="ep-btn-primary"
+                    style={footerBtn}
                   >
                     Candidater
                   </button>

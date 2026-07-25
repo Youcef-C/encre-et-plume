@@ -266,6 +266,7 @@ const PublishIllustrationForm = forwardRef<PublishIllustrationHandle, {
           <button
             type="button"
             onClick={() => setNewOpen(true)}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -275,8 +276,6 @@ const PublishIllustrationForm = forwardRef<PublishIllustrationHandle, {
               minHeight: 44,
               cursor: 'pointer',
               fontFamily: 'inherit',
-              background: 'var(--accent)',
-              color: '#fff',
               boxShadow: '2px 2px 0 var(--shadow)',
             }}
           >
@@ -357,12 +356,10 @@ const PublishIllustrationForm = forwardRef<PublishIllustrationHandle, {
           type="button"
           onClick={() => void handleSubmit()}
           disabled={pending || uploadBusy}
+          className="ep-btn-primary"
           style={{
             fontSize: 15,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
-            border: '3px solid var(--ink)',
             borderRadius: 8,
             padding: '12px 22px',
             minHeight: 44,

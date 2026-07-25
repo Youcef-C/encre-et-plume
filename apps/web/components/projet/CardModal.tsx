@@ -240,7 +240,7 @@ export default function CardModal({
           <div role="alert" style={{ padding: 24, fontSize: 14, fontWeight: 700 }}>
             <span id={titleId}>Carte introuvable.</span>
             <div style={{ marginTop: 12 }}>
-              <button type="button" onClick={onClose} style={secondaryBtn}>
+              <button type="button" onClick={onClose} className="ep-btn-secondary" style={secondaryBtn}>
                 Fermer
               </button>
             </div>
@@ -712,6 +712,7 @@ export default function CardModal({
                   setDueDate('');
                   schedule({ dueDate: null });
                 }}
+                className="ep-btn-secondary"
                 style={secondaryBtn}
               >
                 Retirer
@@ -786,7 +787,7 @@ export default function CardModal({
         {/* Members-only delete */}
         {memberOnly && (
           <div style={{ marginTop: 18, borderTop: '2px solid var(--border)', paddingTop: 14 }}>
-            <button type="button" onClick={() => setConfirmDelete(true)} style={{ ...secondaryBtn, color: '#c0392b', borderColor: '#c0392b' }}>
+            <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...secondaryBtn, border: '2px solid #c0392b' }}>
               Supprimer la carte
             </button>
           </div>
@@ -1097,10 +1098,10 @@ function LabelsSection({
                   />
                   <Swatches value={editColor} onPick={setEditColor} />
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button type="button" onClick={() => void saveEdit(l.id)} style={primaryBtn}>
+                    <button type="button" onClick={() => void saveEdit(l.id)} className="ep-btn-primary" style={primaryBtn}>
                       Enregistrer
                     </button>
-                    <button type="button" onClick={() => setEditingId(null)} style={secondaryBtn}>
+                    <button type="button" onClick={() => setEditingId(null)} className="ep-btn-secondary" style={secondaryBtn}>
                       Annuler
                     </button>
                   </div>
@@ -1181,7 +1182,7 @@ function LabelsSection({
               style={inputStyle}
             />
             <Swatches value={newColor} onPick={setNewColor} />
-            <button type="button" onClick={() => void create()} style={{ ...primaryBtn, alignSelf: 'flex-start' }}>
+            <button type="button" onClick={() => void create()} className="ep-btn-primary" style={{ ...primaryBtn, alignSelf: 'flex-start' }}>
               Créer
             </button>
           </div>
@@ -1311,7 +1312,7 @@ function ChecklistSection({
             }}
             style={{ ...inputStyle, flex: 1 }}
           />
-          <button type="button" onClick={() => void add()} style={primaryBtn}>
+          <button type="button" onClick={() => void add()} className="ep-btn-primary" style={primaryBtn}>
             Ajouter
           </button>
         </div>
@@ -1426,10 +1427,10 @@ function CommentsSection({
                       style={{ ...inputStyle, height: 60, resize: 'vertical' }}
                     />
                     <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-                      <button type="button" onClick={() => void saveEdit(c.id)} style={primaryBtn}>
+                      <button type="button" onClick={() => void saveEdit(c.id)} className="ep-btn-primary" style={primaryBtn}>
                         Enregistrer
                       </button>
-                      <button type="button" onClick={() => setEditingId(null)} style={secondaryBtn}>
+                      <button type="button" onClick={() => setEditingId(null)} className="ep-btn-secondary" style={secondaryBtn}>
                         Annuler
                       </button>
                     </div>
@@ -1530,7 +1531,7 @@ function CommentsSection({
             </ul>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-            <button type="button" disabled={!body.trim()} onClick={() => void submit()} style={{ ...primaryBtn, opacity: body.trim() ? 1 : 0.5 }}>
+            <button type="button" disabled={!body.trim()} onClick={() => void submit()} className="ep-btn-primary" style={{ ...primaryBtn, opacity: body.trim() ? 1 : 0.5 }}>
               Commenter
             </button>
           </div>
@@ -1584,8 +1585,6 @@ const primaryBtn: React.CSSProperties = {
   borderRadius: 7,
   padding: '7px 14px',
   cursor: 'pointer',
-  background: 'var(--accent)',
-  color: '#fff',
   fontFamily: 'inherit',
   minHeight: 36,
 };
@@ -1597,8 +1596,6 @@ const secondaryBtn: React.CSSProperties = {
   borderRadius: 7,
   padding: '7px 14px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 36,
 };

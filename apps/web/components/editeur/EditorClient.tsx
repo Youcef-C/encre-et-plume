@@ -1482,7 +1482,7 @@ function Sidebar({
           />
           {error && <div role="alert" style={{ color: 'var(--accent)', fontSize: 11, fontWeight: 700, marginTop: 4 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <button type="submit" disabled={busy || correctionBusy} style={{ background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button type="submit" disabled={busy || correctionBusy} className="ep-btn-primary" style={{ border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               ＋ Commentaire
             </button>
             {/* CS-5 — sibling of "Commenter": file a scenario Correction from the selected passage. */}
@@ -1491,7 +1491,8 @@ function Sidebar({
               onClick={() => void requestCorrection()}
               disabled={busy || correctionBusy || !range || !documentId}
               title={!documentId ? 'Enregistrez d’abord le scénario' : !range ? 'Sélectionnez un passage à corriger' : undefined}
-              style={{ background: 'var(--card)', color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: !range || !documentId ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: !range || !documentId ? 0.55 : 1 }}
+              className="ep-btn-secondary"
+              style={{ border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 40, fontSize: 12, fontWeight: 700, cursor: !range || !documentId ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: !range || !documentId ? 0.55 : 1 }}
             >
               {correctionBusy ? 'Envoi…' : 'Demander une correction'}
             </button>

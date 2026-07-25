@@ -42,13 +42,11 @@ export default function GalleryGrid({
         <button
           type="button"
           onClick={onRetry}
+          className="ep-btn-primary"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '8px 16px',
             cursor: 'pointer',
           }}
@@ -68,13 +66,11 @@ export default function GalleryGrid({
         <button
           type="button"
           onClick={onReset}
+          className="ep-btn-dark"
           style={{
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--ink)',
-            color: 'var(--paper)',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '8px 16px',
             cursor: 'pointer',
           }}

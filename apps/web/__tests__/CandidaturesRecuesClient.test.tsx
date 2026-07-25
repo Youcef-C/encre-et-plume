@@ -86,6 +86,14 @@ const threeApps: ApplicationDto[] = [
   }),
 ];
 
+// Relative, not a fixed date: the edit modal rejects a past deadline, so a hardcoded
+// one silently rots the "Enregistrer" test the day it expires. 10d out matches closesInDays.
+const deadlineISO = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 10);
+  return new Date(`${d.toISOString().slice(0, 10)}T00:00:00`).toISOString();
+})();
+
 const callDetail: CallDetail = {
   id: 'mc7-call-nocturne',
   heading: 'SCÉNARISTE CHERCHE DESSINATEUR·RICE',
@@ -99,7 +107,7 @@ const callDetail: CallDetail = {
   description: 'Un polar nocturne sous la pluie.',
   sampleUrl: null,
   status: 'open',
-  deadline: '2026-07-19T00:00:00.000Z',
+  deadline: deadlineISO,
   isOwner: true,
   hasApplied: false,
   myApplicationId: null,
@@ -189,15 +197,16 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
     });
   });
 
-  it('colours Accepter green (#1f8a5b) and Refuser accent-red — the round-2 accept/reject semantic', async () => {
+  it('colours Accepter green (success) and Refuser danger — the round-2 accept/reject semantic', async () => {
     getList().mockResolvedValue(response([group()]));
     renderClient();
     await screen.findByText('« Polar nocturne »');
 
     const accepter = screen.getByRole('button', { name: 'Accepter la candidature de Léa B.' });
     const refuser = screen.getByRole('button', { name: 'Refuser la candidature de Léa B.' });
-    expect(accepter).toHaveStyle({ background: '#1f8a5b' });
-    expect(refuser).toHaveStyle({ background: 'var(--accent)' });
+    // Accept/reject now map to the shared button-color scheme: success (green) / danger (red).
+    expect(accepter.className).toContain('ep-btn-success');
+    expect(refuser.className).toContain('ep-btn-danger');
   });
 
   it('switches the active call with the selector, swapping rows and the count badge', async () => {

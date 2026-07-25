@@ -1,5 +1,5 @@
 ---
-description: Implement one Encre & Plume user story end-to-end through the multi-agent pipeline — Manager → Backend → Frontend → QA → Reviewer — looping back to the Manager on a failed review until it passes (max 3 rounds).
+description: Implement one Encre & Plume user story end-to-end through the multi-agent pipeline — Manager → Full-Stack Dev → QA → Reviewer — looping back to the Manager on a failed review until it passes (max 3 rounds).
 argument-hint: <story-id | epic-folder>   e.g. F-1  or  00-foundation
 disable-model-invocation: true
 ---
@@ -23,13 +23,10 @@ Dispatch the **project-manager** agent. Pass: the story file path, the pipeline 
 `.claude/pipeline/$1/`, and — **only when `iteration > 1`** — point it at `review.md` and `qa-report.md`
 so it revises the plan and adds a "Changes this round" section. Wait until `plan.md` exists.
 
-## 2 · Backend
-Dispatch the **backend-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md`. Wait for
-`backend-notes.md`.
-
-## 3 · Frontend
-Dispatch the **frontend-developer** agent. Pass the story path + `plan.md` + `backend-notes.md` (real API
-contracts). Wait for `frontend-notes.md`.
+## 2 · Full-Stack Dev
+Dispatch the **fullstack-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md`. It builds
+the backend slice first, then the frontend against those real contracts, and writes BOTH notes files. Wait
+for `backend-notes.md` **and** `frontend-notes.md` (both must exist before QA).
 
 ## 4 · QA
 Dispatch the **qa-test** agent. Pass the story path + `plan.md` + the two notes files. Wait for `qa-report.md`.
@@ -49,8 +46,14 @@ and the `verdict` in `state.json`.
   blocking findings and the artifact paths (`.claude/pipeline/$1/`) so they can decide. Never loop indefinitely.
 
 ## Rules
-- Dispatch agents **one at a time, in order** (Backend before Frontend so the UI binds to real contracts).
-  All failures route back through the Manager — agents never call each other directly.
+- Dispatch agents **one at a time, in order**. The Full-Stack Dev builds backend-before-frontend internally
+  so the UI binds to real contracts. All failures route back through the Manager — agents never call each
+  other directly.
+- **CRUD completeness:** when a story introduces a resource users can create/edit, the plan AND the
+  implementation must cover its whole lifecycle — Create, Read/list, Update, **and Delete** — each with its
+  route + authz ([[F-2]]), FE affordance (Delete needs a confirmation step), and a test, unless the story
+  explicitly excludes one. **DELETE is the operation most often dropped** — confirm it's present (or
+  scoped-out on purpose) before the gate, not after.
 - Keep your own context small: pass agents **file paths**, not pasted file contents; they read from disk.
 - Between stages, sanity-check the expected artifact was actually written before proceeding; if an agent
   failed to produce its file, report it rather than continuing blindly.

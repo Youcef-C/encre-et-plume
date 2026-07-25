@@ -24,16 +24,13 @@ export default function GalerieHeader({ summary }: { summary: GallerySummary }) 
         </span>
         <Link
           href={ctaHref}
-          className="ep-gallery-cta"
+          className="ep-gallery-cta ep-btn-primary"
           style={{
             marginLeft: 'auto',
             alignSelf: 'center',
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '8px 15px',
             cursor: 'pointer',
             boxShadow: '2px 2px 0 var(--shadow)',

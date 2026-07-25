@@ -37,16 +37,14 @@ const placeholderAvatar: React.CSSProperties = {
   backgroundColor: 'var(--tone)',
 };
 
-// Prototype action buttons: 12px / 700, ink border, radius 6, 6px 13px — with a 44px a11y tap floor (D10).
+// Prototype action buttons: 12px / 700, ink border, 6px 13px — with a 44px a11y tap floor (D10).
+// Layout-only; color/border idiom via .ep-btn-secondary (or -success/-danger) at each call site.
 const actionBtn: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   border: '2px solid var(--ink)',
-  borderRadius: 6,
   padding: '6px 13px',
   minHeight: 44,
-  background: 'var(--card)',
-  color: 'var(--ink)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   textDecoration: 'none',
@@ -54,12 +52,8 @@ const actionBtn: React.CSSProperties = {
   alignItems: 'center',
 };
 
-const decideBtn = (background: string): React.CSSProperties => ({
-  ...actionBtn,
-  background,
-  color: '#fff',
-  boxShadow: '2px 2px 0 var(--shadow)',
-});
+// Layout for the accept/reject decision buttons (color via .ep-btn-success / .ep-btn-danger).
+const decideBtnLayout: React.CSSProperties = { ...actionBtn, boxShadow: '2px 2px 0 var(--shadow)' };
 
 const sampleThumb: React.CSSProperties = {
   width: 46,
@@ -187,6 +181,7 @@ function ApplicantRow({
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`Voir l'échantillon de ${app.applicant.name}`}
+                    className="ep-btn-secondary"
                     style={actionBtn}
                   >
                     PDF{s.size != null ? ` · ${formatBytes(s.size)}` : ''}
@@ -199,7 +194,7 @@ function ApplicantRow({
           {/* Action row (proto line 2189): Voir le profil / green Accepter / red Refuser — stuck right.
               MC-7 amendment appends an owner "Retirer" (delete the applicant, any status). */}
           <div className="ep-candidature-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 'auto' }}>
-            <Link href={`/${app.applicant.slug}`} style={actionBtn}>
+            <Link href={`/${app.applicant.slug}`} className="ep-btn-secondary" style={actionBtn}>
               Voir le profil
             </Link>
 
@@ -210,7 +205,8 @@ function ApplicantRow({
                   onClick={() => decide('accepted')}
                   disabled={busy}
                   aria-label={`Accepter la candidature de ${app.applicant.name}`}
-                  style={decideBtn('#1f8a5b')}
+                  className="ep-btn-success"
+                  style={decideBtnLayout}
                 >
                   Accepter
                 </button>
@@ -219,7 +215,8 @@ function ApplicantRow({
                   onClick={() => decide('rejected')}
                   disabled={busy}
                   aria-label={`Refuser la candidature de ${app.applicant.name}`}
-                  style={decideBtn('var(--accent)')}
+                  className="ep-btn-danger"
+                  style={decideBtnLayout}
                 >
                   Refuser
                 </button>
@@ -237,11 +234,12 @@ function ApplicantRow({
                     setRemoveConfirming(false);
                     onRemove();
                   }}
-                  style={{ ...actionBtn, background: 'var(--accent)', color: '#fff', boxShadow: '2px 2px 0 var(--shadow)' }}
+                  className="ep-btn-primary"
+                  style={{ ...actionBtn, boxShadow: '2px 2px 0 var(--shadow)' }}
                 >
                   Confirmer le retrait
                 </button>
-                <button type="button" onClick={() => setRemoveConfirming(false)} style={actionBtn}>
+                <button type="button" onClick={() => setRemoveConfirming(false)} className="ep-btn-secondary" style={actionBtn}>
                   Annuler
                 </button>
               </span>
@@ -250,6 +248,7 @@ function ApplicantRow({
                 type="button"
                 onClick={() => setRemoveConfirming(true)}
                 aria-label={`Retirer la candidature de ${app.applicant.name}`}
+                className="ep-btn-secondary"
                 style={actionBtn}
               >
                 Retirer
@@ -364,14 +363,11 @@ export default function CandidaturesRecuesClient() {
         </p>
         <Link
           href="/connexion?redirect=/candidatures-recues"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
-            fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '10px 20px',
             textDecoration: 'none',
           }}
@@ -419,15 +415,11 @@ export default function CandidaturesRecuesClient() {
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
-              fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: '8px 16px',
-              cursor: 'pointer',
               fontFamily: 'inherit',
             }}
           >
@@ -478,6 +470,7 @@ export default function CandidaturesRecuesClient() {
               type="button"
               onClick={() => setDetailOpen(true)}
               aria-label={`Voir l'appel « ${selected.callTitle} »`}
+              className="ep-btn-secondary"
               style={{ ...actionBtn, marginLeft: 'auto' }}
             >
               Voir l&apos;appel

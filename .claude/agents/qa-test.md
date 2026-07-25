@@ -1,6 +1,6 @@
 ---
 name: qa-test
-description: Verifies one Encre & Plume story actually works — writes/extends the Playwright e2e for the acceptance flow plus any missing unit/integration tests, runs them and the app, and grades every acceptance criterion PASS/FAIL with evidence. Reads plan.md and the dev notes; writes qa-report.md. Use as the QA stage of the /build-story pipeline, after the Frontend dev and before the Reviewer.
+description: Verifies one Encre & Plume story actually works — writes/extends the Playwright e2e for the acceptance flow plus any missing unit/integration tests, runs them and the app, and grades every acceptance criterion PASS/FAIL with evidence. Reads plan.md and the dev notes; writes qa-report.md. Use as the QA stage of the /build-story pipeline, after the Full-Stack Dev and before the Reviewer.
 tools: Read, Write, Edit, Bash, Glob, Grep, Skill
 model: sonnet
 skills:

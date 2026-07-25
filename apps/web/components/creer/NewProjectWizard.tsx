@@ -102,23 +102,17 @@ const chip = (active: boolean): React.CSSProperties => ({
   cursor: 'pointer',
   fontFamily: 'inherit',
 });
+// Layout-only base — colour comes from the .ep-btn-* class applied alongside at each call site
+// (.ep-btn-secondary for neutral footer buttons, .ep-btn-primary for the accent CTAs).
 const footerBtn: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
-  background: 'var(--card)',
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '9px 16px',
   minHeight: 44,
   cursor: 'pointer',
   fontFamily: 'inherit',
-  color: 'var(--ink)',
-};
-const accentBtn: React.CSSProperties = {
-  ...footerBtn,
-  background: 'var(--accent)',
-  color: '#fff',
-  boxShadow: '3px 3px 0 var(--shadow)',
 };
 const stepBtn: React.CSSProperties = {
   display: 'flex',
@@ -576,7 +570,7 @@ export default function NewProjectWizard() {
                               {p.genreTags[0] ? ` · ${p.genreTags[0]}` : ''}
                             </span>
                           </div>
-                          <button type="button" onClick={() => addInvite(p)} aria-label={`Ajouter ${p.name}`} style={{ ...accentBtn, padding: '4px 11px', minHeight: 36, fontSize: 12 }}>
+                          <button type="button" onClick={() => addInvite(p)} aria-label={`Ajouter ${p.name}`} className="ep-btn-primary" style={{ ...footerBtn, padding: '4px 11px', minHeight: 36, fontSize: 12 }}>
                             ＋ Ajouter
                           </button>
                         </div>
@@ -696,28 +690,28 @@ export default function NewProjectWizard() {
         {/* Footer */}
         <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', borderTop: '3px solid var(--ink)', background: 'var(--paper)', flexWrap: 'wrap' }}>
           {step > 1 && (
-            <button type="button" onClick={goBack} style={footerBtn}>
+            <button type="button" onClick={goBack} className="ep-btn-secondary" style={footerBtn}>
               ← Retour
             </button>
           )}
-          <button type="button" onClick={() => router.push('/projets')} style={footerBtn}>
+          <button type="button" onClick={() => router.push('/projets')} className="ep-btn-secondary" style={footerBtn}>
             Annuler
           </button>
           <div style={{ flex: 1, minWidth: 8 }} />
           {!isIllus && step >= 2 && (
-            <button type="button" onClick={() => void submit(false)} disabled={busy} style={{ ...footerBtn, opacity: busy ? 0.6 : 1 }}>
+            <button type="button" onClick={() => void submit(false)} disabled={busy} className="ep-btn-secondary" style={{ ...footerBtn, opacity: busy ? 0.6 : 1 }}>
               Configurer plus tard
             </button>
           )}
           {/* Continuer advances both branches through Type → Détails → Soutien. On step 3 the manga
              branch shows "Créer le projet" and the illustration branch's embedded form owns "Publier". */}
           {(step === 1 || step === 2) && (
-            <button type="button" onClick={goNext} style={accentBtn}>
+            <button type="button" onClick={goNext} className="ep-btn-primary" style={footerBtn}>
               Continuer →
             </button>
           )}
           {!isIllus && step === 3 && (
-            <button type="button" onClick={() => void submit(true)} disabled={busy || !splitValid} style={{ ...accentBtn, opacity: busy || !splitValid ? 0.6 : 1 }}>
+            <button type="button" onClick={() => void submit(true)} disabled={busy || !splitValid} className="ep-btn-primary" style={{ ...footerBtn, opacity: busy || !splitValid ? 0.6 : 1 }}>
               {pending ? 'Création…' : 'Créer le projet'}
             </button>
           )}
@@ -726,7 +720,8 @@ export default function NewProjectWizard() {
               type="button"
               onClick={() => illusRef.current?.submit()}
               disabled={illusStatus.pending || illusStatus.uploadBusy}
-              style={{ ...accentBtn, opacity: illusStatus.pending || illusStatus.uploadBusy ? 0.6 : 1 }}
+              className="ep-btn-primary"
+              style={{ ...footerBtn, opacity: illusStatus.pending || illusStatus.uploadBusy ? 0.6 : 1 }}
             >
               {illusStatus.pending ? 'Publication…' : '✓ Publier'}
             </button>

@@ -70,8 +70,8 @@ describe('IllustrationCollections (display-only)', () => {
   it('makes "Gérer les collections" a red (accent) button for the owner', () => {
     render(<IllustrationCollections detail={makeDetail()} account={owner} />);
     const btn = screen.getByRole('button', { name: 'Gérer les collections' });
-    expect(btn.style.background).toContain('var(--accent)');
-    expect(btn.style.color).toBe('rgb(255, 255, 255)'); // #fff normalized by jsdom
+    // Primary CTA now uses the shared button-color scheme class (accent red + white).
+    expect(btn.className).toContain('ep-btn-primary');
   });
 
   it('links "Voir tout" to the Galerie filtered to this user\'s collections when there are collections', () => {

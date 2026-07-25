@@ -13,7 +13,6 @@ const OUTER: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: '40px 16px',
-  background: 'var(--paper)',
 };
 
 const CARD: React.CSSProperties = {

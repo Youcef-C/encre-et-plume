@@ -48,17 +48,12 @@ function chipStyle(active: boolean): React.CSSProperties {
 }
 
 // Outline nav buttons (Mes candidatures / Mes appels à projets) — both live (MC-6/MC-7).
+// Layout-only; color/border idiom via .ep-btn-secondary at the call sites.
 const outlineBtn: React.CSSProperties = {
   fontSize: 13,
-  fontWeight: 700,
   border: '2px solid var(--ink)',
-  borderRadius: 6,
   padding: '8px 14px',
   minHeight: 44,
-  background: 'var(--card)',
-  color: 'var(--ink)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
 };
 
 function SkeletonRow() {
@@ -207,14 +202,11 @@ export default function AppelsClient() {
         </p>
         <Link
           href="/connexion?redirect=/appels"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
-            fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '10px 20px',
             textDecoration: 'none',
           }}
@@ -231,28 +223,22 @@ export default function AppelsClient() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 40, textTransform: 'uppercase', margin: 0 }}>Appels à projets</h1>
         <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <Link href="/mes-candidatures" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+          <Link href="/mes-candidatures" className="ep-btn-secondary" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Mes candidatures
           </Link>
           {/* MC-7: received applicants on the owner's own calls. */}
-          <Link href="/candidatures-recues" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+          <Link href="/candidatures-recues" className="ep-btn-secondary" style={{ ...outlineBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             Mes appels à projets
           </Link>
           <button
             type="button"
             onClick={() => setPosting(true)}
+            className="ep-btn-primary"
             style={{
               fontSize: 15,
-              fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
-              border: '3px solid var(--ink)',
-              borderRadius: 6,
               padding: '11px 20px',
               minHeight: 44,
-              cursor: 'pointer',
               fontFamily: 'inherit',
-              boxShadow: '3px 3px 0 var(--shadow)',
             }}
           >
             ＋ Poster un appel
@@ -301,15 +287,11 @@ export default function AppelsClient() {
           <button
             type="button"
             onClick={() => setRetryKey((k) => k + 1)}
+            className="ep-btn-primary"
             style={{
               fontSize: 13,
-              fontWeight: 700,
-              background: 'var(--accent)',
-              color: '#fff',
               border: '2px solid var(--ink)',
-              borderRadius: 6,
               padding: '8px 16px',
-              cursor: 'pointer',
             }}
           >
             Réessayer
@@ -341,14 +323,11 @@ export default function AppelsClient() {
               <button
                 type="button"
                 onClick={loadMore}
+                className="ep-btn-secondary"
                 style={{
                   fontSize: 13,
-                  fontWeight: 700,
-                  background: 'var(--card)',
                   border: '2px solid var(--ink)',
-                  borderRadius: 6,
                   padding: '10px 20px',
-                  cursor: 'pointer',
                   boxShadow: '2px 2px 0 var(--shadow)',
                 }}
               >

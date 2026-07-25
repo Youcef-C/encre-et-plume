@@ -663,7 +663,8 @@ export default function SalonDock() {
               <button
                 type="button"
                 onClick={join}
-                style={{ fontSize: 14, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 8, padding: '10px 22px', cursor: 'pointer', boxShadow: '3px 3px 0 var(--shadow)', fontFamily: 'inherit', minHeight: 44 }}
+                className="ep-btn-primary"
+                style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 8, padding: '10px 22px', cursor: 'pointer', boxShadow: '3px 3px 0 var(--shadow)', fontFamily: 'inherit', minHeight: 44 }}
               >
                 ＋ Rejoindre le salon
               </button>
@@ -740,7 +741,8 @@ export default function SalonDock() {
               <button
                 type="button"
                 onClick={send}
-                style={{ fontSize: 14, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 15px', cursor: 'pointer', boxShadow: '2px 2px 0 var(--shadow)', whiteSpace: 'nowrap', fontFamily: 'inherit', minHeight: 44 }}
+                className="ep-btn-primary"
+                style={{ fontSize: 14, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 15px', cursor: 'pointer', boxShadow: '2px 2px 0 var(--shadow)', whiteSpace: 'nowrap', fontFamily: 'inherit', minHeight: 44 }}
               >
                 Envoyer
               </button>
@@ -748,8 +750,8 @@ export default function SalonDock() {
                 type="button"
                 onClick={leave}
                 title="Quitter le salon"
-                className="ep-salon-leave"
-                style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)', background: 'var(--card)', border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 12px', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', minHeight: 44 }}
+                className="ep-salon-leave ep-btn-danger-outline"
+                style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 12px', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', minHeight: 44 }}
               >
                 Quitter
               </button>

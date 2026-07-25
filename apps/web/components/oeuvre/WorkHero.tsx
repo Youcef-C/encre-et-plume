@@ -210,7 +210,8 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
                   ? `Reprendre la lecture : chapitre ${resume.chapterNumber}, page ${resume.page} sur ${resume.totalPages}`
                   : undefined
               }
-              style={{ ...actionBase, background: 'var(--accent)', color: '#fff', textDecoration: 'none' }}
+              className="ep-btn-primary"
+              style={{ ...actionBase, textDecoration: 'none' }}
             >
               {resume ? 'Reprendre la lecture' : 'Lire'}
             </Link>
@@ -228,13 +229,14 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
               )}{' '}
               {save.active ? 'Dans ma liste' : 'Ma liste'}
             </button>
-            <button type="button" onClick={trigger} style={{ ...actionBase, background: 'var(--card)', color: 'var(--ink)' }}>
+            <button type="button" onClick={trigger} className="ep-btn-secondary" style={actionBase}>
               <StarIcon size={14} style={{ color: 'var(--accent)' }} /> Soutenir
             </button>
             <button
               type="button"
               onClick={handleProposer}
-              style={{ ...actionBase, background: 'var(--ink)', color: 'var(--paper)', boxShadow: '3px 3px 0 var(--accent)' }}
+              className="ep-btn-dark"
+              style={{ ...actionBase, boxShadow: '3px 3px 0 var(--accent)' }}
             >
               Proposer une collab
             </button>
@@ -337,13 +339,11 @@ export default function WorkHero({ work, account }: { work: WorkDetail; account:
               </button>
               <Link
                 href="/admin"
+                className="ep-btn-primary"
                 style={{
                   fontSize: 12,
                   fontWeight: 700,
-                  background: 'var(--accent)',
-                  color: '#fff',
                   border: '2px solid #f1ece1',
-                  borderRadius: 6,
                   padding: '7px 13px',
                   textDecoration: 'none',
                 }}

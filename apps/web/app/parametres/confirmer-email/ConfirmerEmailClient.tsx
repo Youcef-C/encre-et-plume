@@ -40,7 +40,6 @@ export default function ConfirmerEmailClient() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 16px',
-        background: 'var(--paper)',
       }}
     >
       <div

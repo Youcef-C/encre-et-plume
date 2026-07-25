@@ -87,13 +87,11 @@ function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void
       <button
         type="button"
         onClick={onRetry}
+        className="ep-btn-primary"
         style={{
           fontSize: 13,
           fontWeight: 700,
-          background: 'var(--accent)',
-          color: '#fff',
           border: '2px solid var(--ink)',
-          borderRadius: 6,
           padding: '8px 16px',
           cursor: 'pointer',
         }}
@@ -360,14 +358,12 @@ export default function MaListeClient() {
         </p>
         <Link
           href="/connexion?redirect=/ma-liste"
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontSize: 14,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '10px 20px',
             textDecoration: 'none',
           }}

@@ -62,7 +62,8 @@ export default function ProfileWorks({ slug }: { slug: string }) {
         <button
           type="button"
           onClick={() => setRetryKey((k) => k + 1)}
-          style={{ fontSize: 13, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
+          className="ep-btn-primary"
+          style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
         >
           Réessayer
         </button>

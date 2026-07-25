@@ -209,7 +209,6 @@ export default function OnboardingClient() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px 16px',
-        background: 'var(--paper)',
       }}
     >
       <div

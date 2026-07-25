@@ -60,14 +60,16 @@ publisher space, `MR-` monetization, `AD-` admin.
 
 ## Building features — the agent pipeline
 Run **`/build-story <ID>`** (e.g. `/build-story F-1`) to implement a story end-to-end. The main session
-orchestrates five role-specialized subagents (in `.claude/agents/`):
+orchestrates four role-specialized subagents (in `.claude/agents/`):
 
-`project-manager → backend-developer → frontend-developer → qa-test → reviewer`
+`project-manager → fullstack-developer → qa-test → reviewer`
 
-The **reviewer** is the quality gate. On a blocking FAIL the pipeline loops back to the **project-manager**
-with the feedback and runs again — **max 3 rounds**, then it stops and reports. Agents hand off through
-files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-notes.md`, `qa-report.md`,
-`review.md`, `state.json`). Pass an epic folder (e.g. `00-foundation`) to fan out story-by-story.
+The **fullstack-developer** builds the backend slice first, then the frontend against those real contracts,
+writing both `backend-notes.md` and `frontend-notes.md`. The **reviewer** is the quality gate. On a blocking
+FAIL the pipeline loops back to the **project-manager** with the feedback and runs again — **max 3 rounds**,
+then it stops and reports. Agents hand off through files in `.claude/pipeline/<ID>/` (`plan.md`,
+`backend-notes.md`, `frontend-notes.md`, `qa-report.md`, `review.md`, `state.json`). Pass an epic folder
+(e.g. `00-foundation`) to fan out story-by-story.
 
 ## Conventions
 - **TDD** — write the failing test before the implementation (API + web).
@@ -84,6 +86,17 @@ files in `.claude/pipeline/<ID>/` (`plan.md`, `backend-notes.md`, `frontend-note
 - **Design system** — manga-zine identity: Anton (display) + Zen Kaku Gothic New (body), ink `#16130f` /
   paper `#f1ece1` / accent red `#e8261c`, halftone textures, bold borders, hard offset shadows. Reuse
   tokens/components in `apps/web`; don't reinvent them. Accessibility basics are required, not optional.
+  Page wrappers must NOT paint their own `background` — let the `body` halftone paper show through (the
+  auth/error pages regressed on this); only cards/panels carry a surface fill (`--card`).
+- **Button colors** (user rule — the fixed scheme): every button uses ONE shared intent class from
+  `apps/web/app/globals.css`; **never hand-style a button's colors inline** (no ad-hoc `background:
+  var(--accent)` / `#c0392b` on a `<button>`, no local `footerBtn`/`actionBtn` color helpers).
+  `.ep-btn-primary` (accent **red**) = main CTA · `.ep-btn-secondary` (**white**/card outline) = cancel/
+  alternate · `.ep-btn-dark` (**ink/black**) = neutral high-contrast · `.ep-btn-success` (**green**) =
+  confirm/accept/validate · `.ep-btn-danger` (destructive **red** `#c0392b`, + `.ep-btn-danger-outline`
+  for a two-step delete) = **delete/leave/destroy**. Dense UIs use the `.ep-btn-compact--<intent>` size.
+  A **DELETE / destructive** action ALWAYS uses `danger` (ties into the CRUD-completeness rule). Per-
+  instance layout (width, min-height, padding) stays inline; the class only carries color + the idiom.
 - **No emojis in the UI** (user rule — overrides any emoji/dingbat the prototype draws). Every pictogram
   comes from the shared SVG icon set `apps/web/components/icons.tsx` (chunky ink-style strokes); extend
   that file when a new icon is needed. Pure typography (arrows `→`, `✓`, `＋`, `◆` separators) is fine.

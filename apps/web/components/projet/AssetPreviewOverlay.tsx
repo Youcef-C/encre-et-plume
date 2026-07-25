@@ -72,7 +72,7 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
             <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>v{version}</div>
           </div>
           {preview?.downloadUrl && (
-            <a href={preview.downloadUrl} target="_blank" rel="noreferrer" style={dlLink}>
+            <a href={preview.downloadUrl} target="_blank" rel="noreferrer" className="ep-btn-secondary" style={dlLink}>
               <DownloadIcon size={15} /> Télécharger
             </a>
           )}
@@ -85,7 +85,7 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
           {error ? (
             <div style={centered}>
               <p style={{ fontSize: 14, color: 'var(--ink2)', marginBottom: 12 }}>Impossible de charger l’aperçu.</p>
-              <button type="button" onClick={load} style={retryBtn}>
+              <button type="button" onClick={load} className="ep-btn-secondary" style={retryBtn}>
                 Réessayer
               </button>
             </div>
@@ -132,7 +132,7 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
           ) : preview.mode === 'processing' ? (
             <div style={centered}>
               <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Conversion en cours…</p>
-              <button type="button" onClick={load} style={retryBtn}>
+              <button type="button" onClick={load} className="ep-btn-secondary" style={retryBtn}>
                 Actualiser
               </button>
             </div>
@@ -245,8 +245,6 @@ const dlLink: React.CSSProperties = {
   border: '2px solid var(--ink)',
   borderRadius: 6,
   padding: '7px 12px',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   textDecoration: 'none',
   minHeight: 40,
   boxSizing: 'border-box',
@@ -272,8 +270,6 @@ const retryBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '8px 16px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 40,
 };

@@ -616,24 +616,23 @@ export default function InviteModal({
             <button
               type="button"
               onClick={onClose}
-              style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)' }}
+              className="ep-btn-primary"
+              style={footerBtn}
             >
               Fermer
             </button>
           ) : (
             <>
-              <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+              <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={sending || locked}
+                className="ep-btn-primary"
                 style={{
                   ...footerBtn,
-                  background: 'var(--accent)',
-                  color: '#fff',
-                  boxShadow: '3px 3px 0 var(--shadow)',
                   opacity: sending || locked ? 0.6 : 1,
                 }}
               >

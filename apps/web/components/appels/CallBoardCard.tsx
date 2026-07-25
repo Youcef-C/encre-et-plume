@@ -205,17 +205,13 @@ export default function CallBoardCard({
                 type="button"
                 onClick={onVoirDetail}
                 aria-label={`Voir le détail — ${call.title}`}
+                className="ep-btn-secondary"
                 style={{
-                  background: 'var(--card)',
-                  color: 'var(--ink)',
                   border: '2px solid var(--ink)',
-                  borderRadius: 6,
                   padding: '7px 14px',
                   minHeight: 44,
-                  fontWeight: 700,
                   fontSize: 13,
                   fontFamily: 'inherit',
-                  cursor: 'pointer',
                 }}
               >
                 Voir le détail
@@ -264,17 +260,13 @@ export default function CallBoardCard({
                         type="button"
                         onClick={confirmWithdraw}
                         disabled={busy}
+                        className="ep-btn-primary"
                         style={{
-                          background: 'var(--accent)',
-                          color: '#fff',
                           border: '2px solid var(--ink)',
-                          borderRadius: 6,
                           padding: '7px 13px',
                           minHeight: 44,
-                          fontWeight: 700,
                           fontSize: 13,
                           fontFamily: 'inherit',
-                          cursor: 'pointer',
                         }}
                       >
                         Confirmer le retrait
@@ -283,17 +275,13 @@ export default function CallBoardCard({
                         type="button"
                         onClick={() => setConfirming(false)}
                         disabled={busy}
+                        className="ep-btn-secondary"
                         style={{
-                          background: 'var(--card)',
-                          color: 'var(--ink)',
                           border: '2px solid var(--ink)',
-                          borderRadius: 6,
                           padding: '7px 13px',
                           minHeight: 44,
-                          fontWeight: 700,
                           fontSize: 13,
                           fontFamily: 'inherit',
-                          cursor: 'pointer',
                         }}
                       >
                         Annuler
@@ -303,17 +291,13 @@ export default function CallBoardCard({
                     <button
                       type="button"
                       onClick={() => setConfirming(true)}
+                      className="ep-btn-secondary"
                       style={{
-                        background: 'var(--card)',
-                        color: 'var(--ink)',
                         border: '2px solid var(--ink)',
-                        borderRadius: 6,
                         padding: '7px 13px',
                         minHeight: 44,
-                        fontWeight: 700,
                         fontSize: 13,
                         fontFamily: 'inherit',
-                        cursor: 'pointer',
                       }}
                     >
                       Retirer
@@ -324,16 +308,12 @@ export default function CallBoardCard({
               <button
                 type="button"
                 onClick={onCandidater}
+                className="ep-btn-dark"
                 style={{
-                  background: 'var(--ink)',
-                  color: 'var(--paper)',
                   border: '2px solid var(--ink)',
-                  borderRadius: 6,
                   padding: '7px 16px',
                   minHeight: 44,
-                  fontWeight: 700,
                   fontFamily: 'inherit',
-                  cursor: 'pointer',
                   boxShadow: '2px 2px 0 var(--accent)',
                 }}
               >

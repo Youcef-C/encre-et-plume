@@ -33,19 +33,6 @@ const badgeStyle: React.CSSProperties = {
   padding: '1px 8px',
 };
 
-const actionBtn: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  border: '2px solid var(--ink)',
-  borderRadius: 6,
-  padding: '8px 14px',
-  minHeight: 44,
-  background: 'var(--card)',
-  color: 'var(--ink)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
 function Row({ item, onUnblocked }: { item: BlockItem; onUnblocked: (userId: string) => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -99,7 +86,8 @@ function Row({ item, onUnblocked }: { item: BlockItem; onUnblocked: (userId: str
         onClick={() => void unblock()}
         disabled={pending}
         aria-label={`${actionLabel} ${item.name}`}
-        style={{ ...actionBtn, marginLeft: 'auto', opacity: pending ? 0.6 : 1 }}
+        className="ep-btn-secondary"
+        style={{ fontSize: 12, padding: '8px 14px', minHeight: 44, border: '2px solid var(--ink)', marginLeft: 'auto', opacity: pending ? 0.6 : 1 }}
       >
         {pending ? '…' : actionLabel}
       </button>
@@ -146,7 +134,8 @@ export default function BlockedAccounts() {
         <button
           type="button"
           onClick={() => setRetry((k) => k + 1)}
-          style={{ fontSize: 13, fontWeight: 700, background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: 'inherit' }}
+          className="ep-btn-primary"
+          style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: 'inherit' }}
         >
           Réessayer
         </button>

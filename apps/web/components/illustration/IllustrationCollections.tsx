@@ -213,21 +213,18 @@ export default function IllustrationCollections({
         <button
           type="button"
           onClick={() => setManageOpen(true)}
+          className="ep-btn-primary"
           style={{
             display: 'block',
             width: '100%',
             marginTop: 12,
             fontSize: 13,
             fontWeight: 700,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '9px 14px',
             minHeight: 44,
             cursor: 'pointer',
             fontFamily: 'inherit',
-            boxShadow: '3px 3px 0 var(--shadow)',
           }}
         >
           Gérer les collections

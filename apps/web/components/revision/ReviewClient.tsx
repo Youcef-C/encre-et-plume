@@ -305,16 +305,13 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
                     <button
                       type="button"
                       onClick={openVersionModal}
+                      className="ep-btn-secondary"
                       style={{
                         fontSize: 13,
                         fontWeight: 700,
-                        border: '3px solid var(--ink)',
                         borderRadius: 8,
                         padding: '8px 14px',
                         minHeight: 40,
-                        background: 'var(--card)',
-                        color: 'var(--ink)',
-                        boxShadow: '3px 3px 0 var(--shadow)',
                         cursor: 'pointer',
                         fontFamily: 'inherit',
                       }}

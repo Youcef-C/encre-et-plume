@@ -332,14 +332,15 @@ export default function NewCollectionForm({
         </div>
 
         <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '3px solid var(--ink)', background: 'var(--paper)' }}>
-          <button type="button" onClick={onClose} style={{ ...footerBtn, background: 'var(--card)' }}>
+          <button type="button" onClick={onClose} className="ep-btn-secondary" style={footerBtn}>
             Annuler
           </button>
           <button
             type="button"
             onClick={() => void handleSubmit()}
             disabled={pending || coverBusy}
-            style={{ ...footerBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: pending || coverBusy ? 0.6 : 1 }}
+            className="ep-btn-primary"
+            style={{ ...footerBtn, opacity: pending || coverBusy ? 0.6 : 1 }}
           >
             {pending ? 'Création…' : 'Créer la collection'}
           </button>

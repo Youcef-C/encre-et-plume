@@ -292,19 +292,18 @@ export default function ProjectWorkspace({
           <div style={{ flex: 1 }} />
           {isMember && (
             <>
-              <button type="button" style={headerBtn}>
+              <button type="button" className="ep-btn-secondary" style={headerBtn}>
                 Gérer le groupe
               </button>
-              <button type="button" style={headerBtn} onClick={openEditor}>
+              <button type="button" className="ep-btn-secondary" style={headerBtn} onClick={openEditor}>
                 Éditeur
               </button>
               <button
                 type="button"
                 aria-label="Publier"
+                className="ep-btn-primary"
                 style={{
                   ...headerBtn,
-                  background: 'var(--accent)',
-                  color: '#fff',
                   boxShadow: '2px 2px 0 var(--shadow)',
                 }}
               >
@@ -419,8 +418,6 @@ const headerBtn: React.CSSProperties = {
   borderRadius: 6,
   padding: '7px 14px',
   cursor: 'pointer',
-  background: 'var(--card)',
-  color: 'var(--ink)',
   fontFamily: 'inherit',
   minHeight: 36,
 };

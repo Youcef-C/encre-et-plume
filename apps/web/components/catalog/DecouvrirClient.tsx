@@ -123,13 +123,11 @@ export default function DecouvrirClient() {
             <button
               type="button"
               onClick={() => router.push('/creer')}
+              className="ep-btn-primary"
               style={{
                 marginLeft: 'auto',
                 fontSize: 14,
                 fontWeight: 700,
-                background: 'var(--accent)',
-                color: '#fff',
-                border: '3px solid var(--ink)',
                 borderRadius: 8,
                 padding: '10px 18px',
                 minHeight: 44,
@@ -160,12 +158,11 @@ export default function DecouvrirClient() {
             <button
               type="button"
               onClick={loadMore}
+              className="ep-btn-secondary"
               style={{
                 fontSize: 13,
                 fontWeight: 700,
-                background: 'var(--card)',
                 border: '2px solid var(--ink)',
-                borderRadius: 6,
                 padding: '10px 20px',
                 cursor: 'pointer',
                 boxShadow: '2px 2px 0 var(--shadow)',

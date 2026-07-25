@@ -80,14 +80,12 @@ export default function Paywall({ chapter, workSlug, onClose }: Props) {
         </p>
         <Link
           href={`/oeuvre/${workSlug}`}
+          className="ep-btn-primary"
           style={{
             display: 'inline-block',
             fontWeight: 700,
             fontSize: 13,
-            background: 'var(--accent)',
-            color: '#fff',
             border: '2px solid var(--ink)',
-            borderRadius: 6,
             padding: '9px 16px',
             textDecoration: 'none',
           }}

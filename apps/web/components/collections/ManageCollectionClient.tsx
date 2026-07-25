@@ -46,9 +46,10 @@ const inputStyle: React.CSSProperties = {
   width: '100%', border: '2px solid var(--ink)', borderRadius: 8, padding: '10px 12px', fontSize: 14,
   fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)', boxSizing: 'border-box',
 };
+// Layout-only base; color comes from .ep-btn-primary / .ep-btn-secondary / .ep-btn-danger(-outline).
 const smallBtn: React.CSSProperties = {
   fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px',
-  minHeight: 40, cursor: 'pointer', fontFamily: 'inherit', background: 'var(--card)', color: 'var(--ink)',
+  minHeight: 40, cursor: 'pointer', fontFamily: 'inherit',
 };
 const arrowBtn: React.CSSProperties = {
   width: 40, height: 40, flex: 'none', fontSize: 16, fontWeight: 700, lineHeight: 1,
@@ -287,7 +288,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
     return (
       <div role="alert" style={{ maxWidth: 820, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
         <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>{error?.message ?? 'Impossible de charger cette collection.'}</p>
-        <button type="button" onClick={() => setRetryKey((k) => k + 1)} style={{ ...smallBtn, background: 'var(--accent)', color: '#fff', borderColor: 'var(--ink)' }}>
+        <button type="button" onClick={() => setRetryKey((k) => k + 1)} className="ep-btn-primary" style={smallBtn}>
           Réessayer
         </button>
       </div>
@@ -358,10 +359,10 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <input aria-label={`Nom du palier ${i + 1}`} value={t.name} onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} placeholder="Nom du palier" style={{ ...inputStyle, flex: 2, minWidth: 120 }} />
               <input aria-label={`Prix mensuel du palier ${i + 1} (€)`} type="number" min={0} step="0.5" value={t.euros} onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))} placeholder="€/mois" style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-              <button type="button" aria-label={`Retirer le palier ${i + 1}`} onClick={() => setTiers((cur) => cur.filter((_, j) => j !== i))} style={smallBtn}>✕</button>
+              <button type="button" aria-label={`Retirer le palier ${i + 1}`} onClick={() => setTiers((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={smallBtn}>✕</button>
             </div>
           ))}
-          <button type="button" onClick={() => setTiers((cur) => [...cur, { name: '', euros: '' }])} style={{ ...smallBtn, marginBottom: 12 }}>＋ Ajouter un palier</button>
+          <button type="button" onClick={() => setTiers((cur) => [...cur, { name: '', euros: '' }])} className="ep-btn-secondary" style={{ ...smallBtn, marginBottom: 12 }}>＋ Ajouter un palier</button>
           <div style={{ marginBottom: 12 }}>
             <OnBrandCheckbox label="Autoriser les dons uniques" checked={allowDonations} onChange={(e) => setAllowDonations(e.target.checked)} style={{ fontWeight: 700 }} />
           </div>
@@ -370,10 +371,10 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <input aria-label={`Titre de l’objectif ${i + 1}`} value={g.title} onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} placeholder="Objectif" style={{ ...inputStyle, flex: 2, minWidth: 120 }} />
               <input aria-label={`Cible de l’objectif ${i + 1} (€)`} type="number" min={0} step="1" value={g.euros} onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))} placeholder="Cible €" style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-              <button type="button" aria-label={`Retirer l’objectif ${i + 1}`} onClick={() => setGoals((cur) => cur.filter((_, j) => j !== i))} style={smallBtn}>✕</button>
+              <button type="button" aria-label={`Retirer l’objectif ${i + 1}`} onClick={() => setGoals((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={smallBtn}>✕</button>
             </div>
           ))}
-          <button type="button" onClick={() => setGoals((cur) => [...cur, { title: '', euros: '' }])} style={smallBtn}>＋ Ajouter un objectif</button>
+          <button type="button" onClick={() => setGoals((cur) => [...cur, { title: '', euros: '' }])} className="ep-btn-secondary" style={smallBtn}>＋ Ajouter un objectif</button>
         </fieldset>
 
         {/* Task C: the info fields are local state committed only here — "Sauvegarder" persists,
@@ -383,7 +384,8 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             type="button"
             onClick={() => void saveInfos()}
             disabled={saving}
-            style={{ ...smallBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)', opacity: saving ? 0.6 : 1 }}
+            className="ep-btn-primary"
+            style={{ ...smallBtn, opacity: saving ? 0.6 : 1 }}
           >
             {saving ? 'Enregistrement…' : 'Sauvegarder'}
           </button>
@@ -391,6 +393,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             type="button"
             onClick={() => { seed(detail); setSavedNote(false); }}
             disabled={saving}
+            className="ep-btn-secondary"
             style={smallBtn}
           >
             Annuler
@@ -442,11 +445,11 @@ export default function ManageCollectionClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button type="button" aria-label={`Monter ${m.title}`} onClick={() => void reorder(i, i - 1)} disabled={reorderPending || i === 0} style={{ ...arrowBtn, opacity: reorderPending || i === 0 ? 0.5 : 1 }}>↑</button>
                   <button type="button" aria-label={`Descendre ${m.title}`} onClick={() => void reorder(i, i + 1)} disabled={reorderPending || i === members.length - 1} style={{ ...arrowBtn, opacity: reorderPending || i === members.length - 1 ? 0.5 : 1 }}>↓</button>
-                  <button type="button" onClick={() => void promoteMemberCover(m.id)} style={smallBtn}>Utiliser comme couverture</button>
-                  <button type="button" aria-label={`Modifier ${m.title}`} onClick={() => void openMemberEdit(m.id)} disabled={memberLoadingId === m.id} style={{ ...smallBtn, opacity: memberLoadingId === m.id ? 0.6 : 1 }}>
+                  <button type="button" onClick={() => void promoteMemberCover(m.id)} className="ep-btn-secondary" style={smallBtn}>Utiliser comme couverture</button>
+                  <button type="button" aria-label={`Modifier ${m.title}`} onClick={() => void openMemberEdit(m.id)} disabled={memberLoadingId === m.id} className="ep-btn-secondary" style={{ ...smallBtn, opacity: memberLoadingId === m.id ? 0.6 : 1 }}>
                     {memberLoadingId === m.id ? 'Chargement…' : 'Modifier'}
                   </button>
-                  <button type="button" aria-label={`Retirer ${m.title}`} onClick={() => void removeMember(m.id)} style={{ ...smallBtn, color: 'var(--accent)', borderColor: 'var(--accent)' }}>Retirer</button>
+                  <button type="button" aria-label={`Retirer ${m.title}`} onClick={() => void removeMember(m.id)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: '#c0392b' }}>Retirer</button>
                 </div>
               </li>
             ))}
@@ -455,7 +458,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
 
         {/* Add picker (FE-11, D18 — replaces the round-1 inline one-at-a-time add rows). */}
         <div style={{ marginTop: 18 }}>
-          <button type="button" onClick={() => setPickerOpen(true)} style={{ ...smallBtn, background: 'var(--accent)', color: '#fff', boxShadow: '3px 3px 0 var(--shadow)' }}>
+          <button type="button" onClick={() => setPickerOpen(true)} className="ep-btn-primary" style={smallBtn}>
             ＋ Ajouter des illustrations
           </button>
         </div>
@@ -481,14 +484,14 @@ export default function ManageCollectionClient({ id }: { id: string }) {
       {/* Danger zone */}
       <section style={{ ...card, borderColor: 'var(--accent)' }}>
         {!confirmDelete ? (
-          <button type="button" onClick={() => setConfirmDelete(true)} style={{ ...smallBtn, color: 'var(--accent)', borderColor: 'var(--accent)' }}>
+          <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: '#c0392b' }}>
             Supprimer la collection
           </button>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 500 }}>Les illustrations ne seront pas supprimées.</span>
-            <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting} style={smallBtn}>Annuler</button>
-            <button type="button" onClick={() => void handleDelete()} disabled={deleting} style={{ ...smallBtn, background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}>
+            <button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting} className="ep-btn-secondary" style={smallBtn}>Annuler</button>
+            <button type="button" onClick={() => void handleDelete()} disabled={deleting} className="ep-btn-danger" style={smallBtn}>
               {deleting ? 'Suppression…' : 'Oui, supprimer'}
             </button>
           </div>
