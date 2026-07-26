@@ -523,6 +523,14 @@ describe('ProjectsService.create', () => {
     );
   });
 
+  it('CS-10: the owner row is the group leader holding the whole revenue split', async () => {
+    await service.create('acc-me', dto());
+    expect((prisma.workCreator as Record<string, jest.Mock>).create.mock.calls[0][0].data).toMatchObject({
+      groupRole: 'leader',
+      sharePct: 100,
+    });
+  });
+
   it('defaults the owner WorkCreator role to scenariste when the profile has no creator roles', async () => {
     (prisma.account as Record<string, jest.Mock>).findUnique.mockResolvedValue({ displayName: 'Moi', profile: { creatorRoles: [] } });
     await service.create('acc-me', dto());
@@ -639,8 +647,9 @@ describe('ProjectsService workspace (CS-2)', () => {
       hashtags: ['thriller'],
       coverImage: null,
       creators: [
-        { accountId: 'acc-me', role: 'scenariste', order: 0, account: { id: 'acc-me', displayName: 'Moi', avatar: null, profile: { creatorRoles: ['scenariste', 'dessinateur'] } } },
-        { accountId: 'acc-yuki', role: 'dessinateur', order: 1, account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg', profile: { creatorRoles: ['dessinateur'] } } },
+        // CS-10 group columns ride along on the workspace query — viewer.canWrite is derived from them.
+        { accountId: 'acc-me', role: 'scenariste', order: 0, groupRole: 'leader', permissions: [], account: { id: 'acc-me', displayName: 'Moi', avatar: null, profile: { creatorRoles: ['scenariste', 'dessinateur'] } } },
+        { accountId: 'acc-yuki', role: 'dessinateur', order: 1, groupRole: 'member', permissions: ['ecriture', 'corrections'], account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg', profile: { creatorRoles: ['dessinateur'] } } },
       ],
       chapters: [
         { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3 },
@@ -698,20 +707,20 @@ describe('ProjectsService workspace (CS-2)', () => {
       expect(res.reviews.summary).toEqual({ overall: 3.5, story: 3, art: 4, count: 2 });
       const hidden = res.reviews.items.find((r) => r.hidden)!;
       expect(hidden.text).toBe('');
-      expect(res.viewer).toEqual({ isMember: true, isOwner: true });
+      expect(res.viewer).toEqual({ isMember: true, isOwner: true, canWrite: true });
       // CS-2 card-modal: the project label palette rides along for the filter row + modal picker.
       expect(res.labels).toEqual([{ id: 'lab-1', name: 'À revoir', color: '#e8261c' }]);
     });
 
     it('a non-owner member sees isMember:true, isOwner:false', async () => {
       const res = await service.getWorkspace('acc-yuki', 'lames-de-brume');
-      expect(res.viewer).toEqual({ isMember: true, isOwner: false });
+      expect(res.viewer).toEqual({ isMember: true, isOwner: false, canWrite: true });
     });
 
     it('a non-member on a PUBLIC project gets a read-only payload (isMember:false)', async () => {
       build(WORKSPACE({ visibility: 'public' }));
       const res = await service.getWorkspace('stranger', 'lames-de-brume');
-      expect(res.viewer).toEqual({ isMember: false, isOwner: false });
+      expect(res.viewer).toEqual({ isMember: false, isOwner: false, canWrite: false });
     });
 
     it('a non-member on a PRIVE project gets 404 (no existence leak)', async () => {

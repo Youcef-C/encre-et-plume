@@ -17,6 +17,13 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
+
+// The popover is portalled to <body> and positioned `fixed` against the trigger's rect: a
+// `position:absolute` child was clipped by ANY ancestor with `overflow:hidden` (the CS-10 members
+// card, U-5) and no z-index can escape a clipping ancestor. Portalling also lifts it out of every
+// stacking context, so this z sits above the app's modals (70–300) rather than competing with them.
+const POPOVER_Z = 400;
 
 type Option = { value: string; label: string; disabled: boolean };
 
@@ -74,7 +81,10 @@ export default function OnBrandSelect({
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Anchor rect of the trigger, in viewport coordinates (the popover is `position:fixed`).
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0, maxWidth: 0 });
   const typeahead = useRef<{ buf: string; t: ReturnType<typeof setTimeout> | null }>({ buf: '', t: null });
   const listId = useId();
   const optId = (i: number) => `${listId}-opt-${i}`;
@@ -86,10 +96,36 @@ export default function OnBrandSelect({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The popover lives in a portal, so it is NOT a DOM descendant of the root — check both.
+      if (rootRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  // Keep the fixed popover glued to the trigger while it is open (scroll anywhere / resize).
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setAnchor({
+        top: r.bottom + 6,
+        left: r.left,
+        width: r.width,
+        // Never narrower than the trigger, never wider than what's left to the viewport edge.
+        maxWidth: Math.max(r.width, (window.innerWidth || 0) - r.left - 8),
+      });
+    };
+    measure();
+    window.addEventListener('scroll', measure, true); // capture: catches scrolling containers too
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
   }, [open]);
 
   // Reset the query and focus the filter box each time the popover opens.
@@ -248,15 +284,20 @@ export default function OnBrandSelect({
         </span>
       </button>
 
-      {open && (
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
         <div
+          ref={popoverRef}
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            // CS-5 Fb-3 — clear sibling surface panels + the Comptoir widget (z 40); modals sit at 70–95.
-            zIndex: 60,
-            minWidth: '100%',
+            position: 'fixed',
+            top: anchor.top,
+            left: anchor.left,
+            zIndex: POPOVER_Z,
+            // U-5: size to the option text (the trigger width is only a floor), capped to the viewport.
+            width: 'max-content',
+            minWidth: anchor.width,
+            maxWidth: anchor.maxWidth,
             background: 'var(--card)',
             border: '2px solid var(--ink)',
             borderRadius: 6,
@@ -332,8 +373,9 @@ export default function OnBrandSelect({
               ))
             )}
           </ul>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </div>
   );
 }

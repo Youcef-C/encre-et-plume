@@ -988,7 +988,7 @@ function PageCard({
                 setConfirmDelete(true);
                 setMenuOpen(false);
               }}
-              style={{ ...menuItemStyle, color: '#c0392b' }}
+              style={{ ...menuItemStyle, color: 'var(--danger)' }}
             >
               Supprimer la carte
             </button>

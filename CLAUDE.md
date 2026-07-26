@@ -93,13 +93,21 @@ then it stops and reports. Agents hand off through files in `.claude/pipeline/<I
   var(--accent)` / `#c0392b` on a `<button>`, no local `footerBtn`/`actionBtn` color helpers).
   `.ep-btn-primary` (accent **red**) = main CTA · `.ep-btn-secondary` (**white**/card outline) = cancel/
   alternate · `.ep-btn-dark` (**ink/black**) = neutral high-contrast · `.ep-btn-success` (**green**) =
-  confirm/accept/validate · `.ep-btn-danger` (destructive **red** `#c0392b`, + `.ep-btn-danger-outline`
-  for a two-step delete) = **delete/leave/destroy**. Dense UIs use the `.ep-btn-compact--<intent>` size.
+  confirm/accept/validate · `.ep-btn-danger` (destructive **red** `var(--danger)`, + `.ep-btn-danger-outline`
+  for a two-step delete) = **delete/leave/destroy**. `--danger` resolves to the accent red `#e8261c`
+  (user decision 2026-07-26 — a deliberate deviation from the prototype's brick `#c0392b`); never hardcode
+  either hex, always use the token so the scheme stays changeable in one edit. **Accepted trade-off, do not
+  re-flag:** white on `#e8261c` measures 4.44:1, marginally under the WCAG AA 4.5:1 floor, and a hovered
+  `.ep-btn-danger-outline` fills solid so it matches the primary CTA. The user chose this knowingly
+  (2026-07-26); the outline→solid two-step is what distinguishes destroy from the CTA at rest. Dense UIs use the `.ep-btn-compact--<intent>` size.
   A **DELETE / destructive** action ALWAYS uses `danger` (ties into the CRUD-completeness rule). Per-
   instance layout (width, min-height, padding) stays inline; the class only carries color + the idiom.
 - **No emojis in the UI** (user rule — overrides any emoji/dingbat the prototype draws). Every pictogram
   comes from the shared SVG icon set `apps/web/components/icons.tsx` (chunky ink-style strokes); extend
-  that file when a new icon is needed. Pure typography (arrows `→`, `✓`, `＋`, `◆` separators) is fine.
+  that file when a new icon is needed. **Check/cross marks are pictograms, not typography** (user rule
+  2026-07-26): `✓ ✔ ✅ ✕ ✖ ❌ ✗` must never be rendered as text — use the `icons.tsx` check/cross icons,
+  including inside status labels ("✓ Accepté") and permission tables. Only true typography stays literal:
+  arrows `→`, `＋`, `◆`/`·` separators, `‹ ›` chevrons.
 - **On-brand form controls** (user rule): never render bare native checkboxes/selects — use the shared
   `apps/web/components/form/OnBrandCheckbox.tsx` / `OnBrandSelect.tsx` / `OnBrandMultiSelect.tsx`.
   `OnBrandSelect` is a **custom popover listbox** (not a styled native `<select>`) — no native select

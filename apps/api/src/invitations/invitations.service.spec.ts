@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import type { ConnectionsService } from '../connections/connections.service';
 import type { BlocksService } from '../blocks/blocks.service';
+import { canManageProject } from '../projects/members.service';
 
 const userRow = (id: string, roles: string[] = ['dessinateur']) => ({
   id,
@@ -207,7 +208,7 @@ describe('InvitationsService', () => {
       );
     });
 
-    it('403s the whole request when projectId is not owned by the sender (zero creates)', async () => {
+    it('403s the whole request when projectId is unknown (zero creates)', async () => {
       prisma.project.findFirst.mockResolvedValue(null);
       await expect(
         service.create('acc-from', { toUsers: ['a', 'b'], projectId: 'proj-x' }),
@@ -215,15 +216,68 @@ describe('InvitationsService', () => {
       expect(prisma.invitation.create).not.toHaveBeenCalled();
     });
 
-    it('attaches an owned project to every fanned-out row', async () => {
-      prisma.project.findFirst.mockResolvedValue({ id: 'proj-1', ownerId: 'acc-from' });
+    it('attaches a manageable project to every fanned-out row', async () => {
+      prisma.project.findFirst.mockResolvedValue({ ownerId: 'acc-from', work: { creators: [] } });
       await service.create('acc-from', { toUsers: ['a'], projectId: 'proj-1' });
-      expect(prisma.project.findFirst).toHaveBeenCalledWith({
-        where: { id: 'proj-1', ownerId: 'acc-from' },
-      });
       expect(prisma.invitation.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ projectId: 'proj-1' }) }),
       );
+    });
+
+    // T-API-7 (CS-10 B8-R2) — the project gate is the SHARED "gérer le groupe" rule, not an
+    // owner-only lookup: the co-leader role CS-10 introduces must be able to invite from the
+    // Groupe page. Same 403 message for everyone the rule rejects.
+    describe('project gate — manage-group, not owner-only', () => {
+      const proj = (creators: { accountId: string; groupRole: string }[]) => ({
+        ownerId: 'acc-owner',
+        work: { creators },
+      });
+      const invite = () => service.create('acc-from', { toUsers: ['a'], projectId: 'proj-1' });
+
+      it('lets a co-leader (non-owner) send a project invitation', async () => {
+        prisma.project.findFirst.mockResolvedValue(proj([{ accountId: 'acc-from', groupRole: 'coleader' }]));
+        const res = await invite();
+        expect(res.results[0]).toMatchObject({ toUser: 'a', status: 'sent' });
+      });
+
+      it('lets a promoted non-owner leader send a project invitation', async () => {
+        prisma.project.findFirst.mockResolvedValue(proj([{ accountId: 'acc-from', groupRole: 'leader' }]));
+        const res = await invite();
+        expect(res.results[0]).toMatchObject({ toUser: 'a', status: 'sent' });
+      });
+
+      it('still lets the project owner send (regression)', async () => {
+        prisma.project.findFirst.mockResolvedValue({ ownerId: 'acc-from', work: { creators: [] } });
+        const res = await invite();
+        expect(res.results[0]).toMatchObject({ toUser: 'a', status: 'sent' });
+      });
+
+      it('403s a plain project member with the same message', async () => {
+        prisma.project.findFirst.mockResolvedValue(proj([{ accountId: 'acc-from', groupRole: 'member' }]));
+        await expect(invite()).rejects.toThrow(new ForbiddenException('Ce projet ne vous appartient pas.'));
+        expect(prisma.invitation.create).not.toHaveBeenCalled();
+      });
+
+      it('403s an account with no relation to the project', async () => {
+        prisma.project.findFirst.mockResolvedValue(proj([{ accountId: 'acc-else', groupRole: 'leader' }]));
+        await expect(invite()).rejects.toThrow(new ForbiddenException('Ce projet ne vous appartient pas.'));
+        expect(prisma.invitation.create).not.toHaveBeenCalled();
+      });
+
+      it('loads the project by id alone (the gate is the shared rule, not an ownerId filter)', async () => {
+        prisma.project.findFirst.mockResolvedValue({ ownerId: 'acc-from', work: { creators: [] } });
+        await invite();
+        expect(prisma.project.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'proj-1' } }),
+        );
+      });
+
+      it('uses the exported CS-10 definition of the rule (no re-derived copy)', async () => {
+        prisma.project.findFirst.mockResolvedValue(proj([{ accountId: 'acc-from', groupRole: 'coleader' }]));
+        await invite();
+        // The shared helper agrees with what the service just allowed.
+        expect(canManageProject(proj([{ accountId: 'acc-from', groupRole: 'coleader' }]), 'acc-from')).toBe(true);
+      });
     });
 
     it('duplicate check keys on (fromUser, toUser, pending)', async () => {
@@ -323,6 +377,19 @@ describe('InvitationsService', () => {
       expect(prisma.workCreator.create).toHaveBeenCalledWith({
         data: { workId: 'work-1', accountId: 'acc-to', role: 'scenariste', order: 2 },
       });
+    });
+
+    it('CS-10: a new member joins with the schema defaults (member, 0 %, écriture+corrections)', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(
+        INV({ projectId: 'proj-1', toUser: userRow('acc-to', ['scenariste']) }),
+      );
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      // The create writes NO group column — Prisma's defaults own them, so an accepted invitee is
+      // always a plain 'member' at 0 % (the leader's 100 % is never diluted by an acceptance).
+      const data = prisma.workCreator.create.mock.calls[0][0].data;
+      expect(data.groupRole).toBeUndefined();
+      expect(data.sharePct).toBeUndefined();
+      expect(data.permissions).toBeUndefined();
     });
 
     it('accepts a project invite when already a member: idempotent, no duplicate WorkCreator', async () => {

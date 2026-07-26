@@ -277,7 +277,8 @@ export interface ProjectWorkspaceResponse {
   pages: WorkspacePage[];
   labels: ProjectLabelItem[]; // CS-2: the project's label palette (filter row + modal picker)
   reviews: { summary: WorkspaceReviewSummary; items: WorkspaceReview[] };
-  viewer: { isMember: boolean; isOwner: boolean };
+  /** `canWrite` = the viewer holds CS-10 « Écriture » (owner/leader/co-leader always do). */
+  viewer: { isMember: boolean; isOwner: boolean; canWrite: boolean };
 }
 
 /** PATCH /projects/{slug} — debounced field-level auto-save sends deltas (all optional). */

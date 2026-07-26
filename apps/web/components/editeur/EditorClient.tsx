@@ -160,6 +160,9 @@ function EditorLoaded({
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [status, setStatus] = useState<CollabStatus>('connecting');
   const [synced, setSynced] = useState(false);
+  // CS-10 — the group « Écriture » permission, shipped on the sync payload. Undefined (an older
+  // server) is treated as writable; the server drops a read-only socket's updates regardless.
+  const [canWrite, setCanWrite] = useState(true);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [comments, setComments] = useState<CaseCommentDto[]>(initial.comments);
   // Transient toast stack (version saved, import errors, presence join/leave). No toast library — a
@@ -218,7 +221,10 @@ function EditorLoaded({
       pageId,
       {
         onStatus: setStatus,
-        onSync: () => setSynced(true),
+        onSync: (p) => {
+          setSynced(true);
+          setCanWrite(p?.canWrite !== false);
+        },
         onMaterialized: (aid) => setAsset((a) => a ?? { id: aid, filename: 'scenario.html', currentVersion: 1 }),
         onComment: (raw) => setComments((list) => mergeComment(list, raw as CaseCommentDto)),
         // CS-15 — a peer (or our own broadcast) deleted a comment: drop it; the highlight-repaint effect
@@ -345,10 +351,10 @@ function EditorLoaded({
     if (editor && synced) seedIfEmpty();
   }, [editor, synced, seedIfEmpty]);
 
-  // Read-only fallback while the connection is down.
+  // Read-only fallback while the connection is down, or when CS-10 denies the « Écriture » permission.
   useEffect(() => {
-    editor?.setEditable(status === 'connected');
-  }, [editor, status]);
+    editor?.setEditable(status === 'connected' && canWrite);
+  }, [editor, status, canWrite]);
 
   // Item 5 — paint the inline highlight for every range-anchored comment. Recomputed whenever the
   // comment list changes or the doc is (re)seeded; case-level comments carry null anchors and are skipped.
@@ -422,6 +428,9 @@ function EditorLoaded({
   // version» stays the only version-creating action). No debounce, no timer — the user saves explicitly.
   const save = useCallback(async () => {
     if (!editor) return;
+    // CS-10 — no « Écriture » permission: the server 403s this route, so don't even ask (the button
+    // is disabled too; this also covers the Ctrl/Cmd-S path). UX only — the gate is server-side.
+    if (!canWrite) return;
     const html = editor.getHTML();
     // Bug (scenario version off-by-one) — never persist a blank document. An empty first Save would
     // materialize an EMPTY v1 (the reported v1=empty / v1==v2 shift), and an on-mount/early Ctrl+S could
@@ -457,7 +466,7 @@ function EditorLoaded({
     } catch {
       setSaveState('error');
     }
-  }, [editor, pageId, ydoc, asset, assetId]);
+  }, [editor, pageId, ydoc, asset, assetId, canWrite]);
 
   // Typing awareness + dirty tracking. `update` fires on local AND remote edits; either legitimately
   // marks THIS client's persisted draft stale. (ponytail: a peer's own save doesn't clear my dirty flag —
@@ -599,6 +608,7 @@ function EditorLoaded({
             pageId={pageId}
             saveState={saveState}
             onSave={save}
+            canWrite={canWrite}
             peers={peers}
             selfColor={myColor}
             selfAvatar={account.avatar ?? null}
@@ -615,6 +625,7 @@ function EditorLoaded({
                 onSnapshot={onVersionSaved}
                 onError={pushToast}
                 editor={editor}
+                canWrite={canWrite}
                 versions={versions}
                 viewVersion={viewVersion}
                 onSelectVersion={onSelectVersion}
@@ -648,6 +659,24 @@ function EditorLoaded({
               </div>
             ) : (
               <div className="ep-a4-sheet">
+                {/* CS-10 — a member without the group « Écriture » permission reads but never writes. */}
+                {!canWrite && (
+                  <div
+                    role="status"
+                    style={{
+                      marginBottom: 14,
+                      background: 'var(--accent-soft)',
+                      border: '2px solid var(--ink)',
+                      borderRadius: 8,
+                      padding: '8px 14px',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    Lecture seule — vous n&apos;avez pas la permission d&apos;écriture.
+                  </div>
+                )}
                 <div className="ep-planche-canvas" style={{ fontSize: 14, lineHeight: 1.6 }}>
                   <EditorContent editor={editor} />
                 </div>
@@ -694,6 +723,7 @@ function EditorHeader({
   pageId,
   saveState,
   onSave,
+  canWrite,
   peers,
   selfColor,
   selfAvatar,
@@ -704,6 +734,7 @@ function EditorHeader({
   pageId: string;
   saveState: SaveState;
   onSave: () => void;
+  canWrite: boolean;
   peers: Peer[];
   selfColor: string;
   selfAvatar: string | null;
@@ -716,7 +747,7 @@ function EditorHeader({
       <PageSwitcher slug={slug} currentPageId={pageId} label={switcherLabel} />
       {/* Item 2 (iter 5) — icon-only Save, co-located with the chapter/page switcher. Accent when there
           are unsaved edits; persists content only (no new version). Ctrl/Cmd-S does the same (see save()). */}
-      <SaveButton saveState={saveState} onSave={onSave} />
+      <SaveButton saveState={saveState} onSave={onSave} canWrite={canWrite} />
       <span role="status" aria-live="polite" style={{ fontSize: 12, color: saveState === 'error' || saveState === 'dirty' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' || saveState === 'dirty' ? 700 : 500 }}>
         {saveState === 'saving'
           ? 'Enregistrement…'
@@ -744,17 +775,20 @@ function EditorHeader({
 // Item 2 (iter 5) — icon-only Save button, sitting next to the chapter/page switcher in the header.
 // State-reactive: accent fill when there are unsaved edits (dirty), "wait" cursor while saving. Keeps
 // the r3 behaviour (persists content only, no new version); Ctrl/Cmd-S triggers the same save().
-function SaveButton({ saveState, onSave }: { saveState: SaveState; onSave: () => void }) {
-  const dirty = saveState === 'dirty' || saveState === 'error';
+function SaveButton({ saveState, onSave, canWrite }: { saveState: SaveState; onSave: () => void; canWrite: boolean }) {
+  const dirty = (saveState === 'dirty' || saveState === 'error') && canWrite;
   const saving = saveState === 'saving';
+  // CS-10 (F16-R3) — without « Écriture » the route 403s, so the affordance is disabled rather than
+  // dead-ending on an error toast.
+  const blocked = saving || !canWrite;
   return (
     <button
       type="button"
       onClick={onSave}
-      disabled={saving}
+      disabled={blocked}
       aria-label="Enregistrer"
       aria-keyshortcuts="Meta+S Control+S"
-      title="Enregistrer (⌘S / Ctrl+S)"
+      title={canWrite ? 'Enregistrer (⌘S / Ctrl+S)' : "Enregistrer — lecture seule (permission « Écriture » requise)"}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -766,7 +800,7 @@ function SaveButton({ saveState, onSave }: { saveState: SaveState; onSave: () =>
         borderRadius: 6,
         background: dirty ? 'var(--accent)' : 'var(--card)',
         color: dirty ? '#fff' : 'var(--ink)',
-        cursor: saving ? 'wait' : 'pointer',
+        cursor: saving ? 'wait' : canWrite ? 'pointer' : 'not-allowed',
         boxShadow: dirty ? '2px 2px 0 var(--shadow)' : 'none',
         padding: 0,
       }}
@@ -860,6 +894,7 @@ function ToolbarExtras({
   onSnapshot,
   onError,
   editor,
+  canWrite,
   versions,
   viewVersion,
   onSelectVersion,
@@ -871,6 +906,7 @@ function ToolbarExtras({
   onSnapshot: (a: AssetItem) => void;
   onError: (msg: string) => void;
   editor: Editor | null;
+  canWrite: boolean;
   versions: AssetVersionItem[];
   viewVersion: number | null;
   onSelectVersion: (v: number | null) => void;
@@ -890,6 +926,7 @@ function ToolbarExtras({
   // accepts the note; it rides onto the CS-3 AssetVersion (same note UX as the history modal).
   const snapshot = async (note?: string) => {
     if (!editor || snappingRef.current) return;
+    if (!canWrite) return; // CS-10 (F16-R3) — the route 403s without « Écriture »; don't dead-end on it
     snappingRef.current = true;
     setSnapping(true);
     try {
@@ -941,7 +978,7 @@ function ToolbarExtras({
               Comparer
             </button>
           )}
-          <VersionSplitButton snapping={snapping} onSnapshot={snapshot} />
+          <VersionSplitButton snapping={snapping} onSnapshot={snapshot} canWrite={canWrite} />
         </>
       )}
       {comparing && compareAssetId && version != null && (
@@ -963,8 +1000,10 @@ function ToolbarExtras({
 
 // ── Item 22 — split control: primary snapshots now; the down-chevron opens an inline note form that
 // snapshots WITH a note. Same note UX (optional textarea) as the CS-3 history modal. ──
-function VersionSplitButton({ snapping, onSnapshot }: { snapping: boolean; onSnapshot: (note?: string) => void }) {
+function VersionSplitButton({ snapping, onSnapshot, canWrite }: { snapping: boolean; onSnapshot: (note?: string) => void; canWrite: boolean }) {
   const [open, setOpen] = useState(false);
+  // CS-10 (F16-R3) — without « Écriture » the version route 403s: disable both halves of the split.
+  const blocked = snapping || !canWrite;
   const [note, setNote] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
@@ -990,8 +1029,9 @@ function VersionSplitButton({ snapping, onSnapshot }: { snapping: boolean; onSna
       <button
         type="button"
         onClick={() => onSnapshot()}
-        disabled={snapping}
-        style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: '6px 0 0 6px', borderRight: 'none', padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+        disabled={blocked}
+        title={canWrite ? undefined : 'Lecture seule — permission « Écriture » requise'}
+        style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: '6px 0 0 6px', borderRight: 'none', padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
       >
         {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
       </button>
@@ -1001,8 +1041,8 @@ function VersionSplitButton({ snapping, onSnapshot }: { snapping: boolean; onSna
         aria-expanded={open}
         aria-label="Ajouter une note à la version"
         onClick={() => setOpen((o) => !o)}
-        disabled={snapping}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, minHeight: 32, border: '2px solid var(--ink)', borderRadius: '0 6px 6px 0', background: open ? 'var(--accent)' : 'var(--card)', color: open ? '#fff' : 'var(--ink)', cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+        disabled={blocked}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, minHeight: 32, border: '2px solid var(--ink)', borderRadius: '0 6px 6px 0', background: open ? 'var(--accent)' : 'var(--card)', color: open ? '#fff' : 'var(--ink)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
       >
         <CaretDownIcon size={13} />
       </button>

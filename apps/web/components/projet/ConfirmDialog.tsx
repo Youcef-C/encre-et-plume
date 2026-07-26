@@ -108,9 +108,10 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            // B6 (CS-5 iter 6) — the destructive action uses the design-system accent red
-            // (--accent #e8261c via .ep-btn-primary), not the off-brand muted #c0392b.
-            className="ep-btn-primary"
+            // This dialog exists for DESTRUCTIVE confirmations only (every caller: Révoquer /
+            // Supprimer), and per the shared button scheme a destructive action is ALWAYS danger —
+            // so the colour is hardcoded here rather than being a caller's decision (U-1).
+            className="ep-btn-danger"
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -120,6 +121,7 @@ export default function ConfirmDialog({
               cursor: 'pointer',
               fontFamily: 'inherit',
               minHeight: 40,
+              boxShadow: '2px 2px 0 var(--shadow)',
             }}
           >
             {confirmLabel}

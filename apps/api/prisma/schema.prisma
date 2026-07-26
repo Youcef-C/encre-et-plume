@@ -588,6 +588,11 @@ model WorkCreator {
   role      String // "scenariste" | "dessinateur" | …
   order     Int     @default(0)
 
+  // CS-10 — group model lives on the membership row (no parallel Member model).
+  groupRole   String   @default("member") // 'leader' | 'coleader' | 'member'
+  permissions String[] @default(["ecriture", "corrections"]) // stored toggles; leadership implies all
+  sharePct    Int      @default(0) // revenue split %, group invariant: sum = 100
+
   @@unique([workId, accountId])
 }
 

@@ -3,7 +3,7 @@
 // MC-3 — "Proposer une collab" invite modal. Replica of the prototype INVITE MODAL section
 // (.dc.html lines 2802–2815): 460px ink-bordered card, hard offset shadow, recipient header,
 // "CHOISIR UN PROJET" selectable rows, footer Annuler / Envoyer l'invitation — plus the story's
-// inferred MESSAGE field. No emojis: the prototype's ✉/✕ glyphs map to icons.tsx.
+// inferred MESSAGE field. No emojis and no check/cross characters: the prototype's mail, close and tick glyphs map to icons.tsx.
 // Reused by all four prefilled triggers (MC-1 cards, F-3 profile, DR-3 work, DR-6 illustration).
 // Round 2 (Mode A multi-recipient): when launched WITHOUT a recipient (from /contacts) the modal
 // enters picker mode — an OnBrandMultiSelect over the sender's contacts (Inferred body, plan §7.4).
@@ -19,7 +19,7 @@ import {
 import { getMyProjects, getContacts, createInvitation } from '../../lib/api';
 import { useScrollLock } from '../../lib/useScrollLock';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
-import { XIcon } from '../icons';
+import { CheckIcon, XIcon } from '../icons';
 
 export interface InviteRecipient {
   userId: string;
@@ -130,10 +130,21 @@ const RESULT_LABEL: Record<InvitationSendStatus, string> = {
 export default function InviteModal({
   recipient,
   fromWork,
+  defaultProjectId,
+  defaultProjectTitle,
   onClose,
 }: {
   recipient?: InviteRecipient;
   fromWork?: InviteFromWork;
+  /** CS-10 — launched from a project's "Gérer le groupe": preselect that project. */
+  defaultProjectId?: string;
+  /**
+   * CS-10 F15-R2 — `GET /projects/mine` is OWNER-scoped, so a co-leader's picker came back without
+   * the very project they are allowed to invite on (blank list, nothing to send). Deviation D5b:
+   * append the current project rather than widening `/projects/mine`, whose three other consumers
+   * (appels picker, workspace, projets) have owner-shaped server-side authz behind them.
+   */
+  defaultProjectTitle?: string;
   onClose: () => void;
 }) {
   const isFromWork = !!fromWork;
@@ -143,7 +154,7 @@ export default function InviteModal({
   const multiMode = picker || isFromWork;
 
   const [projects, setProjects] = useState<ProjectsState>({ status: 'loading' });
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -250,6 +261,14 @@ export default function InviteModal({
       setSending(false);
     }
   }
+
+  // D5b: `/projects/mine` is owner-scoped, so the preselected project may be missing for a
+  // co-leader — append it (already checked) so it is visible and sendable.
+  const ownedProjects = projects.status === 'ready' ? projects.items : [];
+  const pickerProjects: ProjectSummary[] =
+    defaultProjectId && defaultProjectTitle && !ownedProjects.some((p) => p.id === defaultProjectId)
+      ? [...ownedProjects, { id: defaultProjectId, title: defaultProjectTitle, meta: '', cover: null }]
+      : ownedProjects;
 
   // Map recipient id → display name for the multi-mode result list.
   const nameById = new Map(pool.map((p) => [p.userId, p.name]));
@@ -454,7 +473,8 @@ export default function InviteModal({
                               fontSize: 12,
                             }}
                           >
-                            {sel ? '✓' : ''}
+                            {/* U-4 rule: a check mark is a pictogram, never the "✓" character. */}
+                            {sel ? <CheckIcon size={12} /> : null}
                           </span>
                         </div>
                       );
@@ -483,29 +503,29 @@ export default function InviteModal({
               CHOISIR UN PROJET
             </div>
 
-            {projects.status === 'loading' && (
+            {projects.status === 'loading' && pickerProjects.length === 0 && (
               <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 14px' }}>Chargement…</p>
             )}
 
-            {projects.status === 'error' && (
+            {projects.status === 'error' && pickerProjects.length === 0 && (
               <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 14px' }}>
                 Impossible de charger vos projets — vous pouvez envoyer la proposition sans projet joint.
               </p>
             )}
 
-            {projects.status === 'ready' && projects.items.length === 0 && (
+            {projects.status === 'ready' && pickerProjects.length === 0 && (
               <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 14px', lineHeight: 1.5 }}>
                 Aucun projet pour l&apos;instant — vous pouvez envoyer la proposition sans projet joint.
               </p>
             )}
 
-            {projects.status === 'ready' && projects.items.length > 0 && (
+            {pickerProjects.length > 0 && (
               <div
                 role="radiogroup"
                 aria-labelledby="invite-project-label"
                 style={{ marginBottom: 14 }}
               >
-                {projects.items.map((project) => {
+                {pickerProjects.map((project) => {
                   const selected = projectId === project.id;
                   return (
                     <div

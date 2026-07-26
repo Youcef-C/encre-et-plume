@@ -787,7 +787,7 @@ export default function CardModal({
         {/* Members-only delete */}
         {memberOnly && (
           <div style={{ marginTop: 18, borderTop: '2px solid var(--border)', paddingTop: 14 }}>
-            <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...secondaryBtn, border: '2px solid #c0392b' }}>
+            <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...secondaryBtn, border: '2px solid var(--danger)' }}>
               Supprimer la carte
             </button>
           </div>
@@ -1140,7 +1140,7 @@ function LabelsSection({
                   (confirmDeleteId === l.id ? (
                     <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 12, fontWeight: 700 }}>
                       Supprimer l&apos;étiquette ?
-                      <button type="button" onClick={() => void remove(l.id)} style={{ ...tinyBtn, color: '#c0392b' }}>
+                      <button type="button" onClick={() => void remove(l.id)} style={{ ...tinyBtn, color: 'var(--danger)' }}>
                         Oui
                       </button>
                       <button type="button" onClick={() => setConfirmDeleteId(null)} style={tinyBtn}>

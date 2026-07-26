@@ -676,7 +676,7 @@ function AssetCard({
                 onClick={onDelete}
                 aria-label={`Supprimer ${asset.filename}`}
                 className="ep-btn-danger-outline"
-                style={{ ...cardActionBtn, border: '2px solid #c0392b' }}
+                style={{ ...cardActionBtn, border: '2px solid var(--danger)' }}
               >
                 <TrashIcon size={13} /> Supprimer
               </button>

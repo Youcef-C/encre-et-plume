@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OnBrandSelect from '../components/form/OnBrandSelect';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('OnBrandSelect', () => {
   it('renders a combobox trigger with the on-brand ink-border styling', () => {
@@ -90,6 +92,91 @@ describe('OnBrandSelect', () => {
     await user.click(screen.getByRole('combobox', { name: 'Trier' }));
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  // ── U-5 (CS-10 round 2) ────────────────────────────────────────────────────────────────────
+  // The popover used to be an `position:absolute` child of the trigger's wrapper, so ANY ancestor
+  // with `overflow:hidden` (e.g. the CS-10 members card) clipped it — a z-index can never escape a
+  // clipping ancestor — and `minWidth:100%` pinned it to a narrow table column, condensing the text.
+  // 22 consumers carried the same latent bug, so the fix lives here, not at a call site.
+  describe('popover is immune to clipping / stacking ancestors', () => {
+    const RECT = {
+      x: 120, y: 200, top: 200, left: 120, right: 220, bottom: 230, width: 100, height: 30,
+      toJSON() {},
+    } as DOMRect;
+
+    function Clipped() {
+      return (
+        <div data-testid="clip" style={{ overflow: 'hidden', width: 100 }}>
+          <OnBrandSelect aria-label="Statut" value="a" onChange={() => {}}>
+            <option value="a">Chef·fe de groupe</option>
+            <option value="b">Co-chef·fe</option>
+          </OnBrandSelect>
+        </div>
+      );
+    }
+
+    it('renders the listbox outside an overflow:hidden ancestor (portalled to <body>)', async () => {
+      const user = userEvent.setup();
+      render(<Clipped />);
+      await user.click(screen.getByRole('combobox', { name: 'Statut' }));
+      const listbox = screen.getByRole('listbox');
+      expect(screen.getByTestId('clip').contains(listbox)).toBe(false);
+      expect(document.body.contains(listbox)).toBe(true);
+    });
+
+    it('positions the popover with position:fixed anchored to the trigger rect', async () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(RECT);
+      const user = userEvent.setup();
+      render(<Clipped />);
+      await user.click(screen.getByRole('combobox', { name: 'Statut' }));
+      const popover = screen.getByRole('listbox').parentElement as HTMLElement;
+      expect(popover.style.position).toBe('fixed');
+      expect(popover.style.top).toBe('236px'); // trigger bottom (230) + 6px gap
+      expect(popover.style.left).toBe('120px');
+    });
+
+    it('sizes to its content with the trigger width as a floor (no condensed option text)', async () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(RECT);
+      const user = userEvent.setup();
+      render(<Clipped />);
+      await user.click(screen.getByRole('combobox', { name: 'Statut' }));
+      const popover = screen.getByRole('listbox').parentElement as HTMLElement;
+      expect(popover.style.width).toBe('max-content');
+      expect(popover.style.minWidth).toBe('100px');
+      expect(popover.style.maxWidth).not.toBe(''); // capped so a long option can't overflow the viewport
+    });
+
+    it('still commits a click on an option rendered in the portal', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <div style={{ overflow: 'hidden' }}>
+          <OnBrandSelect aria-label="Statut" value="a" onChange={onChange}>
+            <option value="a">Chef·fe de groupe</option>
+            <option value="b">Co-chef·fe</option>
+          </OnBrandSelect>
+        </div>,
+      );
+      await user.click(screen.getByRole('combobox', { name: 'Statut' }));
+      await user.click(screen.getByRole('option', { name: 'Co-chef·fe' }));
+      expect(onChange).toHaveBeenCalledWith({ target: { value: 'b' } });
+    });
+
+    it('still closes on an outside click', async () => {
+      const user = userEvent.setup();
+      render(
+        <div>
+          <button type="button">ailleurs</button>
+          <Clipped />
+        </div>,
+      );
+      const trigger = screen.getByRole('combobox', { name: 'Statut' });
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await user.click(screen.getByRole('button', { name: 'ailleurs' }));
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
   });
 
   describe('searchable mode', () => {

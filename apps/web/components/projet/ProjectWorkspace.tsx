@@ -292,7 +292,12 @@ export default function ProjectWorkspace({
           <div style={{ flex: 1 }} />
           {isMember && (
             <>
-              <button type="button" className="ep-btn-secondary" style={headerBtn}>
+              <button
+                type="button"
+                className="ep-btn-secondary"
+                style={headerBtn}
+                onClick={() => router.push(`/projet/${slug}/groupe`)}
+              >
                 Gérer le groupe
               </button>
               <button type="button" className="ep-btn-secondary" style={headerBtn} onClick={openEditor}>
@@ -393,8 +398,10 @@ export default function ProjectWorkspace({
           {tab === 'chapitres' && (
             <PlaceholderPanel title="Chapitres" note="La gestion des chapitres arrive bientôt." />
           )}
+          {/* CS-10 B-4: upload/version/delete are « Écriture »-gated server-side — mirror that here
+              so a member without it isn't offered actions that would 403. */}
           {tab === 'fichiers' && (
-            <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!isMember} />
+            <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!isMember || !workspace.viewer.canWrite} />
           )}
           {tab === 'discussion' && (
             <PlaceholderPanel

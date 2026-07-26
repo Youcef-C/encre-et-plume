@@ -22,6 +22,7 @@ import { S3StorageService } from '../media/s3-storage.service';
 import { PagesService } from './pages.service';
 import { EditorGateway } from './editor.gateway';
 import { isMemberOf } from './projects.service';
+import { hasGroupPermission } from './members.service';
 
 const STATUS_SET = new Set<string>(CORRECTION_STATUSES);
 const TEXT_CAP = 500 * 1024; // mirror the CS-3 preview cap for derived-text payloads
@@ -40,7 +41,12 @@ type LoadedPage = {
   projectId: string;
   title: string;
   stage: string;
-  project: { slug: string; title: string; ownerId: string; work: { creators: { accountId: string }[] } | null };
+  project: {
+    slug: string;
+    title: string;
+    ownerId: string;
+    work: { creators: { accountId: string; groupRole: string; permissions: string[] }[] } | null;
+  };
 };
 
 type CorrectionRow = {
@@ -83,6 +89,7 @@ export class CorrectionsService {
   // ── create (POST /pages/:id/corrections) ──────────────────────────────────
   async create(accountId: string, pageId: string, dto: CreateCorrectionRequest): Promise<CorrectionDto> {
     const page = (await this.pages.loadMemberPage(accountId, pageId)) as unknown as LoadedPage;
+    assertCanCorrect(page, accountId);
     const description = (dto.description ?? '').trim();
     if (!description) throw new BadRequestException('Description requise');
 
@@ -172,6 +179,7 @@ export class CorrectionsService {
     })) as unknown as (CorrectionRow & { asset: { currentVersion: number } }) | null;
     if (!correction) throw new NotFoundException('Demande introuvable');
     const page = (await this.pages.loadMemberPage(accountId, correction.pageId)) as unknown as LoadedPage;
+    assertCanCorrect(page, accountId);
 
     if (correction.authorId !== accountId && correction.assigneeId !== accountId) {
       throw new ForbiddenException("Réservé à l'auteur·rice ou à la personne assignée");
@@ -195,7 +203,8 @@ export class CorrectionsService {
   async remove(accountId: string, correctionId: string): Promise<void> {
     const correction = await this.prisma.correction.findUnique({ where: { id: correctionId }, select: { pageId: true, authorId: true, commentId: true, assetId: true } });
     if (!correction) throw new NotFoundException('Demande introuvable');
-    await this.pages.loadMemberPage(accountId, correction.pageId); // membership gate
+    const page = (await this.pages.loadMemberPage(accountId, correction.pageId)) as unknown as LoadedPage; // membership gate
+    assertCanCorrect(page, accountId); // CS-10 — same gate as create/updateStatus/validate
     if (correction.authorId !== accountId) throw new ForbiddenException("Seul·e l'auteur·rice peut supprimer cette demande");
     // Fb-2 — a scenario correction is a tagged comment: delete the COMMENT (the DB cascade removes this
     // correction) and fan the deletion out to open editors. Legacy comment-less rows delete directly.
@@ -233,6 +242,7 @@ export class CorrectionsService {
   // ── validate (POST /pages/:id/review/validate) — member-gated, idempotent ─
   async validate(accountId: string, pageId: string): Promise<ValidateReviewResponse> {
     const page = (await this.pages.loadMemberPage(accountId, pageId)) as unknown as LoadedPage;
+    assertCanCorrect(page, accountId);
     if (page.stage === 'propre') return { stage: 'propre' }; // idempotent no-op
     if (page.stage !== 'corrections') throw new ConflictException("La carte n'est pas en Corrections");
 
@@ -416,6 +426,17 @@ export class CorrectionsService {
       resolvedInVersion: c.resolvedInVersion,
       createdAt: c.createdAt.toISOString(),
     };
+  }
+}
+
+/**
+ * CS-10 — every correction WRITE additionally requires the group « Corrections » permission (the
+ * prototype draws the toggle; a toggle that gates nothing would be a lie). Reads stay member-gated.
+ * Owner / leader / co-leader always pass.
+ */
+function assertCanCorrect(page: LoadedPage, accountId: string): void {
+  if (!hasGroupPermission(page.project, accountId, 'corrections')) {
+    throw new ForbiddenException("Vous n'avez pas la permission « Corrections » sur ce projet.");
   }
 }
 

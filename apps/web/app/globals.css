@@ -16,6 +16,9 @@
   --border: #16130f;
   --accent: #e8261c;
   --accent-soft: #f7dcd8;
+  /* Destructive red. User decision 2026-07-26: destroy uses the app accent red, not the
+     prototype's brick #c0392b. One token so the scheme moves in one edit. */
+  --danger: var(--accent);
   --tone: #ded7c7;
   --shadow: #16130f;
   --dot: 6px;
@@ -157,7 +160,7 @@ h1, h2, h3, h4, h5, h6 {
      .ep-btn-secondary  white/card  → cancel / alternate / dismiss
      .ep-btn-dark       ink/black   → neutral high-contrast action
      .ep-btn-success    green       → confirm / accept / validate (positive)
-     .ep-btn-danger     red #c0392b → delete / leave / destroy (destructive)
+     .ep-btn-danger     red var(--danger) = accent → delete / leave / destroy (destructive)
                         + .ep-btn-danger-outline for a two-step delete affordance
    All share the manga-zine idiom (3px ink border, 6px radius, hard offset
    shadow, translate on hover/press). Compact size: .ep-btn-compact--<intent>.
@@ -234,8 +237,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 .ep-btn-dark { background-color: var(--ink); color: var(--paper); }
 .ep-btn-success { background-color: #1f8a5b; color: #fff; }
-.ep-btn-danger { background-color: #c0392b; color: #fff; }
-.ep-btn-danger-outline { background-color: var(--card); color: #c0392b; border-color: #c0392b; }
+.ep-btn-danger { background-color: var(--danger); color: #fff; }
+.ep-btn-danger-outline { background-color: var(--card); color: var(--danger); border-color: var(--danger); }
 
 .ep-btn-dark:hover,
 .ep-btn-success:hover,
@@ -245,7 +248,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 /* Two-step delete: outline fills to solid danger on hover. */
 .ep-btn-danger-outline:hover {
-  background-color: #c0392b;
+  background-color: var(--danger);
   color: #fff;
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0 var(--shadow);
@@ -426,7 +429,7 @@ h1, h2, h3, h4, h5, h6 {
   max-width: calc(100vw - 52px);
 }
 .ep-salon-leave:hover {
-  background: #c0392b !important;
+  background: var(--danger) !important;
   color: #fff !important;
 }
 @media (max-width: 480px) {
@@ -1644,7 +1647,7 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* Compact intents mirroring the full-size scheme (compact is only a size). */
 .ep-btn-compact--dark { background: var(--ink); color: var(--paper); }
 .ep-btn-compact--success { background: #1f8a5b; color: #fff; }
-.ep-btn-compact--danger { background: #c0392b; color: #fff; }
+.ep-btn-compact--danger { background: var(--danger); color: #fff; }
 
 /* Green "Valider les modifications" CTA — legacy compact-green used in the editor/revision
    surfaces. Equivalent intent to .ep-btn-success (the canonical green); kept at its tuned
@@ -1810,4 +1813,124 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* QA F4 — clear the fixed "Le Comptoir" chat widget so it can't obscure the composer/list on tablet. */
 @media (max-width: 768px) {
   .ep-review-page { padding-bottom: 120px !important; }
+}
+
+/* ── CS-10 · Groupe & permissions ──────────────────────────────────────────────
+   Desktop = the prototype's fixed-width permission columns. Below 768px the row turns into a
+   stacked card: the member line spans the width, each permission cell becomes a labelled
+   "Écriture ······ [switch]" line with a ≥44px tap target, and the split rows go single-column. */
+/* U-3 — ONE grid template shared by the column header and every member/pending row, so each
+   switch sits exactly under its header. Proto column widths 80/80/90/90/70 + a trailing actions
+   column for the revoke button. */
+.ep-group-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px 80px 90px 90px 70px 52px;
+  align-items: center;
+  gap: 10px;
+}
+.ep-group-grid > .ep-group-cell,
+.ep-group-grid > .ep-group-actions {
+  justify-self: center;
+}
+.ep-group-cell-label { display: none; }
+
+/* N7 — the visual pill stays 34×20, the hit area is ≥44×44 at every breakpoint. */
+.ep-perm-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.ep-perm-switch:disabled { opacity: 0.6; cursor: default; }
+
+/* U-2 — on-brand share slider (a form-control idiom like .ep-perm-switch, not a button colour).
+   The accent fill IS the prototype's "Part effective" bar, driven by an inline --pct. */
+.ep-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: linear-gradient(to right, var(--accent) var(--pct, 0%), var(--card) var(--pct, 0%));
+  cursor: pointer;
+}
+.ep-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: #fff;
+  box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer;
+}
+.ep-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: #fff;
+  box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer;
+}
+.ep-range:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ep-range:disabled { opacity: 0.6; cursor: default; }
+/* Tap target: padding on the wrapper, never on the 12px track itself. */
+.ep-range-wrap {
+  flex: 1;
+  min-width: 90px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.ep-group-back:hover { color: var(--ink); }
+
+.ep-split-head,
+.ep-split-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.8fr 1.4fr;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .ep-group-head { display: none; }
+  .ep-group-row.ep-group-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+  }
+  .ep-group-member { grid-column: 1 / -1; }
+  .ep-group-grid > .ep-group-cell,
+  .ep-group-grid > .ep-group-actions { justify-self: stretch; }
+  .ep-group-cell {
+    width: auto;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    text-align: left !important;
+  }
+  .ep-group-cell-label {
+    display: inline;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--ink2);
+  }
+  .ep-group-actions { grid-column: 1 / -1; }
+  .ep-group-role-select .ep-select { min-height: 44px; }
+  /* Structural, not a local colour helper (U-1): the revoke trigger goes full-width on mobile. */
+  .ep-group-row .ep-btn-danger-outline { width: 100%; }
+  .ep-split-head { display: none; }
+  .ep-split-row { grid-template-columns: 1fr; gap: 8px; }
 }

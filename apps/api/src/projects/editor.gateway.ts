@@ -15,6 +15,7 @@ import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { verifySessionToken } from '../auth/session-token';
 import { isMemberOf } from './projects.service';
+import { hasGroupPermission } from './members.service';
 
 /** Parse a single cookie value from a raw Cookie header (mirrors MessagingGateway — no dep). */
 function readCookie(header: string | undefined, name: string): string | undefined {
@@ -90,10 +91,22 @@ export class EditorGateway implements OnGatewayInit {
 
     const page = await this.prisma.page.findUnique({
       where: { id: body.pageId },
-      select: { id: true, projectId: true, project: { select: { ownerId: true, work: { select: { creators: { select: { accountId: true } } } } } } },
+      select: {
+        id: true,
+        projectId: true,
+        project: {
+          select: {
+            ownerId: true,
+            work: { select: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } },
+          },
+        },
+      },
     });
     // Membership gate — a non-member never joins the room (silent, no existence probe).
     if (!page || !isMemberOf(page.project as never, accountId)) return;
+    // CS-10 write gate — a member without « Écriture » joins read-only (presence still works).
+    const canWrite = hasGroupPermission(page.project as never, accountId, 'ecriture');
+    socket.data['canWrite'] = canWrite;
 
     // D9 — explicit assetId opens a CHOSEN scenario/texte asset room. Invalid (foreign project / wrong
     // type) → silently drop the join (same no-leak rule as the REST resolver).
@@ -125,7 +138,7 @@ export class EditorGateway implements OnGatewayInit {
       }
     }
     const peers = (await this.server.in(room).fetchSockets()).length;
-    socket.emit(EDITOR_WS_EVENTS.sync, { ydocState, updates, initialHtml: null, peers });
+    socket.emit(EDITOR_WS_EVENTS.sync, { ydocState, updates, initialHtml: null, peers, canWrite });
     // Ask any live peer for its full encoded state (covers the DB-read → live-edit window).
     socket.to(room).emit(EDITOR_WS_EVENTS.stateRequest, {});
   }
@@ -134,6 +147,8 @@ export class EditorGateway implements OnGatewayInit {
   async handleUpdate(@ConnectedSocket() socket: Socket, @MessageBody() body: WsEditorUpdate): Promise<void> {
     const room = socket.data['editorRoom'] as string | undefined;
     if (!room || !body?.u) return;
+    // CS-10: a read-only member's edits are dropped server-side (never trust the client's editable flag).
+    if (socket.data['canWrite'] === false) return;
     socket.to(room).emit(EDITOR_WS_EVENTS.update, { u: body.u }); // relay to peers (not sender)
     // Append to the pending log when materialized (room is editor:asset:<id>). Fire-and-forget: a lost
     // row is recovered by peer sync / the next autosave.

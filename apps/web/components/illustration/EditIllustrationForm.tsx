@@ -190,7 +190,7 @@ export default function EditIllustrationForm({
             }}
             disabled={deleting || pending}
             className="ep-btn-danger-outline"
-            style={{ ...footerBtn, borderColor: '#c0392b' }}
+            style={{ ...footerBtn, borderColor: 'var(--danger)' }}
           >
             Supprimer l’illustration
           </button>

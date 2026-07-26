@@ -24,7 +24,7 @@ function makeWorkspace(): ProjectWorkspaceResponse {
       { id: 'pg3', chapterId: null, title: 'Brouillon', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0 },
     ],
     labels: [], reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
-    viewer: { isMember: true, isOwner: true },
+    viewer: { isMember: true, isOwner: true, canWrite: true },
   };
 }
 

@@ -8,9 +8,27 @@ const PROJECT = (o: Record<string, unknown> = {}) => ({
   ownerId: 'acc-me',
   visibility: 'prive',
   workId: 'work-1',
-  work: { id: 'work-1', creators: [{ accountId: 'acc-me' }, { accountId: 'acc-yuki' }] },
+  work: {
+    id: 'work-1',
+    creators: [
+      { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+      { accountId: 'acc-yuki', groupRole: 'member', permissions: ['ecriture', 'corrections'] },
+    ],
+  },
   ...o,
 });
+
+/** CS-10: the same project with Yuki's « Corrections » toggle switched off. */
+const PROJECT_NO_CORRECTIONS = () =>
+  PROJECT({
+    work: {
+      id: 'work-1',
+      creators: [
+        { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+        { accountId: 'acc-yuki', groupRole: 'member', permissions: ['ecriture'] },
+      ],
+    },
+  });
 
 const PAGE = (o: Record<string, unknown> = {}) => ({
   id: 'page-1',
@@ -303,6 +321,53 @@ describe('CorrectionsService', () => {
     it('non-member rejected (loadMemberPage throws)', async () => {
       pages.loadMemberPage.mockRejectedValue(new ForbiddenException());
       await expect(service.validate('stranger', 'page-1')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // ── CS-10: the group « Corrections » permission gates every write path ──────
+  describe('corrections permission (CS-10)', () => {
+    const dessin = { type: 'dessin' as const, assetId: 'asset-dessin', anchor: { region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 } }, description: 'Nez' };
+    const denied = new ForbiddenException("Vous n'avez pas la permission « Corrections » sur ce projet.");
+
+    beforeEach(() => pages.loadMemberPage.mockResolvedValue(PAGE({ project: PROJECT_NO_CORRECTIONS() })));
+
+    it('403s creating a correction without the permission', async () => {
+      await expect(service.create('acc-yuki', 'page-1', dessin)).rejects.toThrow(denied);
+    });
+
+    it('403s a status change without the permission', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-yuki' }));
+      await expect(service.updateStatus('acc-yuki', 'corr-1', { status: 'corrige' })).rejects.toThrow(denied);
+    });
+
+    it('403s validating the review without the permission', async () => {
+      prisma.correction.count.mockResolvedValue(0);
+      await expect(service.validate('acc-yuki', 'page-1')).rejects.toThrow(denied);
+    });
+
+    it('allows a leader (leadership implies every permission)', async () => {
+      prisma.correction.count.mockResolvedValue(0);
+      await expect(service.validate('acc-me', 'page-1')).resolves.toMatchObject({ stage: 'propre' });
+    });
+
+    // Round-3 sweep (T-API-10): `remove()` was the one corrections mutation without the gate — the
+    // same gateway/REST split class as B-2, closed here for symmetry with create/updateStatus/validate.
+    it('403s deleting a correction without the permission (even for its own author)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-yuki', commentId: null }));
+      await expect(service.remove('acc-yuki', 'corr-1')).rejects.toThrow(denied);
+      expect(prisma.correction.delete).not.toHaveBeenCalled();
+    });
+
+    it('lets the author delete when the Corrections toggle is on', async () => {
+      pages.loadMemberPage.mockResolvedValue(PAGE());
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-yuki', commentId: null }));
+      await service.remove('acc-yuki', 'corr-1');
+      expect(prisma.correction.delete).toHaveBeenCalledWith({ where: { id: 'corr-1' } });
+    });
+
+    it('allows a member whose Corrections toggle is on', async () => {
+      pages.loadMemberPage.mockResolvedValue(PAGE());
+      await expect(service.create('acc-yuki', 'page-1', dessin)).resolves.toMatchObject({ description: 'Nez' });
     });
   });
 

@@ -18,7 +18,17 @@ function makeSocket(cookie?: string) {
 const MEMBER_PAGE = {
   id: 'page-1',
   projectId: 'proj-1',
-  project: { ownerId: 'acc-me', work: { creators: [{ accountId: 'acc-me' }] } },
+  project: {
+    ownerId: 'acc-me',
+    work: {
+      creators: [
+        { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+        // CS-10: a plain member whose « Écriture » toggle is off → read-only editor.
+        { accountId: 'acc-reader', groupRole: 'member', permissions: ['corrections'] },
+        { accountId: 'acc-writer', groupRole: 'member', permissions: ['ecriture'] },
+      ],
+    },
+  },
 };
 
 function build(over: { prisma?: any; jwt?: any; redis?: any } = {}) {
@@ -158,6 +168,55 @@ describe('EditorGateway.handleJoin (membership-gated)', () => {
       'editor:sync',
       expect.objectContaining({ ydocState: Buffer.from('yjs').toString('base64'), updates: [Buffer.from('u1').toString('base64')] }),
     );
+  });
+});
+
+// CS-10 — the group « Écriture » permission gates the collaborative editor server-side.
+describe('EditorGateway write permission (CS-10)', () => {
+  it('syncs canWrite:true for a leader / owner', async () => {
+    const { gateway } = build();
+    serverOf(gateway);
+    const socket = makeSocket('ep_session=good');
+    socket.data['accountId'] = 'acc-me';
+    await gateway.handleJoin(socket as never, { pageId: 'page-1' });
+    expect(socket.emit).toHaveBeenCalledWith('editor:sync', expect.objectContaining({ canWrite: true }));
+    expect(socket.data['canWrite']).toBe(true);
+  });
+
+  it('syncs canWrite:false for a member without the écriture toggle', async () => {
+    const { gateway } = build();
+    serverOf(gateway);
+    const socket = makeSocket('ep_session=good');
+    socket.data['accountId'] = 'acc-reader';
+    await gateway.handleJoin(socket as never, { pageId: 'page-1' });
+    expect(socket.emit).toHaveBeenCalledWith('editor:sync', expect.objectContaining({ canWrite: false }));
+    expect(socket.data['canWrite']).toBe(false);
+  });
+
+  it('drops an update from a read-only socket: no relay, no persist', async () => {
+    const { gateway, prisma } = build();
+    (prisma.scenarioDocument.findUnique as jest.Mock).mockResolvedValue({ id: 'doc-1' });
+    const toRet = { emit: jest.fn() };
+    const socket = makeSocket('ep_session=good');
+    socket.data['accountId'] = 'acc-reader';
+    socket.data['editorRoom'] = 'editor:asset:asset-1';
+    socket.data['canWrite'] = false;
+    socket.to.mockReturnValue(toRet);
+    await gateway.handleUpdate(socket as never, { u: 'AA==' });
+    await new Promise((r) => setImmediate(r));
+    expect(toRet.emit).not.toHaveBeenCalled();
+    expect(prisma.scenarioUpdate.create).not.toHaveBeenCalled();
+  });
+
+  it('still relays awareness (presence/cursors) from a read-only socket', () => {
+    const { gateway } = build();
+    const toRet = { emit: jest.fn() };
+    const socket = makeSocket('ep_session=good');
+    socket.data['editorRoom'] = 'editor:asset:asset-1';
+    socket.data['canWrite'] = false;
+    socket.to.mockReturnValue(toRet);
+    gateway.handleAwareness(socket as never, { a: 'BB==' });
+    expect(toRet.emit).toHaveBeenCalledWith('editor:awareness', { a: 'BB==' });
   });
 });
 

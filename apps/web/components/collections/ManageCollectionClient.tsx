@@ -449,7 +449,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
                   <button type="button" aria-label={`Modifier ${m.title}`} onClick={() => void openMemberEdit(m.id)} disabled={memberLoadingId === m.id} className="ep-btn-secondary" style={{ ...smallBtn, opacity: memberLoadingId === m.id ? 0.6 : 1 }}>
                     {memberLoadingId === m.id ? 'Chargement…' : 'Modifier'}
                   </button>
-                  <button type="button" aria-label={`Retirer ${m.title}`} onClick={() => void removeMember(m.id)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: '#c0392b' }}>Retirer</button>
+                  <button type="button" aria-label={`Retirer ${m.title}`} onClick={() => void removeMember(m.id)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: 'var(--danger)' }}>Retirer</button>
                 </div>
               </li>
             ))}
@@ -484,7 +484,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
       {/* Danger zone */}
       <section style={{ ...card, borderColor: 'var(--accent)' }}>
         {!confirmDelete ? (
-          <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: '#c0392b' }}>
+          <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...smallBtn, borderColor: 'var(--danger)' }}>
             Supprimer la collection
           </button>
         ) : (

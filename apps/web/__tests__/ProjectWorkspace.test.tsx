@@ -38,7 +38,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
     pages: [],
     labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
-    viewer: { isMember: true, isOwner: true },
+    viewer: { isMember: true, isOwner: true, canWrite: true },
     ...over,
   };
 }
@@ -63,6 +63,13 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Gérer le groupe' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditeur' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
+  });
+
+  // CS-10 — the header button opens the "Gérer le groupe" surface.
+  it('“Gérer le groupe” navigates to /projet/{slug}/groupe', async () => {
+    renderWs();
+    await userEvent.click(screen.getByRole('button', { name: 'Gérer le groupe' }));
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche/groupe');
   });
 
   // Batch — the header "Éditeur" button opens the collaborative editor: the last card opened for this
@@ -151,8 +158,20 @@ describe('ProjectWorkspace', () => {
   });
 
   it('hides action buttons for a non-member public viewer', () => {
-    renderWs('tableau', { viewer: { isMember: false, isOwner: false } });
+    renderWs('tableau', { viewer: { isMember: false, isOwner: false, canWrite: false } });
     expect(screen.queryByRole('button', { name: 'Gérer le groupe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
+  });
+
+  // CS-10 B-4 — the asset write routes are « Écriture »-gated server-side; the Fichiers panel must
+  // mirror that rather than offering actions that 403. Defence in depth, never the only gate.
+  it('hides the Fichiers import affordance from a member without « Écriture »', () => {
+    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: false } });
+    expect(screen.queryByRole('button', { name: /Importer/ })).not.toBeInTheDocument();
+  });
+
+  it('offers it to a member who holds « Écriture »', () => {
+    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: true } });
+    expect(screen.getByRole('button', { name: /Importer/ })).toBeInTheDocument();
   });
 });

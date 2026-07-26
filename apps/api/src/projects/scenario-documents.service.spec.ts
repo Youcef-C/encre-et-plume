@@ -16,7 +16,14 @@ const PROJECT = (o: Record<string, unknown> = {}) => ({
   ownerId: 'acc-me',
   visibility: 'prive',
   workId: 'work-1',
-  work: { creators: [{ accountId: 'acc-me' }, { accountId: 'acc-yuki' }] },
+  // CS-10 — the group columns ride along on the membership rows so the write paths can gate on
+  // « Écriture » (hasGroupPermission). `acc-me` is also the ownerId (owner ⇒ always allowed).
+  work: {
+    creators: [
+      { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+      { accountId: 'acc-yuki', groupRole: 'member', permissions: ['ecriture', 'corrections'] },
+    ],
+  },
   ...o,
 });
 
@@ -599,5 +606,122 @@ describe('ScenarioDocumentsService.share', () => {
     const prisma = buildPrisma();
     const { service } = makeService(prisma);
     await expect(service.share('stranger', 'page-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// ── CS-10 round 3 (B11-R3 / T-API-9) — the « Écriture » gate on the REST write path ──────────────
+// The permission used to be enforced ONLY on the WS relay (editor.gateway), so a member with the
+// toggle OFF could still `PATCH /pages/:id/document` and `POST /pages/:id/document/versions`
+// directly (reproduced live: 200 + 201, materializing the asset and cutting v2). These rows are the
+// DIRECT-API matrix — a UI/banner assertion is exactly what let the bypass survive two QA rounds.
+describe('ScenarioDocumentsService — « Écriture » permission on the REST write paths', () => {
+  const GROUP_PROJECT = () =>
+    PROJECT({
+      work: {
+        creators: [
+          { accountId: 'acc-me', groupRole: 'leader', permissions: [] }, // also the owner
+          { accountId: 'acc-leader', groupRole: 'leader', permissions: [] }, // non-owner leader
+          { accountId: 'acc-coleader', groupRole: 'coleader', permissions: [] },
+          { accountId: 'acc-writer', groupRole: 'member', permissions: ['ecriture', 'corrections'] },
+          { accountId: 'acc-reader', groupRole: 'member', permissions: ['corrections'] }, // Écriture OFF
+        ],
+      },
+    });
+
+  const DENIED = "Vous n'avez pas la permission « Écriture » sur ce projet.";
+
+  /** A page whose project carries the full group matrix, with a linked asset + an existing doc so
+   *  both write paths reach their real work when the gate lets them through. */
+  function buildGroupPrisma() {
+    const prisma = buildPrisma();
+    prisma.page.findUnique.mockResolvedValue(PAGE({ project: GROUP_PROJECT() }));
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.html', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: {}, ydocState: null, comments: [] });
+    return prisma;
+  }
+
+  const autosave = (service: ScenarioDocumentsService, accountId: string) =>
+    service.autosave(accountId, 'page-1', { ydocState: 'AA==', contentJson: CONTENT, html: '<p>x</p>' });
+  const snapshot = (service: ScenarioDocumentsService, accountId: string) =>
+    service.snapshotVersion(accountId, 'page-1', { html: '<p>final</p>' });
+
+  describe.each([
+    ['owner', 'acc-me'],
+    ['non-owner leader', 'acc-leader'],
+    ['co-leader', 'acc-coleader'],
+    ['member with « Écriture »', 'acc-writer'],
+  ])('%s writes', (_label, accountId) => {
+    it('autosaves', async () => {
+      const prisma = buildGroupPrisma();
+      const { service } = makeService(prisma);
+      await expect(autosave(service, accountId)).resolves.toMatchObject({ materialized: null });
+      expect(prisma.scenarioDocument.update).toHaveBeenCalled();
+    });
+
+    it('snapshots a version', async () => {
+      const prisma = buildGroupPrisma();
+      const { service, assets } = makeService(prisma);
+      await expect(snapshot(service, accountId)).resolves.toMatchObject({ currentVersion: 2 });
+      expect(assets.addVersion).toHaveBeenCalled();
+    });
+  });
+
+  describe('a member with « Écriture » toggled OFF', () => {
+    it('is refused on autosave (403) and nothing is written', async () => {
+      const prisma = buildGroupPrisma();
+      const { service, media, assets } = makeService(prisma);
+      await expect(autosave(service, 'acc-reader')).rejects.toMatchObject({ status: 403, message: DENIED });
+      expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+      expect(media.ingestAsset).not.toHaveBeenCalled();
+      expect(assets.createAsset).not.toHaveBeenCalled(); // never materializes the project's asset
+    });
+
+    it('is refused on snapshotVersion (403) and no version is cut', async () => {
+      const prisma = buildGroupPrisma();
+      const { service, assets } = makeService(prisma);
+      await expect(snapshot(service, 'acc-reader')).rejects.toMatchObject({ status: 403, message: DENIED });
+      expect(assets.addVersion).not.toHaveBeenCalled();
+    });
+
+    it('is also refused on a BLANK card (the create-when-none materialize path)', async () => {
+      const prisma = buildGroupPrisma();
+      prisma.assetPageLink.findFirst.mockResolvedValue(null); // no asset yet
+      const { service, assets } = makeService(prisma);
+      await expect(autosave(service, 'acc-reader')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(assets.createAsset).not.toHaveBeenCalled();
+    });
+
+    // Reads are member-gated only — the toggle governs writing, not seeing.
+    it('can still READ the document', async () => {
+      const prisma = buildGroupPrisma();
+      const { service } = makeService(prisma);
+      await expect(service.getDocument('acc-reader', 'page-1')).resolves.toMatchObject({ pageId: 'page-1' });
+    });
+
+    // Recorded decision (plan §3-B11-R3 item 4): comments are a SEPARATE affordance, not « Écriture »
+    // (CS-15 owns author-only delete). They stay member-gated.
+    it('can still comment (comments are not « Écriture »)', async () => {
+      const prisma = buildGroupPrisma();
+      const { service } = makeService(prisma);
+      await expect(service.addComment('acc-reader', 'page-1', 1, { text: 'Une note' })).resolves.toMatchObject({ text: 'Une note' });
+    });
+  });
+
+  it('a non-member still 404s on both write paths (no existence leak, unchanged)', async () => {
+    const prisma = buildGroupPrisma();
+    const { service } = makeService(prisma);
+    await expect(autosave(service, 'stranger')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(snapshot(service, 'stranger')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // The gate must read the SAME columns the shared seam needs — if the select stays membership-only,
+  // `hasGroupPermission` can never see a permission and the gate is decorative.
+  it('loads groupRole + permissions with the page (feeds the shared hasGroupPermission seam)', async () => {
+    const prisma = buildGroupPrisma();
+    const { service } = makeService(prisma);
+    await autosave(service, 'acc-me');
+    const select = prisma.page.findUnique.mock.calls[0][0].select.project.select.work.select.creators.select;
+    expect(select).toMatchObject({ accountId: true, groupRole: true, permissions: true });
   });
 });

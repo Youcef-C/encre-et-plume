@@ -294,3 +294,56 @@ describe('InviteModal — from-work mode (multi-creator work)', () => {
     });
   });
 });
+
+// F15-R2 (CS-10 B-1 frontend half) — `GET /projects/mine` is owner-scoped, so a CO-LEADER opening
+// the invite modal from /projet/{slug}/groupe got an empty picker and could not attach the project
+// they are allowed to invite on. Contained fix: the caller passes the current project's title and
+// the modal appends it when the fetched list doesn't contain the preselected id.
+describe('InviteModal — defaultProjectId not in the owned list (co-leader)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getMyProjects).mockResolvedValue(projects);
+    vi.mocked(api.getContacts).mockResolvedValue(contacts);
+  });
+
+  it('appends the preselected project when the owned list does not contain it', async () => {
+    render(
+      <InviteModal
+        recipient={recipient}
+        defaultProjectId="p-coled"
+        defaultProjectTitle="E2E CS10 · Groupe"
+        onClose={vi.fn()}
+      />,
+    );
+    const option = await screen.findByRole('radio', { name: /E2E CS10 · Groupe/ });
+    expect(option).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('sends that projectId with the invitation', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createInvitation).mockResolvedValue(envelope([sentResult('theo-1')]));
+    render(
+      <InviteModal
+        recipient={recipient}
+        defaultProjectId="p-coled"
+        defaultProjectTitle="E2E CS10 · Groupe"
+        onClose={vi.fn()}
+      />,
+    );
+    await screen.findByRole('radio', { name: /E2E CS10 · Groupe/ });
+    await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
+    await waitFor(() =>
+      expect(api.createInvitation).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: 'p-coled' }),
+      ),
+    );
+  });
+
+  it('does not duplicate a project already returned by /projects/mine', async () => {
+    render(
+      <InviteModal recipient={recipient} defaultProjectId="p1" defaultProjectTitle="Lames de Brume" onClose={vi.fn()} />,
+    );
+    await screen.findByRole('radio', { name: /Lames de Brume/ });
+    expect(screen.getAllByRole('radio', { name: /Lames de Brume/ })).toHaveLength(1);
+  });
+});

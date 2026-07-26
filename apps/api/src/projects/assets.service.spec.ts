@@ -794,4 +794,113 @@ describe('AssetsService', () => {
       expect(res.items[0].previewable).toBe(false);
     });
   });
+
+  // ── CS-10 B-4: « Écriture » gates every asset WRITE ────────────────────────
+  //
+  // Regression matrix for a live bypass: `resolveMemberProject`/`loadMemberAsset` selected only
+  // `accountId`, so the permission columns never loaded and all four write routes were member-gated
+  // only. A member with « Écriture » OFF could version, repoint and PERMANENTLY DELETE the project's
+  // scenario asset — the same asset the editor routes had just been gated to protect.
+  //
+  // Every existing write test above runs as `acc-me`, the OWNER, which is why the hole survived two QA
+  // rounds. These cases drive the service directly, per caller shape, and assert that a refusal
+  // persists NOTHING — a 403 with a completed side effect is still a breach.
+  describe('CS-10 — « Écriture » permission gate on asset writes', () => {
+    const member = (accountId: string, groupRole: string, permissions: string[]) => ({ accountId, groupRole, permissions });
+
+    /** Point both resolvers at a project whose creator rows carry real group columns. */
+    const withCreators = (creators: ReturnType<typeof member>[]) => {
+      const project = PROJECT({ work: { id: 'work-1', creators } });
+      prisma.project.findUnique.mockResolvedValue(project);
+      prisma.asset.findUnique.mockImplementation(({ where }: any) =>
+        where.projectId_filename ? Promise.resolve(null) : Promise.resolve({ ...ASSET(), project }),
+      );
+      prisma.asset.findFirst.mockResolvedValue(ASSET());
+      prisma.assetVersion.findUnique.mockResolvedValue({ mediaId: 'media-1', size: 2048 });
+    };
+
+    const WRITER = member('acc-writer', 'member', ['ecriture', 'corrections']);
+    const READER = member('acc-reader', 'member', ['corrections']); // « Écriture » explicitly OFF
+    const LEADER = member('acc-lead', 'leader', []); // leadership ⇒ every permission
+    const COLEADER = member('acc-co', 'coleader', []);
+
+    const ROSTER = [WRITER, READER, LEADER, COLEADER];
+
+    const routes: [string, (accountId: string) => Promise<unknown>][] = [
+      ['createAsset', (a) => service.createAsset(a, 'lames-de-brume', { mediaId: 'media-1', filename: 'planche.png' })],
+      ['addVersion', (a) => service.addVersion(a, 'lames-de-brume', 'asset-1', { mediaId: 'media-1' })],
+      ['setActiveVersion', (a) => service.setActiveVersion(a, 'asset-1', 2)],
+      ['deleteAsset', (a) => service.deleteAsset(a, 'asset-1')],
+      // N1/N2, closed after the round-4 review: `createFromUrl` burned a server-side fetch + S3 ingest
+      // before reaching a gate, and `linkToPage` re-types the asset (a write) on membership alone.
+      ['linkToPage', (a) => service.linkToPage(a, 'asset-1', { pageId: 'page-1' } as never)],
+    ];
+
+    describe.each(routes)('%s', (_name, call) => {
+      it.each([
+        ['the owner', 'acc-me'],
+        ['a non-owner leader', 'acc-lead'],
+        ['a co-leader', 'acc-co'],
+        ['a member holding « Écriture »', 'acc-writer'],
+      ])('allows %s', async (_who, accountId) => {
+        withCreators(ROSTER);
+        // createAsset/addVersion additionally require the media to belong to the caller (you can only
+        // attach bytes you uploaded) — give each caller their own so we're testing the permission gate.
+        prisma.media.findUnique.mockResolvedValue(MEDIA({ ownerId: accountId }));
+        // `deleteAsset` resolves void — assert only that the gate lets the call through.
+        await expect(call(accountId)).resolves.not.toThrow();
+      });
+
+      it('refuses a member WITHOUT « Écriture » (403) and persists nothing', async () => {
+        withCreators(ROSTER);
+        await expect(call('acc-reader')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.asset.create).not.toHaveBeenCalled();
+        expect(prisma.asset.update).not.toHaveBeenCalled();
+        expect(prisma.asset.delete).not.toHaveBeenCalled();
+        expect(prisma.assetVersion.create).not.toHaveBeenCalled();
+        expect(media.ingestAsset).not.toHaveBeenCalled();
+        expect(media.deleteMediaById).not.toHaveBeenCalled();
+      });
+
+      it('still hides the project from a non-member (404, no existence leak)', async () => {
+        withCreators(ROSTER);
+        await expect(call('acc-stranger')).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+    // The gate is only as good as the columns behind it — B-4 existed precisely because the select
+    // omitted them, so assert the query shape, not just the behaviour.
+    it('loads groupRole + permissions on both resolvers', async () => {
+      withCreators(ROSTER);
+      await service.createAsset('acc-me', 'lames-de-brume', { mediaId: 'media-1', filename: 'planche.png' });
+      const select = prisma.project.findUnique.mock.calls[0][0].include.work.include.creators.select;
+      expect(select).toMatchObject({ accountId: true, groupRole: true, permissions: true });
+
+      await service.setActiveVersion('acc-me', 'asset-1', 2);
+      const byId = prisma.asset.findUnique.mock.calls.find((c: any) => c[0]?.include?.project);
+      expect(byId[0].include.project.include.work.include.creators.select).toMatchObject({
+        accountId: true,
+        groupRole: true,
+        permissions: true,
+      });
+    });
+
+    // N1 specifically: the refusal must land BEFORE the fetch/ingest, not after — otherwise a caller
+    // who will be refused anyway can still make the server fetch a URL and write an S3 object.
+    it('createFromUrl refuses without « Écriture » before fetching or ingesting anything', async () => {
+      withCreators(ROSTER);
+      const fetchGuarded = jest.spyOn(service as never, 'fetchGuarded' as never);
+      await expect(service.createFromUrl('acc-reader', 'lames-de-brume', { url: 'https://cdn/x.png' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(fetchGuarded).not.toHaveBeenCalled();
+      expect(media.ingestAsset).not.toHaveBeenCalled();
+    });
+
+    it('leaves reads member-gated — a member without « Écriture » can still list', async () => {
+      withCreators(ROSTER);
+      prisma.asset.findMany.mockResolvedValue([ASSET()]);
+      await expect(service.list('acc-reader', 'lames-de-brume', {} as never)).resolves.toBeDefined();
+    });
+  });
 });

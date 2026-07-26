@@ -67,6 +67,15 @@ const SPECS = [
   // test (owned by a fresh live-signup account, deleted at test end) so it never permanently inflates
   // the board's total open-call count that appels.spec.ts asserts exactly (e.g. "10 total").
   { key: 'MC_BATCH_SCENARISTE', email: 'qa_e2e_mc_batch_scenariste@test.com', slug: 'e2e-mc-batch-scenariste' },
+  // CS-10 dedicated "Gérer le groupe" fixtures (QA) — a lone-owner project (A) plus an already-
+  // connected contact (B) so the InviteModal's picker (D5: no `recipient`/`fromWork` prop → contacts
+  // pool) can invite B without a separate connection-request flow. No other spec references these
+  // accounts or the project, so revoke/role/split mutations here can't disturb a parallel sibling.
+  { key: 'CS10_A', email: 'qa_e2e_cs10_a@test.com', slug: 'e2e-cs10-a' }, // scenariste (owner/leader)
+  { key: 'CS10_B', email: 'qa_e2e_cs10_b@test.com', slug: 'e2e-cs10-b' }, // dessinateur (invitee)
+  // Round 2 (B8-R2): a third contact, connected to B, so the CS10-E15 probe can watch a promoted
+  // CO-LEADER send a project invitation (the gate that used to 403 every non-owner).
+  { key: 'CS10_C', email: 'qa_e2e_cs10_c@test.com', slug: 'e2e-cs10-c' }, // scenariste (B's contact)
 ];
 
 async function main() {
@@ -432,13 +441,14 @@ async function main() {
     const project = await prisma.project.upsert({ where: { slug: 'e2e-cs2-multi' }, create: projectData, update: projectData });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: owner } },
-      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
-      update: {},
+      // CS-10: the owner row is the group leader holding the whole split (invariant: ≥1 leader, sum 100).
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader', sharePct: 100, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: collab } },
-      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
-      update: {},
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1, groupRole: 'member', sharePct: 0 },
+      update: { groupRole: 'member', sharePct: 0, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.notification.deleteMany({
       where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
@@ -472,13 +482,14 @@ async function main() {
     const project = await prisma.project.upsert({ where: { slug: 'e2e-cs5-review' }, create: projectData, update: projectData });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: owner } },
-      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
-      update: {},
+      // CS-10: the owner row is the group leader holding the whole split (invariant: ≥1 leader, sum 100).
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader', sharePct: 100, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: collab } },
-      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
-      update: {},
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1, groupRole: 'member', sharePct: 0 },
+      update: { groupRole: 'member', sharePct: 0, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.notification.deleteMany({
       where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
@@ -512,16 +523,64 @@ async function main() {
     const project = await prisma.project.upsert({ where: { slug: 'e2e-cs4-multi' }, create: projectData, update: projectData });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: owner } },
-      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0 },
-      update: {},
+      // CS-10: the owner row is the group leader holding the whole split (invariant: ≥1 leader, sum 100).
+      create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader', sharePct: 100, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.workCreator.upsert({
       where: { workId_accountId: { workId: work.id, accountId: collab } },
-      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1 },
-      update: {},
+      create: { workId: work.id, accountId: collab, role: 'dessinateur', order: 1, groupRole: 'member', sharePct: 0 },
+      update: { groupRole: 'member', sharePct: 0, permissions: ['ecriture', 'corrections'] },
     });
     await prisma.notification.deleteMany({
       where: { recipientId: { in: [owner, collab] }, type: { in: ['project_activity', 'mention'] }, refId: project.id },
+    });
+  }
+
+  // ── CS-10 "Gérer le groupe" fixture: lone-owner project + an already-connected contact ─────────
+  // A owns a fresh project alone (leader/100 %, exercises the empty-state hint too); B is an
+  // accepted Connection of A (so B shows up in the invite modal's contacts picker) but starts with
+  // NO WorkCreator row — cs10-group-permissions.spec.ts drives the real invite → accept → promote →
+  // toggle → split → revoke flow itself. Hermetic: reset A's pending invitations to B, any stray
+  // WorkCreator row for B, and both accounts' project_activity notifications before each run.
+  {
+    const a = accounts.CS10_A.id;
+    const b = accounts.CS10_B.id;
+    const c = accounts.CS10_C.id;
+    await prisma.profile.upsert({ where: { accountId: a }, update: { creatorRoles: ['scenariste'] }, create: { accountId: a, creatorRoles: ['scenariste'] } });
+    await prisma.profile.upsert({ where: { accountId: b }, update: { creatorRoles: ['dessinateur'] }, create: { accountId: b, creatorRoles: ['dessinateur'] } });
+    await prisma.profile.upsert({ where: { accountId: c }, update: { creatorRoles: ['scenariste'] }, create: { accountId: c, creatorRoles: ['scenariste'] } });
+    await prisma.connection.deleteMany({ where: { requesterId: { in: [a, b, c] }, addresseeId: { in: [a, b, c] } } });
+    await prisma.connection.createMany({
+      data: [
+        { requesterId: a, addresseeId: b, status: 'accepted', respondedAt: new Date('2026-07-08T09:00:00.000Z') },
+        // B⇄C — the co-leader invite probe (CS10-E15) needs a contact of B's who is not a member.
+        { requesterId: b, addresseeId: c, status: 'accepted', respondedAt: new Date('2026-07-08T09:00:00.000Z') },
+      ],
+    });
+
+    const workData = {
+      slug: 'e2e-cs10-groupe', title: 'E2E CS10 · Groupe', format: 'Manga', genre: 'Seinen',
+      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS10_A · 0 ch.', publishedAt: null,
+    };
+    const work = await prisma.work.upsert({ where: { slug: 'e2e-cs10-groupe' }, create: workData, update: workData });
+    const projectData = {
+      ownerId: a, title: 'E2E CS10 · Groupe', kind: 'Manga', genre: 'Seinen', status: 'en cours',
+      slug: 'e2e-cs10-groupe', workId: work.id, visibility: 'prive',
+    };
+    const project = await prisma.project.upsert({ where: { slug: 'e2e-cs10-groupe' }, create: projectData, update: projectData });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: work.id, accountId: a } },
+      create: { workId: work.id, accountId: a, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader', sharePct: 100, permissions: ['ecriture', 'corrections'] },
+    });
+    // B/C may have joined/been revoked in a previous local run — start each run with both absent.
+    await prisma.workCreator.deleteMany({ where: { workId: work.id, accountId: { in: [b, c] } } });
+    await prisma.invitation.deleteMany({ where: { fromUserId: { in: [a, b] }, toUserId: { in: [b, c] } } });
+    // Dedicated fixture accounts (no other spec references them) — safe to clear ALL their
+    // project-activity / invitation notifications between runs.
+    await prisma.notification.deleteMany({
+      where: { recipientId: { in: [a, b, c] }, type: { in: ['project_activity', 'invitation'] } },
     });
   }
 

@@ -23,6 +23,9 @@ import type {
 } from '@encre-et-plume/shared';
 import { GENRES, PROJECTS_PAGE_SIZE, catalogGenreLabel, normalizeHashtags } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+// Pure function, dereferenced at call time — members.service imports `isMemberOf` back from here, and
+// the resulting file-level cycle is safe for exactly that reason (same pattern as assets.service).
+import { hasGroupPermission } from './members.service';
 import { WORKSPACE_PAGE_INCLUDE, toWorkspacePage } from './pages.service';
 import { CollectionsService, buildSoutien } from '../collections/collections.service';
 import { SlugService } from '../slug/slug.service';
@@ -205,8 +208,11 @@ export class ProjectsService {
           soutien: (soutien ?? undefined) as never, // Prisma Json input
         },
       });
-      // CS-10 seam: owner is the order-0 WorkCreator (Creator role).
-      await tx.workCreator.create({ data: { workId: work.id, accountId, role: ownerRole, order: 0 } });
+      // CS-10: owner is the order-0 WorkCreator AND the group leader holding the whole revenue split
+      // (explicit, not default-reliant — every group keeps ≥1 leader and a 100 % total).
+      await tx.workCreator.create({
+        data: { workId: work.id, accountId, role: ownerRole, order: 0, groupRole: 'leader', sharePct: 100 },
+      });
       for (let i = 0; i < goals.length; i++) {
         await tx.fundingGoal.create({
           data: { workId: work.id, title: goals[i].title, targetCents: goals[i].targetCents, currentCents: 0, order: i },
@@ -539,7 +545,9 @@ export class ProjectsService {
       pages: project.pages.map((p) => toWorkspacePage(p as never)),
       labels: project.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
       reviews: { summary: reviewSummary(allReviews), items: allReviews.slice(0, 20) },
-      viewer: { isMember, isOwner },
+      // CS-10 B-4: the Fichiers panel offers upload/version/delete, all « Écriture »-gated server-side.
+      // Ship the viewer's answer so the UI can disable them instead of dead-ending on a 403.
+      viewer: { isMember, isOwner, canWrite: hasGroupPermission(project as never, accountId, 'ecriture') },
     };
   }
 

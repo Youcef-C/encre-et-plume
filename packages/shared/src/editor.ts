@@ -122,6 +122,9 @@ export interface WsEditorSync {
   updates: string[];
   initialHtml: string | null;
   peers: number;
+  /** CS-10 — false when the joiner lacks the group « Écriture » permission: the editor renders
+   *  read-only and the gateway drops that socket's updates server-side. */
+  canWrite: boolean;
 }
 export interface WsEditorUpdate {
   u: string;

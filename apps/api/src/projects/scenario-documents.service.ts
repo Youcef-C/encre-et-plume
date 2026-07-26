@@ -20,6 +20,7 @@ import { AssetsService } from './assets.service';
 import { EditorGateway } from './editor.gateway';
 import { toCommentDto, type CommentRow } from './comment-mapper';
 import { isMemberOf } from './projects.service';
+import { assertCanWrite } from './members.service';
 
 const HTML = 'text/html';
 
@@ -85,6 +86,10 @@ function deriveCases(contentJson: PlancheDocJson | null): CaseSummary[] {
 }
 
 type LinkedAsset = { id: string; filename: string; currentVersion: number };
+
+// CS-10 — every editor WRITE additionally requires « Écriture »; membership alone is not enough.
+// Reads and comments stay member-gated (a comment is a separate affordance, not « Écriture »).
+// `assertCanWrite` now lives in members.service.ts — one definition shared with the CS-3 asset routes.
 
 /**
  * CS-4 collaborative script editor — the working-draft store (ScenarioDocument) bound 1:1 to a CS-3
@@ -162,6 +167,7 @@ export class ScenarioDocumentsService {
 
   async autosave(accountId: string, pageId: string, body: AutosaveDocumentRequest, assetId?: string): Promise<AutosaveDocumentResponse> {
     const page = await this.resolveMemberPage(accountId, pageId);
+    assertCanWrite(page.project, accountId);
     const ydoc = Buffer.from(body.ydocState, 'base64');
     const asset = await this.resolveEditorAsset(page, assetId);
     // Item 20/26 — persist the chosen scheme in place. `undefined` (older client) leaves it untouched
@@ -202,6 +208,7 @@ export class ScenarioDocumentsService {
 
   async snapshotVersion(accountId: string, pageId: string, body: SnapshotVersionRequest, assetId?: string): Promise<AssetItem> {
     const page = await this.resolveMemberPage(accountId, pageId);
+    assertCanWrite(page.project, accountId);
     const asset = await this.resolveEditorAsset(page, assetId);
     if (!asset) throw new BadRequestException('Aucun scénario à versionner');
     // Fb-6 — dedupe guard: autosave writes the draft in place but does NOT bump the head; a re-click of
@@ -296,7 +303,17 @@ export class ScenarioDocumentsService {
         projectId: true,
         chapterId: true,
         createdAt: true,
-        project: { select: { id: true, slug: true, title: true, ownerId: true, work: { select: { creators: { select: { accountId: true } } } } } },
+        // CS-10: the group columns ride along (mirrors pages.service.loadMemberPage) so the write
+        // paths can gate on « Écriture » through the shared hasGroupPermission seam.
+        project: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            ownerId: true,
+            work: { select: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } },
+          },
+        },
         chapter: { select: { id: true, number: true, title: true } },
       },
     });

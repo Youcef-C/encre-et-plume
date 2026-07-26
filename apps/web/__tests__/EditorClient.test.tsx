@@ -7,7 +7,7 @@ import type { EditorDocumentResponse, CaseCommentDto } from '@encre-et-plume/sha
 // ── Mock the realtime provider: capture handlers + a controllable awareness map. ──
 type Handlers = {
   onStatus?: (s: string) => void;
-  onSync?: () => void;
+  onSync?: (payload?: unknown) => void;
   onComment?: (c: unknown) => void;
   onCommentDeleted?: (id: string) => void;
   onMaterialized?: (id: string) => void;
@@ -140,11 +140,20 @@ async function renderEditor(doc: EditorDocumentResponse) {
   (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(doc);
   render(<EditorClient slug="lames" pageId="pg1" />);
   await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+  // The title commits before the provider's passive effect necessarily flushes, so wait for the
+  // provider itself: every test below drives `getProvider()`, which must be THIS render's instance.
+  await waitFor(() => expect(providerHolder.current).toBeTruthy());
 }
 
 describe('EditorClient (Éditeur shell)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset BOTH the holder's `current` and its instance list. Resetting only `instances` let
+    // `getProvider()` hand back the PREVIOUS test's provider when this test's provider hadn't been
+    // constructed yet (its passive effect not flushed) — the handler then targeted an unmounted tree
+    // and `stays writable when the sync payload grants canWrite` failed on a stale value under
+    // full-suite load. Null here + the `renderEditor` wait below makes the race fail loudly instead.
+    providerHolder.current = null as unknown as MockProvider;
     providerHolder.instances.length = 0;
     liveTextsHolder.map = new Map();
     for (const k of Object.keys(editorHandlers)) delete editorHandlers[k];
@@ -163,6 +172,14 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(screen.getByRole('button', { name: 'Partager' })).toBeInTheDocument();
   });
 
+  // Round-3 isolation regression: `beforeEach` must clear the holder's `current`, not just
+  // `instances`. When it didn't, `getProvider()` could hand a later test the PREVIOUS test's
+  // provider (whenever this test's provider effect hadn't flushed yet), so handlers fired at an
+  // unmounted tree and assertions read stale values. This runs after a test that built a provider.
+  it('does not leak the previous test’s collab provider into the next test', () => {
+    expect(providerHolder.current).toBeNull();
+  });
+
   it('shows the connecting banner and drops to read-only until connected', async () => {
     await renderEditor(makeDoc());
     expect(screen.getByText('Connexion…')).toBeInTheDocument();
@@ -171,6 +188,60 @@ describe('EditorClient (Éditeur shell)', () => {
     act(() => getProvider().handlers.onStatus!('reconnecting'));
     expect(screen.getByText('Reconnexion en cours — lecture seule')).toBeInTheDocument();
     expect(fakeEditor.setEditable).toHaveBeenCalledWith(false);
+  });
+
+  // CS-10 — the group « Écriture » permission arrives on the sync payload; without it the editor
+  // stays read-only (the server drops that socket's updates anyway).
+  it('shows the CS-10 read-only banner when the sync payload says canWrite:false', async () => {
+    await renderEditor(makeDoc());
+    act(() => getProvider().handlers.onStatus!('connected'));
+    act(() => getProvider().handlers.onSync!({ canWrite: false } as never));
+    expect(
+      await screen.findByText("Lecture seule — vous n'avez pas la permission d'écriture."),
+    ).toBeInTheDocument();
+    expect(fakeEditor.setEditable).toHaveBeenCalledWith(false);
+  });
+
+  it('stays writable when the sync payload grants canWrite', async () => {
+    await renderEditor(makeDoc());
+    act(() => getProvider().handlers.onStatus!('connected'));
+    act(() => getProvider().handlers.onSync!({ canWrite: true } as never));
+    await waitFor(() =>
+      expect(screen.queryByText("Lecture seule — vous n'avez pas la permission d'écriture.")).not.toBeInTheDocument(),
+    );
+    expect(fakeEditor.setEditable).toHaveBeenLastCalledWith(true);
+  });
+
+  // CS-10 round 3 (F16-R3) — the server now 403s the write routes for a member without « Écriture »
+  // (B11-R3). The UI must not dead-end against that: the two write affordances go disabled and their
+  // handlers no-op. Client-side only — the gate itself is server-side.
+  it('F16-R3: canWrite:false disables Enregistrer + Enregistrer une nouvelle version and calls neither api', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    act(() => getProvider().handlers.onStatus!('connected'));
+    act(() => getProvider().handlers.onSync!({ canWrite: false } as never));
+
+    const save = await screen.findByRole('button', { name: 'Enregistrer' });
+    const snapshot = screen.getByRole('button', { name: 'Enregistrer une nouvelle version' });
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(snapshot).toBeDisabled();
+
+    // Even bypassing the disabled attribute (keyboard shortcut) must not reach the API.
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    await act(async () => { await Promise.resolve(); });
+    expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+  });
+
+  it('F16-R3: canWrite:true keeps both write affordances enabled and calling through', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    act(() => getProvider().handlers.onStatus!('connected'));
+    act(() => getProvider().handlers.onSync!({ canWrite: true } as never));
+
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
   });
 
   it('hides the version chip until materialized; blank card cannot comment yet', async () => {

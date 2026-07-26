@@ -246,7 +246,8 @@ export class PagesService {
     const page = await this.prisma.page.findUnique({
       where: { id: pageId },
       include: {
-        project: { include: { work: { include: { creators: { select: { accountId: true } } } } } },
+        // CS-10: the group columns ride along so callers can gate writes with hasGroupPermission().
+        project: { include: { work: { include: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } } } },
         assignees: { select: { userId: true } },
       },
     });
@@ -257,7 +258,7 @@ export class PagesService {
       stage: PageStage;
       linkedFileIds: string[];
       assignees: { userId: string }[];
-      project: { ownerId: string; workId: string; work: { creators: { accountId: string }[] } };
+      project: { ownerId: string; workId: string; work: { creators: { accountId: string; groupRole: string; permissions: string[] }[] } };
     };
   }
 

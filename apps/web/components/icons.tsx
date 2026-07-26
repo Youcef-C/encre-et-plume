@@ -81,6 +81,16 @@ export function PenNibIcon(p: IconProps) {
   );
 }
 
+/**
+ * CS-10 — the ✒ / 🖌 glyphs the prototype draws next to a creator's name, as icons. Hoisted here
+ * (round 2, N6) so the members card and the revenue-split card share one definition.
+ */
+export function CreatorRoleIcon({ role, size = 12 }: { role: string; size?: number }) {
+  if (role === 'dessinateur' || role === 'dessinatrice') return <BrushIcon size={size} style={{ display: 'inline' }} />;
+  if (role === 'scenariste') return <PenNibIcon size={size} style={{ display: 'inline' }} />;
+  return null;
+}
+
 export function MailIcon(p: IconProps) {
   return (
     <Svg {...p}>

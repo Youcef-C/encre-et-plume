@@ -1173,3 +1173,35 @@ export const createSupportTicket = (
     method: 'POST',
     body: JSON.stringify(body),
   });
+
+// ─── CS-10 · "Gérer le groupe" — roles, permissions, revenue split ────────────
+import type {
+  GroupMembersResponse,
+  UpdateGroupMemberRequest,
+  UpdateRevenueSplitRequest,
+} from '@encre-et-plume/shared';
+
+export const getGroupMembers = (slug: string): Promise<GroupMembersResponse> =>
+  request<GroupMembersResponse>(`/projects/${encodeURIComponent(slug)}/members`);
+
+// `id` is the GroupMemberDto.id (the membership row), not the accountId.
+export const updateGroupMember = (
+  id: string,
+  body: UpdateGroupMemberRequest,
+): Promise<GroupMembersResponse> =>
+  request<GroupMembersResponse>(`/members/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+export const revokeGroupMember = (id: string): Promise<GroupMembersResponse> =>
+  request<GroupMembersResponse>(`/members/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const updateRevenueSplit = (
+  slug: string,
+  body: UpdateRevenueSplitRequest,
+): Promise<GroupMembersResponse> =>
+  request<GroupMembersResponse>(`/projects/${encodeURIComponent(slug)}/revenue-split`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });

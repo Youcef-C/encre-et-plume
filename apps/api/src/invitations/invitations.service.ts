@@ -20,6 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ConnectionsService } from '../connections/connections.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { toProjectSummary } from '../projects/projects.service';
+import { canManageProject } from '../projects/members.service';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { RespondInvitationDto } from './dto/respond-invitation.dto';
 
@@ -121,10 +122,18 @@ export class InvitationsService {
       throw new BadRequestException('Sélectionnez au moins un·e destinataire.');
     }
 
-    // Request-level: project ownership checked ONCE before the loop (message capped by the DTO).
+    // Request-level: the project gate is checked ONCE before the loop (message capped by the DTO).
+    // CS-10 B8-R2 — this is the SAME "gérer le groupe" rule as the members routes (owner OR leader
+    // OR co-leader), not an owner-only lookup: a co-leader inviting from /projet/{slug}/groupe used
+    // to get a 403 here. Same message for every rejected caller (no group-shape disclosure).
     if (dto.projectId) {
-      const owned = await this.prisma.project.findFirst({ where: { id: dto.projectId, ownerId: fromUserId } });
-      if (!owned) throw new ForbiddenException('Ce projet ne vous appartient pas.');
+      const project = await this.prisma.project.findFirst({
+        where: { id: dto.projectId },
+        select: { ownerId: true, work: { select: { creators: { select: { accountId: true, groupRole: true } } } } },
+      });
+      if (!project || !canManageProject(project, fromUserId)) {
+        throw new ForbiddenException('Ce projet ne vous appartient pas.');
+      }
     }
 
     // ponytail: N≤20 loop, batch the lookups if the cap ever grows.
