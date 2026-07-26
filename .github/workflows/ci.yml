@@ -180,10 +180,9 @@ jobs:
       # never existed and login never redirected. e2e-seed.js (below, in global-setup.ts) seeds a
       # separate set of generic qa_e2e_* accounts and does not create these fixtures.
       # Runs AFTER Build: seed.js requires @encre-et-plume/shared/dist, which only exists post-build.
-      - name: Seed dev/e2e fixtures
-        if: steps.webcheck.outputs.ok == 'true'
-        run: pnpm --filter api exec node prisma/seed.js
-
+      # (The dev seed used to run here as its own step. It now runs from e2e/global-setup.ts so that a
+      # LOCAL run seeds identically — the missing local equivalent was why repeat local suites failed
+      # while CI stayed green. Still ordered after Build: global-setup runs when Playwright starts.)
       - name: Run e2e (shard ${{ matrix.shard }}/4)
         if: steps.webcheck.outputs.ok == 'true'
         run: pnpm --filter web exec playwright test --shard=${{ matrix.shard }}/4

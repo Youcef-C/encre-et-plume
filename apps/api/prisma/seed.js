@@ -765,7 +765,22 @@ async function main() {
     const profileData = { accountId: account.id, creatorRoles: [MC8_ACCOUNT.role], city: MC8_ACCOUNT.city };
     await prisma.profile.upsert({ where: { accountId: account.id }, create: profileData, update: profileData });
 
-    // Idempotent reset: drop any connection touching this fixture account before recreating.
+    // Idempotent reset. Deliberately wider than this one fixture account: e2e tests create
+    // connections BETWEEN seeded accounts (MC8-E12 has dr1-yuki-moreau request the top MC-2
+    // suggestion), and nothing else ever removes them — the e2e teardown only sweeps `qa_e2e_*` /
+    // `deleted+*` accounts. Left narrow, a second local run got 409 "already connected" on a request
+    // the test expects to succeed. Clearing every connection *between* seed-domain accounts makes the
+    // whole fixture network reset-safe; the blocks below recreate the intended ones.
+    //
+    // Scoped to both endpoints being seed accounts, so a connection a real local user made to a
+    // fixture is left alone.
+    const seedAccountIds = (
+      await prisma.account.findMany({ where: { email: { endsWith: '@seed.encre-et-plume.local' } }, select: { id: true } })
+    ).map((a) => a.id);
+    await prisma.connection.deleteMany({
+      where: { requesterId: { in: seedAccountIds }, addresseeId: { in: seedAccountIds } },
+    });
+    // …plus anything touching this fixture account specifically (e.g. a qa_e2e_* counterpart).
     await prisma.connection.deleteMany({ where: { OR: [{ requesterId: account.id }, { addresseeId: account.id }] } });
 
     const idBySlug = async (slug) => (await prisma.account.findUnique({ where: { profileSlug: slug }, select: { id: true } }))?.id;
