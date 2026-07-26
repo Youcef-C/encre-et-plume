@@ -35,6 +35,10 @@ const PASSWORD = 'password123';
 const CAMILLE_EMAIL = 'camille.roux@seed.encre-et-plume.local';
 
 async function loginAsCamille(page: Page) {
+  // An authenticated visit to /connexion redirects home (the GuestOnly guard), so the form never
+  // renders and .fill() hangs. Clearing first makes this helper authoritative: the context ends up
+  // signed in as this user, even if it already carried a session for someone else.
+  await page.context().clearCookies();
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(CAMILLE_EMAIL);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);

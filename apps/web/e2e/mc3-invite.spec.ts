@@ -173,9 +173,11 @@ test.describe('MC-3 collaboration invite — signed in (dr1-camille-roux)', () =
   });
 
   test('MC3-E5: responsive — modal usable at 375/768/1280 with no horizontal overflow', async ({ page }) => {
+    // Sign in ONCE: an authenticated visit to /connexion redirects home, so re-running the login
+    // helper inside the loop would wait forever on a form that is no longer rendered.
+    await loginAsCamille(page);
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      await loginAsCamille(page);
       await page.goto('/trouver');
       await expect(page.getByRole('heading', { name: 'Trouver un·e partenaire' })).toBeVisible({ timeout: 10_000 });
 
@@ -244,12 +246,15 @@ test.describe('MC-3 delta — Mode A multi-recipient picker (mc8-contacts-fixtur
     await expect(dialog).toHaveAttribute('aria-modal', 'true');
     await expect(dialog).toBeFocused();
 
-    // No prefilled/read-only recipient in picker mode — the multi-select IS the recipient field.
+    // No prefilled/read-only recipient in picker mode — the reachable-user search IS the recipient
+    // field (2026-07-26: the Contacts dropdown was retired; contacts are listed idle, then chipped).
     await expect(dialog.getByText('DESTINATAIRES')).toBeVisible();
-    await dialog.getByRole('button', { name: /^Contacts/ }).click();
-    await dialog.getByRole('checkbox', { name: 'Léa B.' }).check();
-    await dialog.getByRole('checkbox', { name: 'Hugo D.' }).check();
-    await expect(dialog.getByRole('button', { name: /^Contacts \(2\)/ })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^Contacts$/ })).toHaveCount(0);
+    await dialog.getByRole('option', { name: /Léa B\./ }).click();
+    await dialog.getByRole('option', { name: /Hugo D\./ }).click();
+    const chips = dialog.getByRole('list', { name: 'Destinataires sélectionnés' });
+    await expect(chips.getByText('Léa B.')).toBeVisible();
+    await expect(chips.getByText('Hugo D.')).toBeVisible();
 
     const message = dialog.getByLabel('MESSAGE');
     await expect(message).toHaveAttribute('placeholder', 'Écrivez un mot aux destinataires…');
@@ -321,9 +326,10 @@ test.describe('MC-3 delta — Mode A multi-recipient picker (mc8-contacts-fixtur
   });
 
   test('MC3-D3: responsive — the picker-mode modal is usable at 375/768/1280 with no horizontal overflow', async ({ page }) => {
+    // Sign in ONCE — see MC3-E5: /connexion redirects home for an authenticated session.
+    await loginAsMc8Fixture(page);
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      await loginAsMc8Fixture(page);
       await page.goto('/contacts');
       await expect(page.getByRole('heading', { name: 'Contacts & connexions', level: 1 })).toBeVisible({ timeout: 10_000 });
 

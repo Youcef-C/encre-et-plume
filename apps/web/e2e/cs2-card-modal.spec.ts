@@ -20,6 +20,10 @@ const STRANGER_EMAIL = 'qa_e2e_cs13_stranger@test.com';
 const MULTI_SLUG = 'e2e-cs2-multi';
 
 async function login(page: Page, email: string) {
+  // An authenticated visit to /connexion redirects home (the GuestOnly guard), so the form never
+  // renders and .fill() hangs. Clearing first makes this helper authoritative: the context ends up
+  // signed in as this user, even if it already carried a session for someone else.
+  await page.context().clearCookies();
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);

@@ -9,7 +9,7 @@
 // optimistic in the provider (rollback on error) and surface a role="alert" inline error here.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { ReachableUser, ConversationItem } from '@encre-et-plume/shared';
+import { GROUP_NAME_MAX_LENGTH, type ReachableUser, type ConversationItem } from '@encre-et-plume/shared';
 import { useMessaging } from '../../lib/messaging';
 import ReachableUserSearch from './ReachableUserSearch';
 import { ChevronLeftIcon } from '../icons';
@@ -28,7 +28,7 @@ function avatarDisc(url: string | null): React.CSSProperties {
   };
 }
 
-// ─── focus-trapped confirm dialog (reuses the GroupCreateModal / BlockConfirmModal pattern) ──────
+// ─── focus-trapped confirm dialog (reuses the NewConversationModal / BlockConfirmModal pattern) ──
 function ConfirmDialog({
   titleId,
   title,
@@ -131,12 +131,16 @@ export default function GroupMembersPanel({
   myId: string | null;
   onBack: () => void;
 }) {
-  const { addParticipant, removeParticipant, leaveGroup } = useMessaging();
+  const { addParticipant, removeParticipant, leaveGroup, renameGroup } = useMessaging();
   const isCreator = conv.createdBy != null && conv.createdBy === myId;
 
-  const [busy, setBusy] = useState<null | 'add' | 'leave' | string>(null); // string = kicking that userId
+  const [busy, setBusy] = useState<null | 'add' | 'leave' | 'rename' | string>(null); // string = kicking that userId
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  // Follow-up 5b: the group name is optional at creation, so the creator sets/changes it here. Seeded
+  // from `customName` (the group's OWN name) — never from the participant-derived title, so an
+  // unnamed group opens on an empty field instead of one pre-filled with something nobody typed.
+  const [name, setName] = useState(conv.customName ?? '');
 
   const memberIds = useMemo(() => conv.participants.map((p) => p.userId), [conv.participants]);
 
@@ -149,6 +153,21 @@ export default function GroupMembersPanel({
       await addParticipant(conv.id, { userId: u.id, slug: u.slug, name: u.name, avatarUrl: u.avatarUrl });
     } catch {
       setError(ERROR_TEXT);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Follow-up 5b: PATCH /conversations/:id — creator-only server-side (403 otherwise); an empty name
+  // clears it back to the participant-derived title.
+  async function handleRename() {
+    if (busy) return;
+    setError(null);
+    setBusy('rename');
+    try {
+      await renameGroup(conv.id, name.trim());
+    } catch {
+      setError(ERROR_TEXT); // the typed value stays in the field, so the save is retryable
     } finally {
       setBusy(null);
     }
@@ -205,6 +224,37 @@ export default function GroupMembersPanel({
           <p role="alert" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', margin: 0, padding: '10px 13px' }}>
             {error}
           </p>
+        )}
+
+        {/* Nom du groupe — creator only (follow-up 5b: the name is optional at creation). */}
+        {isCreator && (
+          <div style={{ padding: '12px 13px', borderBottom: '2px solid var(--border)' }}>
+            <label htmlFor="group-rename" style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginBottom: 6 }}>
+              Nom du groupe
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <input
+                id="group-rename"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={GROUP_NAME_MAX_LENGTH}
+                placeholder={conv.name}
+                style={{ flex: '1 1 140px', minWidth: 0, border: '2px solid var(--ink)', borderRadius: 8, padding: '9px 11px', fontSize: 13, fontFamily: 'inherit', background: 'var(--paper)', color: 'var(--ink)', boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                onClick={() => void handleRename()}
+                disabled={busy === 'rename' || name.trim() === (conv.customName ?? '')}
+                className="ep-btn-primary"
+                style={{ flex: 'none', fontSize: 12, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 8, padding: '8px 14px', minHeight: 44, cursor: busy === 'rename' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: busy === 'rename' || name.trim() === (conv.customName ?? '') ? 0.55 : 1 }}
+              >
+                {busy === 'rename' ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--ink2)', lineHeight: 1.45 }}>
+              Laissez vide pour utiliser les noms des membres.
+            </p>
+          </div>
         )}
 
         {/* Ajouter — creator only. MC-13: reachable-user search, direct add on pick. */}

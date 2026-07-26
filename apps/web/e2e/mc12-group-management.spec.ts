@@ -13,7 +13,7 @@
  *   - `apps/api/prisma/e2e-seed.js` seeds 4 DEDICATED accounts for this suite: MC12_A (creator),
  *     MC12_B (earliest-joined — the ownership-transfer target), MC12_C (kicked), MC12_D (added
  *     later). Any prior conversation for these 4 accounts is wiped every run, and accepted
- *     connections A⇄B / A⇄C / A⇄D are re-established so the "＋ Groupe" / "Ajouter" contact
+ *     connections A⇄B / A⇄C / A⇄D are re-established so the "＋ Conversation" / "Ajouter" contact
  *     pickers list them. No other spec file references these accounts (grep-confirmed).
  *   - the seed also creates ONE PROJECT-LINKED group conversation (accounts.MC12_PROJECT_GROUP.id,
  *     `projectId != null`) directly via Prisma — CS-8 (the real project-chat creation flow) isn't
@@ -82,18 +82,20 @@ test.describe('MC-12 — standalone group lifecycle (MC12_A creator ⇄ B/C/D)',
 
       const groupName = `Groupe MC12 ${Date.now()}`;
 
-      // ── Create the standalone group: A + B + C via "＋ Groupe" ──
+      // ── Create the standalone group: A + B + C via "＋ Conversation" ──
+      // Follow-up 5b: one general starter — 2+ people picked ⇒ a group, and the (optional) name
+      // field only appears once it IS a group.
       await fab(pageA).click();
-      await panel(pageA).getByRole('button', { name: '＋ Groupe' }).click();
-      const modal = pageA.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
+      await panel(pageA).getByRole('button', { name: '＋ Conversation' }).click();
+      const modal = pageA.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' });
       await expect(modal).toBeVisible({ timeout: 10_000 });
-      await modal.getByLabel('Nom du groupe').fill(groupName);
       // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
-      const createSearch = modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' });
+      const createSearch = modal.getByRole('combobox', { name: 'Ajouter une personne' });
       await createSearch.fill('MC12_B');
       await modal.getByRole('option', { name: /MC12_B/ }).click();
       await createSearch.fill('MC12_C');
       await modal.getByRole('option', { name: /MC12_C/ }).click();
+      await modal.getByLabel('Nom du groupe (facultatif)').fill(groupName);
       await modal.getByRole('button', { name: 'Créer le groupe' }).click();
       await expect(modal).toHaveCount(0);
       await expect(panel(pageA).getByText('Démarrez la conversation')).toBeVisible({ timeout: 10_000 });
@@ -326,16 +328,20 @@ test.describe('MC-12 — responsive', () => {
     const groupName = `Groupe MC12 responsive ${Date.now()}`;
 
     await fab(page).click();
-    await panel(page).getByRole('button', { name: '＋ Groupe' }).click();
-    const modal = page.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
-    await modal.getByLabel('Nom du groupe').fill(groupName);
+    await panel(page).getByRole('button', { name: '＋ Conversation' }).click();
+    const modal = page.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' });
     // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
-    await modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' }).fill('MC12_B');
+    // Two people picked ⇒ a group (one alone would now start a DM, follow-up 5b).
+    const respSearch = modal.getByRole('combobox', { name: 'Ajouter une personne' });
+    await respSearch.fill('MC12_B');
     await modal.getByRole('option', { name: /MC12_B/ }).click();
+    await respSearch.fill('MC12_C');
+    await modal.getByRole('option', { name: /MC12_C/ }).click();
+    await modal.getByLabel('Nom du groupe (facultatif)').fill(groupName);
     await modal.getByRole('button', { name: 'Créer le groupe' }).click();
     await expect(modal).toHaveCount(0);
     await panel(page).getByRole('button', { name: 'Gérer le groupe' }).click();
-    await expect(panel(page).getByText('2 membres')).toBeVisible({ timeout: 10_000 });
+    await expect(panel(page).getByText('3 membres')).toBeVisible({ timeout: 10_000 });
 
     for (const [width, height, label] of [[375, 800, '375px'], [768, 1024, '768px'], [1280, 900, '1280px']] as const) {
       await page.setViewportSize({ width, height });

@@ -5,17 +5,33 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   timeout: 30_000,
-  // CI retries absorb known parallel-worker flakes (e.g. profile.spec F20 tests share the seeded
-  // UTILISATEUR account); locally 0 so a real failure surfaces immediately.
-  retries: process.env.CI ? 2 : 0,
+  // 2 everywhere. Locally this was 0 ("so a real failure surfaces immediately"), which stopped being
+  // tenable once the default went parallel: at 3 workers two WS-heavy specs still lose their
+  // propagation window occasionally and recover on retry. A genuinely broken test fails all 3
+  // attempts — CS4-RT did exactly that at 5 workers — so this absorbs contention without hiding
+  // breakage. Watch the "flaky" count: a spec that starts recovering-on-retry is a real signal.
+  retries: 2,
   // Serial in CI (1 worker). The suite's two-context realtime tests (CS-4 editor CRDT/presence, MC-11
   // salon, MC-8 contacts) each open 2 WS clients; at 2 workers up to 4 heavy WS clients + editor CRDT
   // traffic saturate the single API instance, so cross-client propagation intermittently misses its
-  // window and those tests flake (they pass reliably in isolation / at workers=1). Running serially
-  // removes that contention deterministically — the job has no timeout-minutes (6h default) so the
-  // ~2x wall-clock is fine. Speed can be recovered later by sharding across matrix jobs (1 worker each).
-  // Locally undefined = Playwright's core-based default.
-  workers: process.env.CI ? 1 : undefined,
+  // window. The job has no timeout-minutes (6h default), so the wall-clock is fine and CI stays exact.
+  //
+  // Locally 3 (2026-07-26), measured over repeated full runs:
+  //   1 worker  → 15.2 min, reliably green
+  //   3 workers → ~4.4 min, 0–1 failures per run, a DIFFERENT spec each time   ← chosen
+  //   5 workers → ~4.2 min, worse (CS4-RT fails all 3 attempts)
+  //
+  // 5 buys nothing: the extra contention triggers retries that eat the parallelism, landing at the same
+  // wall-clock while being red. 3 is a deliberate speed/noise trade, NOT a green configuration — every
+  // failure seen so far passes under `PW_WORKERS=1`, so treat a parallel failure as unconfirmed until
+  // you re-run that spec serially.
+  //
+  // The underlying cause is not the worker count: specs share the seeded fixtures and mutate them
+  // (MC-8 contacts request/accept/remove, MC-13 roster, profile F20, the two-context realtime specs),
+  // so parallel workers interleave those mutations. The real fix is per-spec fixture isolation
+  // (dedicated accounts, as cs10 does) — until then, parallelism is inherently noisy here.
+  // CI stays at 1: the contention is real and CI has no time pressure.
+  workers: process.env.CI ? 1 : Number(process.env.PW_WORKERS ?? 3),
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',

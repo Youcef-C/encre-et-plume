@@ -22,7 +22,13 @@ export type ConversationStatus = 'open' | 'requested';
 export interface ConversationItem {
   id: string;
   type: ConversationType;
-  name: string; // group name, or the OTHER party's displayName for a DM
+  name: string; // display title: group name (or, unnamed, its members' names), OTHER party for a DM
+  /**
+   * The group's OWN stored name, `null` when it has none (the title above is then derived from the
+   * participants). Only "who may rename" cares about the difference — it seeds the rename field so an
+   * unnamed group doesn't pre-fill with a title nobody typed. Absent for dm/salon.
+   */
+  customName?: string | null;
   projectId: string | null; // CS-8 seam
   participants: ConversationParticipantDto[];
   unreadCount: number;
@@ -78,7 +84,12 @@ export interface SendMessageRequest {
 
 export type CreateConversationRequest =
   | { participantId: string } // DM (get-or-create)
-  | { name: string; participantIds: string[] }; // group
+  | { name?: string; participantIds: string[] }; // group — the name is OPTIONAL, settable later
+
+/** PATCH /conversations/:id — set (or clear, with '') a group's name. Creator-only, server-enforced. */
+export interface RenameConversationRequest {
+  name: string;
+}
 
 export interface MarkReadResponse {
   unreadCount: 0;

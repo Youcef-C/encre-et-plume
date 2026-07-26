@@ -362,6 +362,10 @@ test('F3-UI-8: owner edit mode updates specialty → roleLine reflected on save'
 // ---------------------------------------------------------------------------
 
 async function loginUi(page: import('@playwright/test').Page, email: string) {
+  // An authenticated visit to /connexion redirects home (the GuestOnly guard), so the form never
+  // renders and .fill() hangs. Clear the session first: this helper's contract is "this context ends
+  // up signed in as <email>", and a pre-existing session — possibly a DIFFERENT user — must not win.
+  await page.context().clearCookies();
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);

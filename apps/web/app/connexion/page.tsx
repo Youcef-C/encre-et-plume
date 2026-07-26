@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import LoginForm from '../../components/LoginForm';
+import GuestOnly from '../../components/GuestOnly';
 
 export const metadata = { title: 'Connexion — Encre & Plume' };
 
 export default function ConnexionPage() {
   return (
+    <GuestOnly>
     <div
       style={{
         minHeight: 'calc(100dvh - 69px)', // subtract header height
@@ -51,5 +53,6 @@ export default function ConnexionPage() {
         </p>
       </div>
     </div>
+    </GuestOnly>
   );
 }

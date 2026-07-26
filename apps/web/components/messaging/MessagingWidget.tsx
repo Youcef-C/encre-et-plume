@@ -8,7 +8,7 @@
 // already collapses to the FAB. On-brand: SVG icons, tokens, no emojis. State + realtime in lib/messaging.tsx.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { ConversationItem, ConversationParticipantDto } from '@encre-et-plume/shared';
+import type { ContactItem, ConversationItem, ConversationParticipantDto } from '@encre-et-plume/shared';
 import {
   UPLOAD_ALLOWED_CONTENT_TYPES,
   DOCUMENT_ALLOWED_CONTENT_TYPES,
@@ -17,9 +17,9 @@ import {
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { useMessaging, type ThreadMessage } from '../../lib/messaging';
-import { getMediaSignedUrl, getPresence, requestUpload, finalizeMedia, getMedia, getMyBlocks, deleteBlock } from '../../lib/api';
+import { getMediaSignedUrl, getPresence, requestUpload, finalizeMedia, getMedia, getMyBlocks, deleteBlock, getContacts } from '../../lib/api';
 import { MailIcon, XIcon, ChevronLeftIcon, PlusIcon, GearIcon } from '../icons';
-import GroupCreateModal from './GroupCreateModal';
+import NewConversationModal from './NewConversationModal';
 import GroupMembersPanel from './GroupMembersPanel';
 import OverflowMenu, { MenuItem } from '../OverflowMenu';
 import BlockConfirmModal from '../blocks/BlockConfirmModal';
@@ -775,6 +775,137 @@ function Composer({
   );
 }
 
+// ─── Contacts tab (2026-07-26 MC-9 amendment, round 2 item 6) ────────────────────
+
+/**
+ * The viewer's contacts, LISTED — the tab opens on the list, not on a search box. Each row carries
+ * the same "Message" affordance the /contacts page rows use, so the two surfaces stay one idiom.
+ * Filtering is the panel's own search field (passed down as `filter`), which keeps the search
+ * secondary to the listing; reaching someone who is NOT a contact is the header's
+ * "＋ Conversation" button. Starting the DM goes through openDm() → POST /conversations
+ * { participantId }, so dmPolicy (F-19) and the block rules (MC-10) are applied server-side and a
+ * refusal comes back as the server's French message shown here.
+ */
+function ContactsTab({
+  filter,
+  error,
+  onPick,
+}: {
+  filter: string;
+  error: string | null;
+  onPick: (userId: string) => void | Promise<void>;
+}) {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState('loading');
+    getContacts()
+      .then((r) => {
+        if (cancelled) return;
+        setContacts(r.items);
+        setState('ready');
+      })
+      .catch(() => !cancelled && setState('error'));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const q = filter.trim().toLowerCase();
+  const shown = q ? contacts.filter((c) => c.name.toLowerCase().includes(q)) : contacts;
+
+  if (state === 'loading') {
+    return (
+      <div>
+        {[0, 1, 2].map((i) => (
+          <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: 58, borderBottom: '2px solid var(--border)', background: 'var(--tone)', opacity: 0.4 }} />
+        ))}
+      </div>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <div role="alert" style={{ padding: 16, textAlign: 'center' }}>
+        <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '0 0 10px' }}>
+          Impossible de charger vos contacts.
+        </p>
+        <button
+          type="button"
+          onClick={() => setReloadKey((k) => k + 1)}
+          className="ep-btn-primary"
+          style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '7px 14px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {error && (
+        <p role="alert" style={{ margin: 0, padding: '10px 13px', fontSize: 12, fontWeight: 700, color: 'var(--accent)', lineHeight: 1.5, borderBottom: '2px solid var(--border)' }}>
+          {error}
+        </p>
+      )}
+      {shown.length === 0 ? (
+        <p style={{ padding: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink2)', lineHeight: 1.5 }}>
+          {q
+            ? 'Aucun contact trouvé.'
+            : 'Aucun contact pour l’instant — utilisez « ＋ Conversation » pour écrire à quelqu’un.'}
+        </p>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {shown.map((c) => {
+            const online = c.presence.online;
+            return (
+              <li
+                key={c.userId}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 13px', borderBottom: '2px solid var(--border)', minHeight: 44 }}
+              >
+                <Link
+                  href={`/${c.slug}`}
+                  aria-label={`Voir le profil de ${c.name}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, textDecoration: 'none', color: 'var(--ink)' }}
+                >
+                  <span aria-hidden="true" style={{ ...singleDisc(c.avatarUrl), position: 'relative' }}>
+                    <span
+                      aria-hidden="true"
+                      style={{ position: 'absolute', right: -1, bottom: -1, width: 11, height: 11, borderRadius: '50%', border: '2px solid var(--card)', background: online ? '#1f8a5b' : 'var(--ink2)' }}
+                    />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ display: 'block', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.name}
+                    </b>
+                    {/* Status as words, never colour alone. */}
+                    <span style={{ display: 'block', fontSize: 11, color: online ? '#1f8a5b' : 'var(--ink2)', fontWeight: online ? 700 : 400 }}>
+                      {online ? 'en ligne' : 'hors ligne'}
+                    </span>
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void onPick(c.userId)}
+                  aria-label={`Message à ${c.name}`}
+                  className="ep-btn-secondary"
+                  style={{ fontSize: 12, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 12px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flex: 'none' }}
+                >
+                  Message
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
 // ─── the widget (FAB + panel) ────────────────────────────────────────────────────
 
 export default function MessagingWidget() {
@@ -793,14 +924,17 @@ export default function MessagingWidget() {
     openWidget,
     closeWidget,
     openConversation,
+    openDm,
     reloadConversations,
     addConversation,
   } = useMessaging();
 
   const [query, setQuery] = useState('');
-  // MC-9 delta: two-tab filter — "Conversations" (open threads + own outgoing requests) and
-  // "Demandes" (incoming pending DM requests, with its own count badge).
-  const [tab, setTab] = useState<'conversations' | 'requests'>('conversations');
+  // MC-9 delta + 2026-07-26 amendment: three-tab filter — "Conversations" (open threads + own
+  // outgoing requests), "Demandes" (incoming pending DM requests, with its own count badge) and
+  // "Contacts" (the user's contacts + reachable-user search, to start a 1:1 from here).
+  const [tab, setTab] = useState<'conversations' | 'requests' | 'contacts'>('conversations');
+  const [dmError, setDmError] = useState<string | null>(null);
   const [groupOpen, setGroupOpen] = useState(false);
   // MC-10 round 2 (F10) — the viewer's block set (kind='block'), for DM-header reflection.
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
@@ -893,13 +1027,15 @@ export default function MessagingWidget() {
               <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--accent)', borderRadius: 5, padding: '0 7px' }}>{totalUnread}</span>
             )}
             <div style={{ flex: 1 }} />
-            {/* MC-9 amendment: primary accent-red group-create trigger (matches other primary actions). */}
+            {/* Follow-up 5b: ONE general start-a-conversation trigger (was "＋ Groupe"). The modal
+               decides DM vs group from how many people are picked, so the 320px header keeps a
+               single affordance. Primary accent-red, matching the other primary actions. */}
             <button
               type="button"
               onClick={() => setGroupOpen(true)}
-              style={{ fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '4px 10px', minHeight: 30, fontFamily: 'inherit' }}
+              style={{ fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '4px 9px', minHeight: 30, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
             >
-              ＋ Groupe
+              ＋ Conversation
             </button>
             {/* MC-9 amendment: the minimize "Réduire" (▁) button is removed — "Fermer" (X) already
                collapses the widget to the FAB. */}
@@ -938,32 +1074,37 @@ export default function MessagingWidget() {
             />
           ) : (
             <>
-              {/* Search field (D2) */}
+              {/* Search field (D2) — the panel's one filter: conversations on the first two tabs,
+                 the contact list on the Contacts tab (item 6: search stays available, but the tab's
+                 content is the list). */}
               <div style={{ padding: '9px 11px', borderBottom: '2px solid var(--border)' }}>
                 <input
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  aria-label="Rechercher une conversation"
+                  aria-label={tab === 'contacts' ? 'Rechercher un contact' : 'Rechercher une conversation'}
                   placeholder="Rechercher…"
                   style={{ width: '100%', fontSize: 13, color: 'var(--ink)', background: 'var(--paper)', border: '2px solid var(--ink)', borderRadius: 8, padding: '7px 11px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
 
-              {/* Two-tab filter: Conversations / Demandes (n) */}
+              {/* Three-tab filter: Conversations / Demandes (n) / Contacts */}
               <div
                 role="tablist"
                 aria-label="Filtrer les messages"
                 style={{ display: 'flex', gap: 6, padding: '8px 11px', borderBottom: '2px solid var(--border)' }}
               >
-                {(['conversations', 'requests'] as const).map((t) => {
+                {(['conversations', 'requests', 'contacts'] as const).map((t) => {
                   const active = tab === t;
                   const isReq = t === 'requests';
-                  const label = isReq
-                    ? requestsCount > 0
-                      ? `Demandes (${requestsCount})`
-                      : 'Demandes'
-                    : 'Conversations';
+                  const label =
+                    t === 'contacts'
+                      ? 'Contacts'
+                      : isReq
+                        ? requestsCount > 0
+                          ? `Demandes (${requestsCount})`
+                          : 'Demandes'
+                        : 'Conversations';
                   return (
                     <button
                       key={t}
@@ -975,11 +1116,19 @@ export default function MessagingWidget() {
                           ? `Demandes, ${requestsCount} en attente`
                           : undefined
                       }
-                      onClick={() => setTab(t)}
+                      onClick={() => {
+                        setTab(t);
+                        setDmError(null);
+                        setQuery(''); // the one search field filters the ACTIVE tab — don't carry a query over
+                      }}
                       style={{
-                        flex: 1,
+                        flex: '1 1 0',
+                        minWidth: 0,
                         minHeight: 36,
-                        fontSize: 12,
+                        padding: '0 4px',
+                        // 3 tabs in a 320px panel: shave a half-point so "Conversations" never clips.
+                        fontSize: 11.5,
+                        whiteSpace: 'nowrap',
                         fontWeight: 700,
                         fontFamily: 'inherit',
                         cursor: 'pointer',
@@ -996,41 +1145,59 @@ export default function MessagingWidget() {
                 })}
               </div>
 
+              {/* One branch for the whole body (review N4): the Contacts tab owns its own states. */}
               <div style={{ maxHeight: 'min(420px, 55dvh)', overflow: 'auto' }}>
-                {conversationsState === 'loading' &&
-                  [0, 1, 2].map((i) => (
-                    <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: 58, borderBottom: '2px solid var(--border)', background: 'var(--tone)', opacity: 0.4 }} />
-                  ))}
+                {tab === 'contacts' ? (
+                  <ContactsTab
+                    filter={query}
+                    error={dmError}
+                    onPick={async (userId) => {
+                      setDmError(null);
+                      // Same server path as every other DM entry point: dmPolicy (F-19) + blocks
+                      // (MC-10) decide open thread / request / refusal — never the client.
+                      const message = await openDm(userId);
+                      if (message) setDmError(message);
+                      else setTab('conversations');
+                    }}
+                  />
+                ) : (
+                  <>
+                    {conversationsState === 'loading' &&
+                      [0, 1, 2].map((i) => (
+                        <div key={i} aria-hidden="true" className="ep-skeleton-delayed" style={{ height: 58, borderBottom: '2px solid var(--border)', background: 'var(--tone)', opacity: 0.4 }} />
+                      ))}
 
-                {conversationsState === 'error' && (
-                  <div role="alert" style={{ padding: 16, textAlign: 'center' }}>
-                    <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '0 0 10px' }}>Impossible de charger vos messages.</p>
-                    <button type="button" onClick={reloadConversations} className="ep-btn-primary" style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                      Réessayer
-                    </button>
-                  </div>
+                    {conversationsState === 'error' && (
+                      <div role="alert" style={{ padding: 16, textAlign: 'center' }}>
+                        <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, margin: '0 0 10px' }}>Impossible de charger vos messages.</p>
+                        <button type="button" onClick={reloadConversations} className="ep-btn-primary" style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Réessayer
+                        </button>
+                      </div>
+                    )}
+
+                    {conversationsState === 'ready' && filtered.length === 0 && (
+                      <p style={{ padding: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink2)' }}>
+                        {tab === 'requests'
+                          ? 'Aucune demande'
+                          : query.trim()
+                            ? 'Aucune conversation trouvée.'
+                            : 'Aucune conversation pour l’instant.'}
+                      </p>
+                    )}
+
+                    {conversationsState === 'ready' &&
+                      filtered.map((c) => (
+                        <ConversationRow
+                          key={c.id}
+                          conv={c}
+                          myId={myId}
+                          isTyping={Boolean(typing[c.id])}
+                          onOpen={() => openConversation(c.id)}
+                        />
+                      ))}
+                  </>
                 )}
-
-                {conversationsState === 'ready' && filtered.length === 0 && (
-                  <p style={{ padding: 20, textAlign: 'center', fontSize: 13, color: 'var(--ink2)' }}>
-                    {tab === 'requests'
-                      ? 'Aucune demande'
-                      : query.trim()
-                        ? 'Aucune conversation trouvée.'
-                        : 'Aucune conversation pour l’instant.'}
-                  </p>
-                )}
-
-                {conversationsState === 'ready' &&
-                  filtered.map((c) => (
-                    <ConversationRow
-                      key={c.id}
-                      conv={c}
-                      myId={myId}
-                      isTyping={Boolean(typing[c.id])}
-                      onOpen={() => openConversation(c.id)}
-                    />
-                  ))}
               </div>
             </>
           )}
@@ -1074,7 +1241,7 @@ export default function MessagingWidget() {
       </button>
 
       {groupOpen && (
-        <GroupCreateModal
+        <NewConversationModal
           onClose={() => setGroupOpen(false)}
           onCreated={(conv) => {
             setGroupOpen(false);

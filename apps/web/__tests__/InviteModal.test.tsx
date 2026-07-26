@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
+  AccountSearchResponse,
   ContactsResponse,
   CreateInvitationsResponse,
   MyProjectsResponse,
@@ -10,6 +11,7 @@ import type {
 vi.mock('../lib/api', () => ({
   getMyProjects: vi.fn(),
   getContacts: vi.fn(),
+  searchAccounts: vi.fn(),
   createInvitation: vi.fn(),
 }));
 import * as api from '../lib/api';
@@ -33,6 +35,14 @@ const contacts: ContactsResponse = {
   items: [
     { userId: 'u-alma', slug: 'alma', name: 'Alma R.', avatarUrl: null, role: 'scenariste', city: 'Nantes', mutualProjects: 0, presence: { online: false, lastSeen: null } },
     { userId: 'u-bao', slug: 'bao', name: 'Bao T.', avatarUrl: null, role: 'dessinateur', city: 'Paris', mutualProjects: 1, presence: { online: true, lastSeen: null } },
+  ],
+};
+
+// The picker pool now comes from GET /accounts/search (contacts first when the query is empty).
+const reachable: AccountSearchResponse = {
+  items: [
+    { id: 'u-alma', name: 'Alma R.', avatarUrl: null, slug: 'alma', isContact: true },
+    { id: 'u-bao', name: 'Bao T.', avatarUrl: null, slug: 'bao', isContact: true },
   ],
 };
 
@@ -154,34 +164,47 @@ describe('InviteModal — prefilled (single recipient)', () => {
   });
 });
 
+// Contacts-DM follow-up (2026-07-26): the picker's "Contacts" dropdown is retired — it now uses the
+// shared ReachableUserSearch (contacts first when idle, anyone reachable when you type) with chips.
 describe('InviteModal — picker mode (no recipient)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getMyProjects).mockResolvedValue(projects);
-    vi.mocked(api.getContacts).mockResolvedValue(contacts);
+    vi.mocked(api.searchAccounts).mockResolvedValue(reachable);
     vi.mocked(api.createInvitation).mockResolvedValue(envelope([]));
   });
 
-  it('shows the "Proposer une collab" title and a contacts multi-select', async () => {
+  it('shows the "Proposer une collab" title and the shared reachable-user search, never a contacts dropdown', async () => {
     renderPicker();
     expect(await screen.findByRole('dialog', { name: /proposer une collab/i })).toBeInTheDocument();
-    // OnBrandMultiSelect trigger labelled "Contacts".
-    expect(await screen.findByRole('button', { name: /^contacts/i })).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: /ajouter un·e destinataire/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^contacts$/i })).not.toBeInTheDocument();
+    expect(api.getContacts).not.toHaveBeenCalled();
   });
 
-  it('shows an empty-contacts hint when the sender has no contacts', async () => {
-    vi.mocked(api.getContacts).mockResolvedValue({ items: [] });
+  it('lists the sender contacts as soon as it opens (idle search)', async () => {
     renderPicker();
-    expect(await screen.findByText(/aucun contact pour l'instant/i)).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: /alma r\./i })).toBeInTheDocument();
+    expect(api.searchAccounts).toHaveBeenCalledWith('');
   });
 
   it('blocks send with 0 selected and does not call the API', async () => {
     const user = userEvent.setup();
     renderPicker();
-    await screen.findByRole('button', { name: /^contacts/i });
+    await screen.findByRole('combobox', { name: /ajouter un·e destinataire/i });
     await user.click(screen.getByRole('button', { name: /envoyer l'invitation/i }));
     expect(screen.getByRole('alert')).toHaveTextContent(/sélectionnez au moins un·e destinataire/i);
     expect(api.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('removes a picked recipient from its chip', async () => {
+    const user = userEvent.setup();
+    renderPicker();
+    await user.click(await screen.findByRole('option', { name: /alma r\./i }));
+    const chips = screen.getByRole('list', { name: /destinataires sélectionnés/i });
+    expect(within(chips).getByText('Alma R.')).toBeInTheDocument();
+    await user.click(within(chips).getByRole('button', { name: /retirer alma r\./i }));
+    expect(within(chips).queryByText('Alma R.')).not.toBeInTheDocument();
   });
 
   it('sends the selected recipients and renders per-recipient results', async () => {
@@ -194,10 +217,9 @@ describe('InviteModal — picker mode (no recipient)', () => {
     const user = userEvent.setup();
     renderPicker();
 
-    // Open the multi-select and pick both contacts.
-    await user.click(await screen.findByRole('button', { name: /^contacts/i }));
-    await user.click(await screen.findByRole('checkbox', { name: /alma r\./i }));
-    await user.click(screen.getByRole('checkbox', { name: /bao t\./i }));
+    // Pick both people from the search listbox.
+    await user.click(await screen.findByRole('option', { name: /alma r\./i }));
+    await user.click(await screen.findByRole('option', { name: /bao t\./i }));
 
     // Plural send label appears with 2+ selected.
     await user.click(screen.getByRole('button', { name: /envoyer les invitations/i }));

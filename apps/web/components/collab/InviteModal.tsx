@@ -6,19 +6,22 @@
 // inferred MESSAGE field. No emojis and no check/cross characters: the prototype's mail, close and tick glyphs map to icons.tsx.
 // Reused by all four prefilled triggers (MC-1 cards, F-3 profile, DR-3 work, DR-6 illustration).
 // Round 2 (Mode A multi-recipient): when launched WITHOUT a recipient (from /contacts) the modal
-// enters picker mode — an OnBrandMultiSelect over the sender's contacts (Inferred body, plan §7.4).
+// enters picker mode. Contacts-DM follow-up (2026-07-26): that picker's "Contacts" dropdown is
+// retired for the shared ReachableUserSearch + removable chips (same idiom as NewConversationModal) —
+// idle it lists the sender's contacts, typing reaches anyone reachable. Selection contract unchanged:
+// still `toUsers: string[]` on POST /invitations.
 import { useEffect, useRef, useState } from 'react';
 import {
   INVITATION_MESSAGE_MAX,
   type ApiError,
-  type ContactItem,
   type CreateInvitationsResponse,
   type InvitationSendStatus,
   type ProjectSummary,
+  type ReachableUser,
 } from '@encre-et-plume/shared';
-import { getMyProjects, getContacts, createInvitation } from '../../lib/api';
+import { getMyProjects, createInvitation } from '../../lib/api';
 import { useScrollLock } from '../../lib/useScrollLock';
-import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
+import ReachableUserSearch from '../messaging/ReachableUserSearch';
 import { CheckIcon, XIcon } from '../icons';
 
 export interface InviteRecipient {
@@ -148,8 +151,9 @@ export default function InviteModal({
   onClose: () => void;
 }) {
   const isFromWork = !!fromWork;
-  // "Picker" = the /contacts launch (pool fetched via getContacts). From-work is its own multi-mode
-  // whose pool is the passed work creators. Both share the multi-select / results plumbing below.
+  // "Picker" = the /contacts launch (pool = whoever the sender picks in the reachable-user search).
+  // From-work is its own multi-mode whose pool is the passed work creators. Both share the
+  // selection / results plumbing below.
   const picker = !recipient && !isFromWork;
   const multiMode = picker || isFromWork;
 
@@ -162,23 +166,24 @@ export default function InviteModal({
   // A duplicate result is terminal for this recipient — lock the send button (prefilled mode).
   const [locked, setLocked] = useState(false);
 
-  // Multi-mode (picker over contacts, or from-work over creators): recipient pool + selection +
-  // per-recipient send results. A single-creator work preselects that lone creator.
-  const [contactsLoaded, setContactsLoaded] = useState(false);
-  const [contacts, setContacts] = useState<ContactItem[]>([]);
-  const [selected, setSelected] = useState<string[]>(
+  // Multi-mode selection + per-recipient send results. From-work toggles ids in its fixed creator
+  // pool (a single-creator work preselects that lone creator); the picker owns the people it picked.
+  const [creatorIds, setCreatorIds] = useState<string[]>(
     fromWork && fromWork.creators.length === 1 ? [fromWork.creators[0].userId] : [],
   );
+  const [picked, setPicked] = useState<ReachableUser[]>([]);
   const [results, setResults] = useState<CreateInvitationsResponse['results'] | null>(null);
 
-  // The recipient pool feeding the multi-select and results naming: contacts (picker) or the
-  // work's creators (from-work). Prefilled mode has no pool.
+  const selected = picker ? picked.map((p) => p.id) : creatorIds;
+
+  // The recipient pool feeding the results naming: the picked people (picker) or the work's
+  // creators (from-work). Prefilled mode has no pool.
   const pool: { userId: string; name: string }[] = isFromWork
     ? fromWork.creators.map((c) => ({ userId: c.userId, name: c.name }))
-    : contacts.map((c) => ({ userId: c.userId, name: c.name }));
+    : picked.map((p) => ({ userId: p.id, name: p.name }));
 
   const toggleRecipient = (id: string) =>
-    setSelected((cur) => (cur.includes(id) ? cur.filter((v) => v !== id) : [...cur, id]));
+    setCreatorIds((cur) => (cur.includes(id) ? cur.filter((v) => v !== id) : [...cur, id]));
 
   useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -194,22 +199,6 @@ export default function InviteModal({
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!picker) return;
-    let cancelled = false;
-    getContacts()
-      .then((res) => {
-        if (cancelled) return;
-        setContacts(res.items);
-        setContactsLoaded(true);
-      })
-      // Load error → treat as empty, the muted hint covers both cases.
-      .catch(() => !cancelled && setContactsLoaded(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [picker]);
 
   // Move focus into the dialog on open.
   useEffect(() => {
@@ -421,7 +410,7 @@ export default function InviteModal({
             {multiMode && (
               // Recipient picker (Mode A multi-select). From-work: the small, scoped creator pool is
               // shown as inline selectable rows (cherry-pick one or several). Picker (/contacts):
-              // the potentially-large pool keeps the OnBrandMultiSelect dropdown.
+              // the shared reachable-user search + removable chips.
               <>
                 <div style={sectionLabel} id="invite-recipients-label">
                   DESTINATAIRES
@@ -480,19 +469,37 @@ export default function InviteModal({
                       );
                     })}
                   </div>
-                ) : picker && contactsLoaded && contacts.length === 0 ? (
-                  <p style={{ fontSize: 13, color: 'var(--ink2)', margin: '0 0 16px', lineHeight: 1.5 }}>
-                    Aucun contact pour l&apos;instant — connectez-vous d&apos;abord avec des créateurs.
-                  </p>
                 ) : (
                   <div style={{ marginBottom: 16 }}>
-                    <OnBrandMultiSelect
-                      label="Contacts"
-                      options={pool.map((p) => ({ value: p.userId, label: p.name }))}
-                      values={selected}
-                      onChange={setSelected}
-                      searchable
+                    <ReachableUserSearch
+                      label="Ajouter un·e destinataire"
+                      placeholder="Rechercher un contact ou un nom…"
+                      excludeIds={selected}
+                      onPick={(u) => setPicked((cur) => (cur.some((p) => p.id === u.id) ? cur : [...cur, u]))}
                     />
+                    {picked.length > 0 && (
+                      <ul
+                        aria-label="Destinataires sélectionnés"
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, listStyle: 'none', margin: '10px 0 0', padding: 0 }}
+                      >
+                        {picked.map((p) => (
+                          <li
+                            key={p.id}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 999, padding: '4px 6px 4px 12px', background: 'var(--paper)', minHeight: 36 }}
+                          >
+                            {p.name}
+                            <button
+                              type="button"
+                              onClick={() => setPicked((cur) => cur.filter((s) => s.id !== p.id))}
+                              aria-label={`Retirer ${p.name}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 28, minHeight: 28, border: 'none', background: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                            >
+                              <XIcon size={14} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </>

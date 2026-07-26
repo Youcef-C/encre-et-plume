@@ -236,7 +236,9 @@ export class MessagesService {
     if ('participantId' in dto && dto.participantId !== undefined) {
       return this.getOrCreateDm(accountId, dto.participantId);
     }
-    if ('name' in dto) {
+    // Group branch keyed on participantIds, not on `name`: since the follow-up made the name optional
+    // ('name' in dto is false for an unnamed group), the participant list is what defines a group.
+    if ('participantIds' in dto) {
       return this.createGroup(accountId, dto.name, dto.participantIds ?? []);
     }
     throw new BadRequestException('Requête invalide.');
@@ -488,9 +490,19 @@ export class MessagesService {
     }
     const target = await this.prisma.account.findFirst({
       where: { id: dto.accountId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, preferences: true },
     });
     if (!target) throw new NotFoundException('Ce membre est introuvable.');
+
+    // Same gate as createGroup: adding someone to an existing group must not become a way around
+    // MC-10 blocks or F-19 dmPolicy. Checked against the CREATOR (the caller), who is the only role
+    // allowed to add — so this mirrors "may this person message that person" exactly.
+    if (await this.blocks.isBlockedPair(accountId, target.id)) {
+      throw new BadRequestException("Impossible d'envoyer le message.");
+    }
+    if ((await this.routeNewDm(accountId, target.id, target.preferences)) === 'refused') {
+      throw new BadRequestException("Impossible d'envoyer le message.");
+    }
 
     // Idempotent: already a member → no-op, return the current item (no create, no emit).
     if (conv.participants.some((p) => p.accountId === dto.accountId)) {
@@ -602,20 +614,36 @@ export class MessagesService {
     }
   }
 
-  private async createGroup(accountId: string, name: string, participantIds: string[]): Promise<ConversationItem> {
-    const trimmed = (name ?? '').trim();
-    if (trimmed.length === 0) throw new BadRequestException('Le nom du groupe est requis.');
-    if (trimmed.length > GROUP_NAME_MAX_LENGTH) {
-      throw new BadRequestException(`Le nom ne peut pas dépasser ${GROUP_NAME_MAX_LENGTH} caractères.`);
-    }
+  private async createGroup(
+    accountId: string,
+    name: string | undefined,
+    participantIds: string[],
+  ): Promise<ConversationItem> {
+    // Follow-up 5b: the name is OPTIONAL (a group started from the widget's "＋ Conversation" flow has
+    // none until PATCH /conversations/:id sets it). Blank → null → the participant-derived fallback.
+    const trimmed = normalizeGroupName(name);
 
     const distinctOthers = [...new Set(participantIds.filter((id) => id && id !== accountId))];
     const existing = distinctOthers.length
       ? ((await this.prisma.account.findMany({
           where: { id: { in: distinctOthers }, deletedAt: null },
-          select: { id: true },
-        })) as { id: string }[])
+          select: { id: true, preferences: true },
+        })) as { id: string; preferences: unknown }[])
       : [];
+    // MC-10 blocks and F-19 dmPolicy apply here too. Without this, `{ participantIds: [X] }` was a
+    // complete bypass of both: the DM arm refuses (getOrCreateDm), but a two-person "group" reaching
+    // the same person did not — a blocked user could message their blocker, who saw it as unread.
+    // Reject rather than silently drop, so the caller cannot probe who blocked them by diffing the
+    // participant list against what they asked for; the message is the DM arm's, so a refusal here
+    // discloses nothing a direct DM attempt would not.
+    for (const other of existing) {
+      if (await this.blocks.isBlockedPair(accountId, other.id)) {
+        throw new BadRequestException("Impossible d'envoyer le message.");
+      }
+      if ((await this.routeNewDm(accountId, other.id, other.preferences)) === 'refused') {
+        throw new BadRequestException("Impossible d'envoyer le message.");
+      }
+    }
     const validOthers = existing.map((a) => a.id);
     if (validOthers.length < 1) {
       // creator + ≥1 other = the ≥2-participant minimum (a 2-member group is drawn in the prototype).
@@ -625,7 +653,8 @@ export class MessagesService {
     const created = (await this.prisma.conversation.create({
       data: {
         type: 'group',
-        name: trimmed,
+        name: trimmed, // null when unnamed
+
         createdBy: accountId, // MC-12: the creator owns the group
         participants: { create: [accountId, ...validOthers].map((id) => ({ accountId: id })) },
       },
@@ -634,9 +663,36 @@ export class MessagesService {
     return this.toItem(created, accountId, 0);
   }
 
-  // DM title is the OTHER party's display name; group title is the stored name.
+  /**
+   * PATCH /conversations/:id — set (or clear) a group's name after creation (follow-up 5b: the name
+   * is optional at creation). Authz mirrors add/kick: CREATOR ONLY, read from the DB row, never a
+   * client claim; a non-member gets the same no-existence-leak 404. An empty name clears it back to
+   * the participant-derived fallback. Both participants refetch via conversation:updated.
+   */
+  async renameConversation(accountId: string, conversationId: string, name: string): Promise<ConversationItem> {
+    const conv = await this.loadGroupForMember(conversationId, accountId); // 404 / 400 dm / 409 project
+    if (conv.createdBy !== accountId) {
+      throw new ForbiddenException('Seul·e le·la créateur·rice du groupe peut renommer le groupe.');
+    }
+    const trimmed = normalizeGroupName(name);
+
+    const updated = (await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { name: trimmed },
+      include: CONV_INCLUDE,
+    })) as unknown as ConvRow;
+
+    this.gateway.emitConversationUpdated(
+      conv.participants.map((p) => p.accountId),
+      { conversationId },
+    );
+    return this.toItem(updated, accountId, 0);
+  }
+
+  // DM title is the OTHER party's display name; group title is the stored name — or, when the group
+  // has none (follow-up 5b), the other participants' names, so no surface ever renders an empty title.
   private displayName(conv: ConvRow, viewerId: string): string {
-    if (conv.type === 'group') return conv.name ?? '';
+    if (conv.type === 'group') return conv.name?.trim() || participantsTitle(conv, viewerId);
     const other = conv.participants.find((p) => p.accountId !== viewerId);
     return other?.account.displayName ?? '';
   }
@@ -647,6 +703,8 @@ export class MessagesService {
       id: conv.id,
       type: conv.type,
       name: this.displayName(conv, viewerId),
+      // The group's own name (null = unnamed → `name` above is the participant-derived fallback).
+      customName: conv.type === 'group' ? (conv.name?.trim() || null) : null,
       projectId: conv.projectId,
       participants: conv.participants.map((p) => ({
         userId: p.account.id,
@@ -692,6 +750,23 @@ export class MessagesService {
 function readDmPolicy(raw: unknown): DmPolicy {
   const p = (raw as Record<string, unknown> | null | undefined)?.['dmPolicy'];
   return DM_POLICIES.includes(p as DmPolicy) ? (p as DmPolicy) : DM_POLICY_DEFAULT;
+}
+
+/** Trim a submitted group name; blank → null (unnamed). Throws past GROUP_NAME_MAX_LENGTH. */
+function normalizeGroupName(raw: string | undefined): string | null {
+  const trimmed = (raw ?? '').trim();
+  if (trimmed.length > GROUP_NAME_MAX_LENGTH) {
+    throw new BadRequestException(`Le nom ne peut pas dépasser ${GROUP_NAME_MAX_LENGTH} caractères.`);
+  }
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** Fallback title for an unnamed group: up to 3 other members, then "+N". Never empty. */
+function participantsTitle(conv: ConvRow, viewerId: string): string {
+  const others = conv.participants.filter((p) => p.accountId !== viewerId).map((p) => p.account.displayName);
+  if (others.length === 0) return 'Groupe';
+  const shown = others.slice(0, 3).join(', ');
+  return others.length > 3 ? `${shown} +${others.length - 3}` : shown;
 }
 
 function clampLimit(raw: number | undefined, def: number, max: number): number {

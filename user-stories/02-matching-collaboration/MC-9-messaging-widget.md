@@ -57,6 +57,37 @@
   fan-out); the client calls the existing `UnreadProvider.refresh()`. Unread counts still come from the
   REST source of truth — the socket event is a "refetch now" signal.
 
+## Amendment (2026-07-26, round 2) — ONE conversation starter + the Contacts tab is a list
+Supersedes the round-1 shape below where they conflict.
+- **One general starter (approved)**: the header's group-only **"＋ Groupe"** becomes **"＋ Conversation"**,
+  opening a single "Nouvelle conversation" flow: pick **1 person → a DM** (the same
+  `POST /conversations { participantId }` path, so [[F-19]] `dmPolicy` + [[MC-10]] blocks still decide) or
+  **2+ people → a group** (`POST /conversations { participantIds }`). One affordance, not two, so the
+  320px header stays uncrowded.
+- **The group name is optional (approved)**: a group can be created unnamed; an unnamed group is titled by
+  its other members server-side (max 3 names then "+N"), so no surface ever renders an empty title. The
+  name is **settable later** by the group's creator from "Gérer le groupe" via the new
+  `PATCH /conversations/:id { name }` (creator-only, server-enforced from `Conversation.createdBy`;
+  an empty name clears it back to the members-derived title).
+- **The Contacts tab is a LIST (approved)**: the tab opens on the viewer's contacts (`GET /contacts`),
+  each row carrying avatar + presence + a **"Message"** action, matching how `/contacts` presents its rows.
+  The panel's existing search field filters that list ("Rechercher un contact"); reaching someone who is
+  **not** a contact is the "＋ Conversation" starter. `/contacts` itself is untouched.
+
+## Amendment (2026-07-26) — start a 1:1 from the widget + a Contacts tab
+- **Start a 1:1 (approved)**: the widget only offered "＋ Groupe"; there was no way to open a direct
+  conversation from it. The panel gains a third list tab **"Contacts"** whose picker starts the DM through
+  the *existing* `POST /conversations { participantId }` path — so the recipient's DM-privacy setting
+  ([[F-19]]) and blocks ([[MC-10]]) apply exactly as everywhere else, and the server's refusal
+  ("Ce membre n'accepte que les messages de ses contacts.") is shown inline.
+- **Contacts visible in the widget (approved)**: that same tab lists the user's contacts (MC-8) so a
+  conversation can be started without going to `/contacts`.
+- **One search idiom (approved)**: every "Contacts" dropdown is replaced by the shared reachable-user
+  search ([[MC-13]] `ReachableUserSearch` → `GET /accounts/search`) — including the "Proposer une collab"
+  picker ([[MC-3]]). `GET /accounts/search` now lists the caller's **contacts when the query is empty**
+  and **ranks contacts first** (`isContact`), so removing the dropdown does not remove the ability to
+  find a contact.
+
 ## Amendment (2026-07-10) — "＋ Groupe" red + remove minimize
 - **"＋ Groupe" button red (approved)**: the group-create trigger in the widget header renders **accent-red** (`var(--accent)` bg, white text) like the other primary actions — not the neutral style.
 - **Remove the minimize "Réduire" (▁) button (approved)**: the widget header's minimize control (deviation D1) is removed because it behaves the same as the close "X" (both collapse the widget to the FAB). Keep only "Fermer". Update/retire the D1 deviation note. Grade against these (the prototype's drawn ▁ is intentionally dropped).

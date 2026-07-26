@@ -58,6 +58,10 @@ async function signUpVerifyAndLogin(page: Page, email: string, displayName: stri
 
 /** Login via the UI form (needed when a browser context — not page.request — must carry the session). */
 async function loginUi(page: Page, email: string): Promise<void> {
+  // An authenticated visit to /connexion redirects home (the GuestOnly guard), so the form never
+  // renders and .fill() hangs. Clear the session first: this helper's contract is "this context ends
+  // up signed in as <email>", and a pre-existing session — possibly a DIFFERENT user — must not win.
+  await page.context().clearCookies();
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);

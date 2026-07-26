@@ -4,6 +4,7 @@ import * as path from 'path';
 export const ACCOUNTS_FILE = path.join(__dirname, '.e2e-accounts.json');
 const SEED_SCRIPT = path.join(__dirname, '../../api/prisma/e2e-seed.js');
 const DEV_SEED_SCRIPT = path.join(__dirname, '../../api/prisma/seed.js');
+const TEARDOWN_SCRIPT = path.join(__dirname, '../../api/prisma/e2e-teardown.js');
 const FLUSH_CACHE_SCRIPT = path.join(__dirname, '../../api/prisma/e2e-flush-list-cache.js');
 
 export default async function globalSetup() {
@@ -18,6 +19,16 @@ export default async function globalSetup() {
   //
   // Requires `@encre-et-plume/shared/dist` — build before running e2e. That holds by construction:
   // the webServer entries start the built API, which needs the same dist.
+  // Sweep throwaway `qa_*` accounts BEFORE seeding, not only after the run. The teardown is the only
+  // thing that removes them, and it never runs when a suite is interrupted or the process is killed —
+  // so debris (and the salon memberships that inflate MC13-E4's roster badge) survived indefinitely.
+  // Running it here makes a local run self-healing instead of depending on the previous run exiting
+  // cleanly. Best-effort: cleanup must never stop a suite from starting.
+  try {
+    execFileSync('node', [TEARDOWN_SCRIPT], { env: { ...process.env }, stdio: 'inherit' });
+  } catch (err) {
+    console.warn('[globalSetup] pre-run teardown failed (continuing):', (err as Error).message);
+  }
   execFileSync('node', [DEV_SEED_SCRIPT], { env: { ...process.env }, stdio: 'inherit' });
   // MC-10 QA finding: gallery/catalog/home/ranking list caches are keyed by query shape only (not DB
   // generation) — a stale hit across repeated local re-runs can carry a previous run's id past a

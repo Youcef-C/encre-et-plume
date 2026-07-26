@@ -12,7 +12,12 @@ async function main() {
 
   // Find all qa_e2e_ accounts and their profile ids (for cascade-safe deletion)
   const accounts = await prisma.account.findMany({
-    where: { OR: [{ email: { startsWith: 'qa_e2e_' } }, { email: { startsWith: 'deleted+' } }] },
+    // `qa_`, not `qa_e2e_`: specs mint throwaway accounts under many prefixes (`qa_mentA_`, `qa_rtA_`,
+    // `qa_trig_`, `qa_probe_` …) and only `qa_e2e_` was ever swept, so the rest accumulated forever —
+    // 651 of them against 15 seeded accounts, with their salon memberships. That is what made
+    // MC13-E4 fail: every stale account still counts in Le Comptoir's roster badge.
+    // Seeded fixtures live on `@seed.encre-et-plume.local` and never match this prefix.
+    where: { OR: [{ email: { startsWith: 'qa_' } }, { email: { startsWith: 'deleted+' } }] },
     include: { profile: { select: { id: true } } },
   });
   const profileIds = accounts.map((a) => a.profile?.id).filter(Boolean);
@@ -124,9 +129,57 @@ async function main() {
     await prisma.application.deleteMany({ where: { applicantId: { in: accountIds } } });
   }
 
-  // 5. Delete accounts
+  // 4z. Safety net for every OTHER table that FK-restricts Account deletion.
+  //
+  // The explicit steps above were written once and never revisited, so each new table with a
+  // RESTRICT foreign key to Account (NotificationPreference, Favorite, Reaction, PageAssignee,
+  // ReadingProgress, WatchlistItem …) silently started blocking teardown — 26 such tables exist today.
+  // Enumerating one more by hand would just restart the rot, so derive them from the live catalog
+  // instead: this stays correct when the schema grows.
+  //
+  // Scoped strictly to the throwaway accounts collected above. Looped because a dependent can itself
+  // be FK-blocked by its own dependent (Media ← AssetVersion); each pass clears one layer, and we
+  // stop as soon as a pass deletes nothing.
+  if (accountIds.length > 0) {
+    const refs = await prisma.$queryRawUnsafe(`
+      SELECT kcu.table_name AS "table", kcu.column_name AS "column"
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = tc.constraint_name
+      JOIN information_schema.referential_constraints rc ON rc.constraint_name = tc.constraint_name
+      JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND ccu.table_name = 'Account'
+        AND rc.delete_rule = 'RESTRICT'
+        -- Pin every join to one schema. Without this the joins fan out across every schema in the
+        -- database — a dev box with leftover Prisma shadow schemas returned 45k rows for 28 real
+        -- pairs, at ~7.7s per pass. DISTINCT alone would hide the cost, not remove it.
+        AND tc.table_schema = 'public'
+        AND kcu.table_schema = 'public'
+        AND ccu.table_schema = 'public'
+        AND rc.constraint_schema = 'public'
+      GROUP BY kcu.table_name, kcu.column_name
+    `);
+    for (let pass = 0; pass < 5; pass++) {
+      let removed = 0;
+      for (const { table, column } of refs) {
+        try {
+          removed += await prisma.$executeRawUnsafe(
+            `DELETE FROM "${table}" WHERE "${column}" = ANY($1::text[])`,
+            accountIds,
+          );
+        } catch {
+          // Still blocked by a deeper dependent — a later pass clears it.
+        }
+      }
+      if (removed === 0) break;
+    }
+  }
+
+  // 5. Delete accounts — must match the `accounts` lookup at the top of this file, or we clear a
+  // wider set's dependents and then delete only a narrow subset, leaving the accounts themselves
+  // behind (that mismatch is how 651 `qa_*` accounts accumulated).
   await prisma.account.deleteMany({
-    where: { email: { startsWith: 'qa_e2e_' } },
+    where: { OR: [{ email: { startsWith: 'qa_' } }, { email: { startsWith: 'deleted+' } }] },
   });
 
   await prisma.$disconnect();

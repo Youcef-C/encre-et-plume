@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import SignupForm from '../../components/SignupForm';
+import GuestOnly from '../../components/GuestOnly';
 
 export const metadata = { title: 'Inscription — Encre & Plume' };
 
 export default function InscriptionPage() {
   return (
+    <GuestOnly>
     <div
       style={{
         minHeight: 'calc(100dvh - 69px)', // subtract header height
@@ -51,5 +53,6 @@ export default function InscriptionPage() {
         </p>
       </div>
     </div>
+    </GuestOnly>
   );
 }

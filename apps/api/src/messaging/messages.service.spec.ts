@@ -279,10 +279,52 @@ describe('MessagesService.createConversation — DM', () => {
 });
 
 describe('MessagesService.createConversation — group', () => {
-  it('rejects a missing/blank name (400)', async () => {
+  // Contract change (contacts-DM follow-up 5b): the group name is OPTIONAL — a blank/absent name is
+  // stored as null and the title falls back to the participants (PATCH /conversations/:id sets it later).
+  it('accepts a blank name and stores null (name is optional now)', async () => {
+    const { service, prisma } = build();
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2' }]);
+    prisma.conversation.create.mockResolvedValue(CONV({ id: 'grp-1', type: 'group', name: null, dmKey: null }));
+    await service.createConversation('acc-1', { name: '  ', participantIds: ['acc-2'] });
+    expect(prisma.conversation.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'group', name: null }) }),
+    );
+  });
+
+  // Security regression (found by probing, 2026-07-26): `{ participantIds: [X] }` was a complete
+  // bypass of MC-10 blocks and F-19 dmPolicy. The DM arm refused, but a two-person "group" reaching
+  // the same person was created and delivered — the blocker saw it as unread in their inbox.
+  it('refuses to create a group with someone the caller is block-paired with', async () => {
+    const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
+    const { service, prisma } = build({ blocks });
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2', preferences: {} }]);
+    await expect(
+      service.createConversation('acc-1', { participantIds: ['acc-2'] }),
+    ).rejects.toThrow("Impossible d'envoyer le message.");
+    expect(prisma.conversation.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a participant whose dmPolicy is 'contacts' and who is not a contact", async () => {
+    const { service, prisma } = build();
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2', preferences: { dmPolicy: 'contacts' } }]);
+    await expect(
+      service.createConversation('acc-1', { participantIds: ['acc-2'] }),
+    ).rejects.toThrow("Impossible d'envoyer le message.");
+    expect(prisma.conversation.create).not.toHaveBeenCalled();
+  });
+
+  it("allows a participant whose dmPolicy is 'anyone'", async () => {
+    const { service, prisma } = build();
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2', preferences: { dmPolicy: 'anyone' } }]);
+    prisma.conversation.create.mockResolvedValue(CONV({ id: 'grp-1', type: 'group', name: null, dmKey: null }));
+    await expect(service.createConversation('acc-1', { participantIds: ['acc-2'] })).resolves.toBeTruthy();
+    expect(prisma.conversation.create).toHaveBeenCalled();
+  });
+
+  it('still rejects a name over the max length (400)', async () => {
     const { service } = build();
     await expect(
-      service.createConversation('acc-1', { name: '  ', participantIds: ['acc-2'] }),
+      service.createConversation('acc-1', { name: 'x'.repeat(81), participantIds: ['acc-2'] }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -353,7 +395,7 @@ describe('MessagesService.listConversations', () => {
   });
 });
 
-describe('MessagesService — MC-10 block enforcement (DM only)', () => {
+describe('MessagesService — MC-10 block enforcement', () => {
   it('sendMessage on a blocked DM pair → neutral 400, no message persisted', async () => {
     const blocks = { isBlockedPair: jest.fn().mockResolvedValue(true) };
     const { service, prisma } = build({ blocks });

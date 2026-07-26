@@ -13,6 +13,7 @@ import { SendMessageDto } from './dto/send-message.dto';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { RespondRequestDto } from './dto/respond-request.dto';
 import { AddParticipantDto } from './dto/add-participant.dto';
+import { RenameConversationDto } from './dto/rename-conversation.dto';
 
 function parseLimit(raw: unknown): number | undefined {
   const n = Number(raw);
@@ -74,6 +75,18 @@ export class ConversationsController {
     @Body() dto: RespondRequestDto,
   ): Promise<ConversationItem> {
     return this.service.respondToRequest(req.accountId, id, dto.action);
+  }
+
+  // Follow-up 5b: the group name is optional at creation, so it must be settable later. Creator-only
+  // (same owner rule as add/kick) — resolved from Conversation.createdBy in the service, never a
+  // client claim. An empty name clears it back to the participant-derived title.
+  @Patch(':id')
+  rename(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: RenameConversationDto,
+  ): Promise<ConversationItem> {
+    return this.service.renameConversation(req.accountId, id, dto.name);
   }
 
   @Post(':id/read')

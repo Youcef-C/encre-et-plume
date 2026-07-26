@@ -901,6 +901,13 @@ export const sendMessage = (conversationId: string, body: SendMessageRequest): P
 export const createConversation = (body: CreateConversationRequest): Promise<ConversationItem> =>
   request<ConversationItem>('/conversations', { method: 'POST', body: JSON.stringify(body) });
 
+// Follow-up 5b: set (or clear, with '') a group's name after creation. Creator-only, server-enforced.
+export const renameConversation = (conversationId: string, name: string): Promise<ConversationItem> =>
+  request<ConversationItem>(`/conversations/${encodeURIComponent(conversationId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+
 export const markConversationRead = (conversationId: string): Promise<MarkReadResponse> =>
   request<MarkReadResponse>(`/conversations/${encodeURIComponent(conversationId)}/read`, { method: 'POST' });
 

@@ -36,6 +36,7 @@ vi.mock('../lib/api', () => ({
   getMediaSignedUrl: vi.fn(),
   getPresence: vi.fn(),
   getContacts: vi.fn(),
+  searchAccounts: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
   getMedia: vi.fn(),
@@ -175,13 +176,15 @@ describe('MessagingWidget — launcher', () => {
     expect(await screen.findByRole('button', { name: 'Messages, 1 non lus' })).toBeInTheDocument();
   });
 
-  it('opens the panel with header controls (accent-red Groupe, no minimize, Fermer)', async () => {
+  it('opens the panel with header controls (one general accent-red conversation starter, no minimize, Fermer)', async () => {
     renderWidget();
     await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
     const dialog = screen.getByRole('dialog', { name: 'Messages' });
-    // MC-9 amendment: "＋ Groupe" is a primary accent-red action.
-    const groupe = within(dialog).getByRole('button', { name: '＋ Groupe' });
-    expect(groupe).toHaveStyle({ background: 'var(--accent)', color: '#fff' });
+    // Follow-up 5b: the group-only "＋ Groupe" is replaced by ONE general start-a-conversation button
+    // (1 person → DM, 2+ → group), so the 320px header keeps a single affordance.
+    expect(within(dialog).queryByRole('button', { name: '＋ Groupe' })).not.toBeInTheDocument();
+    const starter = within(dialog).getByRole('button', { name: '＋ Conversation' });
+    expect(starter).toHaveStyle({ background: 'var(--accent)', color: '#fff' });
     // MC-9 amendment: the minimize "Réduire" (▁) button is removed; only "Fermer" remains.
     expect(within(dialog).queryByRole('button', { name: 'Réduire' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Fermer' })).toBeInTheDocument();
@@ -591,5 +594,103 @@ describe('MessagingWidget — Demandes tab (MC-9 delta)', () => {
     // Composer stays enabled — opening messages allowed.
     expect(screen.getByLabelText('Écrire un message')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Envoyer' })).toBeEnabled();
+  });
+});
+
+// Contacts-DM follow-up (2026-07-26, round 2 / item 6) — the Contacts tab is a LIST of the viewer's
+// contacts, each row carrying the "Message" affordance (same wording as the /contacts page rows), not
+// a search box. Starting the DM stays on the SAME POST /conversations { participantId } path as every
+// other entry point, so dmPolicy (F-19) + blocks (MC-10) are enforced server-side.
+describe('MessagingWidget — Contacts tab (list)', () => {
+  const contact = (over: Record<string, unknown> = {}) => ({
+    userId: 'u-lea',
+    slug: 'lea-b',
+    name: 'Léa B.',
+    avatarUrl: null,
+    role: 'dessinateur',
+    city: null,
+    mutualProjects: 0,
+    presence: { online: true, lastSeen: null },
+    ...over,
+  });
+
+  beforeEach(() => {
+    (api.getContacts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [contact()] });
+    (api.createConversation as ReturnType<typeof vi.fn>).mockResolvedValue(dmConv);
+  });
+
+  async function openContactsTab() {
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages, 1 non lus' }));
+    await userEvent.click(await screen.findByRole('tab', { name: 'Contacts' }));
+  }
+
+  it('opens on the contact LIST (no search box as the entry point) and starts the DM from a row', async () => {
+    await openContactsTab();
+
+    expect(await screen.findByRole('button', { name: 'Message à Léa B.' })).toBeInTheDocument();
+    expect(api.getContacts).toHaveBeenCalled();
+    // The picker combobox is no longer this tab's entry point — the list is.
+    expect(screen.queryByRole('combobox', { name: 'Rechercher une personne' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Message à Léa B.' }));
+    await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith({ participantId: 'u-lea' }));
+    expect(await screen.findByLabelText('Écrire un message')).toBeInTheDocument();
+  });
+
+  it('filters the list with the panel search field (secondary to the listing)', async () => {
+    (api.getContacts as ReturnType<typeof vi.fn>).mockResolvedValue({
+      items: [contact(), contact({ userId: 'u-noe', slug: 'noe-p', name: 'Noé P.' })],
+    });
+    await openContactsTab();
+    await screen.findByRole('button', { name: 'Message à Noé P.' });
+
+    await userEvent.type(screen.getByLabelText('Rechercher un contact'), 'Léa');
+    expect(screen.queryByRole('button', { name: 'Message à Noé P.' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Message à Léa B.' })).toBeInTheDocument();
+  });
+
+  it('shows the server refusal when the recipient only accepts DMs from contacts', async () => {
+    // A real refusal is an ApiError body — statusCode is what proves the copy is the server's French
+    // message and not a transport TypeError ("Failed to fetch") leaking into role="alert" (review N1).
+    (api.createConversation as ReturnType<typeof vi.fn>).mockRejectedValue({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: "Ce membre n'accepte que les messages de ses contacts.",
+    });
+    await openContactsTab();
+    await userEvent.click(await screen.findByRole('button', { name: 'Message à Léa B.' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Ce membre n'accepte que les messages de ses contacts.",
+    );
+    expect(screen.queryByLabelText('Écrire un message')).not.toBeInTheDocument();
+  });
+
+  // Review N1: a transport failure rejects with a TypeError whose English message must never render.
+  it('falls back to French copy when the request fails at the transport level', async () => {
+    (api.createConversation as ReturnType<typeof vi.fn>).mockRejectedValue(new TypeError('Failed to fetch'));
+    await openContactsTab();
+    await userEvent.click(await screen.findByRole('button', { name: 'Message à Léa B.' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Une erreur est survenue. Veuillez réessayer.');
+    expect(alert).not.toHaveTextContent('Failed to fetch');
+  });
+
+  it('tells the user when they have no contacts yet', async () => {
+    (api.getContacts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    await openContactsTab();
+    expect(await screen.findByText(/Aucun contact pour l’instant/i)).toBeInTheDocument();
+  });
+
+  it('shows an error state with a retry when the contacts fail to load', async () => {
+    (api.getContacts as ReturnType<typeof vi.fn>).mockRejectedValueOnce({ message: 'boom' });
+    await openContactsTab();
+    expect(await screen.findByText('Impossible de charger vos contacts.')).toBeInTheDocument();
+
+    (api.getContacts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [contact()] });
+    await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByRole('button', { name: 'Message à Léa B.' })).toBeInTheDocument();
   });
 });

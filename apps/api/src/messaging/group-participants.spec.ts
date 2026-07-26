@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
@@ -55,6 +55,7 @@ function makePrisma(conv: Record<string, unknown> = GROUP()) {
     conversation: {
       findUnique: jest.fn().mockResolvedValue(conv),
       create: jest.fn().mockResolvedValue(conv),
+      update: jest.fn().mockResolvedValue(conv),
     },
     conversationParticipant: {
       create: jest.fn().mockResolvedValue({}),
@@ -81,6 +82,7 @@ function build(prisma: ReturnType<typeof makePrisma> = makePrisma()) {
     emitParticipantAdded: jest.fn(),
     emitParticipantRemoved: jest.fn(),
     emitConversationDeleted: jest.fn(),
+    emitConversationUpdated: jest.fn(),
   };
   const blocks = { isBlockedPair: jest.fn() };
   const connections = { stateBetween: jest.fn() };
@@ -316,5 +318,106 @@ describe('MessagesService.leaveConversation (MC-12 leave)', () => {
   it('non-member → 404', async () => {
     const { service } = build();
     await expect(service.leaveConversation('stranger', 'grp-1')).rejects.toThrow('Conversation introuvable.');
+  });
+});
+
+// ── PATCH /conversations/:id — rename a group (contacts-DM follow-up 5b) ──────
+// The group name became OPTIONAL at creation, so it must be settable later. Authz mirrors the rest
+// of MC-12 group management: CREATOR ONLY, resolved from the DB row (never a client claim).
+describe('MessagesService.renameConversation (group name set later)', () => {
+  it('creator renames → name persisted (trimmed) + conversation:updated to every participant', async () => {
+    const prisma = makePrisma();
+    prisma.conversation.update.mockResolvedValue(GROUP({ name: 'Lames de Brume' }));
+    const { service, gateway } = build(prisma);
+    const item = await service.renameConversation('acc-1', 'grp-1', '  Lames de Brume  ');
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'grp-1' }, data: { name: 'Lames de Brume' } }),
+    );
+    expect(item.name).toBe('Lames de Brume');
+    expect(gateway.emitConversationUpdated).toHaveBeenCalledWith(
+      expect.arrayContaining(['acc-1', 'acc-2', 'acc-3']),
+      { conversationId: 'grp-1' },
+    );
+  });
+
+  it('an empty name clears it back to the participant-derived fallback (name = null)', async () => {
+    const prisma = makePrisma();
+    prisma.conversation.update.mockResolvedValue(GROUP({ name: null }));
+    const { service } = build(prisma);
+    const item = await service.renameConversation('acc-1', 'grp-1', '   ');
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'grp-1' }, data: { name: null } }),
+    );
+    expect(item.name).toBe('Name acc-2, Name acc-3');
+  });
+
+  it('a non-creator member → 403, nothing written', async () => {
+    const prisma = makePrisma();
+    const { service, gateway } = build(prisma);
+    await expect(service.renameConversation('acc-2', 'grp-1', 'Pirate')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+    expect(gateway.emitConversationUpdated).not.toHaveBeenCalled();
+  });
+
+  it('a non-member caller → 404 (no existence leak)', async () => {
+    const prisma = makePrisma();
+    const { service } = build(prisma);
+    await expect(service.renameConversation('stranger', 'grp-1', 'Pirate')).rejects.toThrow('Conversation introuvable.');
+  });
+
+  it('a dm → 400 (group-only)', async () => {
+    const prisma = makePrisma(GROUP({ type: 'dm', createdBy: null }));
+    const { service } = build(prisma);
+    await expect(service.renameConversation('acc-1', 'grp-1', 'Pirate')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('a name over the max length → 400', async () => {
+    const prisma = makePrisma();
+    const { service } = build(prisma);
+    await expect(service.renameConversation('acc-1', 'grp-1', 'x'.repeat(81))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── unnamed groups: a display fallback everywhere conversation.name is rendered ──
+describe('MessagesService — unnamed group display name (contacts-DM follow-up 5b)', () => {
+  it('a group created without a name is stored with name = null', async () => {
+    const prisma = makePrisma();
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2' }, { id: 'acc-3' }]);
+    prisma.conversation.create.mockResolvedValue(GROUP({ name: null }));
+    const { service } = build(prisma);
+    await service.createConversation('acc-1', { participantIds: ['acc-2', 'acc-3'] });
+    expect(prisma.conversation.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'group', name: null }) }),
+    );
+  });
+
+  it('an unnamed group falls back to the OTHER participants’ names, never an empty title', async () => {
+    const prisma = makePrisma();
+    prisma.account.findMany.mockResolvedValue([{ id: 'acc-2' }, { id: 'acc-3' }]);
+    prisma.conversation.create.mockResolvedValue(GROUP({ name: null }));
+    const { service } = build(prisma);
+    const item = await service.createConversation('acc-1', { participantIds: ['acc-2', 'acc-3'] });
+    expect(item.name).toBe('Name acc-2, Name acc-3');
+  });
+
+  it('caps the fallback at 3 names + a remainder count (a 320px row must not wrap)', async () => {
+    const prisma = makePrisma(
+      GROUP({
+        name: null,
+        participants: [
+          PART('acc-1', '2026-07-07T10:00:00.000Z'),
+          PART('acc-2', '2026-07-07T10:00:00.000Z'),
+          PART('acc-3', '2026-07-07T10:00:00.001Z'),
+          PART('acc-4', '2026-07-07T10:00:00.002Z'),
+          PART('acc-5', '2026-07-07T10:00:00.003Z'),
+        ],
+      }),
+    );
+    const { service } = build(prisma);
+    const item = await service.renameConversation('acc-1', 'grp-1', '');
+    expect(item.name).toBe('Name acc-2, Name acc-3, Name acc-4 +1');
   });
 });

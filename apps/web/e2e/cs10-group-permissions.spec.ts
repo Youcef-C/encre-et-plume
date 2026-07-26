@@ -76,8 +76,13 @@ test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B inv
     await page.getByRole('button', { name: '＋ Inviter un membre' }).click();
     await expect(page.getByRole('dialog', { name: 'Proposer une collab' })).toBeVisible();
 
-    await page.getByRole('button', { name: /^Contacts/ }).click();
-    await page.getByRole('checkbox', { name: 'E2E CS10_B' }).check();
+    // 2026-07-26: the Contacts dropdown was retired — the reachable-user search IS the recipient
+    // field now, listing contacts idle and turning a pick into a chip (same flow as MC3-D1).
+    const dialog = page.getByRole('dialog', { name: 'Proposer une collab' });
+    await dialog.getByRole('option', { name: /E2E CS10_B/ }).click();
+    await expect(
+      dialog.getByRole('list', { name: 'Destinataires sélectionnés' }).getByText('E2E CS10_B'),
+    ).toBeVisible();
     await page.getByRole('button', { name: "Envoyer l'invitation" }).click();
     await expect(page.getByText('Envoyée')).toBeVisible({ timeout: 8_000 });
     await page.getByRole('button', { name: 'Fermer', exact: true }).and(page.locator('.ep-btn-primary')).click();
@@ -230,8 +235,8 @@ test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B inv
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
     await expect(projectRow).toHaveAttribute('aria-checked', 'true');
 
-    await page.getByRole('button', { name: /^Contacts/ }).click();
-    await page.getByRole('checkbox', { name: 'E2E CS10_C' }).check();
+    // 2026-07-26: Contacts dropdown retired — the reachable-user search is the recipient field.
+    await page.getByRole('dialog', { name: 'Proposer une collab' }).getByRole('option', { name: /E2E CS10_C/ }).click();
     await page.getByRole('button', { name: "Envoyer l'invitation" }).click();
     await expect(page.getByText('Envoyée')).toBeVisible({ timeout: 8_000 });
     await page.getByRole('button', { name: 'Fermer', exact: true }).and(page.locator('.ep-btn-primary')).click();

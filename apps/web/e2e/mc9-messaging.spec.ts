@@ -27,7 +27,7 @@
  * are only used here as connection-request SENDERS (their role is irrelevant to that); MSG_FRESH is
  * the dedicated (not roles.spec.ts-shared) recipient whose "zero pending requests" baseline must hold
  * regardless of what roles.spec.ts does to the shared FRESH account concurrently.
- * The "＋ Groupe" contact and the /contacts "Message" seam target both use the dedicated MSG_CONTACT
+ * The "＋ Conversation" contact and the /contacts "Message" seam target both use the dedicated MSG_CONTACT
  * account (connected to MSG_A) instead of the shared ADMIN2, so neither reads state ADMIN2's other
  * consumers (roles.spec.ts mutates its role) could disturb.
  */
@@ -133,9 +133,11 @@ test.describe('MC-9 widget anatomy — MSG_A (seeded unread fixtures)', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Messages', { exact: true })).toBeVisible();
     await expect(dialog.getByText('3', { exact: true })).toBeVisible(); // header count chip
-    // MC-9 amendment (2026-07-10): "＋ Groupe" is now accent-red (matches other primary actions);
-    // the minimize "Réduire" (▁) button is removed — only "Fermer" (X) remains.
-    const groupBtn = dialog.getByRole('button', { name: '＋ Groupe' });
+    // MC-9 amendment (2026-07-10) + follow-up 5b (2026-07-26): ONE general accent-red
+    // "＋ Conversation" starter replaces the group-only "＋ Groupe"; the minimize "Réduire" (▁)
+    // button is removed — only "Fermer" (X) remains.
+    await expect(dialog.getByRole('button', { name: '＋ Groupe' })).toHaveCount(0);
+    const groupBtn = dialog.getByRole('button', { name: '＋ Conversation' });
     await expect(groupBtn).toBeVisible();
     await expect(groupBtn).toHaveCSS('background-color', 'rgb(232, 38, 28)'); // var(--accent) #e8261c
     await expect(dialog.getByRole('button', { name: 'Réduire' })).toHaveCount(0);
@@ -368,7 +370,7 @@ test.describe('MC-9 realtime messaging — context A (MSG_A) + context B (MSG_B)
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ＋ Groupe creation + the MC-8 contacts "Message" seam (needs an accepted connection first).
+// ＋ Conversation creation + the MC-8 contacts "Message" seam (needs an accepted connection first).
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONTACT)', () => {
@@ -376,7 +378,7 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
 
   test.beforeAll(async ({ playwright }) => {
     // Establish an accepted connection MSG_A ⇄ MSG_CONTACT so MSG_CONTACT appears as a selectable
-    // contact in the "＋ Groupe" multi-select and as a Contacts row for the MC-8 seam test.
+    // contact in the "＋ Conversation" picker and as a Contacts-tab row for the MC-8 seam test.
     const uCtx = await playwright.request.newContext();
     const aCtx = await playwright.request.newContext();
     try {
@@ -397,27 +399,117 @@ test.describe('MC-9 group creation + MC-8 « Message » seam (MSG_A ⇄ MSG_CONT
     }
   });
 
-  test('MC9-E8: "＋ Groupe" — name + a contact via the MC-13 reachable-user search → thread opens empty, send works', async ({
+  test('MC9-E8: "＋ Conversation" — 2 people via the MC-13 reachable-user search → an UNNAMED group opens, titled by its members, send works', async ({
     page,
   }) => {
     await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
     await fab(page).click();
-    await panel(page).getByRole('button', { name: '＋ Groupe' }).click();
+    await panel(page).getByRole('button', { name: '＋ Conversation' }).click();
 
-    const modal = page.getByRole('dialog', { name: 'Nouveau groupe' }).or(page.getByRole('dialog').filter({ hasText: 'Nouveau groupe' }));
+    const modal = page
+      .getByRole('dialog', { name: 'Nouvelle conversation' })
+      .or(page.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' }));
     await expect(modal).toBeVisible({ timeout: 10_000 });
-    await modal.getByLabel('Nom du groupe').fill('Projet · Test QA');
     // MC-13: the contacts-only OnBrandMultiSelect was replaced by the shared reachable-user search.
-    await modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' }).fill('MSG_CONTACT');
+    const search = modal.getByRole('combobox', { name: 'Ajouter une personne' });
+    await search.fill('MSG_CONTACT');
     await modal.getByRole('option', { name: /MSG_CONTACT/ }).click();
+    // Follow-up 5b: 2+ people ⇒ a group. The name field only appears now, and it is OPTIONAL —
+    // leave it empty to prove the server's participant-derived title.
+    await search.fill('MSG_C');
+    await modal.getByRole('option', { name: /E2E MSG_C$/ }).click();
+    await expect(modal.getByLabel('Nom du groupe (facultatif)')).toBeVisible();
     await modal.getByRole('button', { name: 'Créer le groupe' }).click();
 
     await expect(modal).toHaveCount(0);
     const dialog = panel(page);
     await expect(dialog.getByText('Démarrez la conversation')).toBeVisible({ timeout: 10_000 });
+    // The unnamed group is titled by its other members — never an empty header.
+    await expect(dialog.getByText(/E2E MSG_CONTACT/).first()).toBeVisible();
     await dialog.getByLabel('Écrire un message').fill('Bienvenue dans le groupe !');
     await dialog.getByRole('button', { name: 'Envoyer' }).click();
     await expect(dialog.getByText('Bienvenue dans le groupe !')).toBeVisible({ timeout: 10_000 });
+
+    // ── follow-up 5b: the name is settable later, creator-only (PATCH /conversations/:id) ──
+    await dialog.getByRole('button', { name: 'Gérer le groupe' }).click();
+    const nameField = dialog.getByLabel('Nom du groupe');
+    await expect(nameField).toBeVisible({ timeout: 10_000 });
+    await expect(nameField).toHaveValue(''); // unnamed → empty field, not the derived title
+    const laterName = `Projet · Test QA ${Date.now()}`;
+    await nameField.fill(laterName);
+    await dialog.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(dialog.getByText(laterName, { exact: true })).toBeVisible({ timeout: 10_000 });
+  });
+
+  // Contacts-DM follow-up (2026-07-26, round 2 / item 6) — the widget's Contacts tab is a LIST of
+  // the viewer's contacts, each row offering "Message". Same POST /conversations { participantId }
+  // path as the /contacts seam, so dmPolicy (F-19) + blocks (MC-10) still decide.
+  test('MC9-C1: widget "Contacts" tab LISTS the contacts and starts the 1:1 from a row', async ({ page }) => {
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+    await fab(page).click();
+    const dialog = panel(page);
+    await dialog.getByRole('tab', { name: 'Contacts' }).click();
+
+    // The list IS the entry point — no picker combobox on this tab.
+    const messageBtn = dialog.getByRole('button', { name: 'Message à E2E MSG_CONTACT' });
+    await expect(messageBtn).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByRole('combobox', { name: 'Rechercher une personne' })).toHaveCount(0);
+
+    await messageBtn.click();
+    // The DM thread opens in place of the list, composer ready.
+    await expect(dialog.getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('MC9-C2: the panel search filters the contact LIST; reaching a non-contact is "＋ Conversation"', async ({
+    page,
+  }) => {
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+    await fab(page).click();
+    const dialog = panel(page);
+    await dialog.getByRole('tab', { name: 'Contacts' }).click();
+    await expect(dialog.getByRole('button', { name: 'Message à E2E MSG_CONTACT' })).toBeVisible({ timeout: 10_000 });
+
+    // Secondary search = filtering the list.
+    const search = dialog.getByRole('searchbox', { name: 'Rechercher un contact' });
+    await search.fill('zzz-aucun');
+    await expect(dialog.getByText('Aucun contact trouvé.')).toBeVisible();
+    await search.fill('MSG_CONTACT');
+    await expect(dialog.getByRole('button', { name: 'Message à E2E MSG_CONTACT' })).toBeVisible();
+
+    // A NON-contact is reached from the general starter, routed by the recipient's dmPolicy.
+    await dialog.getByRole('button', { name: '＋ Conversation' }).click();
+    const modal = page.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' });
+    await modal.getByRole('combobox', { name: 'Ajouter une personne' }).fill('MSG_C');
+    await modal.getByRole('option', { name: /E2E MSG_C$/ }).click();
+    await modal.getByRole('button', { name: 'Démarrer la conversation' }).click();
+    await expect(modal).toHaveCount(0, { timeout: 10_000 });
+    await expect(dialog.getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('MC9-C3: responsive — the Contacts list is usable at 375/768/1280 with no horizontal overflow', async ({
+    page,
+  }) => {
+    await login(page, ACCOUNTS.MSG_A.email, /menu de e2e msg_a/i);
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await fab(page).click();
+      const dialog = panel(page);
+      const tab = dialog.getByRole('tab', { name: 'Contacts' });
+      await tab.click();
+      const box = await tab.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(36);
+      const rowBtn = dialog.getByRole('button', { name: 'Message à E2E MSG_CONTACT' });
+      await expect(rowBtn).toBeVisible({ timeout: 10_000 });
+      const rowBox = await rowBtn.boundingBox();
+      expect(rowBox!.height).toBeGreaterThanOrEqual(44); // tap target
+      // The header keeps its single starter unclipped at every width.
+      await expect(dialog.getByRole('button', { name: '＋ Conversation' })).toBeVisible();
+      const noOverflow = await page.evaluate(
+        () => document.scrollingElement!.scrollWidth <= window.innerWidth + 1,
+      );
+      expect(noOverflow).toBe(true);
+    }
   });
 
   test('MC9-E9: /contacts « Message à E2E MSG_CONTACT » opens (or starts) the DM directly (openMsg behavior)', async ({

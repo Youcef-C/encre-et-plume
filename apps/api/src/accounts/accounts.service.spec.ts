@@ -323,10 +323,49 @@ describe('AccountsService', () => {
       preferences: dmPolicy ? { dmPolicy } : {},
     });
 
-    it('empty / whitespace query → { items: [] } without a DB hit', async () => {
+    // Contacts-DM follow-up (2026-07-26): an empty query is the picker's IDLE state — it lists the
+    // caller's contacts so removing the Contacts dropdown doesn't remove the ability to find a contact.
+    it('empty / whitespace query lists the caller contacts, flagged isContact', async () => {
+      connections.connectedIds.mockResolvedValue(new Set(['friend']));
+      prisma.account.findMany.mockResolvedValue([acc('friend', 'contacts', 'Léa B.')]);
+
+      const res = await service.search('caller', '   ');
+
+      expect(res.items).toEqual([
+        { id: 'friend', name: 'Léa B.', avatarUrl: null, slug: 'slug-friend', isContact: true },
+      ]);
+      const where = prisma.account.findMany.mock.calls[0][0].where;
+      expect(where.id).toEqual({ in: ['friend'] });
+      expect(where.displayName).toBeUndefined();
+    });
+
+    it('empty query with no contacts → { items: [] } without a DB hit', async () => {
       await expect(service.search('caller', '   ')).resolves.toEqual({ items: [] });
       await expect(service.search('caller', undefined as unknown as string)).resolves.toEqual({ items: [] });
       expect(prisma.account.findMany).not.toHaveBeenCalled();
+    });
+
+    it('empty query drops a blocked contact', async () => {
+      connections.connectedIds.mockResolvedValue(new Set(['friend', 'blk']));
+      blocks.blockedPairIds.mockResolvedValue(new Set(['blk']));
+      prisma.account.findMany.mockResolvedValue([acc('friend', 'contacts')]);
+
+      await service.search('caller', '');
+
+      expect(prisma.account.findMany.mock.calls[0][0].where.id).toEqual({ in: ['friend'] });
+    });
+
+    it('ranks contacts first and flags them for a non-empty query', async () => {
+      prisma.account.findMany.mockResolvedValue([
+        acc('anyone', 'anyone', 'Aaa'), // alphabetically first, but not a contact
+        acc('friend', 'requests', 'Zzz'),
+      ]);
+      connections.connectedIds.mockResolvedValue(new Set(['friend']));
+
+      const res = await service.search('caller', 'user');
+
+      expect(res.items.map((i) => i.id)).toEqual(['friend', 'anyone']);
+      expect(res.items.map((i) => i.isContact)).toEqual([true, false]);
     });
 
     it('queries case-insensitive displayName contains, trims + bounds q, excludes the caller', async () => {
@@ -371,7 +410,7 @@ describe('AccountsService', () => {
       );
       const res = await service.search('caller', 'user');
       expect(res.items.length).toBe(ACCOUNT_SEARCH_MAX);
-      expect(res.items[0]).toEqual({ id: 'u0', name: 'User u0', avatarUrl: null, slug: 'slug-u0' });
+      expect(res.items[0]).toEqual({ id: 'u0', name: 'User u0', avatarUrl: null, slug: 'slug-u0', isContact: false });
     });
   });
 });

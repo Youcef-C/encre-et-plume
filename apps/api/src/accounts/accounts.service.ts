@@ -10,6 +10,8 @@ import type { Account } from '@prisma/client';
 const SEARCH_QUERY_MAX = 100; // bound the input at the trust boundary
 const SEARCH_CANDIDATE_WINDOW = 60; // DB window before the in-memory reachability filter caps at ACCOUNT_SEARCH_MAX
 
+type SearchRow = { id: string; displayName: string; avatar: string | null; profileSlug: string; preferences: unknown };
+
 const VALID_THEMES: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
 // ponytail: duplicated in auth.service.ts / onboarding.service.ts — a small coercion is cheaper than a shared util that ties auth↔accounts↔onboarding
@@ -51,38 +53,64 @@ export class AccountsService {
   ) {}
 
   /**
-   * MC-13 reachable-user search (backs both group pickers). Accounts whose displayName matches `q`
-   * (case-insensitive contains), RESTRICTED to users the caller may reach: their contacts (MC-8) OR
-   * users whose dmPolicy ∈ {anyone, requests} (F-19) — contacts-only non-contacts are dropped. Excludes
-   * the caller and any blocked pair (MC-10). Capped at ACCOUNT_SEARCH_MAX. Deliberately NOT /partners
-   * (creator-only, excludes readers).
+   * MC-13 reachable-user search (backs the group pickers, the collab-invite picker and the widget's
+   * "Contacts" tab). Accounts whose displayName matches `q` (case-insensitive contains), RESTRICTED to
+   * users the caller may reach: their contacts (MC-8) OR users whose dmPolicy ∈ {anyone, requests}
+   * (F-19) — contacts-only non-contacts are dropped. Excludes the caller and any blocked pair (MC-10).
+   * Capped at ACCOUNT_SEARCH_MAX. Deliberately NOT /partners (creator-only, excludes readers).
+   *
+   * Contacts-DM follow-up (2026-07-26): contacts come FIRST and carry `isContact: true`, and an EMPTY
+   * `q` returns the caller's contacts instead of nothing — that idle state is what replaced the
+   * "Contacts" dropdown in the pickers, so a contact stays one click away.
    * ponytail: in-memory policy filter over a 60-row window; move dmPolicy to a queryable column if
    * search volume demands.
    */
   async search(callerId: string, rawQ: string): Promise<AccountSearchResponse> {
     const q = (rawQ ?? '').trim().slice(0, SEARCH_QUERY_MAX);
-    if (q.length === 0) return { items: [] };
-
-    const [candidates, contacts, blocked] = await Promise.all([
-      this.prisma.account.findMany({
-        where: { deletedAt: null, id: { not: callerId }, displayName: { contains: q, mode: 'insensitive' } },
-        select: { id: true, displayName: true, avatar: true, profileSlug: true, preferences: true },
-        orderBy: { displayName: 'asc' },
-        take: SEARCH_CANDIDATE_WINDOW,
-      }) as Promise<{ id: string; displayName: string; avatar: string | null; profileSlug: string; preferences: unknown }[]>,
+    const [contacts, blocked] = await Promise.all([
       this.connections.connectedIds(callerId),
       this.blocks.blockedPairIds(callerId),
     ]);
 
-    const items: ReachableUser[] = [];
+    // Idle state: list the contacts themselves (always reachable — no dmPolicy filter needed).
+    if (q.length === 0) {
+      const ids = [...contacts].filter((id) => id !== callerId && !blocked.has(id));
+      if (ids.length === 0) return { items: [] };
+      const rows = await this.searchCandidates({ deletedAt: null, id: { in: ids } });
+      return {
+        items: rows.slice(0, ACCOUNT_SEARCH_MAX).map((c) => this.toReachable(c, true)),
+      };
+    }
+
+    const candidates = await this.searchCandidates({
+      deletedAt: null,
+      id: { not: callerId },
+      displayName: { contains: q, mode: 'insensitive' },
+    });
+
+    // Two buckets keep the alphabetical order inside each while ranking contacts first.
+    const contactHits: ReachableUser[] = [];
+    const others: ReachableUser[] = [];
     for (const c of candidates) {
       if (blocked.has(c.id)) continue;
-      const reachable = contacts.has(c.id) || readPreferences(c.preferences).dmPolicy !== 'contacts';
-      if (!reachable) continue;
-      items.push({ id: c.id, name: c.displayName, avatarUrl: c.avatar, slug: c.profileSlug });
-      if (items.length >= ACCOUNT_SEARCH_MAX) break;
+      const isContact = contacts.has(c.id);
+      if (!isContact && readPreferences(c.preferences).dmPolicy === 'contacts') continue;
+      (isContact ? contactHits : others).push(this.toReachable(c, isContact));
     }
-    return { items };
+    return { items: [...contactHits, ...others].slice(0, ACCOUNT_SEARCH_MAX) };
+  }
+
+  private searchCandidates(where: Record<string, unknown>): Promise<SearchRow[]> {
+    return this.prisma.account.findMany({
+      where,
+      select: { id: true, displayName: true, avatar: true, profileSlug: true, preferences: true },
+      orderBy: { displayName: 'asc' },
+      take: SEARCH_CANDIDATE_WINDOW,
+    }) as unknown as Promise<SearchRow[]>;
+  }
+
+  private toReachable(c: SearchRow, isContact: boolean): ReachableUser {
+    return { id: c.id, name: c.displayName, avatarUrl: c.avatar, slug: c.profileSlug, isContact };
   }
 
   async updateRole(id: string, role: UserRole): Promise<AccountSummary> {

@@ -28,6 +28,7 @@ import {
   type WsTypingServer,
 } from '@encre-et-plume/shared';
 import * as api from './api';
+import { apiErrorMessage } from './apiError';
 import { useSession } from './session';
 import { useUnreadCounts } from './unread';
 
@@ -68,7 +69,13 @@ interface MessagingCtx {
   closeWidget: () => void;
   openConversation: (id: string) => void;
   closeThread: () => void;
-  openDm: (userId: string) => Promise<void>;
+  /**
+   * Open (or start) the 1:1 with `userId` through POST /conversations { participantId } — the single
+   * server path that applies the recipient's dmPolicy (F-19) and the block rules (MC-10).
+   * Resolves to the server's French error message when it refuses, or null on success, so a caller
+   * that has somewhere to show it can (widget Contacts tab); fire-and-forget callers just ignore it.
+   */
+  openDm: (userId: string) => Promise<string | null>;
   // MC-9 delta: recipient accepts/declines a pending DM request.
   respondToRequest: (conversationId: string, action: ConversationRequestAction) => Promise<void>;
   reloadConversations: () => void;
@@ -81,6 +88,8 @@ interface MessagingCtx {
   addParticipant: (conversationId: string, participant: ConversationParticipantDto) => Promise<void>;
   removeParticipant: (conversationId: string, accountId: string) => Promise<void>;
   leaveGroup: (conversationId: string) => Promise<void>;
+  /** Follow-up 5b: set (or clear, with '') a group's name after creation. Creator-only server-side. */
+  renameGroup: (conversationId: string, name: string) => Promise<void>;
 }
 
 const noop = () => {};
@@ -105,7 +114,7 @@ export const MessagingContext = createContext<MessagingCtx>({
   closeWidget: noop,
   openConversation: noop,
   closeThread: noop,
-  openDm: async () => {},
+  openDm: async () => null,
   respondToRequest: async () => {},
   reloadConversations: noop,
   loadOlderMessages: noop,
@@ -116,6 +125,7 @@ export const MessagingContext = createContext<MessagingCtx>({
   addParticipant: async () => {},
   removeParticipant: async () => {},
   leaveGroup: async () => {},
+  renameGroup: async () => {},
 });
 
 export const useMessaging = () => useContext(MessagingContext);
@@ -479,8 +489,16 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  // Follow-up 5b: the creator names the group after the fact (PATCH /conversations/:id). Not
+  // optimistic — the server is the authority on who may rename, so we swap in its item on success
+  // and rethrow so the panel can show the failure with the typed name intact.
+  const renameGroup = useCallback(async (conversationId: string, name: string) => {
+    const updated = await api.renameConversation(conversationId, name);
+    setConversations((cur) => cur.map((c) => (c.id === conversationId ? updated : c)));
+  }, []);
+
   const openDm = useCallback(
-    async (userId: string) => {
+    async (userId: string): Promise<string | null> => {
       setPanelState('open');
       try {
         const conv = await api.createConversation({ participantId: userId });
@@ -488,8 +506,13 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         setActiveConversationId(conv.id);
         loadThread(conv.id);
         markRead(conv.id);
-      } catch {
-        // Leave the list open; the failure surfaces via the list panel.
+        return null;
+      } catch (e) {
+        // Leave the list open and hand the server's neutral copy back to the caller (a refused DM
+        // policy, a block, a deleted account) instead of failing silently. Only an ApiError carries
+        // French server copy: a transport failure rejects with a TypeError whose English message
+        // ("Failed to fetch") must never reach a role="alert" (review N1).
+        return apiErrorMessage(e);
       }
     },
     [addConversation, loadThread, markRead],
@@ -634,6 +657,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         addParticipant,
         removeParticipant,
         leaveGroup,
+        renameGroup,
       }}
     >
       {children}

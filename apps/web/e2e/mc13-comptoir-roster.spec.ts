@@ -78,6 +78,10 @@ async function signUpVerifyAndLogin(page: Page, email: string, displayName: stri
 }
 
 async function loginUi(page: Page, email: string): Promise<void> {
+  // An authenticated visit to /connexion redirects home (the GuestOnly guard), so the form never
+  // renders and .fill() hangs. Clear the session first: this helper's contract is "this context ends
+  // up signed in as <email>", and a pre-existing session — possibly a DIFFERENT user — must not win.
+  await page.context().clearCookies();
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(email);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);
@@ -89,7 +93,7 @@ async function loginUi(page: Page, email: string): Promise<void> {
 async function signUpFreshOnPage(page: Page, tag: string, name: string): Promise<void> {
   const email = freshEmail(tag);
   await signUpVerifyAndLogin(page, email, name);
-  await loginUi(page, email);
+  await page.goto('/');
 }
 
 /** Same, but opens a new page in the given context first (multi-context realtime tests). */
@@ -284,8 +288,8 @@ test('MC13-E3: membership persists across a FULL disconnect (context close) — 
     const nameB = `MC13 DiscB ${Date.now()}`;
     const emailB = freshEmail('discB');
     const pageB = await ctxB.newPage();
-    await signUpVerifyAndLogin(pageB, emailB, nameB);
-    await loginUi(pageB, emailB);
+    await signUpVerifyAndLogin(pageB, emailB, nameB); // already sets the session cookie
+    await pageB.goto('/');
 
     await ensureExpanded(pageA); // the roster trigger only renders while the dock is unfolded
     await rosterToggle(pageA).click();
@@ -448,7 +452,7 @@ test('MC13-E7: roster row "Bloquer" removes the target from the roster', async (
 // presence-model rework).
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('MC13-E8: "Nouveau groupe" search finds a reachable non-contact (dmPolicy=anyone) and excludes a dmPolicy=contacts non-contact', async ({
+test('MC13-E8: "Nouvelle conversation" search finds a reachable non-contact (dmPolicy=anyone) and excludes a dmPolicy=contacts non-contact', async ({
   browser,
 }) => {
   const ctxA = await browser.newContext();
@@ -466,12 +470,11 @@ test('MC13-E8: "Nouveau groupe" search finds a reachable non-contact (dmPolicy=a
     await setDmPolicy(pageClosed, 'contacts'); // non-contact + dmPolicy=contacts → MUST be excluded
 
     await msgFab(pageA).click();
-    await pageA.getByRole('button', { name: '＋ Groupe' }).click();
-    const modal = pageA.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
+    await pageA.getByRole('button', { name: '＋ Conversation' }).click();
+    const modal = pageA.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' });
     await expect(modal).toBeVisible();
 
-    await modal.getByLabel('Nom du groupe').fill(`MC13 Groupe ${Date.now()}`);
-    const search = modal.getByRole('combobox', { name: 'Ajouter un·e participant·e' });
+    const search = modal.getByRole('combobox', { name: 'Ajouter une personne' });
 
     // The dmPolicy=contacts non-contact never appears, even after the debounce settles.
     await search.fill(tagClosed);
@@ -488,9 +491,11 @@ test('MC13-E8: "Nouveau groupe" search finds a reachable non-contact (dmPolicy=a
     await option.click();
     await expect(modal.getByRole('button', { name: `Retirer ${tagOpen}` })).toBeVisible();
 
-    await modal.getByRole('button', { name: 'Créer le groupe' }).click();
+    // Follow-up 5b: a single pick starts a DM (the group needs 2+); either way this test's subject is
+    // the SEARCH, and the picked non-contact resolves into a live thread.
+    await modal.getByRole('button', { name: 'Démarrer la conversation' }).click();
     await expect(modal).toHaveCount(0, { timeout: 10_000 });
-    await expect(msgPanel(pageA).getByRole('button', { name: 'Gérer le groupe' })).toBeVisible({ timeout: 10_000 });
+    await expect(msgPanel(pageA).getByLabel('Écrire un message')).toBeVisible({ timeout: 10_000 });
   } finally {
     await ctxA.close();
     await ctxOpen.close();
@@ -503,23 +508,31 @@ test('MC13-E9: GroupMembersPanel "Ajouter un membre" direct-adds a reachable non
 }) => {
   const ctxA = await browser.newContext();
   const ctxSeed = await browser.newContext();
+  const ctxSeed2 = await browser.newContext();
   const ctxNew = await browser.newContext();
   try {
     const pageA = await signUpFreshUi(ctxA, 'gmpA', 'MC13 GmpA');
     const tagSeed = `Mc13GmpSeed${Date.now()}`;
     const pageSeed = await signUpFreshUi(ctxSeed, 'gmpseed', tagSeed); // default dmPolicy=requests → reachable
     void pageSeed;
+    // Follow-up 5b: a group needs 2+ other people (one alone starts a DM), so seed a second member.
+    const tagSeed2 = `Mc13GmpSeedB${Date.now()}`;
+    const pageSeed2 = await signUpFreshUi(ctxSeed2, 'gmpseedb', tagSeed2);
+    void pageSeed2;
 
-    // Create a minimal group (A + seed member) first.
+    // Create a minimal group (A + both seed members) first — no name, it stays optional.
     await msgFab(pageA).click();
-    await pageA.getByRole('button', { name: '＋ Groupe' }).click();
-    const createModal = pageA.getByRole('dialog').filter({ hasText: 'Nouveau groupe' });
-    await createModal.getByLabel('Nom du groupe').fill(`MC13 Gmp ${Date.now()}`);
-    const createSearch = createModal.getByRole('combobox', { name: 'Ajouter un·e participant·e' });
+    await pageA.getByRole('button', { name: '＋ Conversation' }).click();
+    const createModal = pageA.getByRole('dialog').filter({ hasText: 'Nouvelle conversation' });
+    const createSearch = createModal.getByRole('combobox', { name: 'Ajouter une personne' });
     await createSearch.fill(tagSeed);
     const seedOption = createModal.getByRole('option', { name: new RegExp(tagSeed) });
     await expect(seedOption).toBeVisible({ timeout: 5_000 });
     await seedOption.click();
+    await createSearch.fill(tagSeed2);
+    const seedOption2 = createModal.getByRole('option', { name: new RegExp(tagSeed2) });
+    await expect(seedOption2).toBeVisible({ timeout: 5_000 });
+    await seedOption2.click();
     await createModal.getByRole('button', { name: 'Créer le groupe' }).click();
     await expect(createModal).toHaveCount(0, { timeout: 10_000 });
 
@@ -541,6 +554,7 @@ test('MC13-E9: GroupMembersPanel "Ajouter un membre" direct-adds a reachable non
   } finally {
     await ctxA.close();
     await ctxSeed.close();
+    await ctxSeed2.close();
     await ctxNew.close();
   }
 });

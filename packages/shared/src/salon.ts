@@ -55,6 +55,13 @@ export interface ReachableUser {
   name: string;
   avatarUrl: string | null;
   slug: string;
+  /**
+   * Contacts-DM follow-up (2026-07-26): true when the user is one of the caller's MC-8 contacts.
+   * Set by GET /accounts/search (contacts rank first, and an EMPTY q lists the contacts) so the
+   * pickers can surface "Vos contacts" after the Contacts dropdown was retired. Absent on the salon
+   * roster payloads, which don't compute connections.
+   */
+  isContact?: boolean;
 }
 
 // A roster row = a ReachableUser plus a `self` flag. The caller's own row is included and flagged so

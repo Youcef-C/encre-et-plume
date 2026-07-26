@@ -44,6 +44,7 @@ vi.mock('../lib/api', () => ({
   addGroupParticipant: vi.fn(),
   removeGroupParticipant: vi.fn(),
   leaveGroup: vi.fn(),
+  renameConversation: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -77,6 +78,7 @@ const ownedGroup: ConversationItem = {
   id: 'g1',
   type: 'group',
   name: 'Lames de Brume',
+  customName: 'Lames de Brume',
   projectId: null,
   participants: members,
   unreadCount: 0,
@@ -315,5 +317,50 @@ describe('MessagingWidget — DM profile link + realtime (MC-12)', () => {
     await fire('participant:removed', { conversationId: 'g1', userId: 'me-1', createdBy: 'u-yuki' });
     // Thread closed → back on the list search field.
     expect(await screen.findByLabelText('Rechercher une conversation')).toBeInTheDocument();
+  });
+});
+
+// Contacts-DM follow-up 5b (2026-07-26): the group name became optional at creation, so it must be
+// settable later. The members panel hosts it — creator only, mirroring the add/kick authz the server
+// enforces on PATCH /conversations/:id.
+describe('GroupMembersPanel — rename (name set later, follow-up 5b)', () => {
+  // An unnamed group: the server sends the participant-derived title in `name` and customName null.
+  const unnamed: ConversationItem = { ...ownedGroup, name: 'Yuki Moreau, Noa T.', customName: null };
+
+  it('creator can set the group name; it PATCHes and reflects the server item', async () => {
+    (api.renameConversation as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...unnamed,
+      name: 'Lames de Brume',
+    });
+    mockList([unnamed, dmConv]);
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: /Messages/ }));
+    await userEvent.click(await screen.findByText('Yuki Moreau, Noa T.'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Gérer le groupe' }));
+
+    await userEvent.type(await screen.findByLabelText('Nom du groupe'), 'Lames de Brume');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(api.renameConversation).toHaveBeenCalledWith('g1', 'Lames de Brume'));
+    expect(await screen.findByText('Lames de Brume')).toBeInTheDocument();
+  });
+
+  it('a plain member gets no name field (server is creator-only)', async () => {
+    mockList([memberGroup, dmConv]);
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: /Messages/ }));
+    await userEvent.click(await screen.findByText('Lames de Brume'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Gérer le groupe' }));
+    expect(screen.queryByLabelText('Nom du groupe')).not.toBeInTheDocument();
+  });
+
+  it('surfaces a failed rename without losing what was typed', async () => {
+    (api.renameConversation as ReturnType<typeof vi.fn>).mockRejectedValue({ message: 'boom' });
+    await openPanel();
+    await userEvent.type(await screen.findByLabelText('Nom du groupe'), 'X');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Une erreur est survenue. Veuillez réessayer.');
+    expect(screen.getByLabelText('Nom du groupe')).toHaveValue('Lames de BrumeX');
+
   });
 });

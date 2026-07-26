@@ -1,10 +1,15 @@
 'use client';
 
-// MC-13 — shared reachable-user search input, reused by GroupCreateModal ("Nouveau groupe") and
-// GroupMembersPanel ("Ajouter un membre"). Mirrors the NewProjectWizard invite-search UI pattern:
+// MC-13 — shared reachable-user search input: THE one people-picker idiom (contacts OR anyone
+// reachable, never a native select and never a contacts dropdown). Reused by NewConversationModal
+// ("Nouvelle conversation"), GroupMembersPanel ("Ajouter un membre") and InviteModal ("Proposer une
+// collab"). Mirrors the NewProjectWizard invite-search UI pattern:
 // a controlled, debounced text input → GET /accounts/search?q= → an on-brand combobox/listbox with
-// ↑/↓/Enter/Escape keyboard nav (same a11y wiring as the SalonDock mention listbox). Never a native
-// select. Picking a row calls onPick and clears the input; the caller filters via `excludeIds`.
+// ↑/↓/Enter/Escape keyboard nav (same a11y wiring as the SalonDock mention listbox).
+// Picking a row calls onPick and clears the input; the caller filters via `excludeIds`.
+// Contacts-DM follow-up (2026-07-26): an EMPTY query is the idle state — it lists the caller's
+// contacts under a "Vos contacts" caption, and contacts found by a real query rank first and carry a
+// "Contact" tag. That is what keeps contacts one click away now the Contacts dropdown is gone.
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReachableUser } from '@encre-et-plume/shared';
 import { searchAccounts } from '../../lib/api';
@@ -48,23 +53,19 @@ export default function ReachableUserSearch({
     [results, excludeKey],
   );
 
-  // Debounced search (300ms) — same timing as the wizard. Empty/whitespace clears results, no call.
+  // Debounced search (300ms) — same timing as the wizard. Empty/whitespace = the idle state, which
+  // asks the same endpoint for the caller's contacts (one search implementation, one endpoint).
+  const q = query.trim();
   useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     const t = setTimeout(() => {
       searchAccounts(q)
         .then((res) => setResults(res.items))
         .catch(() => setResults([]))
         .finally(() => setLoading(false));
-    }, 300);
+    }, q ? 300 : 0);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [q]);
 
   // Keep the active option in range as the suggestion set changes.
   useEffect(() => {
@@ -73,12 +74,19 @@ export default function ReachableUserSearch({
 
   const pick = (u: ReachableUser) => {
     onPick(u);
+    // Keep the rows: the caller adds the pick to excludeIds (so it drops out on its own) and clearing
+    // the query re-runs the idle contacts fetch. Wiping results here would empty an idle list for good.
     setQuery('');
-    setResults([]);
     setActiveIdx(0);
   };
 
-  const open = query.trim().length > 0;
+  // Idle (no query) opens as soon as there are contacts to show; an empty contact book gets the
+  // idle hint below instead of a bare "Aucun résultat".
+  const open = q.length > 0 || suggestions.length > 0;
+  // Keyed on what the SERVER returned, not on `suggestions`: a caller whose excludeIds happen to
+  // cover every contact (e.g. all of them already picked as chips) has contacts — saying otherwise
+  // would be factually wrong copy.
+  const idleEmpty = q.length === 0 && !loading && results.length === 0;
   const active = suggestions[activeIdx];
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -93,7 +101,13 @@ export default function ReachableUserSearch({
       e.preventDefault();
       if (active) pick(active);
     } else if (e.key === 'Escape') {
-      // Clear the suggestions without bubbling up to close a host modal.
+      // Nothing typed → nothing to clear. Bail BEFORE touching state: `setQuery('')` is a no-op when
+      // the query is already empty, so the fetch effect (keyed on the debounced query) never re-runs,
+      // but `setResults([])` would still wipe the idle "Vos contacts" list — permanently, leaving a
+      // user who has contacts staring at "Aucun contact pour l'instant". Returning here also lets
+      // Escape reach the host modal, which is what a user expects when the field is empty.
+      if (query.length === 0) return;
+      // Otherwise clear the query without bubbling up and closing the host modal.
       e.preventDefault();
       e.stopPropagation();
       setQuery('');
@@ -128,14 +142,24 @@ export default function ReachableUserSearch({
           outline: 'none',
         }}
       />
+      {idleEmpty && (
+        <p style={{ margin: 0, padding: '9px 12px', fontSize: 12, color: 'var(--ink2)', lineHeight: 1.45, background: 'var(--paper)' }}>
+          Aucun contact pour l’instant — cherchez un nom ci-dessus.
+        </p>
+      )}
+      {open && q.length === 0 && suggestions.length > 0 && (
+        <p aria-hidden="true" style={{ margin: 0, padding: '7px 12px 5px', fontSize: 11, fontWeight: 700, color: 'var(--ink2)', letterSpacing: '.04em', textTransform: 'uppercase', background: 'var(--paper)' }}>
+          Vos contacts
+        </p>
+      )}
       {open && (
         <ul id={listId} role="listbox" aria-label={label} style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 200, overflow: 'auto' }}>
-          {loading && (
+          {loading && q.length > 0 && (
             <li aria-hidden="true" style={{ padding: '9px 12px', fontSize: 13, color: 'var(--ink2)' }}>
               Recherche…
             </li>
           )}
-          {!loading && suggestions.length === 0 && (
+          {!loading && q.length > 0 && suggestions.length === 0 && (
             <li aria-hidden="true" style={{ padding: '9px 12px', fontSize: 13, color: 'var(--ink2)' }}>
               Aucun résultat
             </li>
@@ -166,6 +190,23 @@ export default function ReachableUserSearch({
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {u.name}
               </span>
+              {u.isContact && q.length > 0 && (
+                // Ranking made visible: contacts come first in the results, and say so.
+                <span
+                  style={{
+                    flex: 'none',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '.04em',
+                    textTransform: 'uppercase',
+                    border: `1.5px solid ${i === activeIdx ? '#fff' : 'var(--ink)'}`,
+                    borderRadius: 999,
+                    padding: '1px 7px',
+                  }}
+                >
+                  Contact
+                </span>
+              )}
               <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 700, opacity: 0.8 }}>
                 ＋
               </span>
