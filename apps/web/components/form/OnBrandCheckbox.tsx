@@ -71,6 +71,14 @@ export default function OnBrandCheckbox({
   return (
     <label
       style={{
+        // `position: relative` is load-bearing: the native input below is visually hidden with
+        // `position: absolute`, so without a positioned ancestor it resolves against whatever distant
+        // ancestor happens to be positioned — its box can land far from this row, even off-screen.
+        // Assistive tech and click-through still worked (the label wraps the input), but anything
+        // driving the input by its coordinates could not reach it: inside a long scrollable list the
+        // e2e `.check()` failed with "element is outside of the viewport" no matter how far it
+        // scrolled. Anchoring it here keeps the hidden input inside its own row.
+        position: 'relative',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 9,

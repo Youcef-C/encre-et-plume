@@ -1041,6 +1041,45 @@ async function main() {
     await prisma.illustration.upsert({ where: { id: i.id }, create: { id: i.id, ...data }, update: data });
   }
 
+  // Sweep collections left behind by previous e2e runs. DR-12's specs create timestamped
+  // `qa-…-collection-<ms>` Works and only delete some of them; a failed run deletes none. Nothing else
+  // removes them — the e2e teardown scopes to `qa_e2e_*` ACCOUNTS, and these Works hang off seeded
+  // ones. They accumulate (22 after a handful of runs), flood the Galerie "Collections" listing and
+  // push the seeded "Carnet d'Encre" card out of view, so DR-12 E3/E6 fail on every run after the
+  // first. No seeded fixture uses the `qa-` prefix, so this only ever removes test debris.
+  //
+  // IllustrationCollection cascades from Work, but WorkCreator does not — clear it first. Best-effort:
+  // a stray dependent must never take the whole seed down with it.
+  //
+  // The same applies to the illustrations those specs publish (titled "QA …", cuid ids — seeded ones
+  // are `dr5-*` with French titles). Left behind they inflate the owner's "Ajouter des illustrations"
+  // picker from 4 entries to 24, pushing the target checkbox below the dialog fold so E3's `.check()`
+  // times out with "element is outside of the viewport".
+  {
+    const strayWorks = await prisma.work.findMany({ where: { slug: { startsWith: 'qa-' } }, select: { id: true } });
+    const strayIllus = await prisma.illustration.findMany({ where: { title: { startsWith: 'QA ' } }, select: { id: true } });
+    try {
+      if (strayWorks.length > 0) {
+        const ids = strayWorks.map((w) => w.id);
+        await prisma.workCreator.deleteMany({ where: { workId: { in: ids } } });
+        await prisma.work.deleteMany({ where: { id: { in: ids } } });
+      }
+      if (strayIllus.length > 0) {
+        // IllustrationCollection cascades from Illustration. Reaction does NOT have a foreign key —
+        // it addresses rows by (targetType, targetId) — so it neither blocks the delete nor cleans
+        // itself up; sweep it explicitly to avoid orphan like/save rows.
+        const ids = strayIllus.map((i) => i.id);
+        await prisma.reaction.deleteMany({ where: { targetType: 'illustration', targetId: { in: ids } } });
+        await prisma.illustration.deleteMany({ where: { id: { in: ids } } });
+      }
+    } catch (err) {
+      console.warn(
+        `[seed] could not sweep e2e debris (${strayWorks.length} collection(s), ${strayIllus.length} illustration(s)):`,
+        err.message,
+      );
+    }
+  }
+
   // DR-12: illustration collection "Carnet d'Encre" — a Work (format 'Illustration(s)') owned by the
   // login-tested creator Yuki Moreau (dr1-yuki-moreau, creatorRoles ['dessinateur']) via a WorkCreator
   // row, with 3 of her own seeded illustrations as ordered members. Gives QA the drawn "Carnet d'Encre"
