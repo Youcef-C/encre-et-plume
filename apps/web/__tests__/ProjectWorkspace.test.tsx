@@ -38,7 +38,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
     pages: [],
     labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
-    viewer: { isMember: true, isOwner: true, canWrite: true },
+    viewer: { isMember: true, isOwner: true, canWrite: true, canManage: true },
     ...over,
   };
 }
@@ -76,7 +76,7 @@ describe('ProjectWorkspace', () => {
   // project (localStorage) if it's still on the board, else the first board card. (Rendered on the
   // INFOS tab so the KanbanBoard isn't mounted — the header buttons show regardless of active tab.)
   const pg = (id: string) =>
-    ({ id, chapterId: null, title: id, stage: 'todo', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0 }) as unknown as ProjectWorkspaceResponse['pages'][number];
+    ({ id, chapterId: null, title: id, stage: 'todo', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null }) as unknown as ProjectWorkspaceResponse['pages'][number];
 
   it('“Éditeur” navigates to the first board card when nothing was opened before', async () => {
     localStorage.clear();
@@ -158,7 +158,7 @@ describe('ProjectWorkspace', () => {
   });
 
   it('hides action buttons for a non-member public viewer', () => {
-    renderWs('tableau', { viewer: { isMember: false, isOwner: false, canWrite: false } });
+    renderWs('tableau', { viewer: { isMember: false, isOwner: false, canWrite: false, canManage: false } });
     expect(screen.queryByRole('button', { name: 'Gérer le groupe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
   });
@@ -166,12 +166,30 @@ describe('ProjectWorkspace', () => {
   // CS-10 B-4 — the asset write routes are « Écriture »-gated server-side; the Fichiers panel must
   // mirror that rather than offering actions that 403. Defence in depth, never the only gate.
   it('hides the Fichiers import affordance from a member without « Écriture »', () => {
-    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: false } });
+    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: false, canManage: false } });
     expect(screen.queryByRole('button', { name: /Importer/ })).not.toBeInTheDocument();
   });
 
   it('offers it to a member who holds « Écriture »', () => {
-    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: true } });
+    renderWs('fichiers', { viewer: { isMember: true, isOwner: false, canWrite: true, canManage: false } });
     expect(screen.getByRole('button', { name: /Importer/ })).toBeInTheDocument();
+  });
+
+  // CS-10 D-2 — card create/edit/move are « Écriture »-gated server-side (`loadWritablePage` /
+  // `resolveWritableProject`). The board must mirror it instead of dead-ending on a 403.
+  it('gives a member without « Écriture » a read-only board', () => {
+    renderWs('tableau', { viewer: { isMember: true, isOwner: false, canWrite: false, canManage: false } });
+    expect(screen.queryByRole('button', { name: '＋ Ajouter une carte' })).not.toBeInTheDocument();
+  });
+
+  it('offers the board write affordances to a member who holds « Écriture »', () => {
+    renderWs('tableau', { viewer: { isMember: true, isOwner: false, canWrite: true, canManage: false } });
+    expect(screen.getAllByRole('button', { name: '＋ Ajouter une carte' }).length).toBe(6);
+  });
+
+  // The INFOS PATCH is « Écriture »-gated too (inferred extension, recorded in backend-notes.md).
+  it('makes the INFOS panel read-only for a member without « Écriture »', () => {
+    renderWs('infos', { viewer: { isMember: true, isOwner: false, canWrite: false, canManage: false } });
+    expect(screen.getByLabelText('TITRE')).toHaveAttribute('readonly');
   });
 });

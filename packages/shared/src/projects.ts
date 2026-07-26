@@ -227,6 +227,9 @@ export interface WorkspacePage {
   checklistDone: number;
   checklistTotal: number;
   commentCount: number;
+  /** CS-10 D-1: the account that created the card. `null` on cards predating the column (and after
+   *  the author's account is deleted) → only leadership may delete them. The FE mirrors that rule. */
+  createdById: string | null;
 }
 
 export interface WorkspaceMember {
@@ -277,8 +280,9 @@ export interface ProjectWorkspaceResponse {
   pages: WorkspacePage[];
   labels: ProjectLabelItem[]; // CS-2: the project's label palette (filter row + modal picker)
   reviews: { summary: WorkspaceReviewSummary; items: WorkspaceReview[] };
-  /** `canWrite` = the viewer holds CS-10 « Écriture » (owner/leader/co-leader always do). */
-  viewer: { isMember: boolean; isOwner: boolean; canWrite: boolean };
+  /** `canWrite` = the viewer holds CS-10 « Écriture » (owner/leader/co-leader always do).
+   *  `canManage` = leader ∪ co-leader ∪ owner — the leadership half of the card-delete rule. */
+  viewer: { isMember: boolean; isOwner: boolean; canWrite: boolean; canManage: boolean };
 }
 
 /** PATCH /projects/{slug} — debounced field-level auto-save sends deltas (all optional). */

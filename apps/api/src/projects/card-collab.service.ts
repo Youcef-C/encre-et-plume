@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PagesService } from './pages.service';
 import { isMemberOf } from './projects.service';
+import { GROUP_GATE_SELECT, assertCanWrite } from './members.service';
 
 const PALETTE = new Set<string>(LABEL_COLORS);
 
@@ -23,6 +24,14 @@ type ProjectShape = { ownerId: string; visibility: string; work: { creators: { a
 /**
  * CS-2 card-modal extension: project labels + per-card checklist + comments (with @name mention
  * notifications). Membership is the single CS-2 rule (PagesService.loadMemberPage / isMemberOf).
+ *
+ * CS-10 D-2 gate placement — labels and checklist items are project content, so they resolve through
+ * the WRITE resolvers (`loadWritableProjectBySlug` / `loadWritableLabel` / `pages.loadWritablePage`).
+ * Comments deliberately resolve through the READ resolver: a recorded CS-10 decision says a comment
+ * is not « Écriture ». Every opt-out is at a call site, visible, and never an omission.
+ *
+ * INFERRED: the user's D-1/D-2 decision named kanban cards only. Gating labels + checklist on
+ * « Écriture » is the safe default extension — flagged in `.claude/pipeline/_fixes/kanban-authz/`.
  */
 @Injectable()
 export class CardCollabService {
@@ -48,8 +57,7 @@ export class CardCollabService {
   }
 
   async createLabel(accountId: string, slug: string, body: CreateLabelRequest): Promise<ProjectLabelItem> {
-    const project = await this.loadProjectBySlug(slug);
-    this.assertMember(project, accountId);
+    const project = await this.loadWritableProjectBySlug(accountId, slug);
     const name = this.assertName(body.name);
     this.assertColor(body.color);
     const row = await this.prisma.projectLabel.create({
@@ -60,12 +68,7 @@ export class CardCollabService {
   }
 
   async updateLabel(accountId: string, labelId: string, body: UpdateLabelRequest): Promise<ProjectLabelItem> {
-    const label = await this.prisma.projectLabel.findUnique({
-      where: { id: labelId },
-      include: { project: { include: { work: { include: { creators: { select: { accountId: true } } } } } } },
-    });
-    if (!label) throw new NotFoundException('Étiquette introuvable');
-    this.assertMember(label.project as unknown as ProjectShape, accountId);
+    await this.loadWritableLabel(accountId, labelId);
 
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = this.assertName(body.name);
@@ -82,12 +85,7 @@ export class CardCollabService {
   }
 
   async deleteLabel(accountId: string, labelId: string): Promise<void> {
-    const label = await this.prisma.projectLabel.findUnique({
-      where: { id: labelId },
-      include: { project: { include: { work: { include: { creators: { select: { accountId: true } } } } } } },
-    });
-    if (!label) throw new NotFoundException('Étiquette introuvable');
-    this.assertMember(label.project as unknown as ProjectShape, accountId);
+    await this.loadWritableLabel(accountId, labelId);
     // The PageLabel FK is onDelete: Cascade → the label vanishes from every card automatically.
     await this.prisma.projectLabel.delete({ where: { id: labelId } });
   }
@@ -95,7 +93,7 @@ export class CardCollabService {
   // ── checklist ────────────────────────────────────────────────────────────────
 
   async addChecklistItem(accountId: string, pageId: string, body: CreateChecklistItemRequest): Promise<PageChecklistItemDto> {
-    await this.pages.loadMemberPage(accountId, pageId);
+    await this.pages.loadWritablePage(accountId, pageId);
     const text = this.assertText(body.text);
     const last = await this.prisma.pageChecklistItem.findFirst({
       where: { pageId },
@@ -110,7 +108,7 @@ export class CardCollabService {
   async updateChecklistItem(accountId: string, itemId: string, body: UpdateChecklistItemRequest): Promise<PageChecklistItemDto> {
     const item = await this.prisma.pageChecklistItem.findUnique({ where: { id: itemId }, select: { id: true, pageId: true } });
     if (!item) throw new NotFoundException('Élément introuvable');
-    await this.pages.loadMemberPage(accountId, item.pageId);
+    await this.pages.loadWritablePage(accountId, item.pageId);
     const data: Record<string, unknown> = {};
     if (body.text !== undefined) data.text = this.assertText(body.text);
     if (body.done !== undefined) data.done = body.done;
@@ -121,7 +119,7 @@ export class CardCollabService {
   async deleteChecklistItem(accountId: string, itemId: string): Promise<void> {
     const item = await this.prisma.pageChecklistItem.findUnique({ where: { id: itemId }, select: { id: true, pageId: true } });
     if (!item) throw new NotFoundException('Élément introuvable');
-    await this.pages.loadMemberPage(accountId, item.pageId);
+    await this.pages.loadWritablePage(accountId, item.pageId);
     await this.prisma.pageChecklistItem.delete({ where: { id: itemId } });
   }
 
@@ -161,13 +159,35 @@ export class CardCollabService {
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
+  /** READ resolver — the project row; the caller applies `assertCanRead`/`assertMember`. */
   private async loadProjectBySlug(slug: string) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
-      include: { work: { include: { creators: { select: { accountId: true } } } } },
+      // CS-10 D-2: always the shared gate select, so the write variant below can actually gate.
+      include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
     if (!project || !project.work) throw new NotFoundException('Projet introuvable');
     return project;
+  }
+
+  /** WRITE resolver — membership AND « Écriture », enforced here so a new caller is safe by default. */
+  private async loadWritableProjectBySlug(accountId: string, slug: string) {
+    const project = await this.loadProjectBySlug(slug);
+    this.assertMember(project as unknown as ProjectShape, accountId);
+    assertCanWrite(project as never, accountId);
+    return project;
+  }
+
+  /** WRITE resolver for a label — 404 unknown, then membership AND « Écriture » on its project. */
+  private async loadWritableLabel(accountId: string, labelId: string) {
+    const label = await this.prisma.projectLabel.findUnique({
+      where: { id: labelId },
+      include: { project: { include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } } } },
+    });
+    if (!label) throw new NotFoundException('Étiquette introuvable');
+    this.assertMember(label.project as unknown as ProjectShape, accountId);
+    assertCanWrite(label.project as never, accountId);
+    return label;
   }
 
   private async loadComment(commentId: string) {

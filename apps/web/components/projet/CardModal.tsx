@@ -89,6 +89,9 @@ export interface CardModalProps {
   viewerId: string | null;
   isOwner: boolean;
   readOnly?: boolean;
+  /** CS-10 D-1 — mirrors `PagesService.deletePage`: leadership OR the card's author. Defence in
+   *  depth: the server gate is the real one, this just never offers an action that would 403. */
+  canDelete?: boolean;
   onClose: () => void;
   onPageChange: (page: WorkspacePage) => void;
   onDeleted: (id: string) => void;
@@ -113,6 +116,7 @@ export default function CardModal({
   viewerId,
   isOwner,
   readOnly,
+  canDelete = false,
   onClose,
   onPageChange,
   onDeleted,
@@ -784,8 +788,8 @@ export default function CardModal({
           />
         </Section>
 
-        {/* Members-only delete */}
-        {memberOnly && (
+        {/* CS-10 D-1: leadership or the card's author only */}
+        {canDelete && (
           <div style={{ marginTop: 18, borderTop: '2px solid var(--border)', paddingTop: 14 }}>
             <button type="button" onClick={() => setConfirmDelete(true)} className="ep-btn-danger-outline" style={{ ...secondaryBtn, border: '2px solid var(--danger)' }}>
               Supprimer la carte

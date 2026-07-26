@@ -22,7 +22,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
     synopsis: 'Un synopsis.', hashtags: ['seinen'], collabOpen: false, visibility: 'public', cover: null,
     members: [], chapters: [], pages: [], labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
-    viewer: { isMember: true, isOwner: true, canWrite: true }, ...over,
+    viewer: { isMember: true, isOwner: true, canWrite: true, canManage: true }, ...over,
   };
 }
 

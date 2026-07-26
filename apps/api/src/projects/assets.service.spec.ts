@@ -902,5 +902,23 @@ describe('AssetsService', () => {
       prisma.asset.findMany.mockResolvedValue([ASSET()]);
       await expect(service.list('acc-reader', 'lames-de-brume', {} as never)).resolves.toBeDefined();
     });
+
+    // D-2 sweep: `unlinkFromPage` mutates the asset's link set AND the card's linkedFileIds/fileTags,
+    // so it is a write — it was left on the read resolver when linkToPage was gated (the same
+    // sibling-caller omission as B-2/B-4). Migrating it onto the write resolver closes that.
+    it('unlinkFromPage refuses a member WITHOUT « Écriture » (403) and persists nothing', async () => {
+      withCreators(ROSTER);
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ pageLinks: [LINK('page-1')] }), project: PROJECT({ work: { id: 'work-1', creators: ROSTER } }) });
+      await expect(service.unlinkFromPage('acc-reader', 'asset-1', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.assetPageLink.delete).not.toHaveBeenCalled();
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it('unlinkFromPage allows a member holding « Écriture »', async () => {
+      withCreators(ROSTER);
+      prisma.asset.findUnique.mockResolvedValue({ ...ASSET({ pageLinks: [LINK('page-1')] }), project: PROJECT({ work: { id: 'work-1', creators: ROSTER } }) });
+      await expect(service.unlinkFromPage('acc-writer', 'asset-1', 'page-1')).resolves.toBeDefined();
+      expect(prisma.assetPageLink.delete).toHaveBeenCalled();
+    });
   });
 });

@@ -97,6 +97,8 @@ export interface KanbanBoardProps {
   labels?: ProjectLabelItem[];
   isOwner?: boolean;
   viewerId?: string | null;
+  /** CS-10 D-1: leader ∪ co-leader ∪ owner — may delete ANY card. Everyone else only their own. */
+  canManage?: boolean;
 }
 
 export default function KanbanBoard({
@@ -108,6 +110,7 @@ export default function KanbanBoard({
   labels: initialLabels = [],
   isOwner = false,
   viewerId = null,
+  canManage = false,
 }: KanbanBoardProps) {
   const [pages, setPages] = useState<WorkspacePage[]>(initialPages);
   const [labels, setLabels] = useState<ProjectLabelItem[]>(initialLabels);
@@ -135,6 +138,12 @@ export default function KanbanBoard({
         ? true
         : p.assignees.some((a) => selectedAssigneeIds.includes(a.accountId)),
     );
+
+  // CS-10 D-1 mirror of `PagesService.deletePage`: leadership may delete any card, everyone else only
+  // the cards they created; `createdById === null` (no recorded author) is leadership-only. Defence in
+  // depth — the server gate is the real one, this only stops offering an action that would 403.
+  const canDeleteCard = (card: WorkspacePage) =>
+    canManage || (viewerId !== null && card.createdById === viewerId);
 
   async function moveCard(id: string, stage: PageStage) {
     const prev = pages;
@@ -477,6 +486,7 @@ export default function KanbanBoard({
             onAddCard={() => void addCard(stage)}
             onMoveCard={(id, to) => void moveCard(id, to)}
             onRemoveCard={(id) => void removeCard(id)}
+            canDeleteCard={canDeleteCard}
           />
         ))}
       </div>
@@ -490,6 +500,7 @@ export default function KanbanBoard({
           viewerId={viewerId}
           isOwner={isOwner}
           readOnly={readOnly}
+          canDelete={canDeleteCard(pages.find((p) => p.id === openPageId) ?? ({ createdById: null } as WorkspacePage))}
           onClose={() => setOpenPageId(null)}
           onPageChange={(page) => setPages((ps) => ps.map((p) => (p.id === page.id ? { ...p, ...page } : p)))}
           onDeleted={(id) => {
@@ -531,6 +542,7 @@ function Column({
   onAddCard,
   onMoveCard,
   onRemoveCard,
+  canDeleteCard,
 }: {
   slug: string;
   stage: PageStage;
@@ -547,6 +559,7 @@ function Column({
   onAddCard: () => void;
   onMoveCard: (id: string, to: PageStage) => void;
   onRemoveCard: (id: string) => void;
+  canDeleteCard: (card: WorkspacePage) => boolean;
 }) {
   const headingId = useId();
   const meta = STAGE_META[stage];
@@ -613,6 +626,7 @@ function Column({
             onDragEnd={onDragEndCard}
             onMove={(to) => onMoveCard(card.id, to)}
             onRemove={() => onRemoveCard(card.id)}
+            canDelete={canDeleteCard(card)}
           />
         ))}
         {!readOnly && (
@@ -667,10 +681,12 @@ function PageCard({
   onDragEnd,
   onMove,
   onRemove,
+  canDelete,
 }: {
   slug: string;
   card: WorkspacePage;
   readOnly?: boolean;
+  canDelete: boolean;
   dragging: boolean;
   onOpen: () => void;
   onDragStart: () => void;
@@ -912,7 +928,7 @@ function PageCard({
         >
           <span aria-hidden="true">⚑</span>
         </Link>
-        {!readOnly && (
+        {(!readOnly || canDelete) && (
           <button
             type="button"
             title="Menu"
@@ -956,42 +972,51 @@ function PageCard({
               gap: 2,
             }}
           >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: 'var(--ink2)',
-                padding: '2px 6px',
-              }}
-            >
-              Déplacer vers →
-            </div>
-            {PAGE_STAGES.filter((s) => s !== card.stage).map((s) => (
-              <button
-                key={s}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onMove(s);
-                  setMenuOpen(false);
-                }}
-                style={menuItemStyle}
-              >
-                {STAGE_META[s].label}
-              </button>
-            ))}
-            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setConfirmDelete(true);
-                setMenuOpen(false);
-              }}
-              style={{ ...menuItemStyle, color: 'var(--danger)' }}
-            >
-              Supprimer la carte
-            </button>
+            {!readOnly && (
+              <>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: 'var(--ink2)',
+                    padding: '2px 6px',
+                  }}
+                >
+                  Déplacer vers →
+                </div>
+                {PAGE_STAGES.filter((s) => s !== card.stage).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onMove(s);
+                      setMenuOpen(false);
+                    }}
+                    style={menuItemStyle}
+                  >
+                    {STAGE_META[s].label}
+                  </button>
+                ))}
+              </>
+            )}
+            {/* CS-10 D-1: only leadership or the card's author is offered the destructive action. */}
+            {canDelete && (
+              <>
+                {!readOnly && <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setConfirmDelete(true);
+                    setMenuOpen(false);
+                  }}
+                  style={{ ...menuItemStyle, color: 'var(--danger)' }}
+                >
+                  Supprimer la carte
+                </button>
+              </>
+            )}
           </div>,
           document.body,
         )}

@@ -12,6 +12,7 @@ import { PAGE_FILE_TAGS, PAGE_STAGES } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMemberOf } from './projects.service';
+import { GROUP_GATE_SELECT, assertCanWrite, canManageProject } from './members.service';
 
 const STAGES = new Set<string>(PAGE_STAGES);
 const FILE_TAGS = new Set<string>(PAGE_FILE_TAGS);
@@ -36,6 +37,7 @@ type PageRow = {
   fileTags: string[];
   linkedFileIds: string[];
   dueDate?: Date | null;
+  createdById?: string | null;
   labels?: { label: { id: string; name: string; color: string } }[];
   assignees?: { user: { id: string; displayName: string; avatar: string | null } }[];
   checklistItems?: { done: boolean }[];
@@ -64,6 +66,8 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     checklistDone: checklist.filter((c) => c.done).length,
     checklistTotal: checklist.length,
     commentCount: p._count?.comments ?? 0,
+    // CS-10 D-1: the FE mirrors the delete rule from this (never as the only gate).
+    createdById: p.createdById ?? null,
   };
 }
 
@@ -84,12 +88,7 @@ export class PagesService {
   ) {}
 
   async createPage(accountId: string, slug: string, body: CreatePageRequest): Promise<WorkspacePage> {
-    const project = await this.prisma.project.findUnique({
-      where: { slug },
-      include: { work: { include: { creators: { select: { accountId: true } } } } },
-    });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
-    if (!isMemberOf(project, accountId)) throw new ForbiddenException('Réservé aux membres du projet');
+    const project = await this.resolveWritableProject(accountId, slug);
 
     const stage = this.assertStage(body.stage ?? 'scenario');
     const chapterId = body.chapterId ?? null;
@@ -100,14 +99,17 @@ export class PagesService {
       : `Page ${(await this.prisma.page.count({ where: { projectId: project.id, chapterId } })) + 1}`;
 
     const page = await this.prisma.page.create({
-      data: { projectId: project.id, chapterId, title, stage, fileTags: [], linkedFileIds: [] },
+      // CS-10 D-1: stamp the author — the delete gate reads it back.
+      data: { projectId: project.id, chapterId, title, stage, fileTags: [], linkedFileIds: [], createdById: accountId },
       include: WORKSPACE_PAGE_INCLUDE,
     });
     return toWorkspacePage(page as PageRow);
   }
 
   async updatePage(accountId: string, pageId: string, body: UpdatePageRequest): Promise<WorkspacePage> {
-    const page = await this.loadMemberPage(accountId, pageId);
+    // Editing a card's fields is an ordinary « Écriture » write (CS-10 D-1 covers only create and
+    // delete explicitly — this is the inferred reading, recorded in the notes).
+    const page = await this.loadWritablePage(accountId, pageId);
 
     if (body.fileTags && body.fileTags.some((t) => !FILE_TAGS.has(t))) {
       throw new BadRequestException('Type de fichier invalide');
@@ -202,14 +204,28 @@ export class PagesService {
     };
   }
 
+  /**
+   * CS-10 D-1 — deleting a card has its OWN rule, so this deliberately resolves through the READ
+   * resolver and gates here instead of using `loadWritablePage`:
+   *   leader ∪ co-leader ∪ owner  →  may delete ANY card (cleans up a departed member's cards)
+   *   anyone else                 →  only the cards they created
+   * The leadership test is `canManageProject`, NOT `isGroupLeader` — the latter deliberately returns
+   * false for co-leaders (it exists for the CS-16 project-delete gate) and would silently exclude
+   * exactly the row this rule grants. `createdById === null` (a pre-column card whose backfill did not
+   * land) matches nobody, so it degrades to leadership-only: fail closed, never open.
+   */
   async deletePage(accountId: string, pageId: string): Promise<void> {
-    await this.loadMemberPage(accountId, pageId);
+    const page = await this.loadMemberPage(accountId, pageId);
+    if (!canManageProject(page.project, accountId) && page.createdById !== accountId) {
+      throw new ForbiddenException('Vous ne pouvez supprimer que les cartes que vous avez créées.');
+    }
     await this.prisma.page.delete({ where: { id: pageId } });
   }
 
   async updateStage(accountId: string, pageId: string, body: UpdatePageStageRequest): Promise<WorkspacePage> {
     const stage = this.assertStage(body.stage);
-    const page = await this.loadMemberPage(accountId, pageId);
+    // Moving a card between stages is an ordinary « Écriture » write (inferred — see updatePage).
+    const page = await this.loadWritablePage(accountId, pageId);
     const enteredCorrections = stage === 'corrections' && page.stage !== 'corrections';
 
     const updated = await this.prisma.page.update({ where: { id: pageId }, data: { stage }, include: WORKSPACE_PAGE_INCLUDE });
@@ -240,14 +256,21 @@ export class PagesService {
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
-  /** Load a page with its project membership context; 404 unknown, 403 non-member. Public so the
-   *  card-collab routes (checklist/comments) reuse the single CS-2 membership rule. */
+  /**
+   * READ resolver — page + project membership context; 404 unknown, 403 non-member. Public so the
+   * card-collab comment routes and CS-5 corrections reuse the single CS-2 membership rule.
+   *
+   * Reaching for THIS on a write path is the deliberate, visible opt-out (comments are member-gated
+   * by a recorded CS-10 decision; `deletePage` has its own stricter rule). Anything that persists card
+   * content goes through `loadWritablePage` instead.
+   */
   async loadMemberPage(accountId: string, pageId: string) {
     const page = await this.prisma.page.findUnique({
       where: { id: pageId },
       include: {
-        // CS-10: the group columns ride along so callers can gate writes with hasGroupPermission().
-        project: { include: { work: { include: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } } } },
+        // CS-10: the group columns ride along so the write resolver can gate. One shared select
+        // constant — the whole B-2/B-4 bug class started as a select that omitted these.
+        project: { include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } } },
         assignees: { select: { userId: true } },
       },
     });
@@ -257,9 +280,36 @@ export class PagesService {
       title: string;
       stage: PageStage;
       linkedFileIds: string[];
+      createdById: string | null;
       assignees: { userId: string }[];
       project: { ownerId: string; workId: string; work: { creators: { accountId: string; groupRole: string; permissions: string[] }[] } };
     };
+  }
+
+  /**
+   * WRITE resolver — membership AND « Écriture », enforced HERE rather than at each call site.
+   *
+   * CS-10 D-2: the same missing-gate bug shipped three times (CS-4 gateway ✓ / scenario REST ✗ → B-2;
+   * B-2 ✓ / asset routes ✗ → B-4; B-4 ✓ / page routes ✗). A route that resolves through this is safe
+   * by default, and a route that wants membership only has to say so out loud by calling
+   * `loadMemberPage`. Omission fails CLOSED. Public: card-collab's checklist routes use it too.
+   */
+  async loadWritablePage(accountId: string, pageId: string) {
+    const page = await this.loadMemberPage(accountId, pageId);
+    assertCanWrite(page.project, accountId);
+    return page;
+  }
+
+  /** WRITE resolver for the by-slug card routes (createPage): membership AND « Écriture ». */
+  private async resolveWritableProject(accountId: string, slug: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { slug },
+      include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
+    });
+    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!isMemberOf(project, accountId)) throw new ForbiddenException('Réservé aux membres du projet');
+    assertCanWrite(project, accountId);
+    return project;
   }
 
   /** dueDate: null clears; a string is a validated 'YYYY-MM-DD' (DTO @Matches). We re-check the

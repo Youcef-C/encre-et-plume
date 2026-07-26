@@ -23,6 +23,7 @@ const PAGE = (o: Record<string, unknown> = {}) => ({
   linkedFileIds: [],
   description: null,
   dueDate: null,
+  createdById: 'acc-me',
   assignees: [],
   project: PROJECT(),
   ...o,
@@ -310,6 +311,144 @@ describe('PagesService', () => {
     });
   });
 
+  // ── CS-10 D-1/D-2: « Écriture » gates card writes; delete is leadership-or-author ───────────
+  //
+  // The gate lives in the SHARED RESOLVERS (`resolveWritableProject` / `loadWritablePage`), not in the
+  // routes: a new caller that reaches for the write resolver is safe by default, and forgetting it is
+  // impossible because there is nothing to forget. The read resolvers (`loadMemberPage`) stay
+  // membership-only and every use of one is a deliberate, visible opt-out.
+  //
+  // Every pre-existing test above runs as `acc-me`, the OWNER, who short-circuits the permission check
+  // on the first line — which is exactly how 81 green tests hid completely ungated asset routes (B-4).
+  // These cases drive the service per caller shape and assert a refusal persists NOTHING.
+  describe('CS-10 — permission gates', () => {
+    const member = (accountId: string, groupRole: string, permissions: string[]) => ({ accountId, groupRole, permissions });
+
+    const WRITER = member('acc-writer', 'member', ['ecriture', 'corrections']);
+    const READER = member('acc-reader', 'member', ['corrections']); // « Écriture » explicitly OFF
+    const LEADER = member('acc-lead', 'leader', []); // leadership ⇒ every permission
+    const COLEADER = member('acc-co', 'coleader', []);
+    const ROSTER = [member('acc-me', 'leader', []), WRITER, READER, LEADER, COLEADER];
+
+    /** Point both resolvers at a project whose creator rows carry real group columns. */
+    const withRoster = (pageOverrides: Record<string, unknown> = {}) => {
+      const project = PROJECT({ work: { id: 'work-1', creators: ROSTER } });
+      prisma.project.findUnique.mockResolvedValue(project);
+      prisma.page.findUnique.mockResolvedValue(PAGE({ project, ...pageOverrides }));
+    };
+
+    // ── write gate: create / update / move ──────────────────────────────────
+    describe.each([
+      ['createPage', (a: string) => service.createPage(a, 'lames-de-brume', {})],
+      ['updatePage', (a: string) => service.updatePage(a, 'page-1', { title: 'x' })],
+      ['updateStage', (a: string) => service.updateStage(a, 'page-1', { stage: 'nemu' })],
+    ] as [string, (a: string) => Promise<unknown>][])('%s', (_name, call) => {
+      it.each([
+        ['the owner', 'acc-me'],
+        ['a non-owner leader', 'acc-lead'],
+        ['a co-leader', 'acc-co'],
+        ['a member holding « Écriture »', 'acc-writer'],
+      ])('allows %s', async (_who, accountId) => {
+        withRoster();
+        await expect(call(accountId)).resolves.toBeDefined();
+      });
+
+      it('refuses a member WITHOUT « Écriture » (403) and persists nothing', async () => {
+        withRoster();
+        await expect(call('acc-reader')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.create).not.toHaveBeenCalled();
+        expect(prisma.page.update).not.toHaveBeenCalled();
+        expect(prisma.page.delete).not.toHaveBeenCalled();
+        expect(prisma.pageLabel.createMany).not.toHaveBeenCalled();
+      });
+
+      it('refuses a non-member (403) and persists nothing', async () => {
+        withRoster();
+        await expect(call('acc-stranger')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.create).not.toHaveBeenCalled();
+        expect(prisma.page.update).not.toHaveBeenCalled();
+      });
+    });
+
+    it('createPage stamps createdById with the caller', async () => {
+      withRoster();
+      await service.createPage('acc-writer', 'lames-de-brume', {});
+      expect(prisma.page.create.mock.calls[0][0].data).toMatchObject({ createdById: 'acc-writer' });
+    });
+
+    // ── the write resolver gates on its own — the route body does nothing ────
+    it('loadWritablePage refuses without « Écriture » (the gate is in the resolver, not the route)', async () => {
+      withRoster();
+      await expect(service.loadWritablePage('acc-reader', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.loadWritablePage('acc-writer', 'page-1')).resolves.toBeDefined();
+    });
+
+    it('loadMemberPage stays membership-only — the read path is the deliberate opt-out', async () => {
+      withRoster();
+      await expect(service.loadMemberPage('acc-reader', 'page-1')).resolves.toBeDefined();
+      await expect(service.loadMemberPage('acc-stranger', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    // The gate is only as good as the columns behind it — B-4 existed precisely because the select
+    // omitted them, so assert the query shape, not just the behaviour.
+    it('both resolvers load groupRole + permissions', async () => {
+      withRoster();
+      await service.createPage('acc-me', 'lames-de-brume', {});
+      expect(prisma.project.findUnique.mock.calls[0][0].include.work.include.creators.select).toMatchObject({
+        accountId: true,
+        groupRole: true,
+        permissions: true,
+      });
+      await service.updatePage('acc-me', 'page-1', { title: 'x' });
+      expect(prisma.page.findUnique.mock.calls[0][0].include.project.include.work.include.creators.select).toMatchObject({
+        accountId: true,
+        groupRole: true,
+        permissions: true,
+      });
+    });
+
+    // ── D-1: delete = leader ∪ co-leader ∪ owner ∪ the card's author ─────────
+    describe('deletePage', () => {
+      it('lets a « Écriture » member delete a card THEY created', async () => {
+        withRoster({ createdById: 'acc-writer' });
+        await service.deletePage('acc-writer', 'page-1');
+        expect(prisma.page.delete).toHaveBeenCalledWith({ where: { id: 'page-1' } });
+      });
+
+      it("refuses a « Écriture » member deleting SOMEONE ELSE's card (403), deletes nothing", async () => {
+        withRoster({ createdById: 'acc-co' });
+        await expect(service.deletePage('acc-writer', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.delete).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['the owner', 'acc-me'],
+        ['a non-owner leader', 'acc-lead'],
+        // canManageProject, NOT isGroupLeader: the latter returns false for co-leaders (it exists for
+        // the CS-16 project-delete gate) and would silently exclude exactly this row.
+        ['a co-leader', 'acc-co'],
+      ])("lets %s delete someone else's card", async (_who, accountId) => {
+        withRoster({ createdById: 'acc-writer' });
+        await service.deletePage(accountId, 'page-1');
+        expect(prisma.page.delete).toHaveBeenCalledWith({ where: { id: 'page-1' } });
+      });
+
+      it('treats a card with no recorded author as leadership-only (fails closed)', async () => {
+        withRoster({ createdById: null });
+        await expect(service.deletePage('acc-writer', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.delete).not.toHaveBeenCalled();
+        await service.deletePage('acc-lead', 'page-1');
+        expect(prisma.page.delete).toHaveBeenCalledWith({ where: { id: 'page-1' } });
+      });
+
+      it('refuses a non-member (403)', async () => {
+        withRoster({ createdById: 'acc-stranger' });
+        await expect(service.deletePage('acc-stranger', 'page-1')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.delete).not.toHaveBeenCalled();
+      });
+    });
+  });
+
   // ── toWorkspacePage · derived linkedFiles (2026-07-14: via the AssetPageLink join) ───────────
   describe('toWorkspacePage linkedFiles', () => {
     it('maps the included assetLinks join to linkedFiles (version = currentVersion)', () => {
@@ -324,6 +463,11 @@ describe('PagesService', () => {
         { assetId: 'as-1', type: 'scenario', filename: 'scenario.txt', version: 3 },
         { assetId: 'as-2', type: 'dessin', filename: 'nemu.png', version: 2 },
       ]);
+    });
+
+    it('exposes createdById so the FE can mirror the delete rule (null when unrecorded)', () => {
+      expect(toWorkspacePage(PAGE() as never).createdById).toBe('acc-me');
+      expect(toWorkspacePage({ ...PAGE(), createdById: null } as never).createdById).toBeNull();
     });
 
     it('is [] when the assetLinks join is absent or empty', () => {

@@ -15,6 +15,15 @@ import { isMemberOf } from './projects.service';
 const ROLES = new Set<string>(GROUP_ROLES);
 const PERMS = new Set<string>(GROUP_PERMISSIONS);
 
+/**
+ * The creator columns EVERY project/page/asset resolver must select.
+ *
+ * One definition on purpose: B-4 was a `creators: { select: { accountId: true } }` — the permission
+ * columns never loaded, so no gate was possible downstream no matter what the route did. Selecting
+ * this constant makes that failure mode unrepresentable.
+ */
+export const GROUP_GATE_SELECT = { accountId: true, groupRole: true, permissions: true } as const;
+
 /** The minimal project shape the exported permission seam needs (a superset of `isMemberOf`'s). */
 export type ProjectWithCreators = {
   ownerId: string;

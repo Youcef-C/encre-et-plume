@@ -707,20 +707,21 @@ describe('ProjectsService workspace (CS-2)', () => {
       expect(res.reviews.summary).toEqual({ overall: 3.5, story: 3, art: 4, count: 2 });
       const hidden = res.reviews.items.find((r) => r.hidden)!;
       expect(hidden.text).toBe('');
-      expect(res.viewer).toEqual({ isMember: true, isOwner: true, canWrite: true });
+      expect(res.viewer).toEqual({ isMember: true, isOwner: true, canWrite: true, canManage: true });
       // CS-2 card-modal: the project label palette rides along for the filter row + modal picker.
       expect(res.labels).toEqual([{ id: 'lab-1', name: 'À revoir', color: '#e8261c' }]);
     });
 
     it('a non-owner member sees isMember:true, isOwner:false', async () => {
       const res = await service.getWorkspace('acc-yuki', 'lames-de-brume');
-      expect(res.viewer).toEqual({ isMember: true, isOwner: false, canWrite: true });
+      // acc-yuki is a plain `member` row: holds « Écriture » but no leadership → canManage false.
+      expect(res.viewer).toEqual({ isMember: true, isOwner: false, canWrite: true, canManage: false });
     });
 
     it('a non-member on a PUBLIC project gets a read-only payload (isMember:false)', async () => {
       build(WORKSPACE({ visibility: 'public' }));
       const res = await service.getWorkspace('stranger', 'lames-de-brume');
-      expect(res.viewer).toEqual({ isMember: false, isOwner: false, canWrite: false });
+      expect(res.viewer).toEqual({ isMember: false, isOwner: false, canWrite: false, canManage: false });
     });
 
     it('a non-member on a PRIVE project gets 404 (no existence leak)', async () => {
@@ -796,6 +797,59 @@ describe('ProjectsService workspace (CS-2)', () => {
 
     it('404 for a non-member on a non-public project (no leak)', async () => {
       await expect(service.updateInfo('stranger', 'lames-de-brume', { title: 'x' })).rejects.toThrow(NotFoundException);
+    });
+
+    // CS-10 D-2 (inferred extension): PATCH /projects/:slug edits project content, so it resolves
+    // through the WRITE resolver. Every case above runs as `acc-me`, the OWNER, who short-circuits the
+    // permission check — the exact blind spot that hid B-4's ungated routes behind 81 green tests.
+    describe('CS-10 — « Écriture » gate', () => {
+      const member = (accountId: string, groupRole: string, permissions: string[]) => ({
+        accountId,
+        groupRole,
+        permissions,
+        role: 'scenariste',
+        order: 0,
+        account: { id: accountId, displayName: accountId, avatar: null, profile: null },
+      });
+      const ROSTER = [
+        member('acc-me', 'leader', []),
+        member('acc-writer', 'member', ['ecriture']),
+        member('acc-reader', 'member', ['corrections']), // « Écriture » explicitly OFF
+        member('acc-co', 'coleader', []),
+      ];
+      const withRoster = () => build(WORKSPACE({ work: { ...WORKSPACE().work, creators: ROSTER } }));
+
+      it.each([
+        ['the owner', 'acc-me'],
+        ['a co-leader', 'acc-co'],
+        ['a member holding « Écriture »', 'acc-writer'],
+      ])('allows %s', async (_who, accountId) => {
+        withRoster();
+        await expect(service.updateInfo(accountId, 'lames-de-brume', { title: 'Nouveau' })).resolves.toBeDefined();
+      });
+
+      it('refuses a member WITHOUT « Écriture » (403) and persists nothing', async () => {
+        withRoster();
+        await expect(service.updateInfo('acc-reader', 'lames-de-brume', { title: 'Nouveau' })).rejects.toThrow(ForbiddenException);
+        expect(prisma.work.update).not.toHaveBeenCalled();
+        expect(prisma.project.update).not.toHaveBeenCalled();
+      });
+
+      it('resolveMemberProject loads groupRole + permissions (a resolver that cannot see them cannot gate)', async () => {
+        withRoster();
+        await service.updateInfo('acc-me', 'lames-de-brume', { title: 'Nouveau' });
+        expect(prisma.project.findUnique.mock.calls[0][0].include.work.include.creators.select).toMatchObject({
+          accountId: true,
+          groupRole: true,
+          permissions: true,
+        });
+      });
+
+      it('viewer.canManage is true for a co-leader (canManageProject, not isGroupLeader)', async () => {
+        withRoster();
+        const res = await service.getWorkspace('acc-co', 'lames-de-brume');
+        expect(res.viewer.canManage).toBe(true);
+      });
     });
   });
 });

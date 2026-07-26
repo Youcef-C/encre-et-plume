@@ -30,7 +30,7 @@ import { MediaService, sanitizeDocxHtml } from '../media/media.service';
 import { S3StorageService } from '../media/s3-storage.service';
 import { CorrectionsService } from './corrections.service';
 import { isMemberOf } from './projects.service';
-import { assertCanWrite, type ProjectWithCreators } from './members.service';
+import { GROUP_GATE_SELECT, assertCanWrite, type ProjectWithCreators } from './members.service';
 
 const SIGNED_URL_TTL = () => Number(process.env['MEDIA_SIGNED_URL_TTL'] ?? 300);
 const TEXT_PREVIEW_CAP = 500 * 1024; // 500 KB — small derived text payload
@@ -107,8 +107,7 @@ export class AssetsService {
 
   // ── B2: register (or D10 re-import → append version) ──────────────────────
   async createAsset(accountId: string, slug: string, body: CreateAssetRequest): Promise<AssetItem> {
-    const project = await this.resolveMemberProject(accountId, slug);
-    assertCanWrite(project, accountId);
+    const project = await this.resolveWritableProject(accountId, slug);
     const filename = (body.filename ?? '').trim();
     if (!filename) throw new BadRequestException('Nom de fichier requis');
     if (filename.length > 255) throw new BadRequestException('Nom de fichier trop long');
@@ -139,8 +138,7 @@ export class AssetsService {
   async createFromUrl(accountId: string, slug: string, body: { url: string; filename?: string; type?: AssetType }): Promise<AssetItem> {
     // Gate BEFORE fetching — never fetch on behalf of a non-member, and never burn a server-side fetch
     // + S3 ingest for a caller `createAsset` is going to refuse anyway (CS-10 B-4 follow-up N1).
-    const project = await this.resolveMemberProject(accountId, slug);
-    assertCanWrite(project, accountId);
+    const project = await this.resolveWritableProject(accountId, slug);
     const { buffer, contentType } = await this.fetchGuarded(body.url);
     const media = await this.media.ingestAsset(accountId, buffer, contentType);
     const filename = (body.filename ?? lastPathSegment(body.url)).trim() || 'fichier';
@@ -186,8 +184,7 @@ export class AssetsService {
 
   // ── B5: add a new version of an existing asset ────────────────────────────
   async addVersion(accountId: string, slug: string, assetId: string, body: AddAssetVersionRequest): Promise<AssetItem> {
-    const project = await this.resolveMemberProject(accountId, slug);
-    assertCanWrite(project, accountId);
+    const project = await this.resolveWritableProject(accountId, slug);
     const asset = await this.prisma.asset.findFirst({ where: { id: assetId, projectId: project.id } });
     if (!asset) throw new NotFoundException('Fichier introuvable');
     const media = await this.loadOwnReadyAssetMedia(accountId, body.mediaId);
@@ -217,8 +214,7 @@ export class AssetsService {
 
   // ── set the active/current version (repoints the Asset head; does NOT create a version) ──
   async setActiveVersion(accountId: string, assetId: string, version: number): Promise<AssetItem> {
-    const asset = await this.loadMemberAsset(accountId, assetId);
-    assertCanWrite(asset.project, accountId);
+    const asset = await this.loadWritableAsset(accountId, assetId);
     if (!Number.isInteger(version) || version < 1) throw new BadRequestException('Version invalide');
     if (version === asset.currentVersion) return this.getAssetItem(assetId); // idempotent no-op
     const target = (await this.prisma.assetVersion.findUnique({
@@ -269,11 +265,10 @@ export class AssetsService {
 
   // ── link asset → card (2026-07-14: scenario/texte/ref = many cards; dessin/page = one; B8 re-type) ──
   async linkToPage(accountId: string, assetId: string, body: LinkAssetRequest): Promise<AssetItem> {
-    const asset = await this.loadMemberAsset(accountId, assetId);
     // CS-10 B-4 follow-up N2: this mutates the asset (`nextType` re-types it) and its page links, so it
     // is a write. Left membership-only, a member without « Écriture » could re-type the scenario asset
     // out of `resolveEditorAsset`'s range and strand the editor into materializing a duplicate.
-    assertCanWrite(asset.project, accountId);
+    const asset = await this.loadWritableAsset(accountId, assetId);
     const page = await this.prisma.page.findUnique({
       where: { id: body.pageId },
       select: { id: true, projectId: true, linkedFileIds: true, fileTags: true },
@@ -336,7 +331,8 @@ export class AssetsService {
   // ── per-card unlink (2026-07-14: removes just this card's link; idempotent) ──
   async unlinkFromPage(accountId: string, assetId: string, pageId: string): Promise<AssetItem> {
     if (!pageId) throw new BadRequestException('pageId requis');
-    const asset = await this.loadMemberAsset(accountId, assetId);
+    // D-2 sweep: unlinking mutates the link set AND the card's linkedFileIds/fileTags → a write.
+    const asset = await this.loadWritableAsset(accountId, assetId);
     if (!asset.pageLinks.some((l) => l.pageId === pageId)) return this.getAssetItem(assetId); // idempotent no-op
     await this.prisma.$transaction(async (tx) => {
       await tx.assetPageLink.delete({ where: { assetId_pageId: { assetId, pageId } } });
@@ -347,11 +343,11 @@ export class AssetsService {
 
   // ── delete an asset + ALL its links + its version chain + F-10 blobs ───────
   async deleteAsset(accountId: string, assetId: string): Promise<void> {
-    const asset = await this.loadMemberAsset(accountId, assetId);
     // Deletion is permanent and cascades every version + blob, so it is gated at least as hard as a
     // write. « Écriture » (not leadership) keeps it consistent with the other three routes; if the
-    // product later wants destroy to be leader-only, tighten here — `isGroupLeader` is the seam.
-    assertCanWrite(asset.project, accountId);
+    // product later wants destroy to be leader-only, tighten here — `canManageProject` is the seam
+    // (NOT `isGroupLeader`, which excludes co-leaders — see the D-1 card-delete rule).
+    const asset = await this.loadWritableAsset(accountId, assetId);
     const versions = await this.prisma.assetVersion.findMany({ where: { assetId }, select: { mediaId: true } });
     const mediaIds = [...new Set(versions.map((v) => (v as { mediaId: string }).mediaId))];
     await this.prisma.$transaction(async (tx) => {
@@ -518,12 +514,13 @@ export class AssetsService {
     return media;
   }
 
+  /** READ resolver — membership only (list/preview/versions). Writes use `resolveWritableProject`. */
   private async resolveMemberProject(accountId: string, slug: string) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
       // CS-10 B-4: load groupRole/permissions, not just accountId — without them no gate is possible
       // downstream, which is exactly how the write routes below stayed open to any member.
-      include: { work: { include: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } } },
+      include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
     if (!project || !project.work) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project, accountId)) {
@@ -533,12 +530,20 @@ export class AssetsService {
     return project;
   }
 
-  /** Load an asset with its project membership context + current link set (for the /assets/:id routes). */
+  /** WRITE resolver — membership AND « Écriture » (CS-10 D-2: the gate lives in the resolver, so a
+   *  new by-slug write route is safe by default and cannot forget it). */
+  private async resolveWritableProject(accountId: string, slug: string) {
+    const project = await this.resolveMemberProject(accountId, slug);
+    assertCanWrite(project, accountId);
+    return project;
+  }
+
+  /** READ resolver — an asset with its project membership context + current link set. */
   private async loadMemberAsset(accountId: string, assetId: string) {
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
       include: {
-        project: { include: { work: { include: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } } } },
+        project: { include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } } },
         pageLinks: { select: { pageId: true } },
       },
     });
@@ -559,6 +564,13 @@ export class AssetsService {
       pageLinks: { pageId: string }[];
       project: ProjectWithCreators;
     };
+  }
+
+  /** WRITE resolver — same, AND « Écriture ». Every /assets/:id route that persists goes through it. */
+  private async loadWritableAsset(accountId: string, assetId: string) {
+    const asset = await this.loadMemberAsset(accountId, assetId);
+    assertCanWrite(asset.project, accountId);
+    return asset;
   }
 }
 

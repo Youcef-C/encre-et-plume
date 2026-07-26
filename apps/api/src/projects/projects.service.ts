@@ -25,7 +25,7 @@ import { GENRES, PROJECTS_PAGE_SIZE, catalogGenreLabel, normalizeHashtags } from
 import { PrismaService } from '../prisma/prisma.service';
 // Pure function, dereferenced at call time — members.service imports `isMemberOf` back from here, and
 // the resulting file-level cycle is safe for exactly that reason (same pattern as assets.service).
-import { hasGroupPermission } from './members.service';
+import { GROUP_GATE_SELECT, assertCanWrite, canManageProject, hasGroupPermission } from './members.service';
 import { WORKSPACE_PAGE_INCLUDE, toWorkspacePage } from './pages.service';
 import { CollectionsService, buildSoutien } from '../collections/collections.service';
 import { SlugService } from '../slug/slug.service';
@@ -547,7 +547,14 @@ export class ProjectsService {
       reviews: { summary: reviewSummary(allReviews), items: allReviews.slice(0, 20) },
       // CS-10 B-4: the Fichiers panel offers upload/version/delete, all « Écriture »-gated server-side.
       // Ship the viewer's answer so the UI can disable them instead of dead-ending on a 403.
-      viewer: { isMember, isOwner, canWrite: hasGroupPermission(project as never, accountId, 'ecriture') },
+      // `canManage` (leader ∪ co-leader ∪ owner) is the leadership half of the D-1 card-delete rule —
+      // the FE pairs it with each card's `createdById`. Never a substitute for the server gate.
+      viewer: {
+        isMember,
+        isOwner,
+        canWrite: hasGroupPermission(project as never, accountId, 'ecriture'),
+        canManage: canManageProject(project as never, accountId),
+      },
     };
   }
 
@@ -559,8 +566,11 @@ export class ProjectsService {
    * Project.cover.
    */
   async updateInfo(accountId: string, slug: string, body: UpdateProjectInfoRequest): Promise<UpdateProjectInfoResponse> {
-    const project = await this.resolveMemberProject(accountId, slug);
-    const work = project.work!; // resolveMemberProject guarantees a linked Work (else it 404s)
+    // CS-10 D-2 (inferred extension): editing the project's title/synopsis/cover is project content, so
+    // it resolves through the WRITE resolver. The user's decision named cards; this route is the same
+    // bug class and is recorded in the notes as inferred.
+    const project = await this.resolveWritableProject(accountId, slug);
+    const work = project.work!; // the resolver guarantees a linked Work (else it 404s)
 
     const workUpdate: Record<string, unknown> = {};
     const projectUpdate: Record<string, unknown> = {};
@@ -594,20 +604,28 @@ export class ProjectsService {
     };
   }
 
-  /** Shared by PATCH /projects/:slug (and reused by page routes via the exported helper): resolve a
-   *  project the caller is a member of. Unknown → 404; non-member public → 403; non-member private → 404. */
+  /** READ resolver — a project the caller is a member of. Unknown → 404; non-member public → 403;
+   *  non-member private → 404 (no existence leak). Membership ONLY: calling this on a write path is
+   *  the deliberate opt-out; writes use `resolveWritableProject`. */
   private async resolveMemberProject(accountId: string, slug: string) {
     const project = await this.prisma.project.findUnique({
       where: { slug },
-      include: {
-        work: { include: { creators: { select: { accountId: true } } } },
-      },
+      // CS-10 D-2: always the shared gate select — a resolver that cannot see the permission columns
+      // cannot gate, which is precisely how B-4 happened.
+      include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
     if (!project || !project.work) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project, accountId)) {
       if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
       throw new NotFoundException('Projet introuvable');
     }
+    return project;
+  }
+
+  /** WRITE resolver — membership AND « Écriture », enforced here so a new caller is safe by default. */
+  private async resolveWritableProject(accountId: string, slug: string) {
+    const project = await this.resolveMemberProject(accountId, slug);
+    assertCanWrite(project as never, accountId);
     return project;
   }
 }

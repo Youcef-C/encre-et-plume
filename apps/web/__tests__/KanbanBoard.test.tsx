@@ -42,6 +42,7 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     checklistDone: 0,
     checklistTotal: 0,
     commentCount: 0,
+    createdById: null,
     ...over,
   };
 }
@@ -61,7 +62,13 @@ const page7 = makePage({
 });
 const page6 = makePage({ id: 'pg6', chapterId: 'c2', title: 'Page 6', stage: 'nemu', fileTags: ['nemu'] });
 
-function renderBoard(pages: WorkspacePage[] = [page7, page6], readOnly = false, labels: ProjectLabelItem[] = []) {
+function renderBoard(
+  pages: WorkspacePage[] = [page7, page6],
+  readOnly = false,
+  labels: ProjectLabelItem[] = [],
+  // CS-10 D-1: the delete affordance needs to know who the viewer is and whether they lead the group.
+  extra: { canManage?: boolean; viewerId?: string | null } = { canManage: true },
+) {
   render(
     <KanbanBoard
       slug="nuit-blanche"
@@ -69,6 +76,8 @@ function renderBoard(pages: WorkspacePage[] = [page7, page6], readOnly = false, 
       initialPages={pages}
       readOnly={readOnly}
       labels={labels}
+      canManage={extra.canManage ?? false}
+      viewerId={extra.viewerId ?? null}
     />,
   );
 }
@@ -190,7 +199,8 @@ describe('KanbanBoard', () => {
   });
 
   it('read-only viewers get no add / menu controls', () => {
-    renderBoard([page7], true);
+    // A non-member viewer: no « Écriture », no leadership, not the card's author → nothing to offer.
+    renderBoard([page7], true, [], { canManage: false, viewerId: null });
     expect(screen.queryByRole('button', { name: '＋ Ajouter une carte' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
   });
@@ -294,5 +304,54 @@ describe('KanbanBoard', () => {
     // Outside pointerdown closes the menu.
     fireEvent.pointerDown(document.body);
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+  // ── CS-10 D-1 — the card delete affordance mirrors the server rule ─────────────────────────────
+  // Server: leader ∪ co-leader ∪ owner may delete ANY card; everyone else only the cards they
+  // created; a card with no recorded author is leadership-only. The UI mirrors it so it never offers
+  // an action that would 403 — defence in depth, never the only gate.
+  describe('delete affordance (CS-10 D-1)', () => {
+    const mine = makePage({ id: 'pg-mine', chapterId: 'c1', title: 'Ma carte', createdById: 'me' });
+    const theirs = makePage({ id: 'pg-theirs', chapterId: 'c1', title: 'Leur carte', createdById: 'yuki' });
+    const orphan = makePage({ id: 'pg-orphan', chapterId: 'c1', title: 'Carte orpheline', createdById: null });
+
+    const openMenu = async () => userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+
+    it('offers « Supprimer la carte » on a card the viewer created', async () => {
+      renderBoard([mine], false, [], { canManage: false, viewerId: 'me' });
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Supprimer la carte' })).toBeInTheDocument();
+    });
+
+    it("hides it on someone else's card for a plain « Écriture » member", async () => {
+      renderBoard([theirs], false, [], { canManage: false, viewerId: 'me' });
+      await openMenu();
+      expect(screen.queryByRole('menuitem', { name: 'Supprimer la carte' })).not.toBeInTheDocument();
+      // the move items are still there — they only need « Écriture »
+      expect(screen.getByRole('menuitem', { name: 'Nemu' })).toBeInTheDocument();
+    });
+
+    it("offers it to a leader / co-leader on someone else's card", async () => {
+      renderBoard([theirs], false, [], { canManage: true, viewerId: 'me' });
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Supprimer la carte' })).toBeInTheDocument();
+    });
+
+    it('treats a card with no recorded author as leadership-only', async () => {
+      renderBoard([orphan], false, [], { canManage: false, viewerId: 'me' });
+      await openMenu();
+      expect(screen.queryByRole('menuitem', { name: 'Supprimer la carte' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the author\'s own delete reachable without « Écriture », with no move items', async () => {
+      renderBoard([mine], true, [], { canManage: false, viewerId: 'me' });
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Supprimer la carte' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Nemu' })).not.toBeInTheDocument();
+    });
+
+    it('offers no ⋯ menu at all to a read-only viewer with nothing to delete', () => {
+      renderBoard([theirs], true, [], { canManage: false, viewerId: 'me' });
+      expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    });
   });
 });

@@ -151,6 +151,7 @@ model Account {
   blocksMade              UserBlock[]              @relation("BlocksMade") // MC-10: block/mute rows this account created
   blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
   pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
+  pagesCreated            Page[]                   @relation("PageAuthor") // CS-10: kanban cards this account created (delete gate)
   pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
   assetVersions           AssetVersion[]           @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
   scenarioComments        ScenarioComment[]        @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
@@ -931,6 +932,11 @@ model Page {
   linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
   description   String? // CS-2 card-modal: free-text card description
   dueDate       DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
+  // CS-10 D-1: who created the card. Nullable because the column landed after the table existed —
+  // the migration backfills every pre-existing row to the project owner, and `null` is treated as
+  // LEADERSHIP-ONLY at the gate, so a failed/partial backfill fails closed rather than open.
+  createdById   String?
+  createdBy     Account?      @relation("PageAuthor", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   labels        PageLabel[] // CS-2 card-modal: applied labels
@@ -941,6 +947,7 @@ model Page {
   corrections   Correction[] // CS-5 review corrections filed against this card
 
   @@index([projectId, chapterId, stage])
+  @@index([createdById])
 }
 
 // ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────

@@ -20,7 +20,7 @@ import { AssetsService } from './assets.service';
 import { EditorGateway } from './editor.gateway';
 import { toCommentDto, type CommentRow } from './comment-mapper';
 import { isMemberOf } from './projects.service';
-import { assertCanWrite } from './members.service';
+import { GROUP_GATE_SELECT, assertCanWrite } from './members.service';
 
 const HTML = 'text/html';
 
@@ -89,7 +89,8 @@ type LinkedAsset = { id: string; filename: string; currentVersion: number };
 
 // CS-10 — every editor WRITE additionally requires « Écriture »; membership alone is not enough.
 // Reads and comments stay member-gated (a comment is a separate affordance, not « Écriture »).
-// `assertCanWrite` now lives in members.service.ts — one definition shared with the CS-3 asset routes.
+// D-2: that gate now lives INSIDE `resolveWritablePage`, not at each route — `assertCanWrite` itself
+// stays a single definition in members.service.ts, shared with the CS-3 asset routes.
 
 /**
  * CS-4 collaborative script editor — the working-draft store (ScenarioDocument) bound 1:1 to a CS-3
@@ -166,8 +167,7 @@ export class ScenarioDocumentsService {
   }
 
   async autosave(accountId: string, pageId: string, body: AutosaveDocumentRequest, assetId?: string): Promise<AutosaveDocumentResponse> {
-    const page = await this.resolveMemberPage(accountId, pageId);
-    assertCanWrite(page.project, accountId);
+    const page = await this.resolveWritablePage(accountId, pageId);
     const ydoc = Buffer.from(body.ydocState, 'base64');
     const asset = await this.resolveEditorAsset(page, assetId);
     // Item 20/26 — persist the chosen scheme in place. `undefined` (older client) leaves it untouched
@@ -207,8 +207,7 @@ export class ScenarioDocumentsService {
   }
 
   async snapshotVersion(accountId: string, pageId: string, body: SnapshotVersionRequest, assetId?: string): Promise<AssetItem> {
-    const page = await this.resolveMemberPage(accountId, pageId);
-    assertCanWrite(page.project, accountId);
+    const page = await this.resolveWritablePage(accountId, pageId);
     const asset = await this.resolveEditorAsset(page, assetId);
     if (!asset) throw new BadRequestException('Aucun scénario à versionner');
     // Fb-6 — dedupe guard: autosave writes the draft in place but does NOT bump the head; a re-click of
@@ -292,8 +291,8 @@ export class ScenarioDocumentsService {
     return headBytes.equals(Buffer.from(html, 'utf8'));
   }
 
-  /** Resolve page + membership; unknown OR non-member → 404 (no existence leak — editor is reachable
-   *  only to members). */
+  /** READ resolver — page + membership; unknown OR non-member → 404 (no existence leak — the editor
+   *  is reachable only to members). Reads and comments use this; writes use `resolveWritablePage`. */
   private async resolveMemberPage(accountId: string, pageId: string) {
     const page = await this.prisma.page.findUnique({
       where: { id: pageId },
@@ -311,7 +310,7 @@ export class ScenarioDocumentsService {
             slug: true,
             title: true,
             ownerId: true,
-            work: { select: { creators: { select: { accountId: true, groupRole: true, permissions: true } } } },
+            work: { select: { creators: { select: GROUP_GATE_SELECT } } },
           },
         },
         chapter: { select: { id: true, number: true, title: true } },
@@ -326,6 +325,14 @@ export class ScenarioDocumentsService {
       project: { id: string; slug: string; title: string };
       chapter: { id: string; number: number; title: string } | null;
     };
+  }
+
+  /** WRITE resolver — membership AND « Écriture », enforced here (CS-10 D-2) so a new editor write
+   *  route is gated by construction instead of by remembering to call `assertCanWrite`. */
+  private async resolveWritablePage(accountId: string, pageId: string) {
+    const page = await this.resolveMemberPage(accountId, pageId);
+    assertCanWrite(page.project, accountId);
+    return page;
   }
 
   /** plancheNo = 1-based position among chapter siblings (createdAt asc, id tie-break); total = count. */

@@ -38,7 +38,7 @@ const chapters: WorkspaceChapter[] = [{ id: 'c1', number: 1, title: 'La rencontr
 function makePage(over: Partial<WorkspacePage>): WorkspacePage {
   return {
     id: 'pg7', chapterId: 'c1', title: 'Page 7', stage: 'scenario', fileTags: [], linkedFileIds: [],
-    linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, ...over,
+    linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null, ...over,
   };
 }
 
@@ -47,7 +47,7 @@ const members: WorkspaceMember[] = [{ accountId: 'me', displayName: 'Yuki', avat
 function pageDetail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
   return {
     id: 'pg7', chapterId: 'c1', title: 'Page 7', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [],
-    dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0,
+    dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null,
     description: '', checklist: [], comments: [], ...over,
   };
 }

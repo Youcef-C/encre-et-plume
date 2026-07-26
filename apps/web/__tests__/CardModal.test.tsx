@@ -53,6 +53,7 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
     checklistDone: 0,
     checklistTotal: 0,
     commentCount: 0,
+    createdById: null,
     description: 'Un synopsis',
     checklist: [],
     comments: [],
@@ -459,6 +460,19 @@ describe('CardModal', () => {
     expect(screen.getByRole('button', { name: /Historique des versions de scenario.txt/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '＋ Lier un fichier' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Lier · remplacer' })).not.toBeInTheDocument();
+  });
+  // CS-10 D-1 — the modal's destructive footer mirrors `PagesService.deletePage` (leadership OR the
+  // card's author). Defence in depth: never the only gate, but never offered when it would 403.
+  it('hides « Supprimer la carte » from a viewer who may not delete it', async () => {
+    mount();
+    await screen.findByLabelText('TITRE');
+    expect(screen.queryByRole('button', { name: 'Supprimer la carte' })).not.toBeInTheDocument();
+  });
+
+  it('offers « Supprimer la carte » to a viewer who may (leadership or the card author)', async () => {
+    mount({}, { canDelete: true });
+    await screen.findByLabelText('TITRE');
+    expect(screen.getByRole('button', { name: 'Supprimer la carte' })).toBeInTheDocument();
   });
 });
 

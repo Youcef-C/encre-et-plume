@@ -84,7 +84,7 @@ export default function OnBrandSelect({
   const popoverRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   // Anchor rect of the trigger, in viewport coordinates (the popover is `position:fixed`).
-  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0, maxWidth: 0 });
+  const [anchor, setAnchor] = useState({ top: 0, left: 0, width: 0, maxWidth: 0, maxHeight: 0 });
   const typeahead = useRef<{ buf: string; t: ReturnType<typeof setTimeout> | null }>({ buf: '', t: null });
   const listId = useId();
   const optId = (i: number) => `${listId}-opt-${i}`;
@@ -111,12 +111,28 @@ export default function OnBrandSelect({
     const measure = () => {
       const r = triggerRef.current?.getBoundingClientRect();
       if (!r) return;
+      const vh = window.innerHeight || 0;
+      const GAP = 6;
+      const EDGE = 8;
+      // A `fixed` popover cannot be scrolled into view — the page scrolls, it stays glued to the
+      // trigger. So a naive "always open downward" puts it permanently out of reach whenever the
+      // trigger sits low in the viewport. Open downward when there's room, else flip above, and cap
+      // the height to whichever side we chose so the list scrolls internally instead of overflowing.
+      const below = vh - r.bottom - GAP - EDGE;
+      const above = r.top - GAP - EDGE;
+      const flip = below < 160 && above > below;
+      const maxHeight = Math.max(120, flip ? above : below);
       setAnchor({
-        top: r.bottom + 6,
+        // When flipped we still anchor from the top edge, so clamp with the measured popover height
+        // if we have one (first paint has none — the clamp below keeps it on-screen regardless).
+        top: flip
+          ? Math.max(EDGE, r.top - GAP - Math.min(maxHeight, popoverRef.current?.offsetHeight ?? maxHeight))
+          : Math.min(r.bottom + GAP, Math.max(EDGE, vh - EDGE)),
         left: r.left,
         width: r.width,
         // Never narrower than the trigger, never wider than what's left to the viewport edge.
-        maxWidth: Math.max(r.width, (window.innerWidth || 0) - r.left - 8),
+        maxWidth: Math.max(r.width, (window.innerWidth || 0) - r.left - EDGE),
+        maxHeight,
       });
     };
     measure();
@@ -298,11 +314,14 @@ export default function OnBrandSelect({
             width: 'max-content',
             minWidth: anchor.width,
             maxWidth: anchor.maxWidth,
+            // Bounded to the space on whichever side we opened, so a long list scrolls in place
+            // rather than running off the viewport where a fixed element can't be scrolled to.
+            maxHeight: anchor.maxHeight || undefined,
             background: 'var(--card)',
             border: '2px solid var(--ink)',
             borderRadius: 6,
             boxShadow: '3px 3px 0 var(--shadow)',
-            overflow: 'hidden',
+            overflow: 'auto',
           }}
         >
           {searchable && (

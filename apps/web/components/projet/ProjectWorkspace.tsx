@@ -179,6 +179,9 @@ export default function ProjectWorkspace({
 }: ProjectWorkspaceProps) {
   const [title, setTitle] = useState(workspace.title);
   const isMember = workspace.viewer.isMember;
+  // CS-10 D-2: card create/edit/move, the project INFOS PATCH and the Fichiers writes are all
+  // « Écriture »-gated server-side — mirror that here so the UI never offers an action that 403s.
+  const canWrite = isMember && workspace.viewer.canWrite;
   const { account } = useSession();
   const router = useRouter();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -380,18 +383,19 @@ export default function ProjectWorkspace({
               slug={slug}
               chapters={workspace.chapters}
               initialPages={workspace.pages}
-              readOnly={!isMember}
+              readOnly={!canWrite}
               members={workspace.members}
               labels={workspace.labels}
               isOwner={workspace.viewer.isOwner}
               viewerId={account?.id ?? null}
+              canManage={workspace.viewer.canManage}
             />
           )}
           {tab === 'infos' && (
             <InfosPanel
               slug={slug}
               workspace={workspace}
-              readOnly={!isMember}
+              readOnly={!canWrite}
               onTitleSaved={setTitle}
             />
           )}
@@ -400,9 +404,7 @@ export default function ProjectWorkspace({
           )}
           {/* CS-10 B-4: upload/version/delete are « Écriture »-gated server-side — mirror that here
               so a member without it isn't offered actions that would 403. */}
-          {tab === 'fichiers' && (
-            <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!isMember || !workspace.viewer.canWrite} />
-          )}
+          {tab === 'fichiers' && <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!canWrite} />}
           {tab === 'discussion' && (
             <PlaceholderPanel
               title="Discussion du projet"

@@ -28,7 +28,7 @@ describe('CardCollabService', () => {
   let service: CardCollabService;
   let prisma: any;
   let notifications: { create: jest.Mock };
-  let pages: { loadMemberPage: jest.Mock };
+  let pages: { loadMemberPage: jest.Mock; loadWritablePage: jest.Mock };
 
   const build = () => {
     prisma = {
@@ -71,7 +71,10 @@ describe('CardCollabService', () => {
       },
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
-    pages = { loadMemberPage: jest.fn().mockResolvedValue(MEMBER_PAGE()) };
+    pages = {
+      loadMemberPage: jest.fn().mockResolvedValue(MEMBER_PAGE()),
+      loadWritablePage: jest.fn().mockResolvedValue(MEMBER_PAGE()),
+    };
     service = new CardCollabService(
       prisma as unknown as PrismaService,
       notifications as unknown as NotificationsService,
@@ -145,11 +148,96 @@ describe('CardCollabService', () => {
     });
   });
 
+  // ── CS-10 D-2: labels + checklist are « Écriture » writes; comments stay member-gated ────────
+  //
+  // INFERRED EXTENSION — the user's decision spoke only about kanban CARDS. Gating labels and
+  // checklist items on « Écriture » is the safe default and is consistent with routing every write
+  // through the write resolver; it is flagged in the notes so it can be reverted if wrong.
+  // Comments are the recorded exception (a comment is not « Écriture »), so they deliberately resolve
+  // through the READ resolver — the opt-out is visible at the call site.
+  describe('CS-10 — permission gates', () => {
+    const member = (accountId: string, groupRole: string, permissions: string[]) => ({ accountId, groupRole, permissions });
+    const ROSTER = [
+      member('acc-me', 'leader', []),
+      member('acc-writer', 'member', ['ecriture']),
+      member('acc-reader', 'member', ['corrections']), // « Écriture » explicitly OFF
+      member('acc-lead', 'leader', []),
+      member('acc-co', 'coleader', []),
+    ];
+
+    const withRoster = () => {
+      const project = PROJECT({ work: { id: 'work-1', creators: ROSTER } });
+      prisma.project.findUnique.mockResolvedValue(project);
+      prisma.projectLabel.findUnique.mockResolvedValue({ id: 'lab-1', name: 'À revoir', color: '#e8261c', project });
+    };
+
+    describe.each([
+      ['createLabel', (a: string) => service.createLabel(a, 'lames-de-brume', { name: 'x', color: '#2e7d5b' })],
+      ['updateLabel', (a: string) => service.updateLabel(a, 'lab-1', { name: 'x' })],
+      ['deleteLabel', (a: string) => service.deleteLabel(a, 'lab-1')],
+    ] as [string, (a: string) => Promise<unknown>][])('%s', (_name, call) => {
+      it.each([
+        ['the owner', 'acc-me'],
+        ['a non-owner leader', 'acc-lead'],
+        ['a co-leader', 'acc-co'],
+        ['a member holding « Écriture »', 'acc-writer'],
+      ])('allows %s', async (_who, accountId) => {
+        withRoster();
+        await expect(call(accountId)).resolves.not.toThrow();
+      });
+
+      it('refuses a member WITHOUT « Écriture » (403) and persists nothing', async () => {
+        withRoster();
+        await expect(call('acc-reader')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.projectLabel.create).not.toHaveBeenCalled();
+        expect(prisma.projectLabel.update).not.toHaveBeenCalled();
+        expect(prisma.projectLabel.delete).not.toHaveBeenCalled();
+      });
+
+      it('still hides a private project from a non-member (404, no leak)', async () => {
+        withRoster();
+        await expect(call('acc-stranger')).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+    it('every label resolver loads groupRole + permissions', async () => {
+      withRoster();
+      await service.createLabel('acc-me', 'lames-de-brume', { name: 'x', color: '#2e7d5b' });
+      expect(prisma.project.findUnique.mock.calls[0][0].include.work.include.creators.select).toMatchObject({
+        accountId: true,
+        groupRole: true,
+        permissions: true,
+      });
+      await service.deleteLabel('acc-me', 'lab-1');
+      expect(prisma.projectLabel.findUnique.mock.calls[0][0].include.project.include.work.include.creators.select).toMatchObject({
+        accountId: true,
+        groupRole: true,
+        permissions: true,
+      });
+    });
+
+    it.each([
+      ['addChecklistItem', () => service.addChecklistItem('acc-me', 'page-1', { text: 'a' })],
+      ['updateChecklistItem', () => service.updateChecklistItem('acc-me', 'ci-1', { done: true })],
+      ['deleteChecklistItem', () => service.deleteChecklistItem('acc-me', 'ci-1')],
+    ] as [string, () => Promise<unknown>][])('%s resolves through the WRITE resolver', async (_name, call) => {
+      await call();
+      expect(pages.loadWritablePage).toHaveBeenCalledWith('acc-me', 'page-1');
+      expect(pages.loadMemberPage).not.toHaveBeenCalled();
+    });
+
+    it('addComment resolves through the READ resolver (recorded decision: a comment is not « Écriture »)', async () => {
+      await service.addComment('acc-me', 'page-1', { body: 'ok' });
+      expect(pages.loadMemberPage).toHaveBeenCalledWith('acc-me', 'page-1');
+      expect(pages.loadWritablePage).not.toHaveBeenCalled();
+    });
+  });
+
   // ── checklist ─────────────────────────────────────────────────────────────
   describe('checklist', () => {
     it('appends an item with order = max + 1 (member-gated)', async () => {
       const res = await service.addChecklistItem('acc-me', 'page-1', { text: '  Crayonné  ' });
-      expect(pages.loadMemberPage).toHaveBeenCalledWith('acc-me', 'page-1');
+      expect(pages.loadWritablePage).toHaveBeenCalledWith('acc-me', 'page-1');
       expect(prisma.pageChecklistItem.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: { pageId: 'page-1', text: 'Crayonné', order: 3 } }),
       );
@@ -168,7 +256,7 @@ describe('CardCollabService', () => {
 
     it('toggles done / edits text', async () => {
       const res = await service.updateChecklistItem('acc-me', 'ci-1', { done: true });
-      expect(pages.loadMemberPage).toHaveBeenCalledWith('acc-me', 'page-1');
+      expect(pages.loadWritablePage).toHaveBeenCalledWith('acc-me', 'page-1');
       expect(prisma.pageChecklistItem.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ci-1' }, data: { done: true } }));
       expect(res.done).toBe(true);
     });
