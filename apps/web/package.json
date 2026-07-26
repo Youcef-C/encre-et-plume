@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@encre-et-plume/shared": "workspace:*",
-    "@sentry/nextjs": "^8.55.2",
+    "@sentry/nextjs": "^10.68.0",
     "@tiptap/core": "^3.27.4",
     "@tiptap/extension-collaboration": "^3.27.4",
     "@tiptap/extension-collaboration-caret": "^3.27.4",

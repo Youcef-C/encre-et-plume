@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   silent: true,
   authToken: process.env.SENTRY_AUTH_TOKEN,
-  // Suppress Sentry build output so it doesn't clutter CI logs
-  disableLogger: true,
+  // Strip Sentry's debug logging from the bundle so it doesn't clutter CI logs. Was `disableLogger`,
+  // which v10 deprecated in favour of this nested option (it still "worked" but printed a deprecation
+  // warning on every build, and would silently stop working on the next major).
+  webpack: { treeshake: { removeDebugLogging: true } },
 });
