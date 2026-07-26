@@ -139,14 +139,14 @@ test.describe('CS-12 Mes projets — signed in (e2e-cs12-owner)', () => {
 
   test('CS12-E5: publish a standalone (uncollected) illustration via the UI (no fixture seeded)', async ({ page }) => {
     await loginAsOwner(page);
-    // CS-1: publishing now walks the /creer wizard Illustration branch (Détails → Soutien → ✓ Publier).
+    // CS-1: publishing now walks the /creer wizard Illustration branch (Détails → Soutien → Publier).
     await page.goto('/creer?type=illustration');
     await expect(page.getByRole('heading', { name: /Nouveau projet/i })).toBeVisible({ timeout: 10_000 });
     await page.getByLabel('Titre', { exact: true }).fill(standaloneTitle);
     await page.locator('input[type="file"]').first().setInputFiles(IMAGE_FIXTURE);
     await page.getByRole('button', { name: /Continuer/ }).click();
-    await expect(page.getByRole('button', { name: '✓ Publier' })).toBeEnabled({ timeout: 30_000 });
-    await page.getByRole('button', { name: '✓ Publier' }).click();
+    await expect(page.getByRole('button', { name: 'Publier', exact: true })).toBeEnabled({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Publier', exact: true }).click();
     await expect(page).toHaveURL(/\/illustration\//, { timeout: 15_000 });
     standaloneIllusUrl = page.url();
     standaloneIllusId = standaloneIllusUrl.split('/illustration/')[1];

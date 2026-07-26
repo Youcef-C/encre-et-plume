@@ -137,8 +137,8 @@ describe('MesCandidaturesClient (MC-6)', () => {
       ]),
     );
     renderClient();
-    expect(await screen.findByText('✓ Acceptée')).toBeInTheDocument();
-    expect(screen.getByText('✕ Refusée')).toBeInTheDocument();
+    expect(await screen.findByText('Acceptée')).toBeInTheDocument();
+    expect(screen.getByText('Refusée')).toBeInTheDocument();
     // rejected title still readable
     expect(screen.getByText('« Refusé »')).toBeInTheDocument();
   });

@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { FavoriteWorkDto } from '@encre-et-plume/shared';
-import { CaretDownIcon, StudioIcon, FullscreenIcon } from '../icons';
+import { CaretDownIcon, StudioIcon, FullscreenIcon, XIcon } from '../icons';
 import FavoritesMenu from './FavoritesMenu';
 import type { ReadingDirection } from './readingDirection';
 
@@ -72,7 +72,7 @@ export default function Topbar({
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, color: '#f1ece1', flexWrap: 'wrap' }}>
       {/* Story update (2026-07-04): back returns to the current work, not the catalogue - overrides
-          the prototype's "‹ Catalogue" link. "✕ Quitter" (tool row, right) already resolves to the
+          the prototype's "‹ Catalogue" link. The "Quitter" link (tool row, right) already resolves to the
           same /oeuvre/{slug} destination as an explicit "quit reading" action; this is the one
           breadcrumb-style "go back" affordance, so the two aren't two competing "back" buttons. */}
       <Link href={`/oeuvre/${workSlug}`} style={{ cursor: 'pointer', fontSize: 14, fontWeight: 700, opacity: 0.85, textDecoration: 'none', color: 'inherit' }}>
@@ -161,7 +161,7 @@ export default function Topbar({
         >
           <FullscreenIcon size={14} /> {isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
         </button>
-        {/* QA F1 fix (round 2): "✕ Quitter" lives IN this flex row (rightmost, next to "Plein
+        {/* QA F1 fix (round 2): the "Quitter" exit link lives IN this flex row (rightmost, next to "Plein
             écran") instead of position:fixed/absolute over the stage. A normal flex child in a
             flex-wrap row can never overlap its siblings or the persistent site header above it
             — the previous coordinate-based fix (position:absolute) only moved the collision
@@ -171,7 +171,7 @@ export default function Topbar({
           href={`/oeuvre/${workSlug}`}
           style={{ ...toolBtn, color: '#fff', background: 'var(--accent)', border: '2px solid #fff', textDecoration: 'none' }}
         >
-          ✕ Quitter
+          <XIcon size={14} /> Quitter
         </Link>
       </div>
     </div>

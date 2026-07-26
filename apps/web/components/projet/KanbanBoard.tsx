@@ -30,6 +30,8 @@ import {
   CalendarIcon,
   ChecklistIcon,
   ChatIcon,
+  CheckIcon,
+  XIcon,
 } from '../icons';
 import { createPage, deletePage, updatePageStage, createProjectLabel, deleteProjectLabel } from '../../lib/api';
 import CardModal from './CardModal';
@@ -358,9 +360,11 @@ export default function KanbanBoard({
                       fontSize: 12,
                       padding: '0 8px',
                       height: '100%',
+                      display: 'inline-flex',
+                      alignItems: 'center',
                     }}
                   >
-                    ✕
+                    <XIcon size={12} />
                   </button>
                 )}
               </span>
@@ -521,7 +525,7 @@ function StageLabel({ stage }: { stage: PageStage }) {
       {meta.label}
       {meta.icon === 'pen' && <PenNibIcon size={13} style={{ marginLeft: 5, display: 'inline' }} />}
       {meta.icon === 'brush' && <BrushIcon size={13} style={{ marginLeft: 5, display: 'inline' }} />}
-      {meta.check && <span aria-hidden="true"> ✓</span>}
+      {meta.check && <CheckIcon size={13} style={{ marginLeft: 5, display: 'inline' }} />}
     </>
   );
 }

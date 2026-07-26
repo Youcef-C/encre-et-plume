@@ -124,7 +124,7 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await page.getByRole('button', { name: /Continuer/ }).click();
     await expect(page.getByRole('button', { name: '＋ Ajouter un palier' })).toBeVisible();
     await expect(page.getByRole('group', { name: /Partage des revenus/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '✓ Publier' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Publier', exact: true })).toBeVisible();
   });
 
   test('CS1-E5b: Galerie deep-link /creer?type=illustration lands on the Illustration Détails step', async ({ page }) => {
@@ -134,7 +134,7 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
     await expect(page.getByText('Déposez l’illustration')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('CS1-E6: mobile (375×812) — type cards stack single-column, ✓ badge not clipped, no overflow across step 2', async ({ page }) => {
+  test('CS1-E6: mobile (375×812) — type cards stack single-column, selected badge not clipped, no overflow across step 2', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await loginAsOwner(page);
     await page.goto('/creer');
@@ -146,8 +146,9 @@ test.describe('CS-1 Nouveau projet — signed in (e2e-cs12-owner)', () => {
       .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
     expect(cols).toBe(1);
 
-    // The Manga card's ✓ badge is on-screen (right edge within the viewport, not clipped off-canvas).
-    const badge = page.getByRole('radiogroup', { name: /Type de projet/i }).getByText('✓', { exact: true });
+    // The Manga card's selected badge (check pictogram) is on-screen (right edge within the viewport,
+    // not clipped off-canvas).
+    const badge = page.getByRole('radiogroup', { name: /Type de projet/i }).getByTestId('type-card-selected');
     await expect(badge).toBeVisible();
     const box = await badge.boundingBox();
     expect(box).not.toBeNull();

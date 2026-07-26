@@ -25,9 +25,11 @@ describe('ProfileTags — visitor mode', () => {
     expect(screen.getByText(/seinen/i)).toBeInTheDocument();
   });
 
-  it('renders each tag with ✓ suffix', () => {
-    render(<ProfileTags tags={['Seinen']} isOwner={false} />);
-    expect(screen.getByText('Seinen ✓')).toBeInTheDocument();
+  it('renders each tag with the check pictogram, never the "✓" character', () => {
+    const { container } = render(<ProfileTags tags={['Seinen']} isOwner={false} />);
+    expect(screen.getByText('Seinen')).toBeInTheDocument();
+    expect(container.querySelector('svg')).toBeInTheDocument();
+    expect(container.textContent ?? '').not.toMatch(/[✓✔✅✕✖❌✗]/);
   });
 
   it('renders nothing when tags is empty (visitor)', () => {

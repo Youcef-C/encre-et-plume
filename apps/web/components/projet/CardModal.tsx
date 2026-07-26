@@ -27,7 +27,7 @@ import {
   type AssetType,
   type PageLinkedFileRef,
 } from '@encre-et-plume/shared';
-import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon, CaretDownIcon } from '../icons';
+import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon, CaretDownIcon, CheckIcon, XIcon } from '../icons';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
 import ConfirmDialog from './ConfirmDialog';
@@ -60,7 +60,9 @@ const STAGE_LABELS: Record<PageStage, string> = {
   corrections: 'Corrections',
   propre: 'PROPRE',
   encrage: 'Encrage',
-  valide: 'VALIDÉ ✓',
+  // U-4: an <option> label is plain text (OnBrandSelect parses strings), so the column's
+  // check pictogram lives on the Kanban column header (KanbanBoard/StageLabel), not here.
+  valide: 'VALIDÉ',
 };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -415,13 +417,18 @@ export default function CardModal({
             )}
           </div>
           <button type="button" aria-label="Fermer" onClick={onClose} style={closeBtn}>
-            ✕
+            <XIcon size={16} />
           </button>
         </div>
 
         <span aria-live="polite" style={{ display: 'block', fontSize: 12, fontWeight: 700, minHeight: 16, color: saveState === 'error' ? 'var(--accent)' : 'var(--ink2)' }}>
           {saveState === 'saving' && 'Enregistrement…'}
-          {saveState === 'saved' && 'Enregistré ✓'}
+          {saveState === 'saved' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              Enregistré
+              <CheckIcon size={13} />
+            </span>
+          )}
           {saveState === 'error' && "L'enregistrement a échoué. Réessayez."}
         </span>
         </div>
@@ -1039,9 +1046,9 @@ function LabelsSection({
                 type="button"
                 aria-label={`Retirer ${l.name}`}
                 onClick={() => onToggle(l)}
-                style={{ border: 'none', background: 'transparent', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, padding: '0 3px' }}
+                style={{ display: 'inline-flex', border: 'none', background: 'transparent', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, padding: '0 3px' }}
               >
-                ✕
+                <XIcon size={12} />
               </button>
             )}
           </span>
@@ -1138,7 +1145,7 @@ function LabelsSection({
                 >
                   <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: 4, background: l.color, border: '1.5px solid var(--ink)', flex: 'none' }} />
                   {l.name}
-                  {on && <span aria-hidden="true" style={{ marginLeft: 'auto' }}>✓</span>}
+                  {on && <CheckIcon size={13} style={{ marginLeft: 'auto' }} />}
                 </button>
                 {!readOnly &&
                   (confirmDeleteId === l.id ? (
@@ -1293,8 +1300,8 @@ function ChecklistSection({
               style={{ flex: 1 }}
             />
             {!readOnly && (
-              <button type="button" aria-label="Supprimer l'élément" onClick={() => void remove(item)} style={tinyBtn}>
-                ✕
+              <button type="button" aria-label="Supprimer l'élément" onClick={() => void remove(item)} style={{ ...tinyBtn, display: 'inline-flex', alignItems: 'center' }}>
+                <XIcon size={12} />
               </button>
             )}
           </div>
@@ -1758,6 +1765,9 @@ const linkBtn: React.CSSProperties = {
 
 const closeBtn: React.CSSProperties = {
   flex: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: '2px solid var(--ink)',
   borderRadius: 7,
   background: 'var(--card)',

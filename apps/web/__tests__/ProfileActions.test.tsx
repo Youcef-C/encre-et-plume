@@ -162,8 +162,8 @@ describe('ProfileActions', () => {
     it('connected → single "Connecté" button that swaps to "Se déconnecter" on hover and disconnects', async () => {
       const user = userEvent.setup();
       render(<ProfileActions profile={{ ...profile, connectionState: 'connected' } as unknown as ProfileResponse} account={account} />);
-      // Rest label is "✓ Connecté" (green); the action (accessible name) is "Se déconnecter".
-      expect(screen.getByText('✓ Connecté')).toBeInTheDocument();
+      // Rest label is "Connecté" + check pictogram (green); the action (accessible name) is "Se déconnecter".
+      expect(screen.getByText('Connecté')).toBeInTheDocument();
       const btn = screen.getByRole('button', { name: /se déconnecter de théo m\./i });
       // Hover swaps the visible label to the undo action.
       await user.hover(btn);
@@ -185,7 +185,7 @@ describe('ProfileActions', () => {
     it('soft-block: blocking a connected profile removes the connection CTA', async () => {
       const user = userEvent.setup();
       render(<ProfileActions profile={{ ...profile, connectionState: 'connected' } as unknown as ProfileResponse} account={account} />);
-      expect(screen.getByText('✓ Connecté')).toBeInTheDocument();
+      expect(screen.getByText('Connecté')).toBeInTheDocument();
       // Block via the overflow → confirm modal.
       await user.click(screen.getByRole('button', { name: /plus d'actions sur le profil de théo m\./i }));
       await user.click(await screen.findByRole('menuitem', { name: 'Bloquer' }));
@@ -193,7 +193,7 @@ describe('ProfileActions', () => {
       await user.click(within(dialog).getByRole('button', { name: 'Bloquer' }));
       // The connection is severed: no "Connecté", no connect/disconnect button at all.
       expect(await screen.findByText('Compte bloqué.')).toBeInTheDocument();
-      expect(screen.queryByText('✓ Connecté')).not.toBeInTheDocument();
+      expect(screen.queryByText('Connecté')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /se (dé)?connecter/i })).not.toBeInTheDocument();
     });
   });

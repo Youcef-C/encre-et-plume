@@ -30,7 +30,7 @@ import {
 import { createCall, updateCall, getMyProjects } from '../../lib/api';
 import { useScrollLock } from '../../lib/useScrollLock';
 import { isDocumentType, ROLE_LABEL } from '../../lib/calls';
-import { XIcon } from '../icons';
+import { XIcon, CheckIcon } from '../icons';
 import GenreChip from '../GenreChip';
 import GenreSuggestInput from '../GenreSuggestInput';
 import OnBrandSelect from '../form/OnBrandSelect';
@@ -577,8 +577,9 @@ export default function PostCallModal({
               <ul style={{ listStyle: 'none', margin: '0 0 10px', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {documents.map((d, i) => (
                   <li key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 10px', background: 'var(--card)' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      ✓ {d.name}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 700, minWidth: 0 }}>
+                      <CheckIcon size={13} />
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                     </span>
                     <button
                       type="button"

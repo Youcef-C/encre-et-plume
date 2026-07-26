@@ -422,7 +422,7 @@ test.describe('Item 2 — MC-7 remove an applicant (owner-only, any status, free
     await expect(page.getByRole('heading', { name: 'Mes appels à projets', level: 1 })).toBeVisible({ timeout: 10_000 });
     // Select this second call (the selector defaults to the newest — this one).
     const row = page.locator('.ep-candidature-row').filter({ hasText: 'QA Batch Applicant B' });
-    await expect(row.getByText('✓ Acceptée')).toBeVisible();
+    await expect(row.getByText('Acceptée', { exact: true })).toBeVisible();
     await row.getByRole('button', { name: 'Retirer la candidature de QA Batch Applicant B' }).click();
     const [deleteResponse] = await Promise.all([
       page.waitForResponse((r) => r.url().includes(`/applications/${appId}`) && r.request().method() === 'DELETE'),
@@ -476,7 +476,7 @@ test.describe('Item 6 (functional) — MC-6 withdraw an ACCEPTED application fre
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
     const row = page.locator('.ep-candidature-row').filter({ hasText: title });
-    await expect(row.getByText('✓ Acceptée')).toBeVisible();
+    await expect(row.getByText('Acceptée', { exact: true })).toBeVisible();
     await expect(row.getByRole('button', { name: 'Retirer' })).toBeVisible();
     await row.getByRole('button', { name: 'Retirer' }).click();
     await row.getByRole('group', { name: 'Confirmer le retrait de la candidature' }).getByRole('button', { name: 'Confirmer le retrait' }).click();

@@ -105,11 +105,11 @@ async function typeIntoCase(page: Page, no: number, text: string) {
 }
 
 // FR9 (r3) — the editor no longer autosaves; persist the current content explicitly via the toolbar
-// « Enregistrer » button (Ctrl/Cmd-S does the same). Waits for the «Enregistré ✓» confirmation.
+// « Enregistrer » button (Ctrl/Cmd-S does the same). Waits for the «Enregistré» confirmation.
 async function saveDoc(page: Page) {
   await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-  await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
 }
 
 // The toolbar's version-switcher combobox (`aria-label="Version affichée"`, e.g. "v1") — a bare
@@ -210,7 +210,7 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
 
     // Now save explicitly — exactly one persist call, and it does NOT create a version.
     await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
     expect(autosavePosts.length).toBe(1);
     expect(versionPosts.length).toBe(0);
   });
@@ -1053,7 +1053,7 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     // A saves explicitly (FR9 — no autosave) → materializes the scenario (v1); B's toolbar picks up the
     // version chip too. B's own edit left A's draft dirty (shared doc changed), so the Save button is armed.
     await a.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-    await expect(a.getByText('Enregistré ✓')).toBeVisible({ timeout: 15_000 });
+    await expect(a.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(a.getByText('v1')).toBeVisible({ timeout: 10_000 });
 
     // Comments: A posts a comment → it appears live in B, anchored to the right case, no reload.

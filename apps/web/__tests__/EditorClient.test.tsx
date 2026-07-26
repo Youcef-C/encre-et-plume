@@ -331,7 +331,7 @@ describe('EditorClient (Éditeur shell)', () => {
     vi.useRealTimers();
   });
 
-  it('FR9: Ctrl+S persists the current content (no new version) and flips to "Enregistré ✓"', async () => {
+  it('FR9: Ctrl+S persists the current content (no new version) and flips to "Enregistré"', async () => {
     (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
     render(<EditorClient slug="lames" pageId="pg1" />);
@@ -341,7 +341,7 @@ describe('EditorClient (Éditeur shell)', () => {
     await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
     // Save persists content, it does NOT create a version.
     expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByText('Enregistré ✓')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Enregistré')).toBeInTheDocument());
   });
 
   it('FR9: the toolbar « Enregistrer » button persists the current content', async () => {

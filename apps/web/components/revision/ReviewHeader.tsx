@@ -3,7 +3,7 @@
 // CS-5 (iter 2, Fb-1) — review screen header, reworked onto the CS-4 EDITOR CHROME (approved deviation
 // from the prototype-replica rule for this screen, recorded in plan.md §1). Two sticky rows inside the
 // editor card: (1) header row — ‹ Projet, project title, the PageSwitcher, the "En révision" pill,
-// member avatars, and the green "✓ Valider les modifications" button; (2) toolbar row — the
+// member avatars, and the green "Valider les modifications" button; (2) toolbar row — the
 // "Fichier : … ▾" picker, the v{from} ↔ v{to} version pair pickers, and the "Ouvrir l'éditeur"
 // cross-link. Verbatim French copy kept from round 1. (r4: the Scénario/Dessin toggle is gone — the
 // revision page is dessin-only; scenario corrections are managed in the editor as tagged comments.)
@@ -12,6 +12,7 @@ import type { CSSProperties } from 'react';
 import type { ReviewFileItem, ReviewVersionItem } from '@encre-et-plume/shared';
 import OnBrandSelect from '../form/OnBrandSelect';
 import PageSwitcher from '../editeur/PageSwitcher';
+import { CheckIcon } from '../icons';
 
 export interface ReviewHeaderProps {
   slug: string;
@@ -114,12 +115,20 @@ export default function ReviewHeader({
         <button
           type="button"
           className="ep-btn-validate"
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
           onClick={() => !disabled && onValidate()}
           disabled={disabled}
           aria-disabled={disabled}
           title={allCorrige ? undefined : 'Toutes les corrections doivent être corrigées'}
         >
-          {validating ? 'Validation…' : '✓ Valider les modifications'}
+          {validating ? (
+            'Validation…'
+          ) : (
+            <>
+              <CheckIcon size={14} />
+              Valider les modifications
+            </>
+          )}
         </button>
       </div>
 

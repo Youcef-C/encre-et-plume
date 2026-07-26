@@ -7,6 +7,7 @@
 // project-member-specific and lives in the wizard; a standalone illustration has a single author.
 import type { SoutienTier, SoutienGoalInput } from '@encre-et-plume/shared';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
+import { XIcon } from '../icons';
 
 export type SoutienTierDraft = { name: string; euros: string };
 export type SoutienGoalDraft = { title: string; euros: string };
@@ -85,6 +86,9 @@ const euroInput: React.CSSProperties = {
 };
 const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', flex: 'none' };
 const removeBtn: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   background: 'none',
   border: 'none',
   color: 'var(--ink2)',
@@ -142,7 +146,7 @@ export default function SoutienFields({ value, onChange }: { value: SoutienValue
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}>€/mois</span>
             </div>
             <button type="button" aria-label={`Retirer le palier ${i + 1}`} onClick={() => setTiers(value.tiers.filter((_, j) => j !== i))} style={removeBtn}>
-              ✕
+              <XIcon size={14} />
             </button>
           </div>
         ))}
@@ -193,7 +197,7 @@ export default function SoutienFields({ value, onChange }: { value: SoutienValue
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}>€/mois</span>
             </div>
             <button type="button" aria-label={`Retirer l’objectif ${i + 1}`} onClick={() => setGoals(value.goals.filter((_, j) => j !== i))} style={removeBtn}>
-              ✕
+              <XIcon size={14} />
             </button>
           </div>
         ))}

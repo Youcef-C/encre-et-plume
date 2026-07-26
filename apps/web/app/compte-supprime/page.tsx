@@ -1,5 +1,6 @@
 // F-14: /compte-supprime — public landing after successful account deletion.
 import Link from 'next/link';
+import { CheckIcon } from '../../components/icons';
 
 export default function CompteSupprimePage() {
   return (
@@ -23,9 +24,9 @@ export default function CompteSupprimePage() {
       >
         <span
           aria-hidden="true"
-          style={{ fontSize: 36, display: 'block', marginBottom: 18 }}
+          style={{ display: 'flex', justifyContent: 'center', marginBottom: 18, color: '#1f8a5b' }}
         >
-          ✓
+          <CheckIcon size={36} />
         </span>
         <h1
           style={{

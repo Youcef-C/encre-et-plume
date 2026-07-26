@@ -41,12 +41,12 @@ describe('InfosPanel', () => {
     mockUpdate().mockResolvedValue({ title: 'Nuit Blanche!', synopsis: '', hashtags: [], collabOpen: false, cover: null });
   });
 
-  it('debounces a title edit into one PATCH and shows "Enregistré ✓"', async () => {
+  it('debounces a title edit into one PATCH and shows "Enregistré"', async () => {
     const user = setup();
     await user.type(screen.getByLabelText('TITRE'), '!');
     await waitFor(() => expect(api.updateProjectInfo).toHaveBeenCalledTimes(1));
     expect(mockUpdate().mock.calls[0][1]).toEqual({ title: 'Nuit Blanche!' });
-    expect(await screen.findByText('Enregistré ✓')).toBeInTheDocument();
+    expect(await screen.findByText('Enregistré')).toBeInTheDocument();
   });
 
   it('blocks the save and shows an alert when the title is emptied', async () => {

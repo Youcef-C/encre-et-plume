@@ -89,16 +89,16 @@ describe('CallBoardCard', () => {
   });
 
   // MC-14: once decided, the pill carries the actual status instead of "Candidature envoyée".
-  it('shows "✓ Acceptée" (not "Candidature envoyée") when the viewer application is accepted', () => {
+  it('shows "Acceptée" (not "Candidature envoyée") when the viewer application is accepted', () => {
     render(<CallBoardCard call={{ ...base, hasApplied: true, myApplicationStatus: 'accepted' }} />);
-    expect(screen.getByText('✓ Acceptée')).toBeInTheDocument();
+    expect(screen.getByText('Acceptée')).toBeInTheDocument();
     expect(screen.queryByText('Candidature envoyée')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
   });
 
-  it('shows "✕ Refusée" and keeps the "Candidater" button hidden when rejected', () => {
+  it('shows "Refusée" and keeps the "Candidater" button hidden when rejected', () => {
     render(<CallBoardCard call={{ ...base, hasApplied: true, myApplicationStatus: 'rejected' }} />);
-    expect(screen.getByText('✕ Refusée')).toBeInTheDocument();
+    expect(screen.getByText('Refusée')).toBeInTheDocument();
     expect(screen.queryByText('Candidature envoyée')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Candidater' })).not.toBeInTheDocument();
   });
@@ -111,11 +111,11 @@ describe('CallBoardCard', () => {
 
   // MC-14 QA regression: the realistic auto-close trigger IS the accepted applicant's own seat —
   // accepting the last seat closes the call in the SAME commit. showCandidater (`!closed && ...`)
-  // gates the whole applied-pill slot, so the accepted applicant loses their "✓ Acceptée" pill the
+  // gates the whole applied-pill slot, so the accepted applicant loses their "Acceptée" pill the
   // instant their acceptance auto-closes the call. See qa-report.md defect #1.
-  it('[QA] still shows "✓ Acceptée" when the call auto-closed on the viewer own accepted seat', () => {
+  it('[QA] still shows "Acceptée" when the call auto-closed on the viewer own accepted seat', () => {
     render(<CallBoardCard call={{ ...base, status: 'closed', hasApplied: true, myApplicationStatus: 'accepted' }} />);
-    expect(screen.getByText('✓ Acceptée')).toBeInTheDocument();
+    expect(screen.getByText('Acceptée')).toBeInTheDocument();
   });
 
   it('offers an inline "Retirer" affordance that withdraws the viewer application', async () => {

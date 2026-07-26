@@ -1,7 +1,7 @@
 'use client';
 
 // CS-1 — "Nouveau projet" wizard, a faithful replica of the prototype's data-page="creer" section
-// (proto 1747–1852): a 740px ink-bordered card, header + ✕, a clickable 3-dot step rail
+// (proto 1747–1852): a 740px ink-bordered card, header + close icon, a clickable 3-dot step rail
 // (Type · Détails · Soutien), and the drawn footer. All three type cards are single-select:
 // Manga/Histoire walk this wizard and submit POST /projects (opens the new project's workspace); Illustration(s)
 // runs the real publish flow INLINE inside the same shell (the embedded PublishIllustrationForm,
@@ -30,7 +30,7 @@ import {
 } from '@encre-et-plume/shared';
 import { createProject, getActiveContest, getPartners } from '../../lib/api';
 import { useSession } from '../../lib/session';
-import { BrushIcon, PenNibIcon } from '../icons';
+import { BrushIcon, PenNibIcon, CheckIcon, XIcon } from '../icons';
 import GenreChip from '../GenreChip';
 import GenreSuggestInput from '../GenreSuggestInput';
 import OnBrandSelect from '../form/OnBrandSelect';
@@ -91,6 +91,9 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 const chip = (active: boolean): React.CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
   background: active ? 'var(--accent)' : 'var(--card)',
   color: active ? '#fff' : 'var(--ink2)',
   border: '2px solid var(--ink)',
@@ -343,8 +346,8 @@ export default function NewProjectWizard() {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, textTransform: 'uppercase', margin: 0, lineHeight: 1 }}>
             Nouveau projet
           </h1>
-          <button type="button" onClick={close} aria-label="Fermer" style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 18, color: 'var(--ink2)', cursor: 'pointer', padding: 4 }}>
-            ✕
+          <button type="button" onClick={close} aria-label="Fermer" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: 4 }}>
+            <XIcon size={18} />
           </button>
         </div>
 
@@ -463,10 +466,10 @@ export default function NewProjectWizard() {
                   <div style={sectionLabel}>Format</div>
                   <div role="group" aria-label="Format" style={{ display: 'flex', gap: 7 }}>
                     <button type="button" aria-pressed={format === 'serie'} onClick={() => setFormat('serie')} style={chip(format === 'serie')}>
-                      Série{format === 'serie' ? ' ✓' : ''}
+                      Série{format === 'serie' && <CheckIcon size={13} />}
                     </button>
                     <button type="button" aria-pressed={format === 'oneshot'} onClick={() => setFormat('oneshot')} style={chip(format === 'oneshot')}>
-                      One Shot{format === 'oneshot' ? ' ✓' : ''}
+                      One Shot{format === 'oneshot' && <CheckIcon size={13} />}
                     </button>
                   </div>
                 </div>
@@ -515,7 +518,7 @@ export default function NewProjectWizard() {
                   {CATALOG_AUDIENCE_RATINGS.map((r) => (
                     <button key={r} type="button" aria-pressed={audience === r} onClick={() => setAudience(r)} style={chip(audience === r)}>
                       {r}
-                      {audience === r ? ' ✓' : ''}
+                      {audience === r && <CheckIcon size={13} />}
                     </button>
                   ))}
                 </div>
@@ -535,8 +538,8 @@ export default function NewProjectWizard() {
                       <span aria-hidden style={avatarDisc(22)} />
                       {m.name}
                       <RoleGlyph role={m.role} size={13} />
-                      <button type="button" aria-label={`Retirer ${m.name}`} onClick={() => removeInvite(m.id)} style={{ background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: '2px 4px', minHeight: 28, fontFamily: 'inherit' }}>
-                        ✕
+                      <button type="button" aria-label={`Retirer ${m.name}`} onClick={() => removeInvite(m.id)} style={{ display: 'inline-flex', alignItems: 'center', background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', padding: '2px 4px', minHeight: 28, fontFamily: 'inherit' }}>
+                        <XIcon size={13} />
                       </button>
                     </span>
                   ))}
@@ -721,9 +724,16 @@ export default function NewProjectWizard() {
               onClick={() => illusRef.current?.submit()}
               disabled={illusStatus.pending || illusStatus.uploadBusy}
               className="ep-btn-primary"
-              style={{ ...footerBtn, opacity: illusStatus.pending || illusStatus.uploadBusy ? 0.6 : 1 }}
+              style={{ ...footerBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: illusStatus.pending || illusStatus.uploadBusy ? 0.6 : 1 }}
             >
-              {illusStatus.pending ? 'Publication…' : '✓ Publier'}
+              {illusStatus.pending ? (
+                'Publication…'
+              ) : (
+                <>
+                  <CheckIcon size={14} />
+                  Publier
+                </>
+              )}
             </button>
           )}
         </div>
@@ -846,8 +856,8 @@ function TypeCards({ type, onManga, onStory, onIllustration }: { type: WizardTyp
           }}
         >
           {c.selected && (
-            <span aria-hidden style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
-              ✓
+            <span aria-hidden data-testid="type-card-selected" style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckIcon size={13} />
             </span>
           )}
           <TypeGlyph kind={c.key} />

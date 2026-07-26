@@ -11,6 +11,7 @@ import type {
   UpdateProjectInfoRequest,
 } from '@encre-et-plume/shared';
 import UploadControl from '../UploadControl';
+import { CheckIcon } from '../icons';
 import { updateProjectInfo } from '../../lib/api';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -101,7 +102,12 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
           }}
         >
           {saveState === 'saving' && 'Enregistrement…'}
-          {saveState === 'saved' && 'Enregistré ✓'}
+          {saveState === 'saved' && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              Enregistré
+              <CheckIcon size={13} />
+            </span>
+          )}
           {saveState === 'error' && "L'enregistrement a échoué. Réessayez."}
         </span>
       </div>
@@ -277,7 +283,9 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
             background: 'var(--paper)',
           }}
         >
-          <span style={{ fontSize: 16, color: '#1f8a5b' }}>✓</span>
+          <span style={{ color: '#1f8a5b', display: 'inline-flex' }}>
+            <CheckIcon size={16} />
+          </span>
           <div style={{ fontSize: 13, color: 'var(--ink2)' }}>
             Les modifications sont enregistrées et appliquées automatiquement à la page de l&apos;œuvre.
           </div>

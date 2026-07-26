@@ -37,7 +37,7 @@ import CompareVersionsModal from './CompareVersionsModal';
 import ConfirmDialog from '../projet/ConfirmDialog';
 import OnBrandSelect from '../form/OnBrandSelect';
 import { NEXT_STATUS } from '../revision/shared';
-import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, SaveIcon, CompareIcon } from '../icons';
+import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, SaveIcon, CompareIcon, CheckIcon } from '../icons';
 
 // CS-5 Fb-2 — a comment row's «Correction» tag colours: accent for open, green for resolved.
 const CORRECTION_TAG_GREEN = '#1f8a5b';
@@ -748,11 +748,11 @@ function EditorHeader({
       {/* Item 2 (iter 5) — icon-only Save, co-located with the chapter/page switcher. Accent when there
           are unsaved edits; persists content only (no new version). Ctrl/Cmd-S does the same (see save()). */}
       <SaveButton saveState={saveState} onSave={onSave} canWrite={canWrite} />
-      <span role="status" aria-live="polite" style={{ fontSize: 12, color: saveState === 'error' || saveState === 'dirty' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' || saveState === 'dirty' ? 700 : 500 }}>
+      <span role="status" aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: saveState === 'error' || saveState === 'dirty' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' || saveState === 'dirty' ? 700 : 500 }}>
         {saveState === 'saving'
           ? 'Enregistrement…'
           : saveState === 'saved'
-            ? 'Enregistré ✓'
+            ? <>Enregistré<CheckIcon size={13} /></>
             : saveState === 'dirty'
               ? 'Modifications non enregistrées'
               : saveState === 'error'
@@ -877,7 +877,14 @@ function SharePopover({ pageId }: { pageId: string }) {
             onClick={copyLink}
             style={{ width: '100%', border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 12px', fontSize: 13, fontWeight: 700, background: 'var(--card)', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--ink)' }}
           >
-            {copied ? 'Lien copié ✓' : 'Copier le lien'}
+            {copied ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
+                Lien copié
+                <CheckIcon size={13} />
+              </span>
+            ) : (
+              'Copier le lien'
+            )}
           </button>
         </div>
       )}
@@ -1181,7 +1188,7 @@ function FileDropdown({
                 >
                   <FileTextIcon size={13} />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</span>
-                  {current && <span aria-hidden="true">✓</span>}
+                  {current && <CheckIcon size={13} />}
                 </button>
               );
             })

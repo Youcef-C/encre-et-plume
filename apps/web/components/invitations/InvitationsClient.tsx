@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { InvitationDto, InvitationDirection, InvitationStatus, CreatorRole } from '@encre-et-plume/shared';
 import { listInvitations, respondInvitation } from '../../lib/api';
 import { relativeTime } from '../../lib/notifications';
-import { BrushIcon, PenNibIcon, MailIcon } from '../icons';
+import { BrushIcon, PenNibIcon, MailIcon, CheckIcon, XIcon } from '../icons';
 
 // Inviter's craft -> the complementary craft they invite the recipient to do.
 const CRAFT_VERB: Record<CreatorRole, string> = {
@@ -49,6 +49,9 @@ function StatusBadge({ status }: { status: InvitationStatus }) {
     return (
       <span
         style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
           fontSize: 11,
           fontWeight: 700,
           background: '#1f8a5b',
@@ -59,7 +62,8 @@ function StatusBadge({ status }: { status: InvitationStatus }) {
           whiteSpace: 'nowrap',
         }}
       >
-        ✓ Acceptée
+        <CheckIcon size={12} />
+        Acceptée
       </span>
     );
   }
@@ -67,6 +71,9 @@ function StatusBadge({ status }: { status: InvitationStatus }) {
     return (
       <span
         style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 4,
           fontSize: 11,
           fontWeight: 700,
           background: 'var(--card)',
@@ -77,7 +84,8 @@ function StatusBadge({ status }: { status: InvitationStatus }) {
           whiteSpace: 'nowrap',
         }}
       >
-        ✕ Refusée
+        <XIcon size={12} />
+        Refusée
       </span>
     );
   }

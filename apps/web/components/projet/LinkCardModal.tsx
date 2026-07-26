@@ -5,13 +5,13 @@
 // Clicking an unlinked card → POST /assets/:id/link; clicking a linked one → DELETE …/link?pageId=.
 // MULTI types (scenario/texte/ref) toggle any number of cards on; SINGLE types (dessin/page) replace
 // their single link server-side (the previously-linked row toggles off from the returned linkedPages).
-// Proto modal chrome (3px ink border, radius 12, hard offset shadow, ✕ close), Escape-dismissible.
+// Proto modal chrome (3px ink border, radius 12, hard offset shadow, icon close), Escape-dismissible.
 import { useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetItem, AssetType, PageStage, WorkspacePage } from '@encre-et-plume/shared';
 import { MULTI_LINK_ASSET_TYPES } from '@encre-et-plume/shared';
 import { linkAssetToPage, unlinkAssetFromPage } from '../../lib/api';
-import { XIcon } from '../icons';
+import { XIcon, CheckIcon } from '../icons';
 
 // Small stage label map (mirrors KanbanBoard's private STAGE_META — only the label is needed here).
 const STAGE_LABEL: Record<PageStage, string> = {
@@ -146,8 +146,15 @@ export default function LinkCardModal({ asset, pages, onClose, onLinked }: LinkC
                       {busyId === p.id ? (
                         <span style={{ fontSize: 12, color: 'var(--ink2)' }}>…</span>
                       ) : (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: isLinked ? 'var(--accent)' : 'var(--ink2)' }}>
-                          {isLinked ? '✓ liée' : '＋ lier'}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, color: isLinked ? 'var(--accent)' : 'var(--ink2)' }}>
+                          {isLinked ? (
+                            <>
+                              <CheckIcon size={12} />
+                              liée
+                            </>
+                          ) : (
+                            '＋ lier'
+                          )}
                         </span>
                       )}
                     </button>

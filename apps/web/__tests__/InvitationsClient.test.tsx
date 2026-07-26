@@ -87,7 +87,7 @@ describe('InvitationsClient', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Accepter' }));
 
     expect(api.respondInvitation).toHaveBeenCalledWith('pend', 'accepted');
-    expect(await screen.findByText('✓ Acceptée')).toBeInTheDocument();
+    expect(await screen.findByText('Acceptée')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Accepter' })).not.toBeInTheDocument();
   });
 
@@ -100,7 +100,7 @@ describe('InvitationsClient', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Refuser' }));
 
     expect(api.respondInvitation).toHaveBeenCalledWith('pend', 'declined');
-    expect(await screen.findByText('✕ Refusée')).toBeInTheDocument();
+    expect(await screen.findByText('Refusée')).toBeInTheDocument();
   });
 
   it('links the sender name and avatar to their profile', async () => {

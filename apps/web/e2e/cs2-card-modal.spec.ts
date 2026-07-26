@@ -101,13 +101,13 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
     await expect(modal).toHaveCount(0);
   });
 
-  test('CM-E2: DESCRIPTION autosaves ("Enregistré ✓") and persists on reload/reopen', async ({ page }) => {
+  test('CM-E2: DESCRIPTION autosaves ("Enregistré") and persists on reload/reopen', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}`);
     await page.getByText('Page 1', { exact: true }).click();
     const modal = dialog(page);
     await modal.getByLabel('Description').fill('Une description e2e CS-2.');
-    await expect(modal.getByText('Enregistré ✓')).toBeVisible({ timeout: 5_000 });
+    await expect(modal.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
 
     await page.reload();
@@ -174,7 +174,7 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
 
     // A past date → the card's meta pill renders with the accent (overdue) background.
     await modal.getByLabel('Échéance').fill('2020-01-15');
-    await expect(modal.getByText('Enregistré ✓')).toBeVisible({ timeout: 5_000 });
+    await expect(modal.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
 
     const duePill = page.locator('span[title="Échéance"]');
@@ -185,7 +185,7 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
 
     await page.getByText('Page 1', { exact: true }).click();
     await dialog(page).getByRole('button', { name: 'Retirer' }).click();
-    await expect(dialog(page).getByText('Enregistré ✓')).toBeVisible({ timeout: 5_000 });
+    await expect(dialog(page).getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
     await expect(page.locator('span[title="Échéance"]')).toHaveCount(0);
   });

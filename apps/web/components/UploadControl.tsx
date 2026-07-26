@@ -10,6 +10,7 @@ import {
 } from '@encre-et-plume/shared';
 import { requestUpload, finalizeMedia, getMedia } from '../lib/api';
 import AvatarCropModal from './AvatarCropModal';
+import { CheckIcon } from './icons';
 
 const ALLOWED_TYPES = new Set<string>(UPLOAD_ALLOWED_CONTENT_TYPES);
 const DOCUMENT_TYPES = new Set<string>(DOCUMENT_ALLOWED_CONTENT_TYPES);
@@ -83,7 +84,7 @@ export default function UploadControl({
   const inputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [dragOver, setDragOver] = useState(false);
-  // MC-4X: remember the picked file's name so a document (no image variants) can render "✓ {name}".
+  // MC-4X: remember the picked file's name so a document (no image variants) can render it with the check pictogram.
   const fileNameRef = useRef<string | undefined>(undefined);
   const combined = !!documentKind; // ONE box accepting both families
   const isDocument = DOCUMENT_KINDS.has(kind); // single-kind document box (legacy path)
@@ -417,11 +418,14 @@ export default function UploadControl({
           )}
         </button>
 
-        {/* Side preview — document ready shows "✓ {filename}"; otherwise an image thumbnail from the
+        {/* Side preview — document ready shows the check pictogram + filename; otherwise an image thumbnail from the
             just-uploaded variants, else the currentUrl context. No source → no thumbnail. */}
         {readyIsDocument ? (
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 'none' }}>
-            ✓ {fileNameRef.current ?? 'Document'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 700, color: 'var(--ink)', maxWidth: 220, flex: 'none' }}>
+            <CheckIcon size={13} />
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fileNameRef.current ?? 'Document'}
+            </span>
           </span>
         ) : previewUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */

@@ -63,9 +63,11 @@ describe('CorrectionList', () => {
     expect(screen.queryByText('Dessin')).toBeNull();
   });
 
-  it('renders the "✓ Corrigé" status with the resolving version chip', () => {
+  it('renders the "Corrigé" status pill with the check pictogram (never the "✓" character) and the resolving version chip', () => {
     render(<CorrectionList {...baseProps} items={[mk({ status: 'corrige', resolvedInVersion: 3 })]} />);
-    expect(screen.getByText(/Corrigé/)).toBeTruthy();
+    const pill = screen.getByText('Corrigé');
+    expect(pill).toBeTruthy();
+    expect(pill.querySelector('svg')).toBeTruthy();
     expect(screen.getByText(/v2/)).toBeTruthy();
     expect(screen.getByText(/v3/)).toBeTruthy();
   });

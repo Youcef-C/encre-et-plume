@@ -76,8 +76,8 @@ test.describe('MC-6 "Mes candidatures" — signed in (dedicated mc6-candidatures
     await expect(rows(page).nth(2)).toContainText('Aventure onirique');
 
     await expect(rowByTitle(page, 'Récit fantastique').getByText('● En attente')).toBeVisible();
-    await expect(rowByTitle(page, 'Comédie douce-amère').getByText('✓ Acceptée')).toBeVisible();
-    await expect(rowByTitle(page, 'Aventure onirique').getByText('✕ Refusée')).toBeVisible();
+    await expect(rowByTitle(page, 'Comédie douce-amère').getByText('Acceptée', { exact: true })).toBeVisible();
+    await expect(rowByTitle(page, 'Aventure onirique').getByText('Refusée', { exact: true })).toBeVisible();
 
     // Meta line: direction · genre · owner.
     await expect(

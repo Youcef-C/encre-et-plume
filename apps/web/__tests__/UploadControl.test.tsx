@@ -196,7 +196,7 @@ describe('UploadControl — document kind', () => {
     await waitFor(() => expect(requestUpload).toHaveBeenCalled());
     capturedXHR!.onload?.();
 
-    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(await screen.findByText('scenario.pdf')).toBeInTheDocument();
     await waitFor(() =>
       expect(onUploaded).toHaveBeenCalledWith(expect.objectContaining({ status: 'ready' }), 'scenario.pdf'),
     );
@@ -716,7 +716,7 @@ describe('UploadControl — persistent box + side preview (DR-12 FE-15)', () => 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('document ready keeps "✓ {name}" beside a still-present box (no "Changer")', async () => {
+  it('document ready keeps "{name}" + check pictogram beside a still-present box (no "Changer")', async () => {
     vi.mocked(requestUpload).mockResolvedValue(mockUploadResponse);
     vi.mocked(finalizeMedia).mockResolvedValue({ ...mockMedia, status: 'pending' });
     vi.mocked(getMedia).mockResolvedValue({ ...mockMedia, kind: 'call_document', status: 'ready' });
@@ -728,7 +728,7 @@ describe('UploadControl — persistent box + side preview (DR-12 FE-15)', () => 
     await waitFor(() => expect(requestUpload).toHaveBeenCalled());
     capturedXHR!.onload?.();
 
-    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(await screen.findByText('scenario.pdf')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ajouter un document/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Changer' })).not.toBeInTheDocument();
   });

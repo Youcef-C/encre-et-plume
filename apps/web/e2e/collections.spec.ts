@@ -38,11 +38,11 @@ async function waitUploadReady(page: Page, submitButtonName: string | RegExp) {
 
 // CS-1: the illustration publish flow now lives inside the /creer wizard's Illustration branch, split
 // across Détails (upload + fields) and Soutien. Publishing = "Continuer →" (Détails → Soutien) then
-// the wizard-footer "✓ Publier" (enabled once the upload is ready).
+// the wizard-footer "Publier" (enabled once the upload is ready).
 async function publishFromWizard(page: Page) {
   await page.getByRole('button', { name: /Continuer/ }).click();
-  await waitUploadReady(page, '✓ Publier');
-  await page.getByRole('button', { name: '✓ Publier' }).click();
+  await waitUploadReady(page, 'Publier');
+  await page.getByRole('button', { name: 'Publier', exact: true }).click();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ import {
 import { getMe, getProfile, getProfilePortfolio, applyToCall, updateMyApplication } from '../../lib/api';
 import { ROLE_LABEL } from '../../lib/calls';
 import { useScrollLock } from '../../lib/useScrollLock';
-import { XIcon } from '../icons';
+import { XIcon, CheckIcon } from '../icons';
 import UploadControl from '../UploadControl';
 
 // Same focus-trap pattern as InviteModal / PostCallModal.
@@ -466,8 +466,9 @@ export default function ApplyCallModal({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={s.thumb} alt="Échantillon téléversé" width={40} height={52} style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 3, display: 'block' }} />
                       ) : (
-                        <span style={{ fontSize: 12, fontWeight: 700, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          ✓ {s.name}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, maxWidth: 160 }}>
+                          <CheckIcon size={12} />
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                         </span>
                       )}
                       <button

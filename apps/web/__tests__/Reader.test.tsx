@@ -135,11 +135,14 @@ describe('Reader (DR-4 FE-1)', () => {
     await waitFor(() => expect(screen.getByRole('slider')).toHaveAttribute('aria-valuetext', 'page 1 sur 6'));
   });
 
-  it('QA F1 fix (round 2): "✕ Quitter" is a normal flex child of the topbar\'s tool row, not position:fixed/absolute — it must be structurally impossible for it to overlap a sibling or the site header', async () => {
+  it('QA F1 fix (round 2): the "Quitter" exit link is a normal flex child of the topbar\'s tool row, not position:fixed/absolute — it must be structurally impossible for it to overlap a sibling or the site header', async () => {
     mockReady();
     render(<Reader slug="lames-de-brume" />);
-    await waitFor(() => expect(screen.getByText('✕ Quitter').closest('a')).toBeInTheDocument());
-    const exitLink = screen.getByText('✕ Quitter').closest('a') as HTMLAnchorElement;
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Quitter' })).toBeInTheDocument());
+    const exitLink = screen.getByRole('link', { name: 'Quitter' }) as HTMLAnchorElement;
+    // U-4: the cross is a pictogram (icons.tsx), never the "✕" character.
+    expect(exitLink.querySelector('svg')).toBeTruthy();
+    expect(exitLink.textContent ?? '').not.toMatch(/[✓✔✅✕✖❌✗]/);
     const fullscreenBtn = screen.getByRole('button', { name: /plein écran/i });
 
     // No fixed/absolute coordinate at all - normal document flow (flex-wrap row).
@@ -153,7 +156,7 @@ describe('Reader (DR-4 FE-1)', () => {
   });
 
   // Story update (2026-07-04): the topbar back control returns to the current work's page, not
-  // the catalogue (overrides the prototype's "‹ Catalogue" link). "✕ Quitter" already covered by
+  // the catalogue (overrides the prototype's "‹ Catalogue" link). The "Quitter" link already covered by
   // the QA F1 test above resolves to the same /oeuvre/{slug} destination as a distinct "quit
   // reading" action - this is the one breadcrumb-style back affordance.
   it('the back link returns to the current work\'s page, not the catalogue', async () => {

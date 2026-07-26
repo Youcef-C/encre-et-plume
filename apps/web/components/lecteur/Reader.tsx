@@ -420,7 +420,7 @@ export default function Reader({ slug }: { slug: string }) {
         </>
       ) : (
         <div className="ep-reader-shell" style={{ maxWidth: 1560, margin: '0 auto', padding: '18px 28px 22px', width: '100%' }}>
-          {/* QA F1 fix (round 2): "✕ Quitter" now renders INSIDE Topbar's own flex row (rightmost,
+          {/* QA F1 fix (round 2): the "Quitter" exit link now renders INSIDE Topbar's own flex row (rightmost,
               next to "Plein écran") instead of as a separately positioned element here — a flex
               child can never overlap a sibling or the site header, whereas any position:fixed/
               absolute coordinate is only ever "usually" non-overlapping. See Topbar.tsx. */}

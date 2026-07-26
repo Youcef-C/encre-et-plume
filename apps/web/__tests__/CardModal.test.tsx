@@ -122,14 +122,14 @@ describe('CardModal', () => {
     expect(screen.getByText('COMMENTAIRES')).toBeInTheDocument();
   });
 
-  it('debounce-autosaves the title with one PATCH and shows "Enregistré ✓"', async () => {
+  it('debounce-autosaves the title with one PATCH and shows "Enregistré"', async () => {
     (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail(), title: 'Page 7!' });
     mount();
     const title = await screen.findByLabelText('TITRE');
     await userEvent.type(title, '!');
     await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1));
     expect(api.updatePage).toHaveBeenCalledWith('pg7', { title: 'Page 7!' });
-    expect(await screen.findByText('Enregistré ✓')).toBeInTheDocument();
+    expect(await screen.findByText('Enregistré')).toBeInTheDocument();
   });
 
   it('creates a label with name + palette colour', async () => {

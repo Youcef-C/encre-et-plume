@@ -125,7 +125,7 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     await expect(correctionsColAfter.getByText('Page 1', { exact: true })).toBeVisible();
   });
 
-  test('CS2-E4: INFOS — edit TITRE/SYNOPSIS/HASHTAGS, "Enregistré ✓" appears, values persist on reload; header title updates', async ({ page }) => {
+  test('CS2-E4: INFOS — edit TITRE/SYNOPSIS/HASHTAGS, "Enregistré" appears, values persist on reload; header title updates', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}?tab=infos`);
 
@@ -134,7 +134,7 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     await page.getByLabel('SYNOPSIS').fill('Un synopsis e2e CS-2.');
     await page.getByLabel(/HASHTAGS/).fill('mangaqa e2e');
 
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('#mangaqa')).toBeVisible();
     await expect(page.getByText('#e2e')).toBeVisible();
     // Header title in the workspace shell updates live from the save response.
@@ -149,7 +149,7 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     currentTitle = newTitle;
   });
 
-  test('CS2-E5: COVER — upload via the drop slot shows "Enregistré ✓" and the cover persists on reload (Work.coverImage write)', async ({ page }) => {
+  test('CS2-E5: COVER — upload via the drop slot shows "Enregistré" and the cover persists on reload (Work.coverImage write)', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}?tab=infos`);
 
@@ -157,7 +157,7 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     const fileInput = page.locator('input[type="file"]').first();
     await fileInput.setInputFiles(COVER_FIXTURE);
 
-    await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByAltText("Couverture de l'œuvre")).toBeVisible();
     await expect(page.getByRole('button', { name: 'Retirer la couverture' })).toBeVisible();
 

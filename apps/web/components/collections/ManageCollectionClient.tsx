@@ -23,6 +23,7 @@ import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { coverStyle, COVER_FRAME_HEIGHT } from '../../lib/cover';
 import GenreChip from '../GenreChip';
+import { XIcon } from '../icons';
 import GenreSuggestInput from '../GenreSuggestInput';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
@@ -359,7 +360,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <input aria-label={`Nom du palier ${i + 1}`} value={t.name} onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} placeholder="Nom du palier" style={{ ...inputStyle, flex: 2, minWidth: 120 }} />
               <input aria-label={`Prix mensuel du palier ${i + 1} (€)`} type="number" min={0} step="0.5" value={t.euros} onChange={(e) => setTiers((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))} placeholder="€/mois" style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-              <button type="button" aria-label={`Retirer le palier ${i + 1}`} onClick={() => setTiers((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={smallBtn}>✕</button>
+              <button type="button" aria-label={`Retirer le palier ${i + 1}`} onClick={() => setTiers((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={{ ...smallBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><XIcon size={14} /></button>
             </div>
           ))}
           <button type="button" onClick={() => setTiers((cur) => [...cur, { name: '', euros: '' }])} className="ep-btn-secondary" style={{ ...smallBtn, marginBottom: 12 }}>＋ Ajouter un palier</button>
@@ -371,7 +372,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
             <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <input aria-label={`Titre de l’objectif ${i + 1}`} value={g.title} onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} placeholder="Objectif" style={{ ...inputStyle, flex: 2, minWidth: 120 }} />
               <input aria-label={`Cible de l’objectif ${i + 1} (€)`} type="number" min={0} step="1" value={g.euros} onChange={(e) => setGoals((cur) => cur.map((x, j) => (j === i ? { ...x, euros: e.target.value } : x)))} placeholder="Cible €" style={{ ...inputStyle, flex: 1, minWidth: 90 }} />
-              <button type="button" aria-label={`Retirer l’objectif ${i + 1}`} onClick={() => setGoals((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={smallBtn}>✕</button>
+              <button type="button" aria-label={`Retirer l’objectif ${i + 1}`} onClick={() => setGoals((cur) => cur.filter((_, j) => j !== i))} className="ep-btn-secondary" style={{ ...smallBtn, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><XIcon size={14} /></button>
             </div>
           ))}
           <button type="button" onClick={() => setGoals((cur) => [...cur, { title: '', euros: '' }])} className="ep-btn-secondary" style={smallBtn}>＋ Ajouter un objectif</button>

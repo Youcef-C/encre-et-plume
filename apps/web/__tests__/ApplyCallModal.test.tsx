@@ -197,7 +197,7 @@ describe('ApplyCallModal', () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole('button', { name: 'upload doc' }));
-    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(await screen.findByText('scenario.pdf')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Envoyer ma candidature' }));
     await waitFor(() =>
       expect(api.applyToCall).toHaveBeenCalledWith('call-1', { samples: [{ mediaId: 'media-doc' }] }),
@@ -226,9 +226,9 @@ describe('ApplyCallModal', () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole('button', { name: 'upload doc' }));
-    expect(await screen.findByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(await screen.findByText('scenario.pdf')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Retirer cet échantillon' }));
-    expect(screen.queryByText('✓ scenario.pdf')).not.toBeInTheDocument();
+    expect(screen.queryByText('scenario.pdf')).not.toBeInTheDocument();
     expect(screen.getByText('0/3')).toBeInTheDocument();
   });
 

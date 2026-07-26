@@ -96,7 +96,7 @@ test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B inv
     await login(page, B_EMAIL);
     await page.goto('/invitations');
     await page.getByRole('button', { name: 'Accepter' }).click();
-    await expect(page.getByText('✓ Acceptée')).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText('Acceptée', { exact: true })).toBeVisible({ timeout: 8_000 });
   });
 
   test('CS10-E4: A sees B as Membre (real membership row, defaults: member/0 %/écriture+corrections)', async ({ page }) => {

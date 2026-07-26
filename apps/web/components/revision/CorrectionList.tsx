@@ -11,7 +11,7 @@ import {
   type CorrectionStatus,
 } from '@encre-et-plume/shared';
 import OnBrandSelect from '../form/OnBrandSelect';
-import { TrashIcon } from '../icons';
+import { TrashIcon, CheckIcon } from '../icons';
 import { NEXT_STATUS, statusColor } from './shared';
 
 type StatusFilter = '' | CorrectionStatus;
@@ -97,7 +97,6 @@ export default function CorrectionList({
         {items.map((c) => {
           const n = numberOf(c.id);
           const label = CORRECTION_STATUS_LABELS[c.status];
-          const statusText = c.status === 'corrige' ? `✓ ${label}` : label;
           const selected = selectedId === c.id;
           const canStatus = c.authorId === meId || c.assigneeId === meId;
           const isAuthor = c.authorId === meId;
@@ -153,6 +152,9 @@ export default function CorrectionList({
                     {/* Filled status pill — colour + label (not colour-only), never shrinks. */}
                     <span
                       style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
                         flex: 'none',
                         fontSize: 10,
                         fontWeight: 700,
@@ -166,7 +168,9 @@ export default function CorrectionList({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {statusText}
+                      {/* U-4: the "corrigé" check is a pictogram, never the "✓" character. */}
+                      {c.status === 'corrige' && <CheckIcon size={10} />}
+                      {label}
                     </span>
                   </span>
                   <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)', lineHeight: 1.4 }}>{c.description}</span>

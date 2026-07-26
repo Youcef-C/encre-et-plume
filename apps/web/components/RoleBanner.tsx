@@ -2,6 +2,7 @@
 
 import { useSession } from '../lib/session';
 import { useEffectiveRole } from '../lib/role';
+import { CheckIcon } from './icons';
 
 export default function RoleBanner() {
   const { account } = useSession();
@@ -44,7 +45,8 @@ export default function RoleBanner() {
             padding: '2px 8px',
           }}
         >
-          ✓ compte vérifié
+          <CheckIcon size={12} />
+          compte vérifié
         </span>
       )}
     </div>

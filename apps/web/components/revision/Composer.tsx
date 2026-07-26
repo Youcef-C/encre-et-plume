@@ -5,6 +5,7 @@
 // Dessin "type" row is gone. A correction needs BOTH a drawn region (area) and a description to submit.
 import { useState } from 'react';
 import type { DessinRegion } from '@encre-et-plume/shared';
+import { XIcon } from '../icons';
 
 export interface ComposerProps {
   draftRegion: DessinRegion | null;
@@ -76,9 +77,9 @@ export default function Composer({ draftRegion, onClearRegion, onSubmit, busy, e
             type="button"
             onClick={onClearRegion}
             aria-label="Retirer la zone"
-            style={{ background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+            style={{ background: 'none', border: 'none', color: 'var(--ink2)', cursor: 'pointer', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center' }}
           >
-            ✕
+            <XIcon size={12} />
           </button>
         </div>
       )}

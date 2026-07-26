@@ -355,7 +355,7 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
     await user.click(screen.getByRole('button', { name: 'Accepter la candidature de Léa B.' }));
 
     await waitFor(() => expect(api.decideApplication).toHaveBeenCalledWith('app-1', 'accepted'));
-    expect(await screen.findByText('✓ Acceptée')).toBeInTheDocument();
+    expect(await screen.findByText('Acceptée')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Accepter la candidature/ })).not.toBeInTheDocument();
     const live = screen.getByRole('status', { name: /décision/i });
     expect(live).toHaveTextContent('Candidature de Léa B. acceptée.');
@@ -370,7 +370,7 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Refuser la candidature de Léa B.' }));
     await waitFor(() => expect(api.decideApplication).toHaveBeenCalledWith('app-1', 'rejected'));
-    expect(await screen.findByText('✕ Refusée')).toBeInTheDocument();
+    expect(await screen.findByText('Refusée')).toBeInTheDocument();
     expect(screen.getByRole('status', { name: /décision/i })).toHaveTextContent('Candidature de Léa B. refusée.');
   });
 
@@ -391,7 +391,7 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
   it('renders a resolved (rejected) row with a badge and no action buttons', async () => {
     getList().mockResolvedValue(response([group({ applications: [application({ status: 'rejected' })] })]));
     renderClient();
-    expect(await screen.findByText('✕ Refusée')).toBeInTheDocument();
+    expect(await screen.findByText('Refusée')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Accepter la candidature/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Refuser la candidature/ })).not.toBeInTheDocument();
   });

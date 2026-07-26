@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { updateMyProfile } from '../lib/api';
 import GenreSuggestInput from './GenreSuggestInput';
 import GenreChip from './GenreChip';
+import { CheckIcon } from './icons';
 
 // F-3 — Selectable tag cloud (Genres & affinités).
 // Visitor: read-only filled chips. Owner: add via vocabulary picker, remove via ✕.
@@ -26,6 +27,9 @@ export default function ProfileTags({ tags: initialTags, isOwner }: Props) {
           <span
             key={tag}
             style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
               background: 'var(--accent)',
               color: '#fff',
               border: '2px solid var(--ink)',
@@ -35,7 +39,8 @@ export default function ProfileTags({ tags: initialTags, isOwner }: Props) {
               fontWeight: 700,
             }}
           >
-            {tag} &#10003;
+            {tag}
+            <CheckIcon size={13} />
           </span>
         ))}
       </div>

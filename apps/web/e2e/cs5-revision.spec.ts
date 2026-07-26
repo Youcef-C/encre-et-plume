@@ -120,7 +120,7 @@ async function typeIntoCase(page: Page, no: number, text: string) {
 async function saveDoc(page: Page) {
   await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-  await expect(page.getByText('Enregistré ✓')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
 }
 
 async function pageIdOf(page: Page, title: string): Promise<string> {
@@ -208,7 +208,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     // No correction exists yet on this fresh page — Valider is vacuously ENABLED (all([]).every ⇒ true,
     // per backend-notes D3/"zero corrections = vacuously allowed"); the disabled-while-open case is
     // covered thoroughly in CS5-4 once real corrections exist.
-    const validateBtn = page.getByRole('button', { name: '✓ Valider les modifications' });
+    const validateBtn = page.getByRole('button', { name: 'Valider les modifications', exact: true });
     await expect(validateBtn).toBeVisible();
 
     await expect(page.getByText('v1 · révisée')).toBeVisible({ timeout: 10_000 });
@@ -386,7 +386,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     // (just filed) is invisible here (dessin-only list) but STILL counts toward the gate.
     await page.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
     const dessinRow = page.locator('li').filter({ hasText: 'Agrandir le plan' });
-    const validateBtn = page.getByRole('button', { name: '✓ Valider les modifications' });
+    const validateBtn = page.getByRole('button', { name: 'Valider les modifications', exact: true });
     await expect(validateBtn).toBeDisabled();
 
     // Direct API call while corrections are open → 409 with the unresolved count (≥2: scenario + dessin).
@@ -416,7 +416,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     const toCorrige = patchResp('corrige');
     await stepperOnDessinRow().click(); // en cours → corrigé
     expect((await toCorrige).status()).toBe(200);
-    await expect(dessinRow.getByText('✓ Corrigé')).toBeVisible({ timeout: 10_000 });
+    await expect(dessinRow.getByText('Corrigé', { exact: true })).toBeVisible({ timeout: 10_000 });
 
     // Valider STAYS blocked — the scenario correction (not shown here) is still à corriger.
     await expect(validateBtn).toBeDisabled();

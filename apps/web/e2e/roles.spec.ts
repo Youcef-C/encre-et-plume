@@ -269,7 +269,7 @@ test('FE-AC4: editor banner visible when role simulated as Éditeur', async ({ p
   await expect(page.getByText("Connecté·e en tant qu'Éditeur · Maison partenaire")).toBeVisible();
 });
 
-test('FE-AC6: "✓ compte vérifié" pill ABSENT for unverified editor (verified=false)', async ({
+test('FE-AC6: "compte vérifié" pill ABSENT for unverified editor (verified=false)', async ({
   page,
 }) => {
   await mockLoginAndLandHome(page, 'Unverified Editor', false /* verified */);
@@ -281,7 +281,7 @@ test('FE-AC6: "✓ compte vérifié" pill ABSENT for unverified editor (verified
   // Banner appears
   await expect(page.getByText("Connecté·e en tant qu'Éditeur · Maison partenaire")).toBeVisible();
   // Pill is absent (account.verified === false)
-  await expect(page.getByText(/✓ compte vérifié/i)).not.toBeVisible();
+  await expect(page.getByText(/compte vérifié/i)).not.toBeVisible();
 });
 
 test('FE-AC6: editor banner absent when role is utilisateur', async ({ page }) => {

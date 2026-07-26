@@ -59,8 +59,8 @@ test('MC3-E2E: avatar dropdown → Invitations shows the received inbox', async 
   // A is a dessinateur → invites to "écrire"; three rows total (pending, accepted, declined).
   await expect(page.getByText(/vous invite à écrire/).first()).toBeVisible();
   await expect(page.getByText('● En attente')).toBeVisible();
-  await expect(page.getByText('✓ Acceptée')).toBeVisible();
-  await expect(page.getByText('✕ Refusée')).toBeVisible();
+  await expect(page.getByText('Acceptée', { exact: true })).toBeVisible();
+  await expect(page.getByText('Refusée', { exact: true })).toBeVisible();
 });
 
 test('MC3-E2E: Accepter flips the status (server-side)', async ({ page }) => {
@@ -71,12 +71,12 @@ test('MC3-E2E: Accepter flips the status (server-side)', async ({ page }) => {
   await page.getByRole('button', { name: 'Accepter' }).click();
 
   // Two accepted rows now (the pre-seeded one + the just-accepted). No more pending badge.
-  await expect(page.getByText('✓ Acceptée')).toHaveCount(2, { timeout: 8_000 });
+  await expect(page.getByText('Acceptée', { exact: true })).toHaveCount(2, { timeout: 8_000 });
   await expect(page.getByText('● En attente')).toHaveCount(0);
 
   // Persisted: a reload keeps it accepted.
   await page.reload();
-  await expect(page.getByText('✓ Acceptée')).toHaveCount(2, { timeout: 8_000 });
+  await expect(page.getByText('Acceptée', { exact: true })).toHaveCount(2, { timeout: 8_000 });
   await expect(page.getByRole('button', { name: 'Accepter' })).toHaveCount(0);
 });
 
@@ -87,13 +87,13 @@ test('MC3-E2E: status filter chips filter client-side', async ({ page }) => {
 
   // "Refusées" chip → only the declined row remains.
   await page.getByRole('button', { name: /Refusées/ }).click();
-  await expect(page.getByText('✕ Refusée')).toBeVisible();
-  await expect(page.getByText('✓ Acceptée')).toHaveCount(0);
+  await expect(page.getByText('Refusée', { exact: true })).toBeVisible();
+  await expect(page.getByText('Acceptée', { exact: true })).toHaveCount(0);
 
   // Back to "Toutes".
   await page.getByRole('button', { name: /Toutes/ }).click();
-  await expect(page.getByText('✕ Refusée')).toBeVisible();
-  await expect(page.getByText('✓ Acceptée').first()).toBeVisible();
+  await expect(page.getByText('Refusée', { exact: true })).toBeVisible();
+  await expect(page.getByText('Acceptée', { exact: true }).first()).toBeVisible();
 });
 
 test('MC3-E2E: an invitation notification links to /invitations', async ({ page }) => {

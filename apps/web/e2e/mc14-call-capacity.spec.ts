@@ -9,7 +9,7 @@
  *      call REOPENS it and it accepts applications again.
  *   3. An owner manual close ("Clôturer l'appel") stays closed even if a seat later frees.
  *   4. POST /applications on a closed call -> 409; the open board excludes closed calls.
- *   5. The applicant-side pill shows the decided status ("✓ Acceptée"/"✕ Refusée") instead of
+ *   5. The applicant-side pill shows the decided status ("Acceptée"/"Refusée") instead of
  *      "Candidature envoyée" once decided.
  *
  * Hermeticity: same convention as calls-batch-fixes.spec.ts — every account is a fresh signup, every
@@ -238,7 +238,7 @@ test.describe('MC-14 — non-final accept stays open; MC-6 withdraw of the accep
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
     const row = page.locator('.ep-candidature-row').filter({ hasText: title });
-    await expect(row.getByText('✓ Acceptée')).toBeVisible();
+    await expect(row.getByText('Acceptée', { exact: true })).toBeVisible();
     await row.getByRole('button', { name: 'Retirer' }).click();
     await row.getByRole('group', { name: 'Confirmer le retrait de la candidature' }).getByRole('button', { name: 'Confirmer le retrait' }).click();
     await expect(row).toHaveCount(0, { timeout: 10_000 });
@@ -299,7 +299,7 @@ test.describe('MC-14 — manual close stays closed even when a seat later frees'
     await page.goto('/mes-candidatures');
     await expect(page.getByRole('heading', { name: 'Mes candidatures', level: 1 })).toBeVisible({ timeout: 10_000 });
     const row = page.locator('.ep-candidature-row').filter({ hasText: title });
-    await expect(row.getByText('✓ Acceptée')).toBeVisible();
+    await expect(row.getByText('Acceptée', { exact: true })).toBeVisible();
     await row.getByRole('button', { name: 'Retirer' }).click();
     await row.getByRole('group', { name: 'Confirmer le retrait de la candidature' }).getByRole('button', { name: 'Confirmer le retrait' }).click();
     await expect(row).toHaveCount(0, { timeout: 10_000 });
@@ -328,7 +328,7 @@ test.describe('MC-14 — manual close stays closed even when a seat later frees'
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Criterion 5 — the applicant-side pill shows the decided status ("✓ Acceptée") instead of
+// Criterion 5 — the applicant-side pill shows the decided status ("Acceptée") instead of
 // "Candidature envoyée" once decided. Isolated in its own test: the realistic trigger for an
 // accepted decision is often the SAME accept that auto-closes the call (criterion 1), so this
 // specifically exercises status:'accepted' AND status:'closed' together on the board card.
@@ -336,7 +336,7 @@ test.describe('MC-14 — manual close stays closed even when a seat later frees'
 test.describe('MC-14 — criterion 5: applicant board pill shows the decided status', () => {
   const ts = Date.now();
 
-  test('the accepted applicant sees "✓ Acceptée" (not just "Clôturé") on their own board card after the auto-close', async ({
+  test('the accepted applicant sees "Acceptée" (not just "Clôturé") on their own board card after the auto-close', async ({
     page,
     browser,
   }) => {
@@ -369,7 +369,7 @@ test.describe('MC-14 — criterion 5: applicant board pill shows the decided sta
       // See qa-report.md defect #1: CallBoardCard's `showCandidater = !closed && !call.isOwner` gates
       // the WHOLE applied-pill slot away on a closed call, so this currently fails — the applicant who
       // was just accepted (and whose acceptance caused the auto-close) sees no status pill at all.
-      await expect(ownCard.getByText('✓ Acceptée')).toBeVisible();
+      await expect(ownCard.getByText('Acceptée', { exact: true })).toBeVisible();
     } finally {
       if (callId) await cleanupCall(ownerPage, callId);
       await ownerCtx.close();

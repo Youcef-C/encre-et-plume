@@ -151,7 +151,7 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
 
     // Diego S. — already resolved on load: badge only, no actions.
     const diego = rowByApplicant(page, 'Diego S.');
-    await expect(diego.getByText('✕ Refusée')).toBeVisible();
+    await expect(diego.getByText('Refusée', { exact: true })).toBeVisible();
     await expect(diego.getByRole('button', { name: /Accepter|Refuser/ })).toHaveCount(0);
   });
 
@@ -295,7 +295,7 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
 
     const lea = rowByApplicant(page, 'Léa B.');
     await lea.getByRole('button', { name: 'Accepter la candidature de Léa B.' }).click();
-    await expect(lea.getByText('✓ Acceptée')).toBeVisible({ timeout: 10_000 });
+    await expect(lea.getByText('Acceptée', { exact: true })).toBeVisible({ timeout: 10_000 });
     // Accepter/Refuser are gone (a decision is final) — MC-7 amendment (2026-07-10): "Retirer" now
     // stays available on every row regardless of status, so the row isn't buttonless anymore.
     await expect(lea.getByRole('button', { name: /Accepter|Refuser/ })).toHaveCount(0);
@@ -304,7 +304,7 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
 
     const noe = rowByApplicant(page, 'Noé P.');
     await noe.getByRole('button', { name: 'Refuser la candidature de Noé P.' }).click();
-    await expect(noe.getByText('✕ Refusée')).toBeVisible({ timeout: 10_000 });
+    await expect(noe.getByText('Refusée', { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(noe.getByRole('button', { name: /Accepter|Refuser/ })).toHaveCount(0);
     await expect(noe.getByRole('button', { name: 'Retirer la candidature de Noé P.' })).toBeVisible();
     await expect(page.getByRole('status', { name: /décision/i })).toHaveText('Candidature de Noé P. refusée.');
@@ -314,9 +314,9 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     await expect(page.getByRole('heading', { name: 'Mes appels à projets', level: 1 })).toBeVisible({
       timeout: 10_000,
     });
-    await expect(rowByApplicant(page, 'Léa B.').getByText('✓ Acceptée')).toBeVisible();
-    await expect(rowByApplicant(page, 'Noé P.').getByText('✕ Refusée')).toBeVisible();
-    await expect(rowByApplicant(page, 'Diego S.').getByText('✕ Refusée')).toBeVisible();
+    await expect(rowByApplicant(page, 'Léa B.').getByText('Acceptée', { exact: true })).toBeVisible();
+    await expect(rowByApplicant(page, 'Noé P.').getByText('Refusée', { exact: true })).toBeVisible();
+    await expect(rowByApplicant(page, 'Diego S.').getByText('Refusée', { exact: true })).toBeVisible();
     // All 3 rows now resolved — no Accepter/Refuser anywhere on the page.
     await expect(page.getByRole('button', { name: /Accepter la candidature|Refuser la candidature/ })).toHaveCount(0);
   });

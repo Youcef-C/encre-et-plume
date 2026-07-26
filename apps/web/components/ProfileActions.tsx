@@ -8,7 +8,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { AccountSummary, ConnectionState, ProfileResponse, ApiError } from '@encre-et-plume/shared';
-import { StarIcon } from './icons';
+import { StarIcon, CheckIcon } from './icons';
 import InviteModal, { type InviteRecipient } from './collab/InviteModal';
 import OverflowMenu, { MenuItem } from './OverflowMenu';
 import BlockConfirmModal from './blocks/BlockConfirmModal';
@@ -24,7 +24,7 @@ function HoverSwapButton({
   onClick,
   restStyle,
 }: {
-  restLabel: string;
+  restLabel: React.ReactNode;
   hoverLabel: string;
   ariaLabel: string;
   onClick: () => void;
@@ -44,6 +44,10 @@ function HoverSwapButton({
       onBlur={() => setActive(false)}
       className="ep-btn-secondary"
       style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 5,
         fontSize: 13,
         padding: '7px 14px',
         minWidth: 150,
@@ -196,7 +200,12 @@ export default function ProfileActions({
         // connected — single button: "Connecté" → "Se déconnecter" on hover (click disconnects).
         return (
           <HoverSwapButton
-            restLabel="✓ Connecté"
+            restLabel={
+              <>
+                <CheckIcon size={13} />
+                Connecté
+              </>
+            }
             hoverLabel="Se déconnecter"
             ariaLabel={`Se déconnecter de ${profile.displayName}`}
             onClick={handleDisconnect}

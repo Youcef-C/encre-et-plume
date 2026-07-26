@@ -216,9 +216,9 @@ describe('PostCallModal', () => {
     const user = userEvent.setup();
     render(<PostCallModal onClose={vi.fn()} onCreated={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'upload doc' }));
-    expect(screen.getByText('✓ scenario.pdf')).toBeInTheDocument();
+    expect(screen.getByText('scenario.pdf')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Retirer le document 1' }));
-    expect(screen.queryByText('✓ scenario.pdf')).not.toBeInTheDocument();
+    expect(screen.queryByText('scenario.pdf')).not.toBeInTheDocument();
   });
 
   it('submits sampleMediaIds and documentMediaIds in the body', async () => {

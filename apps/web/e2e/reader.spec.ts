@@ -111,7 +111,7 @@ test.describe('Lecteur — manga reader', () => {
 
   test('dark stage renders with Quitter / Plein écran, chapters aside, and reactions aside', async ({ page }) => {
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
-    await expect(page.getByRole('link', { name: '✕ Quitter' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Quitter', exact: true })).toBeVisible();
     // Accessible name comes from aria-label ("Passer en plein écran"), which takes precedence
     // over the visible "⛶ Plein écran" text per ARIA name computation — match case-insensitively.
     await expect(page.getByRole('button', { name: /plein écran/i })).toBeVisible();
@@ -198,7 +198,7 @@ test.describe('Lecteur — manga reader', () => {
   });
 
   // Story update (2026-07-04): back returns to the current work's page, not the catalogue -
-  // overrides the prototype's "‹ Catalogue" link ("✕ Quitter" already covers the same
+  // overrides the prototype's "‹ Catalogue" link ("Quitter" already covers the same
   // destination as a distinct "quit reading" action, verified by the AABB tests below).
   test('the back link returns to the current work\'s page, not the catalogue', async ({ page }) => {
     await page.goto('/lecteur/lames-de-brume?chapitre=1');
@@ -282,7 +282,7 @@ test.describe('Lecteur — manga reader', () => {
 
   // QA F1 regression, round 2: a coordinate-based fix (position:absolute inside the stage) only
   // moved the collision around - the pill then landed on top of "Plein écran" at 1280px and the
-  // chapter-title dropdown at 375px. Structural fix: "✕ Quitter" is now a normal flex child of
+  // chapter-title dropdown at 375px. Structural fix: "Quitter" is now a normal flex child of
   // Topbar's tool row (rightmost, next to "Plein écran"), so it is laid out side by side with its
   // siblings instead of floating over them - overlap is impossible by construction, not just by
   // coordinate luck. Verify pairwise non-intersection of all three controls at the widths QA used.
@@ -313,11 +313,11 @@ test.describe('Lecteur — manga reader', () => {
   });
 
   for (const width of [375, 1280]) {
-    test(`"✕ Quitter", "Plein écran", and the chapter dropdown never overlap at ${width}px`, async ({ page }) => {
+    test(`"Quitter", "Plein écran", and the chapter dropdown never overlap at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/lecteur/lames-de-brume?chapitre=1');
 
-      const quitter = page.getByRole('link', { name: '✕ Quitter' });
+      const quitter = page.getByRole('link', { name: 'Quitter', exact: true });
       const fullscreenBtn = page.getByRole('button', { name: /plein écran/i });
       const chapterDropdown = page.getByRole('button', { name: 'Lames de Brume · Ch. 1' });
       await expect(quitter).toBeVisible();
@@ -337,7 +337,7 @@ test.describe('Lecteur — manga reader', () => {
       expect(boxesIntersect(quitterBox!, dropdownBox!)).toBe(false);
       expect(boxesIntersect(fullscreenBox!, dropdownBox!)).toBe(false);
 
-      // Also still true: "✕ Quitter" never sits on top of the persistent site header, and the
+      // Also still true: "Quitter" never sits on top of the persistent site header, and the
       // header's own sign-in control stays genuinely clickable (actionability fails if covered).
       const header = page.getByRole('banner');
       const headerBox = await header.boundingBox();
@@ -373,7 +373,7 @@ test.describe('Lecteur — Plein écran (immersive) mode', () => {
 
     await expect(page.getByText('Chapitres')).not.toBeVisible();
     await expect(page.getByText('Réactions')).not.toBeVisible();
-    await expect(page.getByRole('link', { name: '✕ Quitter' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Quitter', exact: true })).not.toBeVisible();
 
     const bar = page.getByRole('toolbar', { name: /plein écran/i });
     await expect(bar).toBeVisible();
@@ -399,7 +399,7 @@ test.describe('Lecteur — Plein écran (immersive) mode', () => {
     await bar.getByRole('button', { name: 'Quitter le plein écran' }).click();
     await expect(page.getByText('Chapitres')).toBeVisible();
     await expect(page.getByText('Réactions')).toBeVisible();
-    await expect(page.getByRole('link', { name: '✕ Quitter' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Quitter', exact: true })).toBeVisible();
   });
 
   test('the bottom bar auto-hides after ~2.8s idle and re-reveals on pointer move', async ({ page }) => {
