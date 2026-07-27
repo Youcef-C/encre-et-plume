@@ -17,7 +17,7 @@
     "@encre-et-plume/shared": "workspace:*",
     "@sentry/nextjs": "^10.68.0",
     "@tiptap/core": "^3.27.4",
-    "@tiptap/extension-collaboration": "^3.27.4",
+    "@tiptap/extension-collaboration": "^3.29.0",
     "@tiptap/extension-collaboration-caret": "^3.27.4",
     "@tiptap/extension-highlight": "^3.27.4",
     "@tiptap/extension-text-align": "^3.27.4",
