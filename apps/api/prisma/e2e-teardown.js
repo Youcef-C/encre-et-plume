@@ -122,6 +122,22 @@ async function main() {
   await prisma.work.deleteMany({ where: { slug: 'e2e-cs12-carnet' } });
   await prisma.illustration.deleteMany({ where: { id: { startsWith: 'e2e-cs12-illu' } } });
 
+  // 4h-bis. DR-12: the collection specs create their collections through the API as a SEEDED account
+  // (Yuki), so nothing above ever swept them and one `qa-*-collection-<ts>` Work per spec accumulated
+  // every run — 13 of them by the CS-7 follow-up, which pushed the seeded "Carnet d'Encre" off the
+  // first Galerie « Collections » page and made collections.spec E6 fail on all 3 attempts. Scoped to
+  // format 'Illustration(s)' on purpose: a `qa-` Manga/Histoire Work can be a Project's Work, and
+  // `Project.workId` FK-restricts the delete. Membership rows cascade with the Work; the creator row
+  // (the collection is created by a SEEDED account, so 4f leaves it) FK-restricts and goes first.
+  // Best-effort: an unexpected dependent must not abort the rest of this teardown.
+  try {
+    const scratchCollections = { slug: { startsWith: 'qa-' }, format: 'Illustration(s)' };
+    await prisma.workCreator.deleteMany({ where: { work: scratchCollections } });
+    await prisma.work.deleteMany({ where: scratchCollections });
+  } catch (err) {
+    process.stderr.write(`[e2e-teardown] qa- collection sweep skipped: ${err}\n`);
+  }
+
   // 4i. F-3: MC-5 Application rows FK-restrict Account deletion (applicantId). The re-seed on the
   // next run recreates the F3_STALE_ROLE fixture's application; the standalone (authorId: null) call
   // itself has no FK to a seeded account, so it doesn't need cleanup here.

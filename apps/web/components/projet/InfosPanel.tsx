@@ -4,7 +4,7 @@
 // induced COVER drop (story note 2026-07-09: the drawn "Déposez la couverture" slot reused here via
 // the F-10 UploadControl). Debounced field-level auto-save; the green ✓ banner doubles as the
 // "Enregistré ✓" indicator. Reviews render read-only (moderation buttons are AD-5).
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   MediaResponse,
   ProjectWorkspaceResponse,
@@ -68,6 +68,26 @@ export default function InfosPanel({ slug, workspace, readOnly, onTitleSaved }: 
       timerRef.current = setTimeout(() => void flush(), 600);
     },
     [flush],
+  );
+
+  // Same data-loss path CardModal fixed in R7-2: `flush` only ever ran from the debounce timer, so
+  // an edit made inside the 600 ms window was thrown away when the panel went (switching tab or
+  // navigating away unmounts it). Unmount now cancels the timer and runs the SAME flush — never a
+  // second save path — and `flush` no-ops on an empty delta, so a debounce that already fired can't
+  // double-save. `flush` is read from a ref because the cleanup runs once with a stale closure.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        void flushRef.current();
+      }
+    },
+    [],
   );
 
   const chips = normalizeHashtags(tagsText);

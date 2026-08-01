@@ -32,6 +32,12 @@ function setup(over: Partial<ProjectWorkspaceResponse> = {}) {
   return user;
 }
 
+function setupWithUnmount(over: Partial<ProjectWorkspaceResponse> = {}) {
+  const user = userEvent.setup();
+  const { unmount } = render(<InfosPanel slug="nuit-blanche" workspace={makeWorkspace(over)} />);
+  return { user, unmount };
+}
+
 const mockUpdate = () => api.updateProjectInfo as ReturnType<typeof vi.fn>;
 const lastCall = () => mockUpdate().mock.calls.at(-1)?.[1];
 
@@ -47,6 +53,26 @@ describe('InfosPanel', () => {
     await waitFor(() => expect(api.updateProjectInfo).toHaveBeenCalledTimes(1));
     expect(mockUpdate().mock.calls[0][1]).toEqual({ title: 'Nuit Blanche!' });
     expect(await screen.findByText('Enregistré')).toBeInTheDocument();
+  });
+
+  // ── Same data-loss class as CardModal R7-2 · leaving the Infos tab unmounts this panel ──
+  // The assertions are SYNCHRONOUS right after `unmount()`: waiting would let the pending debounce
+  // fire on its own and hide the bug the fix exists for.
+  describe('pending autosave on unmount', () => {
+    it('flushes a pending edit when the panel unmounts inside the debounce window', async () => {
+      const { user, unmount } = setupWithUnmount();
+      await user.type(screen.getByLabelText('TITRE'), '!');
+      unmount();
+      expect(api.updateProjectInfo).toHaveBeenCalledWith('nuit-blanche', { title: 'Nuit Blanche!' });
+    });
+
+    it('does not save twice when the debounce already fired before the unmount', async () => {
+      const { user, unmount } = setupWithUnmount();
+      await user.type(screen.getByLabelText('TITRE'), '!');
+      await waitFor(() => expect(api.updateProjectInfo).toHaveBeenCalledTimes(1));
+      unmount();
+      expect(api.updateProjectInfo).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('blocks the save and shows an alert when the title is emptied', async () => {
