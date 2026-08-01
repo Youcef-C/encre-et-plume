@@ -5,14 +5,6 @@ chain: **Find a partner → Create together → Publish & be read → Get scoute
 Reader (lecteur·rice), Writer (scénariste), Illustrator (dessinateur·rice), Publisher/Editor (verified
 `editor`), Editorial staff (`maintainer`), Admin.
 
-## Tech stack
-- **Web:** Next.js (App Router, React/TypeScript) + Tailwind CSS — `apps/web`.
-- **API:** NestJS (REST + WebSocket gateway) — `apps/api`.
-- **DB:** PostgreSQL via Prisma. **Cache / sessions / pub-sub:** Redis (via `ioredis`) — back rate-limiting, token/session denylists, feed & match caches, and WS fan-out here. **Payments:** Stripe.
-- **Local infra:** `docker-compose.yml` at the root runs Postgres + Redis for dev/CI; connection via `DATABASE_URL` / `REDIS_URL`.
-- **Tests:** Jest (API), Vitest + React Testing Library (web units), Playwright (e2e).
-- **Monorepo:** pnpm workspaces + Turborepo; shared TS contracts in `packages/shared`.
-
 ## Scaling & reliability (target: tens of thousands of users — see `ARCHITECTURE.md`)
 - **Modular monolith, NOT microservices.** Keep clean module boundaries per domain; scale by running N
   stateless instances behind a load balancer. Don't split services preemptively — only if a measured
@@ -38,13 +30,6 @@ Reader (lecteur·rice), Writer (scénariste), Illustrator (dessinateur·rice), P
   secrets/PII (RGPD).
 
 ## Repo layout
-```
-apps/web/        # Next.js frontend
-apps/api/        # NestJS backend (REST + WS, Prisma)
-packages/shared/ # shared types / API contracts (FE and BE agree here)
-user-stories/    # the product backlog — the spec the pipeline implements
-.claude/         # agents, the /build-story command, pipeline scratch, settings
-```
 The monorepo **root config is already provided** (`package.json`, `pnpm-workspace.yaml`, `turbo.json`,
 `tsconfig.base.json`, `.nvmrc` = Node 24, `.gitignore`, `.github/` CI/CD). The pipeline's Manager adds
 `apps/` and `packages/` into this existing skeleton on the first `/build-story` run — it must not clobber

@@ -63,9 +63,13 @@ Consume your own `backend-notes.md` (real endpoints/shapes — do not invent con
 The screen must be a faithful **replica** of the prototype, NOT an approximation and NOT your own design.
 Source of truth: `Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`.
 
-1. Find your screen's section: grep the file for its banner comment `<!-- ============ NAME ============ -->`
-   (e.g. `PROFIL`, `GALERIE`, `ŒUVRE`, `CLASSEMENT`, `MESSAGES`, `TROUVER`, `ACCUEIL`) or its
-   `data-screen="<key>"`. The global header is the `TOP NAV` section. Read that WHOLE section.
+1. Find your screen's section: `grep -n '<!-- =\{4,\}'` the file to list every banner comment
+   `<!-- ============ NAME ============ -->` with its line number (e.g. `PROFIL`, `GALERIE`, `ŒUVRE`,
+   `CLASSEMENT`, `MESSAGES`, `TROUVER`, `ACCUEIL`); the global header is the `TOP NAV` section. Your
+   section runs from its banner to the next one. **Read ONLY that line range** (`Read` with
+   `offset`/`limit`) — the prototype is one enormous HTML file and reading it whole blows the context for
+   no gain. Same for `TOP NAV` when you need the header. Never `cat` it, never read it unbounded, and
+   don't re-read a section you already have.
 2. Replicate it exactly: same DOM structure/order, same components and controls, the same nav items / icons
    / glyphs, the exact inline-style values (paddings, `3px solid var(--ink)` borders, radii, hard offset
    shadows `5px 5px 0 var(--shadow)`, halftone dot avatars), and **verbatim French copy**. Do NOT invent

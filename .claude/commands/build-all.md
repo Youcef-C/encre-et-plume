@@ -24,11 +24,12 @@ Do this in the main thread; keep your own context small (work from file paths, n
 Skip any story already marked `passed` in `_batch.json`, or whose `.claude/pipeline/<epic>/<ID>/state.json` has
 `verdict: "PASS"`. This makes re-running `/build-all` resume where it left off instead of redoing work.
 
-## 2 · Per story — run the /build-story loop
-For each remaining story **in order**, execute the `/build-story <ID>` playbook
-(`.claude/commands/build-story.md`): Manager → Full-Stack Dev → QA → Reviewer, looping back to the
-Manager on a blocking FAIL, capped at 3 rounds. Announce each story as you start it (e.g.
-"[3/65] DR-3 — Work page…").
+## 2 · Per story — run the loop yourself
+For each remaining story **in order**, run the `/build-story <ID>` loop
+(`.claude/commands/build-story.md`) — Manager → Full-Stack Dev → QA → Reviewer, looping back to the Manager
+on a blocking FAIL, capped at 3 rounds. Manager and Reviewer run inline in this thread; Dev and QA are
+dispatched as subagents, which also keeps their (large) contexts out of this long batch. Announce each story
+and each stage as you start it (e.g. "[3/65] DR-3 — Work page… · Round 1 · Backend").
 
 Then record the outcome in `_batch.json`:
 - **PASS** → `passed`. **Commit & push the completed feature** before moving on. FIRST, run the full CI
@@ -59,6 +60,8 @@ and will retry the failed/skipped ones (after they address the blockers).
 
 ## Rules
 - One story at a time, in dependency order — never run stories concurrently (they share the codebase).
+- Dev and QA are subagents; you execute Manager and Reviewer inline. Read the files a stage actually needs
+  and keep the rest at path level — this context has to survive dozens of stories.
 - This is a long, expensive run (dozens of stories × up to 3 rounds each). Surface progress continuously
   so it's followable and interruptible; the ledger makes any interruption resumable.
 - Don't lower the bar to get through faster — each story still has to pass the Reviewer gate.

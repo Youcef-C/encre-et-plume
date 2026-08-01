@@ -1,11 +1,25 @@
 ---
-description: Implement one Encre & Plume user story end-to-end through the multi-agent pipeline — Manager → Full-Stack Dev → QA → Reviewer — looping back to the Manager on a failed review until it passes (max 3 rounds).
+description: Implement one Encre & Plume user story end-to-end through the four-stage pipeline — Manager → Full-Stack Dev → QA → Reviewer, with Manager/Reviewer inline and Dev/QA dispatched — looping back to the Manager on a failed review until it passes (max 3 rounds).
 argument-hint: <story-id | epic-folder>   e.g. F-1  or  00-foundation
 disable-model-invocation: true
 ---
 
-You are the **orchestrator** for the Encre & Plume dev pipeline. Run this loop yourself in the main
-thread (you hold the loop state; the agents start fresh and hand off through files on disk). Target: `$1`.
+You run the Encre & Plume dev pipeline — Manager → Full-Stack Dev → QA → Reviewer. Target: `$1`.
+
+**Manager and Reviewer run inline in this main thread**: read that role's instructions in
+`.claude/agents/<role>.md`, follow them as your own instructions, and write the stage's artifact to disk
+before moving on. Both mostly read artifacts you already hold, and both want the strongest model — planning
+sets the global view, reviewing is the gate — so a subagent would only pay to re-read what you have.
+
+**The Full-Stack Dev and QA are dispatched as subagents.** The Dev is the context you don't want to keep:
+it reads the prototype and rewrites app files over many turns, and none of that has to live in this thread
+afterwards — `backend-notes.md` + `frontend-notes.md` are all the later stages need. QA is dispatched
+because it runs on a cheaper model (`model: sonnet`) and its work — running suites, grading criteria
+against the plan — doesn't need this thread's context, just the files.
+
+Wear one hat at a time. Each inline stage works from the artifacts on disk — the plan, the QA report — not
+from your memory; that's what keeps the Reviewer honest. Review as the Reviewer would and let a real blocker
+FAIL even though you planned it.
 
 ## 0 · Resolve & init
 - If `$1` is an epic folder (e.g. `00-foundation`), list its `*.md` stories (skip `_epic.md`), order by
@@ -19,21 +33,39 @@ thread (you hold the loop state; the agents start fresh and hand off through fil
   (per `CLAUDE.md`) before planning.
 
 ## 1 · Manager  (loop entry — re-enters here on a failed review)
-Dispatch the **project-manager** agent. Pass: the story file path, the pipeline dir
-`.claude/pipeline/$1/`, and — **only when `iteration > 1`** — point it at `review.md` and `qa-report.md`
-so it revises the plan and adds a "Changes this round" section. Wait until `plan.md` exists.
+Follow `.claude/agents/project-manager.md` against the story file. On `iteration > 1`, first read
+`review.md` and `qa-report.md` and fold the feedback in, adding a "Changes this round" section. Write
+`plan.md`.
 
-## 2 · Full-Stack Dev
-Dispatch the **fullstack-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md`. It builds
-the backend slice first, then the frontend against those real contracts, and writes BOTH notes files. Wait
-for `backend-notes.md` **and** `frontend-notes.md` (both must exist before QA).
+**Plan pre-flight — clear this before dispatching the Dev.** A blocking FAIL re-runs Manager + Dev + QA +
+Reviewer, so a round costs far more than getting the plan right. These are what actually fail the gate here;
+each must be answered in `plan.md` (a deliberate "N/A because …" is a valid answer, silence is not):
+- **DELETE exists.** For every resource the story lets users create: Create, Read/list, Update **and
+  Delete** — route + server-side authz ([[F-2]]) + FE affordance (Delete gets a confirmation step) + a test.
+  Delete is the one that gets dropped.
+- **The prototype section is named**, by banner + line range, for every screen the story touches — plus any
+  **induced deviation** written down with its reason, so QA and the Reviewer grade the deviation.
+- **Design-system rules that keep biting:** buttons use one shared `.ep-btn-*` intent class (destructive →
+  `danger`), never inline colors; no emojis and no literal `✓`/`✕` — icons from `components/icons.tsx`; no
+  bare native checkbox/select — `OnBrand*`; genre/tag entry via the shared vocabulary; page wrappers paint
+  no `background`.
+- **All three breakpoints** (~375 / ~768 / ~1280) are in the plan's frontend tasks, not assumed.
+- **Every list endpoint is paginated + indexed**, no N+1; any user-authored HTML reaching an `innerHTML`
+  sink is server-side sanitized.
+- **Acceptance checklist** maps each story criterion to the test that proves it.
 
-## 4 · QA
-Dispatch the **qa-test** agent. Pass the story path + `plan.md` + the two notes files. Wait for `qa-report.md`.
+## 2 · Full-Stack Dev  (dispatched)
+Dispatch the **fullstack-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md` — paths
+only, it reads from disk. It builds the backend slice first, then the frontend against those real
+contracts, and writes BOTH notes files. Wait for `backend-notes.md` **and** `frontend-notes.md`.
+
+## 4 · QA  (dispatched)
+Dispatch the **qa-test** agent. Pass the story path + `plan.md` + the two notes files — paths only. Wait
+for `qa-report.md`, then read it; that report (not the agent's chat summary) is what the Reviewer grades.
 
 ## 5 · Reviewer  (the gate)
-Dispatch the **reviewer** agent. Pass the story path + `plan.md` + `qa-report.md`. Read its `review.md`
-and the `verdict` in `state.json`.
+Follow `.claude/agents/reviewer.md` against the story + `plan.md` + `qa-report.md` + the diff. Write
+`review.md` and the `verdict` in `state.json`.
 
 ## 6 · Gate
 - **VERDICT: PASS** → the story is done. Summarize to the user: what was built (key files/endpoints/
@@ -46,15 +78,18 @@ and the `verdict` in `state.json`.
   blocking findings and the artifact paths (`.claude/pipeline/$1/`) so they can decide. Never loop indefinitely.
 
 ## Rules
-- Dispatch agents **one at a time, in order**. The Full-Stack Dev builds backend-before-frontend internally
-  so the UI binds to real contracts. All failures route back through the Manager — agents never call each
-  other directly.
+- Run the stages **one at a time, in order** (Manager + Reviewer inline, Dev + QA dispatched). Backend goes
+  before frontend so the UI binds to real contracts. All failures route back through the Manager stage,
+  never stage-to-stage.
+- Dispatched agents get **file paths, not pasted contents** — they read from disk.
 - **CRUD completeness:** when a story introduces a resource users can create/edit, the plan AND the
   implementation must cover its whole lifecycle — Create, Read/list, Update, **and Delete** — each with its
   route + authz ([[F-2]]), FE affordance (Delete needs a confirmation step), and a test, unless the story
   explicitly excludes one. **DELETE is the operation most often dropped** — confirm it's present (or
   scoped-out on purpose) before the gate, not after.
-- Keep your own context small: pass agents **file paths**, not pasted file contents; they read from disk.
-- Between stages, sanity-check the expected artifact was actually written before proceeding; if an agent
-  failed to produce its file, report it rather than continuing blindly.
+- Keep context workable: read what a stage actually needs, not everything; the artifacts on disk are the
+  memory, so you can stay narrow and re-read a file when you need it again.
+- **Never read the prototype HTML whole** — it's one enormous file. `grep -n '<!-- =\{4,\}'` for the banner
+  line numbers, then `Read` only your section's range (`offset`/`limit`). Applies to every stage.
+- Between stages, sanity-check the expected artifact was actually written before proceeding.
 - Announce each stage to the user as you go (e.g. "Round 1 · Backend…") so the run is followable.
