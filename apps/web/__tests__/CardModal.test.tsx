@@ -44,6 +44,7 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
     chapterId: 'c1',
     title: 'Page 7',
     stage: 'scenario',
+    position: 0,
     fileTags: [],
     linkedFileIds: [],
     linkedFiles: [],
@@ -120,6 +121,60 @@ describe('CardModal', () => {
     expect(screen.getByText('COLONNE')).toBeInTheDocument();
     expect(screen.getByText('CHECKLIST')).toBeInTheDocument();
     expect(screen.getByText('COMMENTAIRES')).toBeInTheDocument();
+  });
+
+  // ── R8-1 · PLACEMENT — define where the card sits, keyboard path for the strip's drag ──
+  describe('PLACEMENT field (R8-1)', () => {
+    /** The card's chapter, four cards, the edited one (pg7) third; the second is a double. */
+    const siblings = [
+      { id: 'a', chapterId: 'c1', position: 0, fileTags: [] },
+      { id: 'b', chapterId: 'c1', position: 1, fileTags: ['double'] },
+      { id: 'pg7', chapterId: 'c1', position: 2, fileTags: [] },
+      { id: 'd', chapterId: 'c1', position: 3, fileTags: [] },
+      { id: 'other', chapterId: 'c2', position: 0, fileTags: [] }, // another chapter — never counted
+    ] as React.ComponentProps<typeof CardModal>['pages'];
+
+    it('shows the card slot and the page numbers it derives, doubles counted twice', async () => {
+      mount({ position: 2 }, { pages: siblings });
+      const field = await screen.findByLabelText('Placement');
+      expect(field).toHaveValue(3); // third card of the chapter
+      // a=1, b=2-3 (double), pg7=4, d=5 → the chapter is 5 pages long.
+      expect(screen.getByText('Page 4 sur 5')).toBeInTheDocument();
+    });
+
+    it('announces BOTH pages when the card itself is a double', async () => {
+      mount({ position: 2, fileTags: ['double'] }, { pages: siblings });
+      expect(await screen.findByText('Pages 4–5 sur 6')).toBeInTheDocument();
+    });
+
+    it('patches the new 1-based slot on commit', async () => {
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail({ position: 0 }) });
+      const { onPageChange } = mount({ position: 2 }, { pages: siblings });
+      const field = await screen.findByLabelText('Placement');
+      await userEvent.clear(field);
+      await userEvent.type(field, '1{Enter}');
+      await waitFor(() => expect(api.updatePage).toHaveBeenCalledWith('pg7', { position: 1 }));
+      expect(onPageChange).toHaveBeenCalled();
+    });
+
+    it('does not fire when the slot is unchanged', async () => {
+      mount({ position: 2 }, { pages: siblings });
+      const field = await screen.findByLabelText('Placement');
+      await userEvent.click(field);
+      await userEvent.tab();
+      expect(api.updatePage).not.toHaveBeenCalled();
+    });
+
+    it('is read-only for a viewer without « Écriture »', async () => {
+      mount({ position: 2 }, { pages: siblings, readOnly: true });
+      expect(await screen.findByLabelText('Placement')).toHaveAttribute('readonly');
+    });
+
+    it('is hidden when the board did not pass the chapter cards', async () => {
+      mount({ position: 2 });
+      await screen.findByLabelText('TITRE');
+      expect(screen.queryByLabelText('Placement')).toBeNull();
+    });
   });
 
   // ── R2-5 · move a card between chapters (the way OUT of "Sans chapitre") ────

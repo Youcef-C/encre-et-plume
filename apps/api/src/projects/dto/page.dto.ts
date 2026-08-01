@@ -1,4 +1,4 @@
-import { IsArray, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import type {
   CreatePageRequest,
   PageFileTag,
@@ -37,6 +37,13 @@ export class UpdatePageDto implements Omit<UpdatePageRequest, 'chapterId'> {
   @IsOptional()
   @IsString()
   chapterId?: string | null;
+
+  // R8-1 — PLACEMENT: a 1-based slot. The service clamps out-of-range values (a drag or a typed
+  // number races the sibling list), so only the type and the floor are enforced here.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  position?: number;
 
   @IsOptional()
   @IsArray()

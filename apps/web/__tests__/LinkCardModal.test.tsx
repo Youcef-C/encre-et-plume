@@ -17,6 +17,7 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     chapterId: 'c1',
     title: 'Page',
     stage: 'scenario',
+    position: 0,
     fileTags: [],
     linkedFileIds: [],
     linkedFiles: [],

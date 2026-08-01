@@ -1847,19 +1847,17 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-group-cell-label { display: none; }
 
 /* N7 — the visual pill stays 34×20, the hit area is ≥44×44 at every breakpoint. */
+/* The permissions table reserves a REAL 44px box instead of the overlay: five switch columns at
+   375px sit close enough that overflowing invisible hit areas would overlap, and a tap on one
+   permission would toggle its neighbour. Layout is per-instance; the pill inside is unchanged. */
 .ep-perm-switch {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  color: inherit;
+  margin: 0 auto;
 }
-.ep-perm-switch:disabled { opacity: 0.6; cursor: default; }
+.ep-perm-switch::after {
+  content: none;
+}
 
 /* U-2 — on-brand share slider (a form-control idiom like .ep-perm-switch, not a button colour).
    The accent fill IS the prototype's "Part effective" bar, driven by an inline --pct. */
@@ -2006,6 +2004,16 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   }
 }
 
+/* Chapitres strip tile (proto 1362). R6-2: a « double » IS a two-page spread, so its tile is 2×
+   wide — the geometry lives here, not inline, so the ≤480px override below scales BOTH. */
+.ep-chapter-thumb {
+  width: 54px;
+  height: 72px;
+}
+.ep-chapter-thumb--double {
+  width: 108px;
+}
+
 /* Dashed "＋ Lier une page" tile — prototype hover fills accent-soft. */
 .ep-chapter-link-tile {
   width: 54px;
@@ -2050,8 +2058,11 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 @media (max-width: 480px) {
   .ep-chapter-thumb,
   .ep-chapter-link-tile {
-    width: 72px !important;
-    height: 96px !important;
+    width: 72px;
+    height: 96px;
+  }
+  .ep-chapter-thumb--double {
+    width: 144px;
   }
   .ep-chapter-form-actions {
     flex-direction: column-reverse;
@@ -2059,5 +2070,256 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   .ep-chapter-form-actions > button {
     width: 100%;
     margin-right: 0 !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CS-6 « Réorganiser les pages » (proto ARRANGEMENT, .dc.html 1693–1721).
+   Mobile-first: 2 columns at ~375px, 4 at ~768px, the prototype's 6 at
+   ~1024px+. The tile carries ONE control, the drag grip (user decision
+   2026-08-01: reordering is drag-and-drop, the cover is automatic and this
+   screen neither adds nor deletes pages); the grip grows to a 44px tap
+   target on touch widths and is keyboard-operable everywhere.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Back link — proto 1696 hover fills the ink colour. */
+.ep-arrangement-back {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink2);
+  text-decoration: none;
+}
+.ep-arrangement-back:hover {
+  color: var(--ink);
+}
+
+/* Tab row — proto 1705 */
+/* CS-6 — the « Couverture » toggle, in the tab panel directly above the page grid. */
+.ep-arrangement-cover-toggle {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* The app's ONE switch. The button is the hit box, its inner span is the pill (OnBrandSwitch). */
+.ep-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.ep-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* ≥44px pointer target as an OVERLAY rather than reserved layout height, so a row holding a switch
+   stays compact. -12px on a 34×20 pill gives 58×44. Grids opt out — see .ep-perm-switch. */
+.ep-switch::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
+.ep-arrangement-tabs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 18px;
+}
+.ep-arrangement-tab {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--ink2);
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  padding: 0 0 9px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.ep-arrangement-tab:hover {
+  color: var(--ink);
+}
+.ep-arrangement-tab[data-selected] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* The grid — proto 1706 */
+.ep-arrangement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Each tile is exactly as tall as its own page preview + footer. Without this the row stretches
+     every tile to the tallest one and the footers grow into big empty blocks. */
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .ep-arrangement-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (min-width: 1024px) {
+  .ep-arrangement-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* Page tile — proto 1707/1708 */
+.ep-arrangement-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--shadow);
+  background: var(--card);
+}
+/* The held card is HIDDEN while it is dragged (user, 2026-08-01): the cursor already carries the
+   card's drag image, so leaving a second half-faded copy in the grid showed the same page twice —
+   once behind the cursor and once in its old slot, next to the dashed gap marking the new one.
+   The ghost under the cursor is an off-screen CLONE (`ghostFrom`), so hiding the real tile here
+   cannot blank it.
+   `opacity` and NOT `display:none`/`visibility` on purpose: the tile must keep its layout box, so
+   the empty slot reads as the hole the page came from AND the DOM stays insert-only for the whole
+   drag. Removing the drag source is exactly what made Chromium drop the drag session (U-5). */
+.ep-arrangement-tile[data-dragging] {
+  opacity: 0;
+}
+.ep-arrangement-tile[draggable='true'] {
+  cursor: grab;
+}
+
+/* The page preview is FORCED to a manga page ratio (B5, 182 × 257 mm) instead of the prototype's
+   flat 150px box — a page thumbnail that is not page-shaped reads as a card, not as a planche.
+   `aspect-ratio` scales it with the column at every breakpoint, and the artwork is cropped INTO the
+   box (absolutely positioned) so a tall or wide file cannot stretch the tile. */
+.ep-arrangement-thumb {
+  position: relative;
+  overflow: hidden;
+  /* Percentage PADDING (not `aspect-ratio`) because it resolves against the WIDTH: a two-cell spread
+     is `2 × column + gap` wide, so `aspect-ratio` would make it taller than its neighbours.
+     The spread's correction is `(100% - 20px) / 2` = one column of preview: 14px of column gap plus
+     the 6px of tile border a second tile would have carried (3px each side, measured). */
+  height: 0;
+  padding-top: calc(100% * 257 / 182);
+}
+.ep-arrangement-thumb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* A « double » IS a two-page spread: the tile spans TWO grid cells and its preview is twice as wide
+   at the same height, with the seam drawn between the two pages (same rule as the CS-7 strip). */
+.ep-arrangement-tile--double {
+  grid-column: span 2;
+}
+.ep-arrangement-tile--double .ep-arrangement-thumb {
+  padding-top: calc((100% - 20px) / 2 * 257 / 182);
+}
+.ep-arrangement-seam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  background: var(--ink);
+  z-index: 1;
+}
+
+/* COUV. badge — proto 1707 */
+.ep-arrangement-couv {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 7px;
+  z-index: 1;
+}
+
+.ep-arrangement-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 2px solid var(--ink);
+}
+
+/* The drag grip — proto 1707's « ⠿ », as an icon (D-3). It is a real button so the grid is also
+   operable from the keyboard (arrow keys move the focused tile); it carries no fill of its own, so
+   it reads as the prototype's inert handle. */
+.ep-arrangement-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink2);
+  cursor: grab;
+}
+.ep-arrangement-handle:hover {
+  color: var(--ink);
+}
+.ep-arrangement-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  color: var(--ink);
+}
+
+/* Insertion gap — proto 1710, label rotated −90°. */
+.ep-arrangement-gap {
+  border: 3px dashed var(--accent);
+  border-radius: 6px;
+  background: var(--card);
+  /* Matches a tile: the page preview's ratio plus its footer (same padding trick as the thumb). */
+  position: relative;
+  height: 0;
+  padding-top: calc(100% * 291 / 182);
+}
+.ep-arrangement-gap span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+/* The slot a « double » would take is twice as wide — the preview has to promise the real result. */
+.ep-arrangement-gap--double {
+  grid-column: span 2;
+  padding-top: calc((100% - 20px) / 2 * 291 / 182);
+}
+.ep-arrangement-gap span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  /* Touch: the grip is grabbed with a finger — give it a real tap target. */
+  .ep-arrangement-handle {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

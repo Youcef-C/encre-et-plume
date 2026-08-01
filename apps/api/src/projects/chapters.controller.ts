@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGu
 import type { ChapterDto, ChapterListResponse } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { ChaptersService } from './chapters.service';
-import { CreateChapterDto, UpdateChapterDto } from './dto/chapter.dto';
+import { CreateChapterDto, UpdateChapterDto, UpdateChapterPageOrderDto } from './dto/chapter.dto';
 
 /**
  * CS-7 project-scoped chapter routes (mirroring `POST /projects/:slug/pages`). Every route is
@@ -33,6 +33,16 @@ export class ChaptersController {
   @Patch(':id')
   update(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateChapterDto): Promise<ChapterDto> {
     return this.chapters.update(req.accountId, id, dto);
+  }
+
+  /** CS-6 — « Réorganiser les pages »: the chapter's complete page order. Returns the refreshed chapter. */
+  @Patch(':id/page-order')
+  pageOrder(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateChapterPageOrderDto,
+  ): Promise<ChapterDto> {
+    return this.chapters.reorderPages(req.accountId, id, dto);
   }
 
   @Delete(':id')

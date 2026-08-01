@@ -1,17 +1,19 @@
 # CS-19 — Version merge validation "Fusion des versions"
 
 **As a** project leader (or a co-author holding the « Fusion » right), **I want** new drawing and scenario
-versions from members without that right to arrive as *proposed* versions I validate before they become the
+versions from members without that right to arrive as _proposed_ versions I validate before they become the
 project's active version, **so that** what the œuvre officially shows is what the rights-holders approved —
 and the « Fusion » permission the group screen already advertises actually means something.
+At the moment, "Enregistrer une nouvelle version" saves a new file version. It must change to something like
+"Proposer une nouvelle version", which then needs to be validated by whoever has the fusion rights.
 
 > Screen(s): the [[CS-3]] version history modal (`AssetVersionsModal`) + the [[CS-4]] editor's "Enregistrer une nouvelle version" + the [[CS-10]] "Gérer le groupe" permission row · Priority: **Must** · Fidelity: **Inferred** (no drawn frame — extends the drawn version-history modal; grade against the criteria)
 
 ## Why this story exists (defect, not just a feature)
 
 [[CS-10]] ships a per-member **Fusion** toggle and tells the user, verbatim in
-`GroupMembersCard.tsx`: *« Autorisation de fusion (merge) : seuls les membres avec le droit « Fusion »
-peuvent valider et intégrer une nouvelle version dans la branche principale du projet. »*
+`GroupMembersCard.tsx`: _« Autorisation de fusion (merge) : seuls les membres avec le droit « Fusion »
+peuvent valider et intégrer une nouvelle version dans la branche principale du projet. »_
 
 That promise is currently false. `hasGroupPermission(…, 'fusion')` is never called anywhere in
 `apps/api/src`; only `ecriture` and `corrections` are enforced. Today `appendVersion()` creates the version
@@ -22,7 +24,7 @@ closes the gap between the advertised permission and the enforced one.
 
 ## Concept — a proposed version, then an explicit integration
 
-The [[CS-3]] chain stays **linear** (v1…vN, no branching) — this adds a *state* to a version, not a branch.
+The [[CS-3]] chain stays **linear** (v1…vN, no branching) — this adds a _state_ to a version, not a branch.
 
 - A member **with** `fusion` (leaders and co-leaders always have it) versions exactly as today: the new
   version is created **and** becomes the head. Nothing changes for them.
@@ -32,7 +34,7 @@ The [[CS-3]] chain stays **linear** (v1…vN, no branching) — this adds a *sta
 - A `fusion` holder then **integrates** it (becomes head, status `integree`) or **rejects** it.
 
 One chokepoint covers both file kinds: `assets.service.ts appendVersion()` is reached by the drawing upload
-route *and* by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snapshotVersion` →
+route _and_ by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snapshotVersion` →
 `addVersion`). Gate it once; do not add a parallel path for scenarios.
 
 ## Frontend
@@ -44,7 +46,7 @@ route *and* by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snap
   - `integree` → as today, with the existing active/head marker unchanged.
   - A non-holder sees the chip and the proposer, but no action buttons.
 - **After saving a version without the right** ([[CS-4]] editor and the [[CS-3]] upload): confirmation reads
-  *« Version proposée — en attente de validation »* rather than implying it went live. The editor's head/
+  _« Version proposée — en attente de validation »_ rather than implying it went live. The editor's head/
   "⎘ vN" badge ([[CS-2]]) keeps pointing at the last **integrated** version.
 - **Pending count**: the Fichiers grid ([[CS-3]]) marks an asset that has proposed versions waiting, so a
   leader doesn't have to open each file to find them.
@@ -72,7 +74,7 @@ route *and* by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snap
   is not history worth keeping). **409** if the version is already `integree` — use [[CS-18]]'s delete for
   those, so the two paths stay distinct.
 - **`setActiveVersion()` (`POST /assets/{id}/active-version`) is now `fusion`-gated** — repointing the head
-  *is* a merge. This is a tightening of a shipped [[CS-3]] route; record it in the notes so QA grades it as
+  _is_ a merge. This is a tightening of a shipped [[CS-3]] route; record it in the notes so QA grades it as
   intended, not as a regression.
 - **GET /assets/{id}/versions** returns `status` per row + a `pendingCount`; **paginated** as today.
 - Entities: `AssetVersion { …, status }`. No new model, no branch pointer, no parallel table.
@@ -110,7 +112,7 @@ route *and* by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snap
   `setActiveVersion` repoint this story reuses and gates.
 - [[CS-4]] — the editor's "Enregistrer une nouvelle version" snapshot reaches the same chokepoint; its
   confirmation copy and head badge change.
-- [[CS-5]] — "addressed" (`resolvedInVersion > filedAgainstVersion`) must mean *integrated*; update that
+- [[CS-5]] — "addressed" (`resolvedInVersion > filedAgainstVersion`) must mean _integrated_; update that
   check here. CS-5's "Valider les modifications" stays a **corrections** gate — it is not the merge gate.
 - [[CS-10]] — the `fusion` permission, its toggle, and the `hasGroupPermission` seam.
 - [[CS-2]] — the derived "⎘ vN" card badge follows integration, not proposal.
@@ -124,7 +126,7 @@ route *and* by the [[CS-4]] editor snapshot (`scenario-documents.service.ts snap
   `proposee` rows. Building CS-18 first would mean reworking those guards.
 - **Deliberate tightening of a shipped route**: `POST /assets/{id}/active-version` moves from `ecriture` to
   `fusion`. Intended, not a regression — it is the merge operation under another name.
-- **Delete**: covered by `reject` (proposed versions, with the media blob). Deleting *integrated* versions
+- **Delete**: covered by `reject` (proposed versions, with the media blob). Deleting _integrated_ versions
   stays [[CS-18]]'s job; keep the two paths separate so neither becomes a backdoor for the other.
 - **Ponytail**: one enum field, one branch at the existing chokepoint, one reused repoint, one reused
   permission seam. No branch model, no merge-conflict resolution, no three-way diff — the chain stays

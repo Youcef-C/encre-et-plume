@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { isWork18Plus, type ApiError, type WorkChapterDto, type WorkDetail, type ChapterPagesResponse, type FavoriteWorkDto, type ReactionViewerState } from '@encre-et-plume/shared';
+import { isWork18Plus, readerPagesShown, type ApiError, type WorkChapterDto, type WorkDetail, type ChapterPagesResponse, type FavoriteWorkDto, type ReactionViewerState } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { useAgeCleared } from '../../lib/ageGate';
@@ -240,7 +240,13 @@ export default function Reader({ slug }: { slug: string }) {
   const totalPages = pagesData?.totalPages ?? 1;
   // Story update (States bullet): 2-page spread now steps pages by 2 for roman too, not just
   // manga - the spread toggle is enabled for both read modes (Topbar.tsx).
-  const step = effectiveSpreadMode === 'double' ? 2 : 1;
+  // CS-6 — the SAME rule the stage draws with (`readerPagesShown`): step by what is on screen. A
+  // standalone cover steps by 1, so page 2 is read rather than skipped.
+  const step = readerPagesShown(page, totalPages, effectiveSpreadMode, {
+    hasCover: pagesData?.hasCover,
+    currentIsDouble: pagesData?.pages[page - 1]?.double,
+    nextIsDouble: pagesData?.pages[page]?.double,
+  });
 
   function goPrev() {
     setPage((p) => Math.max(1, p - step));

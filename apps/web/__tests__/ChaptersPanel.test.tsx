@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   updateChapter: vi.fn(),
   deleteChapter: vi.fn(),
   createPage: vi.fn(),
+  updatePage: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -26,16 +27,17 @@ function chapter(over: Partial<ChapterDto> = {}): ChapterDto {
     targetPages: 2,
     plancheCount: 2,
     likeCount: 2100,
+    hasCover: true, // CS-6 — the chapter opens on a cover (its first page)
     pages: [
-      { id: 'p1', title: 'Page 1', stage: 'valide', thumbnailUrl: null, fileTags: [] },
-      { id: 'p2', title: 'Page 2', stage: 'nemu', thumbnailUrl: null, fileTags: [] },
+      { id: 'p1', title: 'Page 1', stage: 'valide', thumbnailUrl: null, fileTags: [], position: 0 },
+      { id: 'p2', title: 'Page 2', stage: 'nemu', thumbnailUrl: null, fileTags: [], position: 1 },
     ],
     ...over,
   };
 }
 
 function pageRef(over: Partial<ChapterDto['pages'][number]> = {}): ChapterDto['pages'][number] {
-  return { id: 'p1', title: 'Page 1', stage: 'valide', thumbnailUrl: null, fileTags: [], ...over };
+  return { id: 'p1', title: 'Page 1', stage: 'valide', thumbnailUrl: null, fileTags: [], position: 0, ...over };
 }
 
 /** The strip tile framing a given card — found by its image, or by its sr-only label when placeholder. */
@@ -105,7 +107,7 @@ describe('ChaptersPanel', () => {
       expect(img).toHaveAttribute('src', 'https://cdn.test/p7.webp');
       expect(img).toHaveStyle({ objectFit: 'cover' });
       // The 2px ink frame and the number badge survive the image (R6-1c).
-      expect(tileFor('Page 7')).toHaveStyle({ border: '2px solid var(--ink)', borderRadius: '4px' });
+      expect(tileFor('Page 7')).toHaveStyle({ borderWidth: '2px', borderStyle: 'solid', borderColor: 'var(--ink)', borderRadius: '4px' });
       expect(within(tileFor('Page 7')).getByText('1')).toBeInTheDocument();
     });
 
@@ -119,18 +121,125 @@ describe('ChaptersPanel', () => {
       await openStrip([pageRef({ title: 'Page 7', thumbnailUrl: 'https://cdn.test/gone.webp' })]);
       fireEvent.error(screen.getByRole('img', { name: 'Page 7' }));
       await waitFor(() => expect(screen.queryByRole('img', { name: 'Page 7' })).not.toBeInTheDocument());
-      expect(tileFor('Page 7')).toHaveStyle({ width: '54px' });
+      expect(tileFor('Page 7')).toHaveStyle({ borderWidth: '2px', borderStyle: 'solid', borderColor: 'var(--ink)' });
     });
 
-    it('renders a « double » card at 2× width — placeholder as well as image (R6-2)', async () => {
+    // R6-2 — the 2× width now lives in the stylesheet (`.ep-chapter-thumb--double`) so the ≤480px
+    // override cannot squash a spread back to one tile. The e2e measures the real pixels.
+    it('marks a « double » card as a 2×-wide tile — placeholder as well as image (R6-2)', async () => {
       await openStrip([
         pageRef({ id: 'p1', title: 'Page 7', fileTags: ['double'] }),
         pageRef({ id: 'p2', title: 'Page 8', fileTags: ['double'], thumbnailUrl: 'https://cdn.test/p8.webp' }),
         pageRef({ id: 'p3', title: 'Page 9' }),
       ]);
-      expect(tileFor('Page 7')).toHaveStyle({ width: '108px', height: '72px' });
-      expect(tileFor('Page 8')).toHaveStyle({ width: '108px', height: '72px' });
-      expect(tileFor('Page 9')).toHaveStyle({ width: '54px', height: '72px' });
+      expect(tileFor('Page 7')).toHaveClass('ep-chapter-thumb--double');
+      expect(tileFor('Page 8')).toHaveClass('ep-chapter-thumb--double');
+      expect(tileFor('Page 9')).not.toHaveClass('ep-chapter-thumb--double');
+    });
+
+    // ── R8-1 · a double IS two pages, so it occupies two slots and the numbering shifts ──
+    it('numbers the tiles, a « double » showing BOTH pages it represents', async () => {
+      await openStrip([
+        pageRef({ id: 'p1', title: 'Page 1' }),
+        pageRef({ id: 'p2', title: 'Page 2', fileTags: ['double'] }),
+        pageRef({ id: 'p3', title: 'Page 3' }),
+      ]);
+      expect(within(tileFor('Page 1')).getByText('1')).toBeInTheDocument();
+      expect(within(tileFor('Page 2')).getByText('2-3')).toBeInTheDocument();
+      expect(within(tileFor('Page 3')).getByText('4')).toBeInTheDocument();
+    });
+
+    it('draws a centre rule on a double so the wide tile reads as two slots', async () => {
+      await openStrip([pageRef({ id: 'p1', title: 'Page 1', fileTags: ['double'] }), pageRef({ id: 'p2', title: 'Page 2' })]);
+      expect(tileFor('Page 1').querySelector('[data-double-rule]')).toBeInTheDocument();
+      expect(tileFor('Page 2').querySelector('[data-double-rule]')).toBeNull();
+    });
+
+    // ── R8-2 · drag a tile to place it. Same optimistic-then-revert shape as the board's moveCard ──
+    async function dragOnto(from: string, to: string) {
+      const data = new Map<string, string>();
+      const dataTransfer = { setData: (k: string, v: string) => data.set(k, v), getData: (k: string) => data.get(k) ?? '', effectAllowed: '' };
+      fireEvent.dragStart(tileFor(from), { dataTransfer });
+      fireEvent.dragOver(tileFor(to), { dataTransfer });
+      fireEvent.drop(tileFor(to), { dataTransfer });
+    }
+
+    /** The strip's cards in drawn order. A tile reads "<title><badge>", e.g. "Page 31" = Page 3 · 1. */
+    const order = (titles = ['Page 1', 'Page 2', 'Page 3']) =>
+      [...document.querySelectorAll('.ep-chapter-thumb')].map((t) => titles.find((n) => t.textContent?.startsWith(n)));
+
+    it('slides the held card into the previewed slot instead of leaving it in place', async () => {
+      await openStrip([
+        pageRef({ id: 'p1', title: 'Page 1' }),
+        pageRef({ id: 'p2', title: 'Page 2', position: 1 }),
+        pageRef({ id: 'p3', title: 'Page 3', position: 2 }),
+      ]);
+      const data = new Map<string, string>();
+      const dataTransfer = { setData: (k: string, v: string) => data.set(k, v), getData: (k: string) => data.get(k) ?? '', effectAllowed: '' };
+
+      fireEvent.dragStart(tileFor('Page 3'), { dataTransfer });
+      expect(tileFor('Page 3')).toHaveAttribute('data-dragging');
+
+      // Hovering Page 1 moves the HELD card there, and the numbering follows what is drawn.
+      fireEvent.dragOver(tileFor('Page 1'), { dataTransfer });
+      expect(order()).toEqual(['Page 3', 'Page 1', 'Page 2']);
+      expect(within(tileFor('Page 3')).getByText('1')).toBeInTheDocument();
+
+      // Hovering further along slides it again — no commit until the drop.
+      fireEvent.dragOver(tileFor('Page 2'), { dataTransfer });
+      expect(order()).toEqual(['Page 1', 'Page 2', 'Page 3']);
+      expect(mocked.updatePage).not.toHaveBeenCalled();
+
+      // Abandoning the drag restores the real order.
+      fireEvent.dragOver(tileFor('Page 1'), { dataTransfer });
+      fireEvent.dragEnd(tileFor('Page 3'), { dataTransfer });
+      expect(order()).toEqual(['Page 1', 'Page 2', 'Page 3']);
+      expect(tileFor('Page 3')).not.toHaveAttribute('data-dragging');
+    });
+
+    it('sends the dropped card its new 1-based slot and reorders the strip immediately', async () => {
+      mocked.updatePage.mockResolvedValue({});
+      await openStrip([
+        pageRef({ id: 'p1', title: 'Page 1' }),
+        pageRef({ id: 'p2', title: 'Page 2' }),
+        pageRef({ id: 'p3', title: 'Page 3', position: 2 }),
+      ]);
+      await dragOnto('Page 3', 'Page 1');
+      await waitFor(() => expect(mocked.updatePage).toHaveBeenCalledWith('p3', { position: 1 }));
+      // Optimistic: the badge follows the new order before any refetch.
+      expect(within(tileFor('Page 3')).getByText('1')).toBeInTheDocument();
+      expect(within(tileFor('Page 1')).getByText('2')).toBeInTheDocument();
+    });
+
+    it('reverts the strip and warns when the placement fails', async () => {
+      mocked.updatePage.mockRejectedValue(new Error('500'));
+      await openStrip([pageRef({ id: 'p1', title: 'Page 1' }), pageRef({ id: 'p2', title: 'Page 2', position: 1 })]);
+      await dragOnto('Page 2', 'Page 1');
+      expect(await screen.findByRole('alert')).toHaveTextContent('La réorganisation a échoué. Réessayez.');
+      expect(within(tileFor('Page 1')).getByText('1')).toBeInTheDocument();
+    });
+
+    it('captions the strip and says the tiles can be dragged (prototype copy)', async () => {
+      await openStrip([pageRef({ id: 'p1', title: 'Page 1' }), pageRef({ id: 'p2', title: 'Page 2', position: 1 })]);
+      expect(screen.getByText('PAGES')).toBeInTheDocument();
+      expect(screen.getByText(/glisser pour réordonner/)).toBeInTheDocument();
+    });
+
+    it('does not promise drag & drop to a viewer without « Écriture »', async () => {
+      const user = userEvent.setup();
+      mocked.getProjectChapters.mockResolvedValue(listResponse([chapter({ pages: [pageRef()] })], false));
+      render(<ChaptersPanel slug="lames-de-brume" canWrite={false} />);
+      await user.click(await screen.findByRole('button', { name: /Prologue/ }));
+      expect(screen.getByText('PAGES')).toBeInTheDocument();
+      expect(screen.queryByText(/glisser pour réordonner/)).toBeNull();
+    });
+
+    it('does not make the tiles draggable without « Écriture »', async () => {
+      const user = userEvent.setup();
+      mocked.getProjectChapters.mockResolvedValue(listResponse([chapter({ pages: [pageRef()] })], false));
+      render(<ChaptersPanel slug="lames-de-brume" canWrite={false} />);
+      await user.click(await screen.findByRole('button', { name: /Prologue/ }));
+      expect(tileFor('Page 1')).not.toHaveAttribute('draggable', 'true');
     });
   });
 

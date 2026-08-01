@@ -572,3 +572,85 @@ test.describe.serial('CS-7 R6 · the page strip shows the linked planche', () =>
     expect(double).toBeCloseTo(bare * 2, 0);
   });
 });
+
+/**
+ * Round 8 — PLACEMENT. A card's slot in its chapter is explicit (`Page.position`), the strip's badge
+ * shows the page number(s) that slot yields, and a « double » consumes TWO of them. Both write paths
+ * — dragging a tile and the card modal's « PLACEMENT » field — go through `PATCH /pages/:id`.
+ */
+test.describe.serial('CS-7 R8 · page placement', () => {
+  let slug: string;
+
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await login(page, OWNER_EMAIL);
+    slug = await createProject(page, `E2E CS7 R8 ${Date.now()}`);
+    await page.close();
+  });
+
+  test('CS7-E16: a double is numbered as two pages; drag and the modal both place a card', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const patched = () =>
+      page.waitForResponse((r) => /\/pages\/[^/]+$/.test(r.url()) && r.request().method() === 'PATCH', { timeout: 15_000 });
+
+    // 1 · three cards, the second turned into a « double » spread.
+    await page.goto(`/projet/${slug}`);
+    await ensureChapter(page);
+    const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
+    for (const title of ['Page 1', 'Page 2', 'Page 3']) {
+      await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+      await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 8_000 });
+    }
+    await page.getByRole('button', { name: 'Ouvrir Page 2' }).click();
+    const modal2 = page.getByRole('dialog', { name: 'Page 2' });
+    let saved = patched();
+    await modal2.getByRole('combobox', { name: 'Type de page' }).click();
+    await page.getByRole('option', { name: /Double page/ }).click();
+    await saved;
+    await modal2.getByRole('button', { name: 'Fermer' }).click();
+    await expect(modal2).toHaveCount(0, { timeout: 10_000 });
+
+    // 2 · the strip numbers the tiles, the double showing BOTH pages it represents.
+    await openChapitres(page, slug);
+    const chapterCard = page.getByRole('listitem').filter({ hasText: 'Chapitre 1' });
+    await chapterCard.getByRole('button', { name: /Chapitre 1/ }).click();
+    const tile = (title: string) => page.locator('.ep-chapter-thumb', { hasText: title });
+    await expect(tile('Page 1').getByText('1', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(tile('Page 2').getByText('2-3', { exact: true })).toBeVisible();
+    await expect(tile('Page 3').getByText('4', { exact: true })).toBeVisible();
+
+    // 3 · drag the last tile onto the first — the placement survives a reload.
+    saved = patched();
+    await tile('Page 3').dragTo(tile('Page 1'));
+    await saved;
+    await page.reload();
+    await chapterCard.getByRole('button', { name: /Chapitre 1/ }).click();
+    await expect(page.locator('.ep-chapter-thumb').first()).toContainText('Page 3', { timeout: 15_000 });
+    await expect(tile('Page 3').getByText('1', { exact: true })).toBeVisible();
+
+    // 4 · the modal's « PLACEMENT » field is the keyboard path to the same move, and it spells out
+    //     the page numbers the slot yields — two of them for the double.
+    await page.goto(`/projet/${slug}`);
+    await page.getByRole('button', { name: 'Ouvrir Page 2' }).click();
+    const modal = page.getByRole('dialog', { name: 'Page 2' });
+    // Three cards, one of them a spread → the chapter is 4 pages, and Page 2 sits last on 3–4.
+    await expect(modal.getByText('Pages 3–4 sur 4')).toBeVisible({ timeout: 10_000 });
+    saved = patched();
+    await modal.getByLabel('Placement').fill('1');
+    await modal.getByLabel('Placement').press('Enter');
+    await saved;
+    await expect(modal.getByText('Pages 1–2 sur 4')).toBeVisible({ timeout: 10_000 });
+    await modal.getByRole('button', { name: 'Fermer' }).click();
+
+    await openChapitres(page, slug);
+    await chapterCard.getByRole('button', { name: /Chapitre 1/ }).click();
+    await expect(page.locator('.ep-chapter-thumb').first()).toContainText('Page 2', { timeout: 15_000 });
+    await expect(tile('Page 2').getByText('1-2', { exact: true })).toBeVisible();
+
+    // 5 · the spread stays two tiles wide on mobile — the ≤480px rule scales both sizes.
+    await page.setViewportSize({ width: 375, height: 780 });
+    const widthOf = async (title: string) => (await tile(title).boundingBox())!.width;
+    expect(await widthOf('Page 2')).toBeCloseTo((await widthOf('Page 3')) * 2, 0);
+    await noHorizontalOverflow(page);
+  });
+});

@@ -82,6 +82,20 @@ export const FILE_TAG_COVERING_TYPES: Record<PageFileTag, AssetType[]> = {
 };
 
 const MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+/**
+ * R8-1 — mirror the server's renumbering after a card is PLACED (the modal's « PLACEMENT » field).
+ * `PATCH /pages/:id { position }` rewrites every sibling's slot, but the response carries only the
+ * moved card, so the board's copies of its neighbours would keep their old positions — and the
+ * modal's placement list, derived from them, would go wrong on the second move. Re-derive the
+ * chapter's dense order here instead of refetching: the rule is the same three lines the API runs.
+ */
+function withPlacement(pages: WorkspacePage[], moved: WorkspacePage): WorkspacePage[] {
+  const siblings = pages.filter((p) => p.chapterId === moved.chapterId && p.id !== moved.id).sort((a, b) => a.position - b.position);
+  siblings.splice(Math.min(Math.max(moved.position, 0), siblings.length), 0, moved);
+  const slots = new Map(siblings.map((p, i) => [p.id, i]));
+  return pages.map((p) => (slots.has(p.id) ? { ...p, position: slots.get(p.id)! } : p));
+}
+
 function formatShortDate(iso: string): string {
   const [, m, d] = iso.split('-');
   const mi = Number(m) - 1;
@@ -314,8 +328,10 @@ export default function KanbanBoard({
   // R2-3 — zero chapters. A card cannot exist without one (R2-1), so there is no board to show:
   // this card REPLACES it rather than sitting above a disabled one (which squashed the columns).
   if (chapters.length === 0) {
+    // The bottom padding is load-bearing: the card's 4px hard offset shadow needs room, or it
+    // bleeds out under the panel's edge.
     return (
-      <div style={{ padding: '16px 18px 0' }}>
+      <div style={{ padding: '16px 18px 22px' }}>
         {chapterError && (
           <div role="alert" style={{ ...boardAlertStyle, margin: '0 0 12px' }}>
             La création du chapitre a échoué. Réessayez.
@@ -689,13 +705,14 @@ export default function KanbanBoard({
           slug={slug}
           members={members}
           chapters={chapters}
+          pages={pages}
           labels={labels}
           viewerId={viewerId}
           isOwner={isOwner}
           readOnly={readOnly}
           canDelete={canDeleteCard(pages.find((p) => p.id === openPageId) ?? ({ createdById: null } as WorkspacePage))}
           onClose={() => setOpenPageId(null)}
-          onPageChange={(page) => setPages((ps) => ps.map((p) => (p.id === page.id ? { ...p, ...page } : p)))}
+          onPageChange={(page) => setPages((ps) => withPlacement(ps.map((p) => (p.id === page.id ? { ...p, ...page } : p)), page))}
           onDeleted={(id) => {
             setPages((ps) => ps.filter((p) => p.id !== id));
             setOpenPageId(null);

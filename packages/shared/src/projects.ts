@@ -218,6 +218,9 @@ export interface WorkspacePage {
   chapterId: string;
   title: string;
   stage: PageStage;
+  /** R8-1 — the card's slot within its chapter (dense 0..n-1). The modal's PLACEMENT field reads it;
+   *  displayed page numbers come from `chapterPageNumbers`, never from this raw value. */
+  position: number;
   fileTags: PageFileTag[];
   linkedFileIds: string[]; // server-maintained denorm (CS-3 link logic); kept for compat
   linkedFiles: PageLinkedFileRef[]; // CS-3 assets linked to this card (badge/chips/sections)
@@ -319,6 +322,13 @@ export interface UpdatePageRequest {
   title?: string;
   /** R2-5 — move the card to another chapter of the SAME project. Never null (R2-1d). */
   chapterId?: string;
+  /**
+   * R8-1 — the card's PLACEMENT: a 1-based slot within its chapter. The server splices the card in
+   * and renumbers every sibling densely, so this is the one write path for both the strip's drag and
+   * the modal's « PLACEMENT » field. Out-of-range values clamp. Sent with `chapterId` = place it in
+   * the destination chapter; omitted on a chapter move = append there.
+   */
+  position?: number;
   fileTags?: PageFileTag[];
   // NOTE: linkedFileIds is NOT writable here — link state is owned by CS-3's POST /assets/:id/link.
   // CS-2 card-modal extension (all optional; null clears where nullable):

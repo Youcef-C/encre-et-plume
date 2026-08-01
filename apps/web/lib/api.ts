@@ -1218,6 +1218,7 @@ import type {
   ChapterDto,
   ChapterListResponse,
   CreateChapterRequest,
+  UpdateChapterPageOrderRequest,
   UpdateChapterRequest,
 } from '@encre-et-plume/shared';
 
@@ -1240,4 +1241,16 @@ export const updateChapter = (id: string, body: UpdateChapterRequest): Promise<C
 // on a published chapter — a chapter delete never destroys or orphans a member's cards.
 export const deleteChapter = (id: string): Promise<void> =>
   request<void>(`/chapters/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ─── CS-6 · « Réorganiser les pages » ────────────────────────────────────────
+
+/** The chapter's COMPLETE page order (first slot first). 400 if it is not a full permutation of the
+ *  chapter's cards — a stale grid is refused rather than silently dropping a page. */
+export const updateChapterPageOrder = (id: string, body: UpdateChapterPageOrderRequest): Promise<ChapterDto> =>
+  request<ChapterDto>(`/chapters/${encodeURIComponent(id)}/page-order`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+/** Designate the chapter's cover card; `{ pageId: null }` clears back to the implicit first page. */
 

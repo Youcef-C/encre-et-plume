@@ -34,6 +34,7 @@ type PageRow = {
   chapterId: string;
   title: string;
   stage: PageStage;
+  position?: number;
   fileTags: string[];
   linkedFileIds: string[];
   dueDate?: Date | null;
@@ -57,6 +58,7 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     chapterId: p.chapterId,
     title: p.title,
     stage: p.stage,
+    position: p.position ?? 0,
     fileTags: p.fileTags as WorkspacePage['fileTags'],
     linkedFileIds: p.linkedFileIds,
     linkedFiles: (p.assetLinks ?? []).map(({ asset: a }) => ({ assetId: a.id, type: a.type, filename: a.filename, version: a.currentVersion })),
@@ -104,13 +106,14 @@ export class PagesService {
     if (!chapterId) throw new BadRequestException('Créez un chapitre avant d’ajouter une carte.');
     await this.assertChapterInWork(chapterId, project.workId);
 
-    const title = body.title?.trim()
-      ? body.title.trim()
-      : `Page ${(await this.prisma.page.count({ where: { projectId: project.id, chapterId } })) + 1}`;
+    // R8-1 — positions are dense (0..n-1), so the chapter's card count IS both the default title's
+    // number and the new card's slot: a new card always lands LAST. One count, two uses.
+    const count = await this.prisma.page.count({ where: { projectId: project.id, chapterId } });
+    const title = body.title?.trim() ? body.title.trim() : `Page ${count + 1}`;
 
     const page = await this.prisma.page.create({
       // CS-10 D-1: stamp the author — the delete gate reads it back.
-      data: { projectId: project.id, chapterId, title, stage, fileTags: [], linkedFileIds: [], createdById: accountId },
+      data: { projectId: project.id, chapterId, title, stage, position: count, fileTags: [], linkedFileIds: [], createdById: accountId },
       include: WORKSPACE_PAGE_INCLUDE,
     });
     return toWorkspacePage(page as PageRow);
@@ -148,6 +151,11 @@ export class PagesService {
     // linkedFileIds is NOT writable here — CS-3's link endpoints own the link state (and the
     // per-file version chain). A page PATCH never touches it (would drift from the AssetPageLink join).
 
+    // R8-1 — PLACEMENT. The strip's drag and the modal's field are the SAME operation ("put this card
+    // at slot N"), so there is no parallel reorder route. A chapter move with no slot appends.
+    const destChapterId = body.chapterId ?? page.chapterId;
+    const placing = body.position !== undefined || (body.chapterId !== undefined && body.chapterId !== page.chapterId);
+
     const updated = await this.prisma.$transaction(async (tx) => {
       if (body.labelIds !== undefined) {
         await tx.pageLabel.deleteMany({ where: { pageId } });
@@ -161,7 +169,34 @@ export class PagesService {
           await tx.pageAssignee.createMany({ data: body.assigneeIds.map((userId) => ({ pageId, userId })) });
         }
       }
-      return tx.page.update({ where: { id: pageId }, data, include: WORKSPACE_PAGE_INCLUDE });
+      // Slot order of the DESTINATION chapter, this card removed — where it is about to be spliced
+      // back in. ponytail: one UPDATE per shifted sibling; a chapter is tens of cards, so a single
+      // CASE-expression write would be premature. Revisit if chapters ever hold thousands.
+      let siblings: { id: string; position: number }[] = [];
+      let index = 0;
+      if (placing) {
+        const rows = await tx.page.findMany({
+          where: { chapterId: destChapterId },
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+          select: { id: true, position: true },
+        });
+        siblings = rows.filter((r) => r.id !== pageId);
+        // 1-based on the wire, clamped: an out-of-range slot lands at an end, never leaves a gap.
+        index = body.position === undefined ? siblings.length : Math.min(Math.max(body.position - 1, 0), siblings.length);
+        data.position = index;
+      }
+
+      const row = await tx.page.update({ where: { id: pageId }, data, include: WORKSPACE_PAGE_INCLUDE });
+
+      if (placing) {
+        // Renumber the shifted siblings only — the moved card already carries its slot above, and a
+        // sibling whose slot did not change is not rewritten.
+        siblings.splice(index, 0, { id: pageId, position: index });
+        for (const [i, s] of siblings.entries()) {
+          if (s.id !== pageId && s.position !== i) await tx.page.update({ where: { id: s.id }, data: { position: i } });
+        }
+      }
+      return row;
     });
 
     // F-5 side effect (best-effort — never fails the request): tell each added/removed member.

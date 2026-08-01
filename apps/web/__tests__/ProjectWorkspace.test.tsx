@@ -73,7 +73,15 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByText('Yuki', { selector: 'span' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Gérer le groupe' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Éditeur' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Réorganiser & Publier' })).toBeInTheDocument();
+  });
+
+  // CS-6 — the header's « Réorganiser & Publier ▾ » is the entry point to « Réorganiser les pages »
+  // (proto 1303 `goArrangement`). It was inert until this story gave it a destination.
+  it('“Réorganiser & Publier ▾” navigates to /projet/{slug}/arrangement', async () => {
+    renderWs();
+    await userEvent.click(screen.getByRole('button', { name: 'Réorganiser & Publier' }));
+    expect(push).toHaveBeenCalledWith('/projet/nuit-blanche/arrangement');
   });
 
   // CS-10 — the header button opens the "Gérer le groupe" surface.
@@ -173,7 +181,7 @@ describe('ProjectWorkspace', () => {
   it('hides action buttons for a non-member public viewer', () => {
     renderWs('tableau', { viewer: { isMember: false, isOwner: false, canWrite: false, canManage: false } });
     expect(screen.queryByRole('button', { name: 'Gérer le groupe' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Réorganiser & Publier' })).not.toBeInTheDocument();
   });
 
   // CS-10 B-4 — the asset write routes are « Écriture »-gated server-side; the Fichiers panel must

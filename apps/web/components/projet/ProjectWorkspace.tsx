@@ -310,16 +310,22 @@ export default function ProjectWorkspace({
               <button type="button" className="ep-btn-secondary" style={headerBtn} onClick={openEditor}>
                 Éditeur
               </button>
+              {/* CS-6 — proto 1303's `goArrangement`: this is the way into « Réorganiser les pages »
+                  (order the chapter's pages, set its cover) before publishing. Scheduling itself is
+                  CS-9's screen. */}
               <button
                 type="button"
-                aria-label="Publier"
+                // The prototype letters this « Publier ▾ », but it does not publish — it opens
+                // « Réorganiser les pages ». The label now says where it goes (user, 2026-08-01).
+                aria-label="Réorganiser & Publier"
                 className="ep-btn-primary"
                 style={{
                   ...headerBtn,
                   boxShadow: '2px 2px 0 var(--shadow)',
                 }}
+                onClick={() => router.push(`/projet/${slug}/arrangement`)}
               >
-                Publier ▾
+                Réorganiser &amp; Publier <span aria-hidden="true">▾</span>
               </button>
             </>
           )}

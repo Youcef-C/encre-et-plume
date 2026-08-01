@@ -86,7 +86,7 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     await expect(page.getByText('E2E CS12_OWNER')).toBeVisible(); // member label (owner's display name)
     await expect(page.getByRole('button', { name: 'Gérer le groupe' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Éditeur' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Publier' })).toBeVisible(); // aria-label overrides "Publier ▾"
+    await expect(page.getByRole('button', { name: 'Réorganiser & Publier' })).toBeVisible(); // aria-label overrides the caret
 
     // Tab bar — ARIA tablist, 6 tabs, Tableau active by default.
     const tablist = page.getByRole('tablist', { name: 'Sections du projet' });
@@ -249,7 +249,7 @@ test.describe('CS-2 Espace projet — authorization (non-member)', () => {
     await expect(page.getByRole('tablist', { name: 'Sections du projet' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Gérer le groupe' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Éditeur' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Publier' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Réorganiser & Publier' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '＋ Ajouter une carte' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Ajouter un chapitre' })).toHaveCount(0);
 
