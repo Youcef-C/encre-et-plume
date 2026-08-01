@@ -12,7 +12,8 @@
 // the card modal and the board's "⋯" menu already do).
 import { useState } from 'react';
 import type { ChapterDto, UpdateChapterRequest } from '@encre-et-plume/shared';
-import { createPage, updateChapter } from '../../lib/api';
+import { chapterPageNumbers } from '@encre-et-plume/shared';
+import { createPage, updateChapter, updatePage } from '../../lib/api';
 import { CheckIcon, HeartIcon } from '../icons';
 import ChapterForm, { type ChapterFormValues } from './ChapterForm';
 
@@ -78,6 +79,11 @@ export default function ChapterAccordionItem({
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [stripError, setStripError] = useState<string | null>(null);
+  /** R8-2 — the card currently being dragged across the strip (native HTML5 dnd, like the board),
+   *  and the tile it is hovering, which is what the drop caret is drawn from. */
+  const [dragId, setDragId] = useState<string | null>(null);
+  /** The previewed slot order (card ids) while a drag is in flight — null when none is. */
+  const [preview, setPreview] = useState<string[] | null>(null);
   /** R6-1d — cards whose thumbnail 404'd/expired; they fall back to the halftone tile. */
   const [brokenThumbs, setBrokenThumbs] = useState<string[]>([]);
 
@@ -85,6 +91,35 @@ export default function ChapterAccordionItem({
   const panelId = `chapter-edit-${chapter.id}`;
   const title = chapter.title ?? `Chapitre ${chapter.number}`;
   const open = expanded || editing;
+  // R8-2 — while a tile is being dragged the strip renders the PREVIEWED order, so the half-faded
+  // card sits where it would land instead of staying put. The numbering follows it: the badges are
+  // derived from what is drawn, so the author reads the page numbers the drop will produce.
+  const pages =
+    preview === null
+      ? chapter.pages
+      : preview.map((id) => chapter.pages.find((p) => p.id === id)).filter((p) => p !== undefined);
+  /** R8-1 — the strip's numbering, doubles consuming two slots. Shared with the card modal's hint. */
+  const pageNumbers = chapterPageNumbers(pages);
+
+  /** Slide the dragged card to `targetId`'s slot in the preview. Hovering the dragged tile itself is
+   *  a no-op — after a slide it IS what sits under the cursor, and reacting would flip-flop. */
+  function previewOver(targetId: string) {
+    if (!dragId || targetId === dragId) return;
+    setPreview((cur) => {
+      const list = cur ?? chapter.pages.map((p) => p.id);
+      const from = list.indexOf(dragId);
+      const to = list.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return list;
+      const next = [...list];
+      next.splice(to, 0, ...next.splice(from, 1));
+      return next;
+    });
+  }
+
+  function endDrag() {
+    setDragId(null);
+    setPreview(null);
+  }
 
   async function save(values: ChapterFormValues) {
     const body: UpdateChapterRequest = {
@@ -111,7 +146,8 @@ export default function ChapterAccordionItem({
         // the server so a « double » created elsewhere would already be 2× wide (R6-2).
         pages: [
           ...chapter.pages,
-          { id: created.id, title: created.title, stage: created.stage, thumbnailUrl: null, fileTags: created.fileTags },
+          // R8-1: a new card always lands LAST, so the server's slot is the current length.
+          { id: created.id, title: created.title, stage: created.stage, thumbnailUrl: null, fileTags: created.fileTags, position: created.position },
         ],
         plancheCount: chapter.plancheCount + 1,
       });
@@ -121,6 +157,25 @@ export default function ChapterAccordionItem({
       setStripError('La création de la page a échoué. Réessayez.');
     } finally {
       setCreating(false);
+    }
+  }
+
+  // R8-2 — place a card at another tile's slot. The board's `moveCard` shape: optimistic first,
+  // revert on failure. `PATCH /pages/:id { position }` is the same route the modal's PLACEMENT field
+  // uses — dragging and typing a number are one operation, so there is no separate reorder endpoint.
+  async function place(id: string, to: number) {
+    const prev = chapter.pages;
+    const from = prev.findIndex((p) => p.id === id);
+    if (from < 0 || to < 0 || to >= prev.length || from === to) return;
+    const next = [...prev];
+    next.splice(to, 0, ...next.splice(from, 1));
+    setStripError(null);
+    onChanged({ ...chapter, pages: next.map((p, i) => ({ ...p, position: i })) });
+    try {
+      await updatePage(id, { position: to + 1 }); // the wire slot is 1-based
+    } catch {
+      onChanged({ ...chapter, pages: prev });
+      setStripError('La réorganisation a échoué. Réessayez.');
     }
   }
 
@@ -188,23 +243,88 @@ export default function ChapterAccordionItem({
       <div id={bodyId} hidden={!open}>
         {open && (
           <>
-            <div style={strip}>
-              {chapter.pages.length === 0 ? (
+            {/* R8-2 — caption the strip and say the tiles move. « ↔ glisser pour réordonner » is the
+                prototype's own wording for exactly this affordance (CS-6 « Réorganiser les pages »,
+                proto line 1705), so the two screens teach the same gesture. Writers only: a reader
+                cannot drag, and a hint for an action they do not have is a lie. */}
+            <div style={stripHeader}>
+              <span style={{ ...sectionLabel, marginBottom: 0 }}>PAGES</span>
+              {canWrite && chapter.pages.length > 1 && (
+                <span style={dragHint}>
+                  <span aria-hidden="true">↔</span> glisser pour réordonner
+                </span>
+              )}
+            </div>
+            <div
+              style={strip}
+              // Releasing between tiles still commits the previewed order — the drag already told us
+              // where the card goes, so a few pixels of gap must not throw the move away.
+              onDragOver={canWrite && dragId ? (e) => e.preventDefault() : undefined}
+              onDrop={
+                canWrite
+                  ? (e) => {
+                      e.preventDefault();
+                      const id = e.dataTransfer.getData('text/plain') || dragId;
+                      endDrag();
+                      if (id && preview) void place(id, preview.indexOf(id));
+                    }
+                  : undefined
+              }
+            >
+              {pages.length === 0 ? (
                 <p style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 500, margin: 0, alignSelf: 'center' }}>
                   Aucune page liée
                 </p>
               ) : (
-                chapter.pages.map((p, i) => {
+                pages.map((p, i) => {
                   // R6-2 — a « double » card IS a two-page spread, so its tile is 2× wide whether or
-                  // not the art has landed: linking a file must not reflow the strip.
-                  const width = p.fileTags.includes('double') ? THUMB_W * 2 : THUMB_W;
+                  // not the art has landed: linking a file must not reflow the strip. The width lives
+                  // in the stylesheet so the ≤480px override scales BOTH tile sizes (it used to force
+                  // `width:72px !important`, squashing a spread back to a single page).
+                  const isDouble = p.fileTags.includes('double');
                   const src = p.thumbnailUrl && !brokenThumbs.includes(p.id) ? p.thumbnailUrl : null;
                   return (
                     <div
                       key={p.id}
-                      className="ep-chapter-thumb"
-                      style={{ ...thumb, width, ...THUMB_FILLS[i % THUMB_FILLS.length] }}
+                      className={`ep-chapter-thumb${isDouble ? ' ep-chapter-thumb--double' : ''}`}
+                      data-dragging={dragId === p.id ? '' : undefined}
+                      style={{ ...thumb, ...THUMB_FILLS[i % THUMB_FILLS.length], ...(canWrite ? grabbable : null), ...(dragId === p.id ? dragging : null) }}
+                      draggable={canWrite}
+                      onDragStart={
+                        canWrite
+                          ? (e) => {
+                              e.dataTransfer.setData('text/plain', p.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              setDragId(p.id);
+                            }
+                          : undefined
+                      }
+                      onDragEnd={canWrite ? endDrag : undefined}
+                      onDragOver={
+                        canWrite
+                          ? (e) => {
+                              e.preventDefault();
+                              previewOver(p.id);
+                            }
+                          : undefined
+                      }
+                      onDrop={
+                        canWrite
+                          ? (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const id = e.dataTransfer.getData('text/plain') || dragId;
+                              const to = preview ? preview.indexOf(id ?? '') : i;
+                              // The optimistic reorder re-keys the tiles, so `dragend` may never
+                              // fire (same trap as the board) — clear the drag where the drop lands.
+                              endDrag();
+                              if (id) void place(id, to);
+                            }
+                          : undefined
+                      }
                     >
+                      {/* R8-1 — a double is TWO pages: split the wide tile so it reads as two slots. */}
+                      {isDouble && <span data-double-rule aria-hidden="true" style={doubleRule} />}
                       {/* R6-1c/d — plain <img> (no next/image), covering the frame. The halftone fill
                           stays underneath, so it is what shows while the image loads; onError drops
                           the <img> for good rather than leaving a broken frame. */}
@@ -218,7 +338,8 @@ export default function ChapterAccordionItem({
                       ) : (
                         <span style={srOnly}>{p.title}</span>
                       )}
-                      <span style={thumbBadge}>{i + 1}</span>
+                      {/* R8-1 — the derived page number(s). A double shows BOTH pages it represents. */}
+                      <span style={thumbBadge}>{pageNumbers[i].label}</span>
                     </div>
                   );
                 })
@@ -242,10 +363,14 @@ export default function ChapterAccordionItem({
               </div>
             )}
 
+            {/* The résumé is prose, the strip above it is a row of tiles — a rule and a « RÉSUMÉ »
+                caption keep the two from reading as one block. Same 2px border the header row uses
+                when the accordion is open. */}
             {chapter.resume && !editing && (
-              <p style={{ fontSize: 13, color: 'var(--ink2)', margin: 0, padding: '0 14px 13px', lineHeight: 1.5 }}>
-                {chapter.resume}
-              </p>
+              <div style={resumeBlock}>
+                <div style={sectionLabel}>RÉSUMÉ</div>
+                <p style={{ fontSize: 13, color: 'var(--ink2)', margin: 0, lineHeight: 1.5 }}>{chapter.resume}</p>
+              </div>
             )}
 
             {editing && canWrite && (
@@ -371,6 +496,39 @@ const modifierBtn: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** The résumé, fenced off from the tile strip above it. */
+const resumeBlock: React.CSSProperties = {
+  borderTop: '2px solid var(--border)',
+  padding: '11px 14px 13px',
+};
+
+/** Same caption idiom as the card modal's field labels. */
+const sectionLabel: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '.05em',
+  color: 'var(--ink2)',
+  marginBottom: 5,
+  textTransform: 'uppercase',
+};
+
+/** Caption row above the tile strip: « PAGES » on the left, the drag hint pushed right. */
+const stripHeader: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 10,
+  flexWrap: 'wrap',
+  padding: '11px 14px 0',
+};
+
+/** Prototype line 1705's hint, verbatim. It sits next to « PAGES » rather than at the far right the
+ *  prototype uses: here it captions the strip right below it, so it belongs to the label. */
+const dragHint: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  color: 'var(--ink2)',
+};
+
 const strip: React.CSSProperties = {
   display: 'flex',
   gap: 9,
@@ -379,16 +537,38 @@ const strip: React.CSSProperties = {
   alignItems: 'center',
 };
 
-/** The prototype's tile. A « double » spread takes two of these across (R6-2). */
-const THUMB_W = 54;
-
+/** The prototype's 54×72 tile — geometry lives in `.ep-chapter-thumb` (globals.css) so the ≤480px
+ *  override scales the single AND the double width together (R6-2). */
 const thumb: React.CSSProperties = {
   position: 'relative',
-  width: THUMB_W,
-  height: 72,
-  border: '2px solid var(--ink)',
+  // Longhand, not the `border` shorthand: the drag state swaps colour + style, and React warns (and
+  // can mis-render) when a shorthand and its longhands are mixed across renders.
+  borderWidth: 2,
+  borderStyle: 'solid',
+  borderColor: 'var(--ink)',
   borderRadius: 4,
   flex: 'none',
+};
+
+/** R8-2 — a tile is draggable to its slot; the modal's PLACEMENT field is the keyboard path. */
+const grabbable: React.CSSProperties = { cursor: 'grab' };
+
+/** R8-2 — the held card: half-faded, outlined in accent, and slid to the slot it would land in. */
+const dragging: React.CSSProperties = {
+  opacity: 0.5,
+  borderColor: 'var(--accent)',
+  borderStyle: 'dashed',
+};
+
+/** R8-1 — the seam between the two pages of a spread. */
+const doubleRule: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  left: 'calc(50% - 1px)',
+  width: 2,
+  background: 'var(--ink)',
+  zIndex: 1,
 };
 
 const thumbImg: React.CSSProperties = {

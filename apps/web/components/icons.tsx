@@ -453,6 +453,23 @@ export function TrashIcon(p: IconProps) {
   );
 }
 
+// CS-6 D-3 — the arrangement grid's drag handle. The prototype draws the « ⠿ » braille glyph
+// (proto 1707-1717); every pictogram in this app is an icon instead (user rule), so this is the same
+// six ink dots at the same visual weight. `aria-hidden` like every icon — the wrapping control
+// carries the « Réorganiser » label.
+export function DragHandleIcon(p: IconProps) {
+  return (
+    <Svg {...p} filled>
+      <circle cx="9" cy="6" r="1.7" stroke="none" />
+      <circle cx="15" cy="6" r="1.7" stroke="none" />
+      <circle cx="9" cy="12" r="1.7" stroke="none" />
+      <circle cx="15" cy="12" r="1.7" stroke="none" />
+      <circle cx="9" cy="18" r="1.7" stroke="none" />
+      <circle cx="15" cy="18" r="1.7" stroke="none" />
+    </Svg>
+  );
+}
+
 // CS-4 (iter 2) — rich-text toolbar pictograms (strike, quote, link, undo/redo, highlight, lists,
 // text colour, clear formatting, alignment). Chunky ink strokes; no emojis.
 

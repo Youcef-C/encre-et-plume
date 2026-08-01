@@ -510,7 +510,8 @@ export class ProjectsService {
             reviews: { orderBy: { createdAt: 'desc' } },
           },
         },
-        pages: { orderBy: { createdAt: 'asc' }, include: WORKSPACE_PAGE_INCLUDE },
+        // R8-1 — slot order, so the board's columns and the Chapitres strip agree on placement.
+        pages: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }], include: WORKSPACE_PAGE_INCLUDE },
         labels: { orderBy: { createdAt: 'asc' } },
       },
     });

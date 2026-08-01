@@ -19,9 +19,9 @@ function makeWorkspace(): ProjectWorkspaceResponse {
       { id: 'c1', number: 1, title: 'Prologue', status: 'draft', plancheCount: 1, targetPages: 20, progressPct: 0 },
     ],
     pages: [
-      { id: 'pg1', chapterId: 'c2', title: 'Planche 5', stage: 'scenario', fileTags: ['scenario'], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
-      { id: 'pg2', chapterId: 'c1', title: 'Planche 1', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
-      { id: 'pg3', chapterId: 'c1', title: 'Brouillon', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
+      { id: 'pg1', chapterId: 'c2', title: 'Planche 5', stage: 'scenario', position: 0, fileTags: ['scenario'], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
+      { id: 'pg2', chapterId: 'c1', title: 'Planche 1', stage: 'scenario', position: 0, fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
+      { id: 'pg3', chapterId: 'c1', title: 'Brouillon', stage: 'scenario', position: 0, fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
     ],
     labels: [], reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
     viewer: { isMember: true, isOwner: true, canWrite: true, canManage: true },

@@ -566,6 +566,11 @@ model Chapter {
   // pill (done ÷ prévues). R3-2 made it NOT NULL with a default of 20 (a standard chapter length):
   // the bar is always displayed, so "no target" — and with it the null percentage — no longer exists.
   targetPages  Int           @default(20)
+  // CS-6 — does this chapter OPEN on a cover? A toggle, not a designation: the cover is always the
+  // first page (`effectiveCoverPageId`), this only says whether that page is one. A hand-picked
+  // cover image belongs to the PROJECT (`Project.cover`), never to a chapter (user, 2026-08-01).
+  // Consequence in the reader: a cover never pairs into a 2-page spread, it stands alone.
+  hasCover     Boolean       @default(true)
   publishAt    DateTime      @default(now()) // future + status=scheduled → "Sorties programmées"
   createdAt    DateTime      @default(now())
   plancheCount Int           @default(0) // ponytail: denormalized; CS owns real page counts later
@@ -941,6 +946,11 @@ model Page {
   title         String // card label, e.g. "Page 7"
   stage         PageStage     @default(scenario)
   fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
+  // CS-7 R8 — the card's SLOT within its chapter (dense 0..n-1, rewritten on every move). Displayed
+  // page numbers are DERIVED from it (`chapterPageNumbers`), a `double` card spanning two of them.
+  // Plain index, not @@unique: the service rewrites the whole permutation, which a unique constraint
+  // would fight mid-transaction (same call as IllustrationCollection.order).
+  position      Int           @default(0)
   linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
   description   String? // CS-2 card-modal: free-text card description
   dueDate       DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
@@ -960,6 +970,7 @@ model Page {
 
   @@index([projectId, chapterId, stage])
   @@index([createdById])
+  @@index([chapterId, position])
 }
 
 // ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────

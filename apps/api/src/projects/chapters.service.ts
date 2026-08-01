@@ -50,6 +50,7 @@ type ChapterRow = {
   status: string;
   likeCount: number;
   targetPages: number;
+  hasCover: boolean;
 };
 
 type PageRow = {
@@ -57,6 +58,7 @@ type PageRow = {
   chapterId: string | null;
   title: string;
   stage: string;
+  position: number;
   fileTags: string[];
   /** R6-1a — the card's linked `page` asset (at most one: CS-3 keeps dessin/page single-linked). */
   assetLinks: { asset: { mediaId: string } | null }[];
@@ -73,6 +75,7 @@ const CHAPTER_SELECT = {
   status: true,
   likeCount: true,
   targetPages: true,
+  hasCover: true, // CS-6 — rides the row already fetched; no extra query for the cover toggle
 } as const;
 
 const PAGE_REF_SELECT = {
@@ -83,6 +86,7 @@ const PAGE_REF_SELECT = {
   // R6-1a — the strip draws the card, so the ref carries what the card IS: its tags (`double` → a
   // 2×-wide tile) and its artwork. Joined in the SAME page query — never one lookup per card.
   fileTags: true,
+  position: true, // R8-1 — the slot the badge's page number derives from
   assetLinks: {
     where: { asset: { type: 'page' as const } },
     select: { asset: { select: { mediaId: true } } },
@@ -188,13 +192,16 @@ export class ChaptersService {
   async update(accountId: string, chapterId: string, body: UpdateChapterBody): Promise<ChapterDto> {
     const { chapter, project } = await this.loadWritableChapter(accountId, chapterId);
 
-    const data: { title?: string; number?: number; resume?: string | null; targetPages?: number } = {};
+    const data: { title?: string; number?: number; resume?: string | null; targetPages?: number; hasCover?: boolean } = {};
     if (body.title !== undefined) data.title = assertTitle(body.title);
     if (body.number !== undefined) {
       data.number = assertNumber(body.number);
       await this.assertNumberFree(chapter.workId, data.number, chapter.id);
     }
     if (body.resume !== undefined) data.resume = body.resume.trim() ? body.resume.trim() : null;
+    // CS-6 — the « Couverture » toggle. A plain boolean field on the chapter, not a resource of its
+    // own: the cover is always the first page, this only says whether the chapter opens on one.
+    if (body.hasCover !== undefined) data.hasCover = Boolean(body.hasCover);
     // R3-2: the planned length can no longer be cleared — `null` is a 400, like any non-positive value.
     if (body.targetPages !== undefined) data.targetPages = assertTargetPages(body.targetPages);
 
@@ -204,6 +211,48 @@ export class ChaptersService {
         : chapter;
     const pages = await this.loadPagesFor([chapterId]);
     return toChapterDto(updated, project.id, pages.get(chapterId) ?? []);
+  }
+
+  // ── PATCH /chapters/:id/page-order ─────────────────────────────────────────
+  /**
+   * CS-6 B1 — « Réorganiser les pages ». The body is the chapter's COMPLETE page order, not a delta.
+   *
+   * Two write paths now reach `Page.position`, deliberately: CS-7's `PATCH /pages/:id { position }`
+   * moves ONE card (possibly across chapters), this one rewrites one chapter's whole permutation.
+   * Different units of work, and this is the story's named contract. Both leave the slots dense
+   * 0..n-1 (pinned by a spec that runs one after the other).
+   */
+  async reorderPages(accountId: string, chapterId: string, body: { pageIds: string[] }): Promise<ChapterDto> {
+    const { chapter, project } = await this.loadWritableChapter(accountId, chapterId);
+
+    const current = (await this.prisma.page.findMany({
+      where: { chapterId },
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, position: true },
+    })) as unknown as { id: string; position: number }[];
+
+    const wanted = body.pageIds ?? [];
+    const known = new Map(current.map((p) => [p.id, p.position]));
+    // A COMPLETE permutation or nothing: same length, no duplicate, no foreign id. This is what
+    // keeps the slots contiguous and stops a stale grid from silently dropping a card.
+    if (wanted.length !== current.length || new Set(wanted).size !== wanted.length || wanted.some((id) => !known.has(id))) {
+      throw new BadRequestException('L’ordre des pages est invalide.');
+    }
+
+    // ponytail: one UPDATE per card that actually moved — a chapter is tens of cards, so a single
+    // CASE-expression write would be premature (same call as CS-7's per-card placement path).
+    //
+    // Nothing else to write: the chapter's cover is "whatever opens it" (user, 2026-08-01), so
+    // reordering IS re-designating it — the rule is `effectiveCoverPageId`, applied at render time
+    // from this very order. There is no stored designation left to keep in step.
+    await this.prisma.$transaction(async (tx) => {
+      for (const [i, id] of wanted.entries()) {
+        if (known.get(id) !== i) await tx.page.update({ where: { id }, data: { position: i } });
+      }
+    });
+
+    const pages = await this.loadPagesFor([chapterId]);
+    return toChapterDto(chapter, project.id, pages.get(chapterId) ?? []);
   }
 
   // ── DELETE /chapters/:id ───────────────────────────────────────────────────
@@ -276,7 +325,9 @@ export class ChaptersService {
     if (chapterIds.length === 0) return byChapter;
     const rows = (await this.prisma.page.findMany({
       where: { chapterId: { in: chapterIds } },
-      orderBy: { createdAt: 'asc' }, // ordering WITHIN a chapter is CS-6's job
+      // R8-1 — slot order. `createdAt` only breaks ties (rows predating the column share position 0
+      // until the backfill lands / a card is placed).
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
       select: PAGE_REF_SELECT,
     })) as unknown as PageRow[];
 
@@ -358,6 +409,7 @@ function toPageRef(p: PageRow, thumbs: Map<string, string | null>): ChapterPageR
     stage: p.stage,
     thumbnailUrl: mediaId ? (thumbs.get(mediaId) ?? null) : null,
     fileTags: (p.fileTags ?? []) as PageFileTag[],
+    position: p.position,
   };
 }
 
@@ -378,5 +430,6 @@ function toChapterDto(c: ChapterRow, projectId: string, pages: ChapterPageRef[])
     plancheCount: pages.length,
     likeCount: c.likeCount,
     pages,
+    hasCover: c.hasCover,
   };
 }

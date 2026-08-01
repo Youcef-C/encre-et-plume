@@ -2,7 +2,7 @@
 
 // DR-4 FE-4 — center stage: manga page panels (single/2-page spread) or paginated prose.
 // Replica of LECTEUR lines 780-816. F7 (loading placeholder) / F9 (error+retry) states live here.
-import { PROSE_PARAGRAPHS_PER_PAGE, type ChapterPagesResponse, type ReaderPageDto } from '@encre-et-plume/shared';
+import { PROSE_PARAGRAPHS_PER_PAGE, readerPagesShown, type ChapterPagesResponse, type ReaderPageDto } from '@encre-et-plume/shared';
 import type { ReadingDirection } from './readingDirection';
 
 export type PagesState = 'loading' | 'ready' | 'locked' | 'error' | 'age-restricted';
@@ -79,17 +79,26 @@ export const ROMAN_PAGE_RATIO = '1 / 1.414';
 // (width derives from 2:3), rendering large on the definite-height stage. DOUBLE: flex:1 1 0 +
 // maxWidth:calc(50%-6px) makes width the definite driver so two pages sit side by side (height
 // derives from 2:3, capped by maxHeight) instead of wrapping/stacking — mirrors RomanPageSurface.
-function pageCardStyle(double?: boolean): React.CSSProperties {
+function pageCardStyle(double?: boolean, innerEdge?: 'left' | 'right'): React.CSSProperties {
   return double
     ? {
         background: 'var(--card)',
         border: '3px solid var(--ink)',
         boxShadow: '8px 8px 0 rgba(0,0,0,.5)',
         padding: 12,
+        // A 2-page spread is ONE image cut in half, so the halves must touch (user, 2026-08-01):
+        // the facing border AND the facing padding go, and the row's gap with them. Which side
+        // faces inward depends on the reading direction — RTL lays the row out reversed, so the
+        // first card sits on the RIGHT and it is its left edge that is the seam.
+        ...(innerEdge === 'left'
+          ? { borderLeftWidth: 0, paddingLeft: 0 }
+          : innerEdge === 'right'
+            ? { borderRightWidth: 0, paddingRight: 0 }
+            : null),
         aspectRatio: MANGA_PAGE_RATIO,
         flex: '1 1 0',
         width: 'auto',
-        maxWidth: 'calc(50% - 6px)',
+        maxWidth: '50%', // no gap to leave room for
         height: 'auto',
         maxHeight: '100%',
         minHeight: 0,
@@ -121,10 +130,10 @@ function halftoneStyle(seed: number): React.CSSProperties {
   };
 }
 
-function PageCard({ workTitle, chapterNumber, page, double }: { workTitle: string; chapterNumber: number; page: ReaderPageDto; double?: boolean }) {
+function PageCard({ workTitle, chapterNumber, page, double, innerEdge }: { workTitle: string; chapterNumber: number; page: ReaderPageDto; double?: boolean; innerEdge?: 'left' | 'right' }) {
   const alt = `${workTitle} — chapitre ${chapterNumber}, page ${page.index}`;
   return (
-    <div className="ep-manga-page" style={{ ...pageCardStyle(double), display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
+    <div className="ep-manga-page" style={{ ...pageCardStyle(double, innerEdge), display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
       {page.image ? (
         // eslint-disable-next-line @next/next/no-img-element -- plain <img> + CDN semantics (no next/image), platform convention
         <img
@@ -158,11 +167,19 @@ function PageCard({ workTitle, chapterNumber, page, double }: { workTitle: strin
   );
 }
 
-function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode, direction }: { workTitle: string; chapterNumber: number; pages: ReaderPageDto[]; page: number; spreadMode: 'single' | 'double'; direction: ReadingDirection }) {
+function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode, direction, hasCover }: { workTitle: string; chapterNumber: number; pages: ReaderPageDto[]; page: number; spreadMode: 'single' | 'double'; direction: ReadingDirection; hasCover: boolean }) {
   const current = pages[page - 1];
   if (!current) return null;
-  const showSecond = spreadMode === 'double' && !current.double && page < pages.length;
-  const second = showSecond ? pages[page] : null;
+  // CS-6 — the shared rule, so what is DRAWN and what the pager STEPS by cannot disagree. A cover
+  // is a standalone recto: it never takes a partner, whatever the spread mode.
+  const second =
+    readerPagesShown(page, pages.length, spreadMode, {
+      hasCover,
+      currentIsDouble: current.double,
+      nextIsDouble: pages[page]?.double,
+    }) === 2
+      ? pages[page]
+      : null;
   return (
     <div
       key={`${chapterNumber}-${page}`}
@@ -171,10 +188,24 @@ function MangaPages({ workTitle, chapterNumber, pages, page, spreadMode, directi
       // contain-sizes within it (single) or width-caps to half the row (double, side by side).
       // flexWrap only kicks in on genuinely narrow widths where two half-pages can't fit.
       // RTL orders the spread right-then-left (row-reverse) while DOM order stays reading order.
-      style={{ display: 'flex', flexDirection: direction === 'rtl' ? 'row-reverse' : 'row', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
+      style={{ display: 'flex', flexDirection: direction === 'rtl' ? 'row-reverse' : 'row', gap: second ? 0 : 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}
     >
-      <PageCard workTitle={workTitle} chapterNumber={chapterNumber} page={current} double={!!second} />
-      {second && <PageCard workTitle={workTitle} chapterNumber={chapterNumber} page={second} double />}
+      <PageCard
+        workTitle={workTitle}
+        chapterNumber={chapterNumber}
+        page={current}
+        double={!!second}
+        innerEdge={second ? (direction === 'rtl' ? 'left' : 'right') : undefined}
+      />
+      {second && (
+        <PageCard
+          workTitle={workTitle}
+          chapterNumber={chapterNumber}
+          page={second}
+          double
+          innerEdge={direction === 'rtl' ? 'right' : 'left'}
+        />
+      )}
     </div>
   );
 }
@@ -311,7 +342,7 @@ export default function Stage({ workTitle, chapterNumber, chapterTitle, pagesSta
     pagesData.readMode === 'prose' ? (
       <RomanPages chapterNumber={chapterNumber} chapterTitle={chapterTitle} prose={pagesData.prose} page={page} spreadMode={spreadMode} direction={direction} />
     ) : (
-      <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} direction={direction} />
+      <MangaPages workTitle={workTitle} chapterNumber={chapterNumber} pages={pagesData.pages} page={page} spreadMode={spreadMode} direction={direction} hasCover={pagesData.hasCover} />
     );
 
   if (!onPrev || !onNext) return content;

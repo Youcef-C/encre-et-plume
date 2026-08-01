@@ -137,8 +137,41 @@ export class MembersService {
 
   // ── GET /projects/:slug/members ───────────────────────────────────────────
   async getMembers(accountId: string, slug: string): Promise<GroupMembersResponse> {
-    const project = await this.loadBySlug(accountId, slug);
+    const project = await this.ensureOwnerMembership(await this.loadBySlug(accountId, slug), accountId, slug);
     return toResponse(project, accountId);
+  }
+
+  /**
+   * The owner is a member BY DEFINITION — `isMemberOf` grants them everything on `ownerId` alone —
+   * but this page reads `WorkCreator` rows. A project whose owner has none therefore rendered an
+   * EMPTY « Membres » table and an EMPTY « Partage des revenus », with the owner locked out of their
+   * own split. The create path (`projects.service`) does write the row, so this only bites rows that
+   * predate it or that a partial cleanup orphaned — but the two sources of truth must never be able
+   * to disagree, so repair on read rather than paper over it in the UI.
+   *
+   * The repaired row is what the create path writes: order-0 leader, taking whatever share is left
+   * (100 % when they are alone), so the sum-100 invariant survives.
+   */
+  private async ensureOwnerMembership(project: GroupProject, accountId: string, slug: string): Promise<GroupProject> {
+    const creators = project.work?.creators ?? [];
+    if (creators.some((c) => c.accountId === project.ownerId)) return project;
+
+    const owner = await this.prisma.account.findUnique({
+      where: { id: project.ownerId },
+      select: { profile: { select: { creatorRoles: true } } },
+    });
+    const taken = creators.reduce((sum, c) => sum + c.sharePct, 0);
+    await this.prisma.workCreator.create({
+      data: {
+        workId: project.workId,
+        accountId: project.ownerId,
+        role: owner?.profile?.creatorRoles?.find((r) => r === 'scenariste' || r === 'dessinateur') ?? 'scenariste',
+        order: 0,
+        groupRole: 'leader',
+        sharePct: Math.max(0, 100 - taken),
+      },
+    });
+    return this.loadBySlug(accountId, slug);
   }
 
   // ── PATCH /members/:id ────────────────────────────────────────────────────

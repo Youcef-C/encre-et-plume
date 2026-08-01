@@ -5,8 +5,9 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { chapterProgressPct } from '@encre-et-plume/shared';
+import { chapterProgressPct, effectiveCoverPageId } from '@encre-et-plume/shared';
 import { ChaptersService } from './chapters.service';
+import { PagesService } from './pages.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Owner acc-me (implicit full permissions), acc-yuki with « Écriture », acc-noa without it.
@@ -27,6 +28,7 @@ const PROJECT = (o: Record<string, unknown> = {}) => ({
 });
 
 const CHAPTER = (o: Record<string, unknown> = {}) => ({
+  hasCover: true, // CS-6 — chapters open on a cover by default (the column default)
   id: 'ch-1',
   workId: 'work-1',
   number: 1,
@@ -72,6 +74,8 @@ describe('ChaptersService', () => {
       },
       page: {
         findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(0),
       },
@@ -403,5 +407,126 @@ describe('ChaptersService', () => {
       prisma.chapter.findUnique.mockResolvedValue(CHAPTER());
       await expect(service.remove('acc-noa', 'ch-1')).rejects.toThrow(ForbiddenException);
     });
+  });
+
+  // ── CS-6 · « Réorganiser les pages » ────────────────────────────────────────
+  // ── CS-6 · the « Couverture » toggle ────────────────────────────────────────
+  // A field on the chapter, not a resource: it rides the ordinary PATCH /chapters/:id. The cover
+  // itself is positional (the first page), so there is nothing else to store.
+  describe('CS-6 hasCover', () => {
+    it('turns the cover off and back on through the ordinary chapter PATCH', async () => {
+      prisma.chapter.update.mockResolvedValue(CHAPTER({ hasCover: false }));
+      const off = await service.update('acc-yuki', 'ch-1', { hasCover: false });
+      expect(prisma.chapter.update.mock.calls[0][0].data).toEqual({ hasCover: false });
+      expect(off.hasCover).toBe(false);
+
+      prisma.chapter.update.mockResolvedValue(CHAPTER({ hasCover: true }));
+      const on = await service.update('acc-yuki', 'ch-1', { hasCover: true });
+      expect(on.hasCover).toBe(true);
+    });
+
+    it('is left alone when the PATCH does not mention it', async () => {
+      await service.update('acc-yuki', 'ch-1', { title: 'Nouveau titre' });
+      expect(prisma.chapter.update.mock.calls[0][0].data).not.toHaveProperty('hasCover');
+    });
+
+    it('403s a member without « Écriture » (same gate as every chapter write)', async () => {
+      await expect(service.update('acc-noa', 'ch-1', { hasCover: false })).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('CS-6 reorderPages', () => {
+    /**
+     * A tiny in-memory Page table. The service RE-READS the chapter's cards to build its response,
+     * so the writes must be visible to that re-read — that is what proves the returned DTO is server
+     * truth and the slots ended dense, rather than an echo of the request.
+     */
+    type StoreRow = { id: string; position: number; chapterId: string; fileTags: string[] };
+    function seedPages(rows: { id: string; position: number; fileTags?: string[] }[]): StoreRow[] {
+      const store = rows.map(
+        (r) => PAGE({ id: r.id, position: r.position, fileTags: r.fileTags ?? [] }) as unknown as StoreRow,
+      );
+      prisma.page.findMany.mockImplementation(async () => [...store].sort((a, b) => a.position - b.position));
+      prisma.page.update.mockImplementation(async ({ where, data }: any) => {
+        const row = store.find((p) => p.id === where.id);
+        return row ? Object.assign(row, data) : null;
+      });
+      return store;
+    }
+
+    it('rewrites `position` to a dense 0..n-1 in the payload order', async () => {
+      const store = seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }, { id: 'p3', position: 2 }]);
+      const res = await service.reorderPages('acc-yuki', 'ch-1', { pageIds: ['p3', 'p1', 'p2'] });
+      expect(store.map((p) => [p.id, p.position])).toEqual([['p1', 1], ['p2', 2], ['p3', 0]]);
+      // …and the answer is the refreshed chapter, read back in the new slot order.
+      expect(res.pages.map((p) => p.id)).toEqual(['p3', 'p1', 'p2']);
+      expect(res.pages.map((p) => p.position)).toEqual([0, 1, 2]);
+    });
+
+    it('writes only the cards that actually moved', async () => {
+      seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }, { id: 'p3', position: 2 }]);
+      await service.reorderPages('acc-yuki', 'ch-1', { pageIds: ['p1', 'p3', 'p2'] });
+      expect(prisma.page.update).toHaveBeenCalledTimes(2); // p1 already sits at slot 0
+    });
+
+    it('runs the renumbering in ONE transaction (a half-applied order is not a state)', async () => {
+      seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }]);
+      await service.reorderPages('acc-yuki', 'ch-1', { pageIds: ['p2', 'p1'] });
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    // The payload is a COMPLETE permutation, never a delta — this is what makes the story's
+    // "order must remain contiguous" true by construction against a stale grid.
+    it.each([
+      ['a missing id', ['p1', 'p2']],
+      ['a duplicate id', ['p1', 'p2', 'p2']],
+      ['a page from another chapter', ['p1', 'p2', 'p9']],
+      ['an empty list', []],
+    ])('400s on %s', async (_label, pageIds) => {
+      seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }, { id: 'p3', position: 2 }]);
+      await expect(service.reorderPages('acc-yuki', 'ch-1', { pageIds })).rejects.toThrow(BadRequestException);
+      await expect(service.reorderPages('acc-yuki', 'ch-1', { pageIds })).rejects.toThrow(/ordre des pages est invalide/);
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it('403s a member without « Écriture », 404s a non-member and an unknown chapter', async () => {
+      seedPages([{ id: 'p1', position: 0 }]);
+      await expect(service.reorderPages('acc-noa', 'ch-1', { pageIds: ['p1'] })).rejects.toThrow(ForbiddenException);
+      await expect(service.reorderPages('acc-stranger', 'ch-1', { pageIds: ['p1'] })).rejects.toThrow(NotFoundException);
+      prisma.chapter.findUnique.mockResolvedValue(null);
+      await expect(service.reorderPages('acc-me', 'nope', { pageIds: ['p1'] })).rejects.toThrow(NotFoundException);
+    });
+
+    // The cover is "whatever opens the chapter" (user, 2026-08-01) — purely positional, so a reorder
+    // re-designates it by definition and there is nothing to store. The chapter row is never touched.
+    it('re-designates the cover by moving the pages, writing nothing to the chapter', async () => {
+      seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }]);
+      const res = await service.reorderPages('acc-yuki', 'ch-1', { pageIds: ['p2', 'p1'] });
+      expect(prisma.chapter.update).not.toHaveBeenCalled();
+      expect(effectiveCoverPageId(res)).toBe('p2');
+    });
+
+    // The §3-B1 drift risk, pinned: CS-7's per-card `PATCH /pages/:id { position }` and CS-6's
+    // whole-permutation route BOTH write `Page.position`. Run one after the other on the same table
+    // and the slots must still be dense 0..n-1.
+    it('stays dense after CS-7 moves ONE card and CS-6 then rewrites the whole order', async () => {
+      const store = seedPages([{ id: 'p1', position: 0 }, { id: 'p2', position: 1 }, { id: 'p3', position: 2 }]);
+      prisma.page.findUnique.mockImplementation(async ({ where }: any) => {
+        const row = store.find((p) => p.id === where.id);
+        return row ? { ...row, project: PROJECT(), assignees: [], createdById: 'acc-yuki' } : null;
+      });
+      const pages = new PagesService(prisma as unknown as PrismaService, { create: jest.fn() } as never);
+
+      await pages.updatePage('acc-yuki', 'p3', { position: 1 }); // CS-7 path: p3 to slot 0 (1-based)
+      expect(sortedPositions(store)).toEqual([0, 1, 2]);
+
+      await service.reorderPages('acc-yuki', 'ch-1', { pageIds: ['p2', 'p1', 'p3'] }); // CS-6 path
+      expect(sortedPositions(store)).toEqual([0, 1, 2]);
+      expect(store.find((p) => p.id === 'p2')?.position).toBe(0);
+    });
+
+    function sortedPositions(store: StoreRow[]): number[] {
+      return store.map((p) => p.position).sort((a, b) => a - b);
+    }
   });
 });

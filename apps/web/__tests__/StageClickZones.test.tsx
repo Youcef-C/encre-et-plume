@@ -11,7 +11,7 @@ function mangaPages(count: number): ChapterPagesResponse {
   return {
     workSlug: 'w',
     chapterNumber: 1,
-    readMode: 'pages',
+    readMode: 'pages', hasCover: false,
     totalPages: count,
     pages: Array.from({ length: count }, (_, i) => ({ index: i + 1, image: null, caption: null, double: false })),
     prose: [],

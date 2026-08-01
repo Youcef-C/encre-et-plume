@@ -83,7 +83,7 @@ const chaptersResponse: WorkChaptersResponse = {
 const mangaPages: ChapterPagesResponse = {
   workSlug: 'lames-de-brume',
   chapterNumber: 1,
-  readMode: 'pages',
+  readMode: 'pages', hasCover: false,
   totalPages: 6,
   pages: Array.from({ length: 6 }, (_, i) => ({ index: i + 1, image: null, caption: i === 2 ? '« Alors prouve-le. »' : null, double: false })),
   prose: [],
@@ -92,7 +92,7 @@ const mangaPages: ChapterPagesResponse = {
 const romanPages: ChapterPagesResponse = {
   workSlug: 'dr2-le-murmure-des-cendres',
   chapterNumber: 1,
-  readMode: 'prose',
+  readMode: 'prose', hasCover: false,
   totalPages: 2,
   pages: [],
   prose: ['Paragraphe un.', 'Paragraphe deux.', 'Paragraphe trois.', 'Paragraphe quatre.', 'Paragraphe cinq.', 'Paragraphe six.'],
@@ -463,7 +463,7 @@ describe('Reader (DR-4 FE-1)', () => {
     const chapter4Pages: ChapterPagesResponse = {
       workSlug: 'lames-de-brume',
       chapterNumber: 4,
-      readMode: 'pages',
+      readMode: 'pages', hasCover: false,
       totalPages: 28,
       pages: Array.from({ length: 28 }, (_, i) => ({ index: i + 1, image: null, caption: null, double: false })),
       prose: [],

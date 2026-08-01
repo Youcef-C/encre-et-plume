@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useScrollLock } from '../../lib/useScrollLock';
 import {
+  chapterPageNumbers,
   PAGE_STAGES,
   LABEL_COLORS,
   LABEL_COLOR_NAMES,
@@ -96,6 +97,9 @@ export interface CardModalProps {
   members: WorkspaceMember[];
   /** R2-5 — this project's chapters, for the « CHAPITRE » move field. */
   chapters?: WorkspaceChapter[];
+  /** R8-1 — the board's cards, for the « PLACEMENT » field: the slot list and the derived page
+   *  numbers both come from the card's own chapter. Omitted → the field is not offered. */
+  pages?: WorkspacePage[];
   labels: ProjectLabelItem[];
   viewerId: string | null;
   isOwner: boolean;
@@ -127,6 +131,7 @@ export default function CardModal({
   slug,
   members,
   chapters = [],
+  pages,
   labels,
   viewerId,
   isOwner,
@@ -286,6 +291,19 @@ export default function CardModal({
     [],
   );
 
+  // R8-1 — where this card sits in its chapter, and the page number(s) that slot yields. The card's
+  // own live `detail` replaces the board's copy in the numbering so flipping TYPE DE PAGE to
+  // « double » widens the span before the board has caught up. Above the loading/error returns: it
+  // is a hook, and the hook order must not depend on `detail`.
+  const placement = useMemo(() => {
+    if (!pages || !detail) return null;
+    const siblings = pages.filter((p) => p.chapterId === detail.chapterId).sort((a, b) => a.position - b.position);
+    const index = siblings.findIndex((p) => p.id === pageId);
+    if (index < 0) return null;
+    const numbers = chapterPageNumbers(siblings.map((p) => (p.id === pageId ? detail : p)));
+    return { slot: index + 1, count: siblings.length, span: numbers[index], total: numbers[numbers.length - 1].to };
+  }, [pages, detail, pageId]);
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       e.stopPropagation();
@@ -390,6 +408,26 @@ export default function CardModal({
     setSaveState('saving');
     try {
       const updated = await updatePage(pageId, { chapterId });
+      setDetail((d) => (d ? withCounts({ ...d, ...updated }) : d));
+      persisted(updated);
+      setSaveState('saved');
+    } catch {
+      setDetail(prev);
+      onPageChange(prev);
+      setSaveState('error');
+    }
+  }
+
+  // R8-1 — PLACEMENT. Same route as the strip's drag (`PATCH /pages/:id { position }`): the server
+  // splices the card in and renumbers its siblings, so this is deliberately NOT debounced — a
+  // half-typed slot must not reorder the chapter.
+  async function onPlacementCommit(slot: number) {
+    if (readOnly || !detail || !placement || slot === placement.slot) return;
+    const clamped = Math.min(Math.max(slot, 1), placement.count);
+    const prev = detail;
+    setSaveState('saving');
+    try {
+      const updated = await updatePage(pageId, { position: clamped });
       setDetail((d) => (d ? withCounts({ ...d, ...updated }) : d));
       persisted(updated);
       setSaveState('saved');
@@ -544,6 +582,41 @@ export default function CardModal({
               <option value="double">⇿ Double page</option>
             </OnBrandSelect>
           </div>
+          {/* R8-1 — PLACEMENT: the card's slot in its chapter, with the page number(s) it yields.
+              A « double » occupies TWO of them, which is what the hint spells out. Uncontrolled +
+              keyed on the slot: the field resets itself once the move is acknowledged. */}
+          {placement && (
+            <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+              <label htmlFor="card-modal-placement" style={sectionLabel}>
+                PLACEMENT
+              </label>
+              <input
+                id="card-modal-placement"
+                key={placement.slot}
+                aria-label="Placement"
+                type="number"
+                min={1}
+                max={placement.count}
+                defaultValue={placement.slot}
+                readOnly={readOnly}
+                aria-describedby="card-modal-placement-hint"
+                onBlur={(e) => void onPlacementCommit(Number(e.currentTarget.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void onPlacementCommit(Number(e.currentTarget.value));
+                  }
+                }}
+                style={inputStyle}
+              />
+              <div id="card-modal-placement-hint" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', marginTop: 4 }}>
+                {placement.span.from === placement.span.to
+                  ? `Page ${placement.span.from} sur ${placement.total}`
+                  : `Pages ${placement.span.from}–${placement.span.to} sur ${placement.total}`}
+              </div>
+            </div>
+          )}
+
           {/* R2-5 — CHAPITRE. Only for writers; the server is the real gate. */}
           {!readOnly && chapters.length > 0 && (
             <div style={{ flex: '1 1 160px', minWidth: 0 }}>

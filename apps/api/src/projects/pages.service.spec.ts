@@ -43,6 +43,7 @@ describe('PagesService', () => {
         update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...PAGE(), ...data })),
         delete: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       chapter: { findUnique: jest.fn().mockResolvedValue({ id: 'ch-1', workId: 'work-1' }) },
       projectLabel: { findMany: jest.fn().mockResolvedValue([]) },
@@ -108,6 +109,20 @@ describe('PagesService', () => {
     it('403 for a non-member', async () => {
       await expect(service.createPage('stranger', 'lames-de-brume', {})).rejects.toThrow(ForbiddenException);
     });
+
+    // R8-1 — a new card always lands LAST in its chapter. Positions stay dense (0..n-1), so the
+    // existing card count IS the next slot; no second query.
+    it('appends the new card at the end of the chapter (position = card count)', async () => {
+      prisma.page.count.mockResolvedValue(6);
+      await service.createPage('acc-me', 'lames-de-brume', { chapterId: 'ch-1' });
+      expect(prisma.page.create.mock.calls[0][0].data.position).toBe(6);
+    });
+
+    it('gives the first card of a chapter position 0', async () => {
+      prisma.page.count.mockResolvedValue(0);
+      await service.createPage('acc-me', 'lames-de-brume', { chapterId: 'ch-1', title: 'Couverture' });
+      expect(prisma.page.create.mock.calls[0][0].data.position).toBe(0);
+    });
   });
 
   // ── updatePage ─────────────────────────────────────────────────────────────
@@ -151,6 +166,67 @@ describe('PagesService', () => {
 
     it('403 non-member', async () => {
       await expect(service.updatePage('stranger', 'page-1', { title: 'x' })).rejects.toThrow(ForbiddenException);
+    });
+
+    // ── R8-1 — PLACEMENT: the ONE write path for both the strip's drag and the modal's field ──
+    describe('position', () => {
+      // 4 cards in ch-1, the edited one (page-1) sitting third.
+      const siblings = (ids = ['a', 'b', 'page-1', 'c']) =>
+        prisma.page.findMany.mockResolvedValue(ids.map((id, position) => ({ id, position })));
+      /** Every position write the service made, as `{ id: position }`. */
+      const written = () =>
+        Object.fromEntries(
+          prisma.page.update.mock.calls
+            .filter((c: any) => c[0].data.position !== undefined)
+            .map((c: any) => [c[0].where.id, c[0].data.position]),
+        );
+
+      it('moves the card to the requested 1-based slot and renumbers the chapter densely', async () => {
+        siblings();
+        await service.updatePage('acc-me', 'page-1', { position: 1 });
+        // page-1 jumps to the front: a and b each shift down one; c never moves.
+        expect(written()).toEqual({ 'page-1': 0, a: 1, b: 2 });
+      });
+
+      it('moves a card DOWN the chapter', async () => {
+        siblings();
+        await service.updatePage('acc-me', 'page-1', { position: 4 });
+        expect(written()).toEqual({ 'page-1': 3, c: 2 });
+      });
+
+      it('only writes the siblings whose slot actually changed', async () => {
+        siblings();
+        await service.updatePage('acc-me', 'page-1', { position: 3 }); // already there
+        expect(written()).toEqual({ 'page-1': 2 });
+      });
+
+      it('clamps an out-of-range slot instead of leaving a gap', async () => {
+        siblings();
+        await service.updatePage('acc-me', 'page-1', { position: 99 });
+        expect(written()).toEqual({ 'page-1': 3, c: 2 });
+      });
+
+      it('places the card in the DESTINATION chapter when the move carries a slot', async () => {
+        prisma.chapter.findUnique.mockResolvedValue({ id: 'ch-2', workId: 'work-1' });
+        siblings(['x', 'y']); // ch-2 already holds two cards
+        await service.updatePage('acc-me', 'page-1', { chapterId: 'ch-2', position: 1 });
+        expect(prisma.page.findMany.mock.calls[0][0].where.chapterId).toBe('ch-2');
+        expect(written()).toEqual({ 'page-1': 0, x: 1, y: 2 });
+      });
+
+      it('appends the card when it changes chapter with no slot given', async () => {
+        prisma.chapter.findUnique.mockResolvedValue({ id: 'ch-2', workId: 'work-1' });
+        siblings(['x', 'y']);
+        await service.updatePage('acc-me', 'page-1', { chapterId: 'ch-2' });
+        expect(written()).toEqual({ 'page-1': 2 });
+      });
+
+      it('does not touch positions on an ordinary edit', async () => {
+        siblings();
+        await service.updatePage('acc-me', 'page-1', { title: 'Renommée' });
+        expect(prisma.page.findMany).not.toHaveBeenCalled();
+        expect(written()).toEqual({});
+      });
     });
 
     // ── CS-2 card-modal extension ─────────────────────────────────────────────

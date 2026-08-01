@@ -62,7 +62,9 @@ describe('MembersService', () => {
         findUnique: jest.fn().mockResolvedValue(PROJECT()),
         findFirst: jest.fn().mockResolvedValue(PROJECT()),
       },
+      account: { findUnique: jest.fn().mockResolvedValue({ profile: { creatorRoles: ['scenariste'] } }) },
       workCreator: {
+        create: jest.fn().mockResolvedValue({}),
         findUnique: jest.fn().mockResolvedValue({ id: 'wc-yuki', workId: 'work-1', accountId: 'acc-yuki', groupRole: 'member', sharePct: 0 }),
         // N3: the revenue-split save re-reads the member set INSIDE its transaction.
         findMany: jest.fn().mockResolvedValue([{ id: 'wc-owner' }, { id: 'wc-yuki' }]),
@@ -98,6 +100,60 @@ describe('MembersService', () => {
       expect(res.members[1].effectivePermissions).toEqual(['ecriture', 'corrections']);
       expect(res.splitTotal).toBe(100);
       expect(res.projectId).toBe('proj-1');
+    });
+
+    // The owner is a member BY DEFINITION (`isMemberOf` says so), but the group page reads
+    // WorkCreator rows — a project whose owner has none rendered an empty Membres table AND an
+    // empty « Partage des revenus ». Repair on read so the two can never disagree again.
+    describe('a project whose owner has no membership row', () => {
+      const repaired = (o: Record<string, unknown> = {}) =>
+        CREATOR({ id: 'wc-new', groupRole: 'leader', sharePct: 100, ...o });
+
+      it('adds the owner as the order-0 leader holding the whole split when alone', async () => {
+        setProject(PROJECT([]));
+        prisma.workCreator.create.mockImplementation(async () => {
+          setProject(PROJECT([repaired()])); // the reload sees the repaired group
+          return {};
+        });
+
+        const res = await service.getMembers('acc-me', 'lames-de-brume');
+        expect(prisma.workCreator.create).toHaveBeenCalledWith({
+          data: { workId: 'work-1', accountId: 'acc-me', role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+        });
+        expect(res.members).toHaveLength(1);
+        expect(res.members[0]).toMatchObject({ accountId: 'acc-me', isOwner: true, groupRole: 'leader', sharePct: 100 });
+        expect(res.splitTotal).toBe(100);
+        expect(res.viewer).toMatchObject({ memberId: 'wc-new', canManage: true, isLeader: true });
+      });
+
+      it('gives the owner only what the other members left, never breaking the 100 % invariant', async () => {
+        setProject(PROJECT([YUKI({ sharePct: 40 })]));
+        prisma.workCreator.create.mockResolvedValue({});
+        await service.getMembers('acc-me', 'lames-de-brume');
+        expect(prisma.workCreator.create.mock.calls[0][0].data.sharePct).toBe(60);
+      });
+
+      it('takes the owner craft from their profile', async () => {
+        setProject(PROJECT([]));
+        prisma.account.findUnique.mockResolvedValue({ profile: { creatorRoles: ['dessinateur'] } });
+        prisma.workCreator.create.mockResolvedValue({});
+        await service.getMembers('acc-me', 'lames-de-brume');
+        expect(prisma.workCreator.create.mock.calls[0][0].data.role).toBe('dessinateur');
+      });
+
+      it('leaves a group that already holds its owner alone', async () => {
+        await service.getMembers('acc-me', 'lames-de-brume');
+        expect(prisma.workCreator.create).not.toHaveBeenCalled();
+      });
+
+      // A non-owner viewer must not trigger a write they cannot see the point of — but they must
+      // still get a correct list, so the repair runs for them too. It is idempotent either way.
+      it('still repairs when a plain member is the one reading', async () => {
+        setProject(PROJECT([YUKI()]));
+        prisma.workCreator.create.mockResolvedValue({});
+        await service.getMembers('acc-yuki', 'lames-de-brume');
+        expect(prisma.workCreator.create).toHaveBeenCalled();
+      });
     });
 
     it('exposes viewer flags: a leader can manage, a plain member cannot', async () => {

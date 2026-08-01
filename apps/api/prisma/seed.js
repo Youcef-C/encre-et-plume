@@ -442,8 +442,16 @@ const MY_APPLICATIONS = [
 const PROJECTS = [
   { id: 'mc3-proj-lames-de-brume', title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'lames-de-brume', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
   { id: 'mc3-proj-spectres-avril', title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-avril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
-  { id: 'mc3-proj-carnet-encre', title: "Carnet d'encre", kind: 'Illustration(s)', genre: null, status: 'en cours', slug: 'carnet-encre', step: null, nextReleaseAt: null },
 ];
+
+// RETIRED FIXTURE — « Carnet d'encre » used to be seeded here as a `Project` with kind
+// 'Illustration(s)'. That is not a representable thing: a `Project` row IS a manga/roman (see
+// projects.service `legacyPicker`: "illustrations/collections are separate models"), so the fake row
+// gave a collection a slug, a workspace and an openable KANBAN — a board of chapters and planches for
+// something that has neither. Illustration collections are Works with format 'Illustration(s)'
+// (DR-12, « Carnet d'Encre » below); the CS-12 dashboard lists them via `collections.getMine` and
+// routes them to /collection/:id/gerer. The row is deleted on seed so existing DBs converge.
+const RETIRED_PROJECT_SLUGS = ['carnet-encre'];
 
 // MC-2: a loginable creator with an EMPTY tag/genre profile — exercises the minimum-data guard
 // (GET /matches/suggestions → { items: [], incompleteProfile: true }, "Complétez votre profil…").
@@ -832,6 +840,24 @@ async function main() {
       await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
     }
 
+    // Converge DBs seeded before a fixture was retired (see RETIRED_PROJECT_SLUGS). Deleted in
+    // dependency order — Page → Chapter → Project → WorkCreator → Work — because none of those
+    // relations cascade. Best-effort: a fixture nobody can open must never block the seed.
+    for (const slug of RETIRED_PROJECT_SLUGS) {
+      try {
+        const stale = await prisma.project.findUnique({ where: { slug }, select: { id: true, workId: true } });
+        if (!stale) continue;
+        await prisma.page.deleteMany({ where: { projectId: stale.id } });
+        await prisma.chapter.deleteMany({ where: { workId: stale.workId } });
+        await prisma.project.delete({ where: { id: stale.id } });
+        await prisma.workCreator.deleteMany({ where: { workId: stale.workId } });
+        await prisma.work.delete({ where: { id: stale.workId } });
+        console.log(`[seed] removed retired fixture project « ${slug} » (a collection is not a Project)`);
+      } catch (err) {
+        console.warn(`[seed] could not remove retired fixture « ${slug} »:`, err.message);
+      }
+    }
+
     // MC-3 (receive side): collaboration invitations RECEIVED by the demo login (Camille) FROM other
     // seeded creators, across every status so the /invitations inbox renders each variant. The verb
     // shown is the inviter's complementary craft (dessinateur → "écrire", scenariste → "dessiner").
@@ -845,7 +871,9 @@ async function main() {
         message: "J'ai l'univers et les décors, mais il me manque une vraie histoire. Tu serais partant·e ? J'ai déjà une vingtaine de planches de recherches et un bestiaire complet." },
       { fromSlug: 'mc1-theo-m', projectId: 'mc3-proj-spectres-avril', status: 'pending', createdAt: inDays(-2),
         message: 'Une idée de one-shot fantastique, on en parle ?' },
-      { fromSlug: 'mc1-hugo-d', projectId: 'mc3-proj-carnet-encre', status: 'accepted', createdAt: inDays(-4), respondedAt: inDays(-3),
+      // Was « Carnet d'encre » — a retired fixture (a collection, never a Project). An invitation is a
+      // collaboration on a manga/roman, so it moved to Spectres d'Avril, which gains its second member.
+      { fromSlug: 'mc1-hugo-d', projectId: 'mc3-proj-spectres-avril', status: 'accepted', createdAt: inDays(-4), respondedAt: inDays(-3),
         message: 'On lance le projet ensemble, hâte de commencer !' },
       { fromSlug: 'mc1-lea-b', projectId: null, status: 'declined', createdAt: inDays(-8), respondedAt: inDays(-7),
         message: 'Une comédie romantique légère, ça te tente ?' },
@@ -929,6 +957,10 @@ async function main() {
     if (staleChapters.length) {
       await prisma.readingProgress.deleteMany({ where: { chapterId: { in: staleChapters.map((c) => c.id) } } });
       await prisma.reaction.deleteMany({ where: { targetType: 'chapter', targetId: { in: staleChapters.map((c) => c.id) } } });
+      // CS-7 R2-1d: a board card cannot outlive its chapter (`Page.chapterId` is NOT NULL), and the
+      // showcase works double as seeded PROJECTS — anyone who adds a card to one of these chapters
+      // from the studio makes this deleteMany fail on the next reseed. Their children all cascade.
+      await prisma.page.deleteMany({ where: { chapterId: { in: staleChapters.map((c) => c.id) } } });
     }
     await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'published' } });
     for (const c of chapters) {
@@ -1075,7 +1107,14 @@ async function main() {
   // picker from 4 entries to 24, pushing the target checkbox below the dialog fold so E3's `.check()`
   // times out with "element is outside of the viewport".
   {
-    const strayWorks = await prisma.work.findMany({ where: { slug: { startsWith: 'qa-' } }, select: { id: true } });
+    // …but ONLY bare collection Works. The CS-* e2e specs create `qa-…` projects through the real
+    // CS-1 route, so those Works carry a Project + Chapters + Pages; deleting the Work row trips
+    // `Chapter_workId_fkey` and the whole sweep aborts (nothing gets cleaned, every run warns).
+    // That debris belongs to the e2e teardown, which owns the account tree — leave it alone.
+    const strayWorks = await prisma.work.findMany({
+      where: { slug: { startsWith: 'qa-' }, project: null, chapters: { none: {} } },
+      select: { id: true },
+    });
     const strayIllus = await prisma.illustration.findMany({ where: { title: { startsWith: 'QA ' } }, select: { id: true } });
     try {
       if (strayWorks.length > 0) {

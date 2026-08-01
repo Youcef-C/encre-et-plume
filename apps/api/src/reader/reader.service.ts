@@ -49,6 +49,8 @@ export class ReaderService {
         totalPages: chapterTotalPages(true, chapter.prose, 0),
         pages: [],
         prose,
+        hasCover: false, // prose has no cover page to stand alone
+
       };
     }
 
@@ -57,6 +59,15 @@ export class ReaderService {
     // (CS-*) produces real double-page panels; a dedicated column can replace this later.
     const pages: ReaderPageDto[] = planches.map((p, i) => ({ index: i + 1, image: p.image, caption: p.caption, double: false }));
 
-    return { workSlug: slug, chapterNumber, readMode: 'pages', totalPages: chapterTotalPages(false, null, pages.length), pages, prose: [] };
+    // CS-6 — a chapter that opens on a cover must show page 1 ALONE, never paired into a spread.
+    return {
+      workSlug: slug,
+      chapterNumber,
+      readMode: 'pages',
+      totalPages: chapterTotalPages(false, null, pages.length),
+      pages,
+      prose: [],
+      hasCover: chapter.hasCover,
+    };
   }
 }
