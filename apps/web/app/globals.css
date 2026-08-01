@@ -1847,19 +1847,17 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-group-cell-label { display: none; }
 
 /* N7 — the visual pill stays 34×20, the hit area is ≥44×44 at every breakpoint. */
+/* The permissions table reserves a REAL 44px box instead of the overlay: five switch columns at
+   375px sit close enough that overflowing invisible hit areas would overlap, and a tap on one
+   permission would toggle its neighbour. Layout is per-instance; the pill inside is unchanged. */
 .ep-perm-switch {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  color: inherit;
+  margin: 0 auto;
 }
-.ep-perm-switch:disabled { opacity: 0.6; cursor: default; }
+.ep-perm-switch::after {
+  content: none;
+}
 
 /* U-2 — on-brand share slider (a form-control idiom like .ep-perm-switch, not a button colour).
    The accent fill IS the prototype's "Part effective" bar, driven by an inline --pct. */
@@ -2103,12 +2101,28 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   margin-bottom: 12px;
 }
 
-/* A switch's ≥44px pointer target as an OVERLAY, not as reserved layout height: the visible track
-   stays 38×22 so a row holding one is compact, while touch still gets a full-size target. */
+/* The app's ONE switch. The button is the hit box, its inner span is the pill (OnBrandSwitch). */
+.ep-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.ep-switch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* ≥44px pointer target as an OVERLAY rather than reserved layout height, so a row holding a switch
+   stays compact. -12px on a 34×20 pill gives 58×44. Grids opt out — see .ep-perm-switch. */
 .ep-switch::after {
   content: '';
   position: absolute;
-  inset: -11px;
+  inset: -12px;
 }
 
 .ep-arrangement-tabs {

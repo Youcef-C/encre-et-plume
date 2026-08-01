@@ -6,7 +6,8 @@
 // Deviations (plan §4): D1 the meta line carries the Leader/Co-leader/Member control, D4 (revised
 // round 2) every pictogram — the prototype's pen/brush glyphs AND its check/cross marks — comes from
 // icons.tsx; no check/cross character is ever rendered as text. The permission cells are real
-// `role="switch"` toggles keeping the prototype's pill look; leader rows show the implied check icon.
+// `role="switch"` toggles keeping the prototype's pill look — via the shared OnBrandSwitch, whose
+// design this very cell defined; leader rows show the implied check icon.
 // Header and rows share ONE `.ep-group-grid` template so every switch sits under its column (U-3).
 import {
   GROUP_PERMISSIONS,
@@ -19,6 +20,7 @@ import {
   type GroupRole,
 } from '@encre-et-plume/shared';
 import OnBrandSelect from '../form/OnBrandSelect';
+import OnBrandSwitch from '../form/OnBrandSwitch';
 import { CheckIcon, CreatorRoleIcon, XIcon } from '../icons';
 
 const GREEN = '#1f8a5b';
@@ -50,7 +52,8 @@ function MemberAvatar({ avatar }: { avatar: string | null }) {
   );
 }
 
-/** The prototype's pill toggle, as a real switch (accent fill + right knob when on). */
+/** The prototype's pill toggle — now THE app-wide switch (user, 2026-08-01): this cell's look is
+ *  where `OnBrandSwitch` took its design, so it draws the shared control rather than a copy. */
 function PermissionSwitch({
   on,
   label,
@@ -63,40 +66,14 @@ function PermissionSwitch({
   onToggle: () => void;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
+    <OnBrandSwitch
+      label={label}
+      checked={on}
       disabled={disabled}
-      onClick={onToggle}
+      onChange={onToggle}
+      hideLabel
       className="ep-perm-switch"
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          display: 'inline-block',
-          width: 34,
-          height: 20,
-          border: '2px solid var(--ink)',
-          borderRadius: 999,
-          background: on ? 'var(--accent)' : 'var(--card)',
-          position: 'relative',
-        }}
-      >
-        <span
-          style={{
-            position: 'absolute',
-            top: 1,
-            [on ? 'right' : 'left']: 1,
-            width: 14,
-            height: 14,
-            borderRadius: '50%',
-            background: on ? '#fff' : 'var(--ink)',
-          }}
-        />
-      </span>
-    </button>
+    />
   );
 }
 
