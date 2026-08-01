@@ -2,8 +2,11 @@
  * MC-3 "Proposer une collab" — scoped e2e acceptance suite.
  *
  * Real backend + seeded dev DB (apps/api/prisma/seed.js), not hermetic. Sender:
- * camille.roux@seed.encre-et-plume.local / password123 (dr1-camille-roux, scénariste), who owns 3
- * seeded projects (Lames de Brume, Spectres d'Avril, Carnet d'encre). Recipients used:
+ * camille.roux@seed.encre-et-plume.local / password123 (dr1-camille-roux, scénariste), who owns 2
+ * seeded projects (Lames de Brume, Spectres d'Avril). « Carnet d'encre » used to be a third, but it
+ * was a fake `Project` row for an ILLUSTRATION COLLECTION — retired from the seed (see
+ * `RETIRED_PROJECT_SLUGS`), because a collection has no chapters, no planches and no kanban. It
+ * still exists as a DR-12 collection; it is simply not invitable. Recipients used:
  *   - Théo M. (theo.m@seed.encre-et-plume.local, mc1-theo-m) via the /trouver partner card + her
  *     own profile page (/mc1-theo-m).
  *   - Yuki Moreau (yuki.moreau@seed.encre-et-plume.local, dr1-yuki-moreau) via the work page
@@ -75,7 +78,9 @@ test.describe('MC-3 collaboration invite — signed in (dr1-camille-roux)', () =
     const lamesRow = dialog.getByRole('radio').filter({ hasText: 'Lames de Brume' });
     await expect(lamesRow).toBeVisible();
     await expect(dialog.getByRole('radio').filter({ hasText: "Spectres d'Avril" })).toBeVisible();
-    await expect(dialog.getByRole('radio').filter({ hasText: "Carnet d'encre" })).toBeVisible();
+    // …and NOT the retired « Carnet d'encre » fixture: an illustration collection is not a project
+    // you can collaborate on. Asserted as an absence so a resurrected fake row fails here.
+    await expect(dialog.getByRole('radio').filter({ hasText: "Carnet d'encre" })).toHaveCount(0);
     await expect(lamesRow).toHaveAttribute('aria-checked', 'false');
 
     await lamesRow.click();
