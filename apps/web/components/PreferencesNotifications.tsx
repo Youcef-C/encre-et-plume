@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NOTIFICATION_TYPES } from '@encre-et-plume/shared';
 import type { NotificationPreferenceRow, NotificationChannel } from '@encre-et-plume/shared';
 import { getNotificationPreferences, updateNotificationPreferences } from '../lib/api';
+import OnBrandSwitch from './form/OnBrandSwitch';
 
 type StatusMsg = { kind: 'success' | 'error'; text: string };
 
@@ -237,45 +238,9 @@ function Switch({ id, label, checked, onToggle }: { id: string; label: string; c
       }}
       className="ep-pref-switch-wrap"
     >
-      <button
-        id={id}
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={onToggle}
-        type="button"
-        style={{
-          width: 44,
-          height: 26,
-          borderRadius: 13,
-          border: '2px solid var(--border)',
-          background: checked ? 'var(--ink)' : 'var(--tone)',
-          cursor: 'pointer',
-          position: 'relative',
-          transition: 'background 0.15s',
-          flexShrink: 0,
-          // Tap target ≥44px via padding
-          padding: 0,
-          minWidth: 44,
-          minHeight: 44,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            width: 18,
-            height: 18,
-            borderRadius: '50%',
-            background: checked ? 'var(--card)' : 'var(--ink2)',
-            left: checked ? 'calc(100% - 20px)' : '2px',
-            transition: 'left 0.15s',
-          }}
-        />
-      </button>
+      {/* The shared control (user, 2026-08-01): accent-red when on, compact track. The column
+          heading already names it on screen, so only the accessible name is carried here. */}
+      <OnBrandSwitch id={id} label={label} checked={checked} onChange={onToggle} hideLabel />
     </div>
   );
 }

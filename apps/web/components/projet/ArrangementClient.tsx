@@ -412,20 +412,6 @@ export default function ArrangementClient() {
             );
           })}
         </div>
-        {/* CS-6 — the « Couverture » toggle lives IN the tab row, next to the chapter it applies to
-            (user, 2026-08-01). Not a per-page designation: the cover is always the first page, this
-            says whether the chapter OPENS on one. Off ⇒ no « COUV. » chip, and the reader treats
-            page 1 as an ordinary page it may pair into a spread. */}
-        {chapter && canWrite && (
-          <OnBrandSwitch
-            label="Couverture"
-            description="La 1re page ; seule dans le lecteur."
-            checked={chapter.hasCover}
-            disabled={savingCover}
-            onChange={(next) => void toggleCover(next)}
-          />
-        )}
-
         {/* Never advertise a gesture the viewer cannot perform (CS-7's rule). */}
         {canWrite && (chapter?.pages.length ?? 0) > 1 && (
           <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 500, color: 'var(--ink2)' }}>
@@ -449,6 +435,21 @@ export default function ArrangementClient() {
         <p style={emptyLine}>Aucun chapitre</p>
       ) : (
         <>
+          {/* CS-6 — the « Couverture » toggle sits in the tab's PANEL, directly over the pages it
+              describes (user, 2026-08-01), not beside the tabs. Not a per-page designation: the
+              cover is always the first page, this says whether the chapter OPENS on one. Off ⇒ no
+              « COUV. » chip, and the reader treats page 1 as an ordinary page it may pair. */}
+          {canWrite && (
+            <div className="ep-arrangement-cover-toggle">
+              <OnBrandSwitch
+                label="Couverture"
+                description="La 1re page ; seule dans le lecteur."
+                checked={chapter.hasCover}
+                disabled={savingCover}
+                onChange={(next) => void toggleCover(next)}
+              />
+            </div>
+          )}
           {drawn.length === 0 && <p style={emptyLine}>Aucune page</p>}
           <ul
             role="list"

@@ -2096,6 +2096,21 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 }
 
 /* Tab row — proto 1705 */
+/* CS-6 — the « Couverture » toggle, in the tab panel directly above the page grid. */
+.ep-arrangement-cover-toggle {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* A switch's ≥44px pointer target as an OVERLAY, not as reserved layout height: the visible track
+   stays 38×22 so a row holding one is compact, while touch still gets a full-size target. */
+.ep-switch::after {
+  content: '';
+  position: absolute;
+  inset: -11px;
+}
+
 .ep-arrangement-tabs {
   display: flex;
   align-items: center;
