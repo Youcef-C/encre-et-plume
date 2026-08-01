@@ -29,6 +29,7 @@ export * from './partners.js';
 export * from './matches.js';
 export * from './locations.js';
 export * from './projects.js';
+export * from './chapters.js';
 export * from './group.js';
 export * from './assets.js';
 export * from './editor.js';

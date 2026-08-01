@@ -290,6 +290,32 @@ describe('AssetsService', () => {
     });
   });
 
+  // ── thumbnailUrlsByMediaId (CS-7 R6-1b) ───────────────────────────────────
+  // The chapter strip needs thumbnails too. It calls THIS, so public/private URL policy stays in
+  // one place instead of a second signing path growing next to it.
+  describe('thumbnailUrlsByMediaId', () => {
+    it('signs private media and passes a public one through, in ONE media query', async () => {
+      prisma.media.findMany.mockResolvedValue([
+        MEDIA({ id: 'media-1' }),
+        MEDIA({ id: 'media-2', visibility: 'public', variants: { thumb: 'https://cdn/pub/thumb.webp' } }),
+      ]);
+      const map = await service.thumbnailUrlsByMediaId(['media-1', 'media-2', 'media-1']);
+      expect(prisma.media.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.media.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['media-1', 'media-2'] } });
+      expect(map.get('media-1')).toBe('https://signed/variant');
+      expect(map.get('media-2')).toBe('https://cdn/pub/thumb.webp');
+    });
+
+    it('maps a media with no thumb variant to null, and queries nothing for an empty list', async () => {
+      prisma.media.findMany.mockResolvedValue([MEDIA({ id: 'media-1', variants: { orig: 'asset/acc-me/media-1.pdf' } })]);
+      expect((await service.thumbnailUrlsByMediaId(['media-1'])).get('media-1')).toBeNull();
+
+      prisma.media.findMany.mockClear();
+      expect((await service.thumbnailUrlsByMediaId([])).size).toBe(0);
+      expect(prisma.media.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   // ── addVersion (B5) ───────────────────────────────────────────────────────
   describe('addVersion', () => {
     it('increments currentVersion, updates head mediaId/size', async () => {

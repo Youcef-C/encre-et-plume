@@ -59,8 +59,22 @@ async function createProject(page: Page, title: string): Promise<string> {
   return page.url().split('/projet/')[1];
 }
 
+/**
+ * R2-1 (CS-7): a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES
+ * the board (no « ＋ Ajouter une carte » at all), so create one before adding cards.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
+
 async function addCard(page: Page, index = 1): Promise<string> {
   const title = `Page ${index}`;
+  await ensureChapter(page);
   const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
   await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
   await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 });

@@ -336,7 +336,7 @@ export class ScenarioDocumentsService {
   }
 
   /** plancheNo = 1-based position among chapter siblings (createdAt asc, id tie-break); total = count. */
-  private async derivePlanche(page: { id: string; projectId: string; chapterId: string | null }): Promise<{ plancheNo: number; total: number }> {
+  private async derivePlanche(page: { id: string; projectId: string; chapterId: string }): Promise<{ plancheNo: number; total: number }> {
     const siblings = await this.prisma.page.findMany({
       where: { projectId: page.projectId, chapterId: page.chapterId },
       select: { id: true, createdAt: true },

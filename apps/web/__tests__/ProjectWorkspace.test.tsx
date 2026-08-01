@@ -1,11 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ProjectWorkspaceResponse } from '@encre-et-plume/shared';
+import type { ProjectWorkspaceResponse, WorkspacePage } from '@encre-et-plume/shared';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
-  return { ...actual, createPage: vi.fn(), updatePageStage: vi.fn(), deletePage: vi.fn(), updateProjectInfo: vi.fn(), getMyProjects: vi.fn() };
+  return {
+    ...actual,
+    createPage: vi.fn(),
+    updatePageStage: vi.fn(),
+    deletePage: vi.fn(),
+    getProjectWorkspace: vi.fn(),
+    updateProjectInfo: vi.fn(),
+    getMyProjects: vi.fn(),
+    // CS-7: the Chapitres tab now renders the real panel, which fetches on mount.
+    getProjectChapters: vi.fn().mockResolvedValue({ chapters: [], canWrite: true }),
+  };
 });
 vi.mock('../components/UploadControl', () => ({ default: ({ label }: { label: string }) => <div>{label}</div> }));
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
@@ -34,7 +45,7 @@ function makeWorkspace(over: Partial<ProjectWorkspaceResponse> = {}): ProjectWor
       { accountId: 'u1', displayName: 'Camille', avatar: null, roles: ['scenariste', 'dessinateur'] },
       { accountId: 'u2', displayName: 'Yuki', avatar: null, roles: ['dessinateur'] },
     ],
-    chapters: [{ id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0 }],
+    chapters: [{ id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 }],
     pages: [],
     labels: [],
     reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
@@ -76,7 +87,7 @@ describe('ProjectWorkspace', () => {
   // project (localStorage) if it's still on the board, else the first board card. (Rendered on the
   // INFOS tab so the KanbanBoard isn't mounted — the header buttons show regardless of active tab.)
   const pg = (id: string) =>
-    ({ id, chapterId: null, title: id, stage: 'todo', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null }) as unknown as ProjectWorkspaceResponse['pages'][number];
+    ({ id, chapterId: 'c1', title: id, stage: 'todo', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null }) as unknown as ProjectWorkspaceResponse['pages'][number];
 
   it('“Éditeur” navigates to the first board card when nothing was opened before', async () => {
     localStorage.clear();
@@ -152,9 +163,11 @@ describe('ProjectWorkspace', () => {
     expect(screen.getByText('Informations du projet')).toBeInTheDocument();
   });
 
-  it('renders the Chapitres placeholder copy', () => {
+  // CS-7 replaced the placeholder with the real Chapitres panel (its own suite covers the behaviour).
+  it('renders the Chapitres panel', async () => {
     renderWs('chapitres');
-    expect(screen.getByText('La gestion des chapitres arrive bientôt.')).toBeInTheDocument();
+    expect(screen.getByText('Chargement…')).toBeInTheDocument();
+    expect(await screen.findByText('Aucun chapitre pour le moment')).toBeInTheDocument();
   });
 
   it('hides action buttons for a non-member public viewer', () => {
@@ -191,5 +204,117 @@ describe('ProjectWorkspace', () => {
   it('makes the INFOS panel read-only for a member without « Écriture »', () => {
     renderWs('infos', { viewer: { isMember: true, isOwner: false, canWrite: false, canManage: false } });
     expect(screen.getByLabelText('TITRE')).toHaveAttribute('readonly');
+  });
+
+  // ── R4-1 · a card must survive a round trip through another tab ──────────────────────────────
+  // The blocking bug the Reviewer failed CS-7 on: the board is rendered conditionally, so leaving
+  // the Tableau UNMOUNTS it and coming back re-seeds `pages` from `workspace.pages` — a snapshot
+  // fetched once. Card mutations only touched the board's local state, so a freshly created card
+  // vanished. Three green suites missed it because they never crossed the tab boundary: this test
+  // does, which is the only shape of test that can catch it.
+  describe('workspace staleness across tabs (R4-1)', () => {
+    const boardPage = (over: Partial<WorkspacePage>): WorkspacePage =>
+      ({
+        id: 'pg1',
+        chapterId: 'c1',
+        title: 'Page 1',
+        stage: 'scenario',
+        fileTags: [],
+        linkedFileIds: [],
+        linkedFiles: [],
+        dueDate: null,
+        labels: [],
+        assignees: [],
+        checklistDone: 0,
+        checklistTotal: 0,
+        commentCount: 0,
+        createdById: null,
+        ...over,
+      }) as WorkspacePage;
+
+    /** The real `ProjectWorkspaceClient` wiring: `onWorkspaceStale` refetches the payload in place. */
+    function StaleHarness({ initial }: { initial: ProjectWorkspaceResponse }) {
+      const [workspace, setWorkspace] = useState(initial);
+      const [tab, setTab] = useState<WorkspaceTab>('tableau');
+      return (
+        <ProjectWorkspace
+          slug="nuit-blanche"
+          workspace={workspace}
+          tab={tab}
+          onTabChange={setTab}
+          onWorkspaceStale={() => {
+            void api.getProjectWorkspace('nuit-blanche').then(setWorkspace);
+          }}
+        />
+      );
+    }
+
+    async function switchTab(name: string) {
+      await userEvent.click(screen.getByRole('tab', { name }));
+    }
+
+    it('keeps a newly created card after leaving and returning to the Tableau', async () => {
+      const created = boardPage({ id: 'new1', title: 'Page 1' });
+      (api.createPage as ReturnType<typeof vi.fn>).mockResolvedValue(created);
+      (api.getProjectWorkspace as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeWorkspace({ pages: [created] }),
+      );
+
+      render(<StaleHarness initial={makeWorkspace({ pages: [] })} />);
+      await userEvent.click(screen.getAllByRole('button', { name: '＋ Ajouter une carte' })[0]);
+      expect(await screen.findByText('Page 1')).toBeInTheDocument();
+      await waitFor(() => expect(api.getProjectWorkspace).toHaveBeenCalled());
+
+      await switchTab('Chapitres');
+      await switchTab('Tableau');
+
+      // The card the user just created — same title, still on the board.
+      expect(screen.getByText('Page 1')).toBeInTheDocument();
+    });
+
+    it('keeps a deleted card gone after leaving and returning to the Tableau', async () => {
+      const existing = boardPage({ id: 'pg1', title: 'Page 1' });
+      (api.deletePage as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (api.getProjectWorkspace as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeWorkspace({ pages: [] }),
+      );
+
+      render(<StaleHarness initial={makeWorkspace({ pages: [existing] })} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Supprimer la carte' }));
+      await userEvent.click(
+        (await screen.findAllByRole('button', { name: 'Supprimer' })).slice(-1)[0],
+      );
+      await waitFor(() => expect(screen.queryByText('Page 1')).not.toBeInTheDocument());
+
+      await switchTab('Chapitres');
+      await switchTab('Tableau');
+
+      expect(screen.queryByText('Page 1')).not.toBeInTheDocument();
+    });
+
+    it('keeps a stage change after leaving and returning to the Tableau', async () => {
+      const existing = boardPage({ id: 'pg1', title: 'Page 1' });
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...existing,
+        stage: 'nemu',
+      });
+      (api.getProjectWorkspace as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeWorkspace({ pages: [{ ...existing, stage: 'nemu' }] }),
+      );
+
+      render(<StaleHarness initial={makeWorkspace({ pages: [existing] })} />);
+      // R5-3: the stage move lives in the ⋯ menu's « Déplacer vers une colonne » submenu now.
+      await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Nemu' }));
+      await waitFor(() => expect(api.getProjectWorkspace).toHaveBeenCalled());
+
+      await switchTab('Chapitres');
+      await switchTab('Tableau');
+
+      const nemu = screen.getByRole('group', { name: /Nemu/i });
+      expect(nemu).toHaveTextContent('Page 1');
+    });
   });
 });

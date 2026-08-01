@@ -15,13 +15,13 @@ function makeWorkspace(): ProjectWorkspaceResponse {
     id: 'p', slug: 'lames', workSlug: 'lames', title: 'Lames', synopsis: '', hashtags: [],
     collabOpen: true, visibility: 'public', cover: null, members: [],
     chapters: [
-      { id: 'c2', number: 2, title: 'La rencontre', status: 'draft', plancheCount: 2 },
-      { id: 'c1', number: 1, title: 'Prologue', status: 'draft', plancheCount: 1 },
+      { id: 'c2', number: 2, title: 'La rencontre', status: 'draft', plancheCount: 2, targetPages: 20, progressPct: 0 },
+      { id: 'c1', number: 1, title: 'Prologue', status: 'draft', plancheCount: 1, targetPages: 20, progressPct: 0 },
     ],
     pages: [
       { id: 'pg1', chapterId: 'c2', title: 'Planche 5', stage: 'scenario', fileTags: ['scenario'], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
       { id: 'pg2', chapterId: 'c1', title: 'Planche 1', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
-      { id: 'pg3', chapterId: null, title: 'Brouillon', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
+      { id: 'pg3', chapterId: 'c1', title: 'Brouillon', stage: 'scenario', fileTags: [], linkedFileIds: [], linkedFiles: [], dueDate: null, labels: [], assignees: [], checklistDone: 0, checklistTotal: 0, commentCount: 0, createdById: null },
     ],
     labels: [], reviews: { summary: { overall: 0, story: 0, art: 0, count: 0 }, items: [] },
     viewer: { isMember: true, isOwner: true, canWrite: true, canManage: true },
@@ -46,7 +46,8 @@ describe('PageSwitcher', () => {
     const listbox = await screen.findByRole('listbox', { name: 'Pages et chapitres' });
     expect(within(listbox).getByText('Chapitre 1 — Prologue')).toBeInTheDocument();
     expect(within(listbox).getByText('Chapitre 2 — La rencontre')).toBeInTheDocument();
-    expect(within(listbox).getByText('Sans chapitre')).toBeInTheDocument();
+    // R2-1d: every card belongs to a chapter — there is no orphan group any more.
+    expect(within(listbox).queryByText('Sans chapitre')).not.toBeInTheDocument();
     expect(api.getProjectWorkspace).toHaveBeenCalledTimes(1);
   });
 

@@ -11,7 +11,7 @@ import * as api from '../../lib/api';
 import { CheckIcon, FileTextIcon } from '../icons';
 
 interface Group {
-  chapter: WorkspaceChapter | null;
+  chapter: WorkspaceChapter;
   pages: WorkspacePage[];
 }
 
@@ -20,8 +20,7 @@ function groupPages(ws: ProjectWorkspaceResponse): Group[] {
     .slice()
     .sort((a, b) => a.number - b.number)
     .map((chapter) => ({ chapter, pages: ws.pages.filter((p) => p.chapterId === chapter.id) }));
-  const orphans = ws.pages.filter((p) => !p.chapterId);
-  if (orphans.length) groups.push({ chapter: null, pages: orphans });
+  // R2-1d: every card belongs to a chapter, so there is no orphan group left to append.
   return groups;
 }
 
@@ -146,9 +145,9 @@ export default function PageSwitcher({
           ) : (
             <ul ref={listRef} role="listbox" aria-label="Pages et chapitres" onKeyDown={onListKeyDown} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {groups.map((g) => (
-                <li key={g.chapter?.id ?? 'orphans'} role="presentation">
+                <li key={g.chapter.id} role="presentation">
                   <div style={{ padding: '9px 13px 5px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--ink2)', borderTop: '2px solid var(--border)' }}>
-                    {g.chapter ? chapterHeading(g.chapter) : 'Sans chapitre'}
+                    {chapterHeading(g.chapter)}
                   </div>
                   {g.pages.length === 0 ? (
                     <div style={{ padding: '4px 13px 9px', fontSize: 12, color: 'var(--ink2)', fontStyle: 'italic' }}>Aucune page</div>

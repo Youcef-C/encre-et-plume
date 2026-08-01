@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WorkspaceChapter, WorkspacePage, ProjectLabelItem } from '@encre-et-plume/shared';
@@ -15,15 +15,18 @@ vi.mock('../lib/api', async (importOriginal) => {
     updatePage: vi.fn(),
     createProjectLabel: vi.fn(),
     deleteProjectLabel: vi.fn(),
+    createChapter: vi.fn(),
+    getProjectWorkspace: vi.fn(),
   };
 });
 
 import * as api from '../lib/api';
 import KanbanBoard from '../components/projet/KanbanBoard';
 
+// R3-2: `targetPages` is NOT NULL (default 20), so every chapter has a real percentage and a bar.
 const chapters: WorkspaceChapter[] = [
-  { id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0 },
-  { id: 'c2', number: 1, title: 'La rencontre', status: 'draft', plancheCount: 0 },
+  { id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0, targetPages: 10, progressPct: 40 },
+  { id: 'c2', number: 1, title: 'La rencontre', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 },
 ];
 
 // New WorkspacePage fields (CS-2 card-modal extension) default to empty so bare cards stay compact.
@@ -67,23 +70,173 @@ function renderBoard(
   readOnly = false,
   labels: ProjectLabelItem[] = [],
   // CS-10 D-1: the delete affordance needs to know who the viewer is and whether they lead the group.
-  extra: { canManage?: boolean; viewerId?: string | null } = { canManage: true },
+  extra: {
+    canManage?: boolean;
+    viewerId?: string | null;
+    chapters?: WorkspaceChapter[];
+    onWorkspaceStale?: () => void;
+  } = { canManage: true },
 ) {
   render(
     <KanbanBoard
       slug="nuit-blanche"
-      chapters={chapters}
+      chapters={extra.chapters ?? chapters}
       initialPages={pages}
       readOnly={readOnly}
       labels={labels}
       canManage={extra.canManage ?? false}
       viewerId={extra.viewerId ?? null}
+      onWorkspaceStale={extra.onWorkspaceStale}
     />,
   );
 }
 
+// R5-3 — the two move actions live in nested submenus now, so every stage move goes
+// ⋯ → « Déplacer vers une colonne » → the stage.
+async function openMenu() {
+  await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+}
+async function moveToColumn(stage: string) {
+  await openMenu();
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: stage }));
+}
+
 describe('KanbanBoard', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  // R2-1d (user rule, 2026-07-31): every card belongs to a chapter, so the board offers NO orphan
+  // bucket — round 1's "Sans chapitre" chip is gone and the chip row is chapters only.
+  it('offers no "Sans chapitre" bucket — the chip row is chapters only', () => {
+    renderBoard();
+    expect(screen.queryByRole('button', { name: 'Sans chapitre' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Prologue' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // ── R2 · a chapter is a prerequisite for a card ─────────────────────────────
+  describe('chapter prerequisite (R2-1 / R2-2 / R2-3)', () => {
+    const newChapter = { id: 'c9', number: 1, title: 'Chapitre 1', status: 'draft', plancheCount: 0 } as WorkspaceChapter;
+
+    it('with zero chapters, the empty state REPLACES the board (no columns at all)', () => {
+      renderBoard([], false, [], { canManage: true, chapters: [] });
+      expect(screen.getByText('Aucun chapitre pour l’instant')).toBeInTheDocument();
+      expect(screen.getByText('Créez un premier chapitre pour organiser vos planches.')).toBeInTheDocument();
+      // No card creation at all — the server 400s it (R2-1), so never offer it.
+      expect(screen.queryByRole('button', { name: '＋ Ajouter une carte' })).not.toBeInTheDocument();
+      // The columns are NOT rendered: a disabled board under the card squashed it (user, 2026-07-31).
+      expect(screen.queryAllByRole('group')).toHaveLength(0);
+    });
+
+    it('the empty-state CTA creates a chapter in one click and unlocks the board', async () => {
+      (api.createChapter as ReturnType<typeof vi.fn>).mockResolvedValue({ ...newChapter, resume: null });
+      renderBoard([], false, [], { canManage: true, chapters: [] });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Créer un chapitre' }));
+      // No form, no number computed in the browser — the server assigns it.
+      expect(api.createChapter).toHaveBeenCalledWith('nuit-blanche', {});
+      await waitFor(() => expect(screen.queryByText('Aucun chapitre pour l’instant')).not.toBeInTheDocument());
+      // …and it is the selected chapter, so cards can be added again.
+      expect(screen.getByRole('button', { name: 'Ch. 1' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getAllByRole('button', { name: '＋ Ajouter une carte' })).toHaveLength(6);
+    });
+
+    it('the "＋" chip creates a chapter and selects it, without a form or a tab switch', async () => {
+      (api.createChapter as ReturnType<typeof vi.fn>).mockResolvedValue({ ...newChapter, id: 'c3', number: 3, title: 'Chapitre 3' });
+      renderBoard();
+      expect(screen.getByRole('button', { name: 'Prologue' })).toHaveAttribute('aria-pressed', 'true');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Ajouter un chapitre' }));
+      expect(api.createChapter).toHaveBeenCalledWith('nuit-blanche', {});
+      const chip = await screen.findByRole('button', { name: 'Ch. 3' });
+      expect(chip).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Prologue' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('hides both affordances for a non-writer', () => {
+      renderBoard([], true, [], { canManage: false, chapters: [] });
+      expect(screen.getByText('Aucun chapitre pour l’instant')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Créer un chapitre' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Ajouter un chapitre' })).not.toBeInTheDocument();
+    });
+
+    it('with ≥1 chapter the board is normal and cards are always chapter-scoped', async () => {
+      // Stub the resolved page: addCard appends whatever createPage returns, so an unstubbed mock
+      // pushes `undefined` into `pages` and the next render throws on `p.chapterId`. That surfaces
+      // as a Vitest *unhandled error* (exit 1) while every test still reports green — same pattern
+      // as the sibling test below.
+      (api.createPage as ReturnType<typeof vi.fn>).mockResolvedValue(makePage({ id: 'new0', title: 'Page 9' }));
+      renderBoard([page7, page6]);
+      expect(screen.queryByText('Aucun chapitre pour l’instant')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: '＋ Ajouter une carte' })).toHaveLength(6);
+      expect(api.createPage).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getAllByRole('button', { name: '＋ Ajouter une carte' })[0]);
+      // A card is never created without a chapter — the selected one is always sent.
+      expect(api.createPage).toHaveBeenCalledWith('nuit-blanche', { chapterId: 'c1', stage: 'scenario' });
+    });
+  });
+
+  // R2-8b/c — the chip carries a thin progress bar. R3-2: EVERY chapter has one now.
+  describe('chip progress bar (R2-8 / R3-2 / R3-3)', () => {
+    it('draws a bar for every chapter, with the value exposed as text', () => {
+      // 2 linked cards, 1 at the terminal stage, against c1's 10 planned → 10 %.
+      renderBoard([makePage({ id: 'p1', chapterId: 'c1', stage: 'valide' }), makePage({ id: 'p2', chapterId: 'c1' })]);
+      const bar = screen.getByRole('progressbar', { name: /Prologue/ });
+      expect(bar).toHaveAttribute('aria-valuenow', '10');
+      expect(bar).toHaveTextContent('10%'); // not colour-only
+      // R3-2 reverses R2-8b's "hidden without a target": the chapter nobody planned still shows one.
+      expect(screen.getByRole('progressbar', { name: /Ch\. 1/ })).toHaveAttribute('aria-valuenow', '0');
+      expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+    });
+
+    // R3-3 (bug): the bar was derived server-side and arrived as a prop, while the board mutates its
+    // own `pages` locally — so it stayed stale until a manual reload. It is now derived from the
+    // pages the board already holds, which makes it react to EVERY local mutation.
+    it('advances when a card moves to VALIDÉ, with no refetch', async () => {
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1', stage: 'nemu' });
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, stage: 'valide' });
+      renderBoard([card]);
+      expect(screen.getByRole('progressbar', { name: /Prologue/ })).toHaveAttribute('aria-valuenow', '0');
+
+      await moveToColumn('VALIDÉ');
+
+      await waitFor(() =>
+        expect(screen.getByRole('progressbar', { name: /Prologue/ })).toHaveAttribute('aria-valuenow', '10'),
+      );
+      expect(api.getProjectWorkspace).not.toHaveBeenCalled(); // derived locally, never refetched
+    });
+
+    it('updates BOTH chapters when a card is moved from one to the other (R2-5)', async () => {
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1', stage: 'valide' });
+      (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, description: '', checklist: [], comments: [] });
+      (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 24, totalPages: 1 });
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, chapterId: 'c2' });
+      renderBoard([card]);
+      expect(screen.getByRole('progressbar', { name: /Prologue/ })).toHaveAttribute('aria-valuenow', '10');
+      expect(screen.getByRole('progressbar', { name: /Ch\. 1/ })).toHaveAttribute('aria-valuenow', '0');
+
+      // The card modal bubbles the moved card up through onPageChange — the bars follow both ways.
+      await userEvent.click(screen.getByText('Page 1'));
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Chapitre' }));
+      await userEvent.click(screen.getByRole('option', { name: 'Ch. 1 — La rencontre' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('progressbar', { name: /Ch\. 1/ })).toHaveAttribute('aria-valuenow', '5'),
+      );
+      expect(screen.getByRole('progressbar', { name: /Prologue/ })).toHaveAttribute('aria-valuenow', '0');
+    });
+  });
+
+  // R3-1 — the chips were scaled back down from R2-8c. The size has to live in CSS: an inline
+  // min-height cannot be raised to the 44px tap-target floor by the mobile media query (the R2-4
+  // lesson). Guard against the inline value coming back.
+  it('keeps the chapter chip sizing in CSS, not inline (raisable to 44px on mobile)', () => {
+    renderBoard();
+    const chip = screen.getByRole('button', { name: 'Prologue' });
+    expect(chip).toHaveClass('ep-chapter-chip');
+    expect(chip.style.minHeight).toBe('');
+    expect(chip.style.padding).toBe('');
+  });
 
   it('renders chapter chips (Prologue / Ch. N) and filters cards by selection', async () => {
     renderBoard();
@@ -167,8 +320,7 @@ describe('KanbanBoard', () => {
   it('moves a card via the ⋯ menu (keyboard path) → updatePageStage', async () => {
     (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue(makePage({ ...page7, stage: 'nemu' }));
     renderBoard();
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Nemu' }));
+    await moveToColumn('Nemu');
     expect(api.updatePageStage).toHaveBeenCalledWith('pg7', 'nemu');
   });
 
@@ -187,8 +339,7 @@ describe('KanbanBoard', () => {
   it('reverts the optimistic move and shows an error banner when the stage PATCH fails', async () => {
     (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('nope'));
     renderBoard();
-    await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Corrections' }));
+    await moveToColumn('Corrections');
     expect(await screen.findByRole('alert')).toHaveTextContent(/a échoué/);
     expect(screen.getByText('Page 7')).toBeInTheDocument();
   });
@@ -259,8 +410,9 @@ describe('KanbanBoard', () => {
 
   it('deletes an étiquette from the filter bar (✕ → confirmation modal → cascades off cards)', async () => {
     (api.deleteProjectLabel as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    const onWorkspaceStale = vi.fn();
     const withLabel = makePage({ id: 'wl', chapterId: 'c1', title: 'Étiquetée', labels: [rouge] });
-    renderBoard([withLabel], false, [rouge]);
+    renderBoard([withLabel], false, [rouge], { canManage: true, onWorkspaceStale });
     await userEvent.click(screen.getByRole('button', { name: "Supprimer l'étiquette Urgent" }));
     const dialog = await screen.findByRole('alertdialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
@@ -268,6 +420,8 @@ describe('KanbanBoard', () => {
     // The palette chip disappears and the card's bar is stripped.
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Urgent', pressed: false })).not.toBeInTheDocument());
     expect(screen.queryByTitle('Urgent')).not.toBeInTheDocument();
+    // R4-1: the palette lives in `workspace.labels` too — same seam, or the chip returns on remount.
+    expect(onWorkspaceStale).toHaveBeenCalled();
   });
 
   it('filters the board by assignee (with a "Moi" chip for the viewer)', async () => {
@@ -305,6 +459,178 @@ describe('KanbanBoard', () => {
     fireEvent.pointerDown(document.body);
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
+
+  // ── R5-1 / R5-2 / R5-3 — the ⋯ menu is the documented keyboard path for moving a card ──────────
+  describe('⋯ menu (R5-1 placement, R5-2 chapter move, R5-3 submenus)', () => {
+    const ZERO = { x: 0, y: 0, top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, toJSON: () => ({}) } as DOMRect;
+    const rect = (o: Partial<DOMRect>) => ({ ...ZERO, ...o }) as DOMRect;
+
+    let rectSpy: { mockRestore: () => void } | null = null;
+
+    /** jsdom gives every box a zero rect — stub the trigger and the measured menus instead. */
+    function stubGeometry(trigger: Partial<DOMRect>, menuHeight: number, submenuHeight = menuHeight) {
+      rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        if (this.getAttribute('aria-label') === 'Menu') return rect(trigger);
+        if (this.getAttribute('role') === 'menu') {
+          // The root menu is « Actions de la carte »; a submenu is named after its parent item.
+          const h = this.getAttribute('aria-label') === 'Actions de la carte' ? menuHeight : submenuHeight;
+          return rect({ top: 0, bottom: h, height: h, width: 190, right: 190 });
+        }
+        return ZERO;
+      });
+    }
+    afterEach(() => {
+      rectSpy?.mockRestore();
+      rectSpy = null;
+    });
+
+    // R5-1 (bug): `top` was `trigger.bottom + 4` with no viewport check, and the menu is
+    // position:fixed in a portal — so the lower items (delete worst of all, being last) were
+    // unreachable for a card near the bottom of the screen.
+    it('flips the menu ABOVE the trigger when it would overflow the viewport bottom', async () => {
+      window.innerHeight = 768;
+      stubGeometry({ top: 700, bottom: 722, left: 274, right: 300, width: 26, height: 22 }, 200);
+      renderBoard();
+      await openMenu();
+      // 700 - 4 - 200 = 496, fully inside the viewport (the old code produced 726 → 926px bottom).
+      expect(screen.getByRole('menu')).toHaveStyle({ top: '496px' });
+    });
+
+    it('clamps into the viewport when the menu fits neither below nor above', async () => {
+      window.innerHeight = 768;
+      stubGeometry({ top: 700, bottom: 722, left: 274, right: 300, width: 26, height: 22 }, 700);
+      renderBoard();
+      await openMenu();
+      const menu = screen.getByRole('menu');
+      expect(menu).toHaveStyle({ top: '60px' }); // 768 - 700 - 8
+      // …and it can never be taller than the viewport: a long list scrolls INSIDE it.
+      expect(menu).toHaveStyle({ maxHeight: '752px', overflowY: 'auto' });
+    });
+
+    it('clamps a long chapter submenu into the viewport too', async () => {
+      window.innerHeight = 768;
+      stubGeometry({ top: 700, bottom: 722, left: 274, right: 300, width: 26, height: 22 }, 200, 900);
+      renderBoard();
+      await openMenu();
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' }));
+      const sub = screen.getByRole('menu', { name: 'Déplacer vers un chapitre' });
+      expect(sub).toHaveStyle({ top: '8px', maxHeight: '752px', overflowY: 'auto' });
+    });
+
+    // R5-2 — the same PATCH the card modal's « CHAPITRE » select uses. One code path, two entries.
+    it('moves the card to another chapter through the same PATCH the card modal uses', async () => {
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' });
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, chapterId: 'c2' });
+      const onWorkspaceStale = vi.fn();
+      renderBoard([card], false, [], { canManage: true, onWorkspaceStale });
+
+      await openMenu();
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Ch. 1 — La rencontre' }));
+
+      expect(api.updatePage).toHaveBeenCalledWith('p1', { chapterId: 'c2' });
+      // It leaves the selected chapter's board, and BOTH progress bars follow (R3-3).
+      await waitFor(() => expect(screen.queryByText('Page 1')).not.toBeInTheDocument());
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    it('never offers the card’s current chapter as a destination (no-op move)', async () => {
+      renderBoard([makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' })]);
+      await openMenu();
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' }));
+      expect(screen.queryByRole('menuitem', { name: /Prologue/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Ch. 1 — La rencontre' })).toBeInTheDocument();
+    });
+
+    it('reverts the optimistic chapter move and reports it when the PATCH fails', async () => {
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' });
+      (api.updatePage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('nope'));
+      renderBoard([card]);
+      await openMenu();
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Ch. 1 — La rencontre' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/a échoué/);
+      expect(screen.getByText('Page 1')).toBeInTheDocument();
+    });
+
+    // R5-3 — this menu is the documented NON-drag path, so keyboard operability is functional.
+    it('is keyboard operable end to end: arrows within a level, Right opens, Enter picks', async () => {
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' });
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, chapterId: 'c2' });
+      renderBoard([card]);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      expect(screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' })).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}');
+      const chapterParent = screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' });
+      expect(chapterParent).toHaveFocus();
+      expect(chapterParent).toHaveAttribute('aria-haspopup', 'menu');
+      expect(chapterParent).toHaveAttribute('aria-expanded', 'false');
+
+      await userEvent.keyboard('{ArrowRight}');
+      expect(chapterParent).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('menuitem', { name: 'Ch. 1 — La rencontre' })).toHaveFocus();
+      // Arrows stay INSIDE the open submenu (they never leak back to the parent level).
+      await userEvent.keyboard('{ArrowDown}');
+      expect(screen.getByRole('menuitem', { name: 'Ch. 1 — La rencontre' })).toHaveFocus(); // only one destination
+
+      await userEvent.keyboard('{Enter}');
+      expect(api.updatePage).toHaveBeenCalledWith('p1', { chapterId: 'c2' });
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    });
+
+    it('Escape unwinds one level at a time and hands focus back to the ⋯ trigger', async () => {
+      renderBoard([makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' })]);
+      const trigger = screen.getByRole('button', { name: 'Menu' });
+      await userEvent.click(trigger);
+      const parent = screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' });
+      await userEvent.keyboard('{ArrowRight}');
+      expect(screen.getAllByRole('menu')).toHaveLength(2);
+
+      await userEvent.keyboard('{Escape}');
+      expect(screen.getAllByRole('menu')).toHaveLength(1);
+      expect(parent).toHaveFocus();
+
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      expect(trigger).toHaveFocus();
+      // The card modal must NOT have opened behind it.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    // R7-3 — hover AND focus highlight come from the shared `.ep-menu-item` class (globals.css:642),
+    // which this menu never picked up. Asserted as wiring, not computed colour: an inline
+    // `background`/`color` would out-rank the class rule and silently kill both states, and focus
+    // matters most here — this is the documented keyboard path for moving a card.
+    it('gives every menu and submenu item the shared .ep-menu-item hover/focus class', async () => {
+      renderBoard([makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1', createdById: 'me' })], false, [], {
+        canManage: false,
+        viewerId: 'me',
+      });
+      await openMenu();
+
+      const parent = screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' });
+      expect(parent).toHaveClass('ep-menu-item');
+      expect(parent.style.background).toBe('');
+      expect(parent.style.backgroundColor).toBe('');
+
+      // The destructive item keeps its own idiom (fills solid danger) rather than the neutral hover.
+      const del = screen.getByRole('menuitem', { name: 'Supprimer la carte' });
+      expect(del).toHaveClass('ep-menu-item', 'ep-menu-item--danger');
+      expect(del.style.color).toBe('');
+
+      await userEvent.click(parent);
+      const items = screen.getAllByRole('menuitem');
+      expect(items.length).toBeGreaterThan(3);
+      for (const item of items) {
+        expect(item).toHaveClass('ep-menu-item');
+        expect(item.style.background).toBe('');
+      }
+      // Keyboard focus lands on a class-styled item, so it highlights exactly like hover.
+      expect(document.activeElement).toHaveClass('ep-menu-item');
+    });
+  });
+
   // ── CS-10 D-1 — the card delete affordance mirrors the server rule ─────────────────────────────
   // Server: leader ∪ co-leader ∪ owner may delete ANY card; everyone else only the cards they
   // created; a card with no recorded author is leadership-only. The UI mirrors it so it never offers
@@ -327,7 +653,8 @@ describe('KanbanBoard', () => {
       await openMenu();
       expect(screen.queryByRole('menuitem', { name: 'Supprimer la carte' })).not.toBeInTheDocument();
       // the move items are still there — they only need « Écriture »
-      expect(screen.getByRole('menuitem', { name: 'Nemu' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Déplacer vers une colonne' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Déplacer vers un chapitre' })).toBeInTheDocument();
     });
 
     it("offers it to a leader / co-leader on someone else's card", async () => {
@@ -352,6 +679,84 @@ describe('KanbanBoard', () => {
     it('offers no ⋯ menu at all to a read-only viewer with nothing to delete', () => {
       renderBoard([theirs], true, [], { canManage: false, viewerId: 'me' });
       expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    });
+  });
+
+  // ── R4-1 — every board mutation rings the `onWorkspaceStale` seam ─────────────────────────────
+  // ProjectWorkspace renders the board conditionally, so leaving the Tableau unmounts it and coming
+  // back re-seeds `pages` from `workspace.pages`. CS-7 built `onWorkspaceStale` to cure exactly that
+  // and wired it to ChaptersPanel only, so chapter mutations refreshed the payload and card
+  // mutations did not — a created card vanished on the way back. The seam is now rung by every
+  // persisted mutation the board owns. (The round trip itself is asserted in ProjectWorkspace.test.)
+  describe('workspace staleness seam (R4-1)', () => {
+    const spy = () => vi.fn();
+
+    it('rings it after a card is created', async () => {
+      const onWorkspaceStale = spy();
+      (api.createPage as ReturnType<typeof vi.fn>).mockResolvedValue(makePage({ id: 'new1', title: 'Page 8' }));
+      renderBoard([page7], false, [], { canManage: true, onWorkspaceStale });
+
+      await userEvent.click(screen.getAllByRole('button', { name: '＋ Ajouter une carte' })[0]);
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    it('rings it after a card is deleted', async () => {
+      const onWorkspaceStale = spy();
+      (api.deletePage as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      renderBoard([page7], false, [], { canManage: true, onWorkspaceStale });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Menu' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Supprimer la carte' }));
+      const dialog = await screen.findByRole('alertdialog');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    it('rings it after a stage change', async () => {
+      const onWorkspaceStale = spy();
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue(makePage({ ...page7, stage: 'nemu' }));
+      renderBoard([page7], false, [], { canManage: true, onWorkspaceStale });
+
+      await moveToColumn('Nemu');
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    it('rings it after an R2-5 chapter move from the card modal', async () => {
+      const onWorkspaceStale = spy();
+      const card = makePage({ id: 'p1', chapterId: 'c1', title: 'Page 1' });
+      (api.getPageDetail as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, description: '', checklist: [], comments: [] });
+      (api.listProjectAssets as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 24, totalPages: 1 });
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...card, chapterId: 'c2' });
+      renderBoard([card], false, [], { canManage: true, onWorkspaceStale });
+
+      await userEvent.click(screen.getByText('Page 1'));
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Chapitre' }));
+      await userEvent.click(screen.getByRole('option', { name: 'Ch. 1 — La rencontre' }));
+
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    // Same defect class, same seam: the quick-created chapter's chip lives in local state too.
+    it('rings it after the "＋" chip quick-creates a chapter', async () => {
+      const onWorkspaceStale = spy();
+      (api.createChapter as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'c3', number: 3, title: 'Chapitre 3', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0, resume: null,
+      });
+      renderBoard([page7], false, [], { canManage: true, onWorkspaceStale });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Ajouter un chapitre' }));
+      await waitFor(() => expect(onWorkspaceStale).toHaveBeenCalledTimes(1));
+    });
+
+    // Nothing was persisted, so nothing is stale — refetching would only undo the local revert.
+    it('does NOT ring it when the write fails', async () => {
+      const onWorkspaceStale = spy();
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('nope'));
+      renderBoard([page7], false, [], { canManage: true, onWorkspaceStale });
+
+      await moveToColumn('Corrections');
+      expect(await screen.findByRole('alert')).toHaveTextContent(/a échoué/);
+      expect(onWorkspaceStale).not.toHaveBeenCalled();
     });
   });
 });

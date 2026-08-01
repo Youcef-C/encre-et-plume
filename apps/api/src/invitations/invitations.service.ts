@@ -259,7 +259,7 @@ export class InvitationsService {
 
   /**
    * Grant the accepter workspace membership on a project invite: a WorkCreator row on the project's
-   * linked Work. Idempotent (skips if already a member) and a no-op when the project/work is gone.
+   * linked Work. Idempotent (skips if already a member) and a no-op when the project is gone.
    * ponytail: findFirst+count+create isn't a single tx — the @@unique([workId,accountId]) index is the
    * real guard against duplicates; add a tx if concurrent double-accepts ever surface.
    */
@@ -269,7 +269,7 @@ export class InvitationsService {
     creatorRoles: string[] | null | undefined,
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({ where: { id: projectId }, select: { workId: true } });
-    if (!project?.workId) return; // project or its seeded Work is gone — nothing to join
+    if (!project) return; // the project is gone — nothing to join (`workId` is NOT NULL)
     const workId = project.workId;
 
     const existing = await this.prisma.workCreator.findFirst({ where: { workId, accountId } });

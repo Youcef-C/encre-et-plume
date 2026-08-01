@@ -300,11 +300,12 @@ model Project {
   step        String? // CS-12 dashboard: current production step, e.g. "encrage Ch.1" — CS-2/CS-5 own writing it
   nextReleaseAt DateTime? // CS-12 dashboard: next scheduled release — CS-9 owns writing it
   // CS-1: the Project↔Work bridge. `workId` shares the Project's slug value, so /projet/{slug} and
-  // /oeuvre/{slug} resolve to the same pair. Nullable so legacy/seed Projects survive.
+  // /oeuvre/{slug} resolve to the same pair. REQUIRED since the CS-7 follow-up: a Work-less Project
+  // is the seed defect behind « Projet introuvable », now unrepresentable rather than merely guarded.
   visibility  String       @default("prive") // 'prive' | 'invitation' | 'public' (workspace/collab)
   collabOpen  Boolean      @default(false) // CS-2 "Demandes de collaboration" toggle (distinct from visibility; MC candidature reads it)
-  workId      String?      @unique // seeded œuvre (Work) — created in one $transaction with the Project
-  work        Work?        @relation(fields: [workId], references: [id])
+  workId      String       @unique // seeded œuvre (Work) — created in one $transaction with the Project
+  work        Work         @relation(fields: [workId], references: [id])
   createdAt   DateTime     @default(now())
   invitations Invitation[]
   calls       ProjectCall[] // MC-4X req6: calls linked to this project
@@ -560,6 +561,11 @@ model Chapter {
   number       Int
   title        String?
   status       ChapterStatus @default(published)
+  resume       String? // CS-7 — chapter summary shown in the Chapitres tab's inline edit form
+  // CS-7 R2-7 — « PLANCHES PRÉVUES »: the chapter's planned length, the DENOMINATOR of the progress
+  // pill (done ÷ prévues). R3-2 made it NOT NULL with a default of 20 (a standard chapter length):
+  // the bar is always displayed, so "no target" — and with it the null percentage — no longer exists.
+  targetPages  Int           @default(20)
   publishAt    DateTime      @default(now()) // future + status=scheduled → "Sorties programmées"
   createdAt    DateTime      @default(now())
   plancheCount Int           @default(0) // ponytail: denormalized; CS owns real page counts later
@@ -573,7 +579,10 @@ model Chapter {
   readingProgress ReadingProgress[]
 
   @@index([status, publishAt])
-  @@index([workId, number])
+  // CS-7 B5: chapter numbers are unique per project. `Project.workId` is 1:1, so work-scoped
+  // uniqueness IS project-scoped uniqueness. Replaces the plain @@index (a unique index serves
+  // the same lookups).
+  @@unique([workId, number])
 }
 
 // ── DR-3: work page "Œuvre" (creative team, planches, funding goals, reviews) ──
@@ -924,8 +933,11 @@ model Page {
   id            String        @id @default(cuid())
   projectId     String
   project       Project       @relation(fields: [projectId], references: [id])
-  chapterId     String? // null = card not yet attached to a chapter
-  chapter       Chapter?      @relation("ChapterBoardCards", fields: [chapterId], references: [id])
+  // CS-7 R2-1d (user rule, 2026-07-31): EVERY card belongs to a chapter. There is no orphan bucket —
+  // a nullable column is what made the forbidden state representable, so the invariant is enforced
+  // here, not in app code. Deleting a chapter that still holds cards is a 409 (R2-6), never a cascade.
+  chapterId     String
+  chapter       Chapter       @relation("ChapterBoardCards", fields: [chapterId], references: [id])
   title         String // card label, e.g. "Page 7"
   stage         PageStage     @default(scenario)
   fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double

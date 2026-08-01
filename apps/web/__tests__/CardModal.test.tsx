@@ -122,6 +122,44 @@ describe('CardModal', () => {
     expect(screen.getByText('COMMENTAIRES')).toBeInTheDocument();
   });
 
+  // ── R2-5 · move a card between chapters (the way OUT of "Sans chapitre") ────
+  describe('CHAPITRE field (R2-5)', () => {
+    const chapters = [
+      { id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 },
+      { id: 'c2', number: 1, title: 'La rencontre', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 },
+    ] as React.ComponentProps<typeof CardModal>['chapters'];
+
+    it('lists this project chapters in an OnBrandSelect — no native select, no "no chapter" option', async () => {
+      mount({}, { chapters });
+      expect(await screen.findByText('CHAPITRE')).toBeInTheDocument();
+      expect(document.querySelector('select')).toBeNull();
+
+      const trigger = screen.getByRole('combobox', { name: 'Chapitre' });
+      expect(trigger).toHaveTextContent('Prologue — L’orage');
+      await userEvent.click(trigger);
+
+      const options = screen.getAllByRole('option');
+      expect(options.map((o) => o.textContent)).toEqual(['Prologue — L’orage', 'Ch. 1 — La rencontre']);
+    });
+
+    it('PATCHes chapterId on select and bubbles the moved card up to the board', async () => {
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail(), chapterId: 'c2' });
+      const { onPageChange } = mount({}, { chapters });
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Chapitre' }));
+      await userEvent.click(screen.getByRole('option', { name: 'Ch. 1 — La rencontre' }));
+
+      await waitFor(() => expect(api.updatePage).toHaveBeenCalledWith('pg7', { chapterId: 'c2' }));
+      await waitFor(() => expect(onPageChange).toHaveBeenCalledWith(expect.objectContaining({ chapterId: 'c2' })));
+    });
+
+    it('is absent for a member without « Écriture »', async () => {
+      mount({}, { chapters, readOnly: true });
+      await screen.findByLabelText('TITRE');
+      expect(screen.queryByText('CHAPITRE')).not.toBeInTheDocument();
+    });
+  });
+
   it('debounce-autosaves the title with one PATCH and shows "Enregistré"', async () => {
     (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail(), title: 'Page 7!' });
     mount();
@@ -246,6 +284,58 @@ describe('CardModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  // ── R7-2 · closing inside the 600 ms autosave debounce must not drop the edit ──
+  // Each assertion is SYNCHRONOUS right after the close gesture: waiting would let the pending
+  // debounce fire on its own and hide the bug the fix exists for.
+  describe('pending autosave on close (R7-2)', () => {
+    async function editTitle() {
+      (api.updatePage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail(), title: 'Page 7!' });
+      const handles = mount({}, { canDelete: true });
+      await userEvent.type(await screen.findByLabelText('TITRE'), '!');
+      return handles;
+    }
+
+    it('flushes the pending edit before closing on Escape', async () => {
+      const { onClose } = await editTitle();
+      await userEvent.keyboard('{Escape}');
+      expect(api.updatePage).toHaveBeenCalledWith('pg7', { title: 'Page 7!' });
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('flushes the pending edit before closing on the ✕ button', async () => {
+      const { onClose } = await editTitle();
+      await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+      expect(api.updatePage).toHaveBeenCalledWith('pg7', { title: 'Page 7!' });
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('flushes the pending edit before closing on the backdrop', async () => {
+      const { onClose } = await editTitle();
+      await userEvent.click(screen.getByRole('dialog').parentElement!);
+      expect(api.updatePage).toHaveBeenCalledWith('pg7', { title: 'Page 7!' });
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('does not save on the delete path — the card is being destroyed', async () => {
+      (api.deletePage as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      const { onDeleted } = await editTitle();
+      await userEvent.click(screen.getByRole('button', { name: 'Supprimer la carte' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+      await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('pg7'));
+      // Past the 600 ms debounce: the pending timer must have been dropped, not flushed.
+      await new Promise((r) => setTimeout(r, 700));
+      expect(api.updatePage).not.toHaveBeenCalled();
+    });
+
+    it('does not save twice when the debounce already fired before the close', async () => {
+      const { onClose } = await editTitle();
+      await waitFor(() => expect(api.updatePage).toHaveBeenCalledTimes(1));
+      await userEvent.keyboard('{Escape}');
+      expect(api.updatePage).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
   // CS-5 F5 — when the card is in Corrections, deep-link to the review screen (mirrors KanbanBoard's ⚑).

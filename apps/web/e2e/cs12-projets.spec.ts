@@ -214,6 +214,21 @@ test.describe('CS-12 Mes projets — signed in (e2e-cs12-owner)', () => {
     await expect(page.getByRole('link', { name: /^Ouvrir/ })).toHaveCount(0);
   });
 
+  // Regression guard (bug 2026-07-31): the SEEDED projects had no Work half of the CS-1 bridge, so
+  // `GET /projects/:slug` 404s « Projet introuvable » — the owner could not open their own project.
+  // Every other workspace e2e creates its project through the wizard (which always makes both
+  // halves), so nothing ever opened a *seeded* project's workspace. This does.
+  test('CS12-E8b: "Modifier" on a seeded project opens its workspace, not « Projet introuvable »', async ({ page }) => {
+    await loginAsOwner(page);
+    await page.goto('/projets');
+    const enCoursCard = page.locator('li.ep-projet-card', { hasText: 'E2E CS12 · En cours' });
+    await enCoursCard.getByRole('link', { name: 'Modifier E2E CS12 · En cours' }).click();
+
+    await expect(page).toHaveURL(/\/projet\/e2e-cs12-en-cours/);
+    await expect(page.getByRole('tablist', { name: 'Sections du projet' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Projet introuvable')).toHaveCount(0);
+  });
+
   test('CS12-E9: visual differentiation — collection has layers glyph + "N illustrations" count; standalone illustration has image glyph, no count', async ({ page }) => {
     await loginAsOwner(page);
     await page.goto('/projets');

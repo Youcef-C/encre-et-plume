@@ -334,10 +334,17 @@ async function main() {
     await prisma.notification.deleteMany({ where: { recipientId: inbox } });
 
     // A project owned by inviter A so the "Ouvrir" action on the accepted row has a target.
+    // `Project.workId` is NOT NULL, so the Work half is seeded first (upsert-by-slug: re-runnable).
+    const invWork = await prisma.work.upsert({
+      where: { slug: 'e2e-inv-project-a' },
+      create: { slug: 'e2e-inv-project-a', title: 'Onibi — arc 2', genre: 'Seinen', meta: 'E2E invitations · 0 ch.' },
+      update: {},
+    });
+    const projData = { ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours', workId: invWork.id };
     const proj = await prisma.project.upsert({
       where: { id: 'e2e-inv-project-a' },
-      update: { ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
-      create: { id: 'e2e-inv-project-a', ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours' },
+      update: projData,
+      create: { id: 'e2e-inv-project-a', ...projData },
     });
 
     const D = (iso) => new Date(iso);
@@ -386,7 +393,21 @@ async function main() {
       { id: 'e2e-cs12-proj-publie', title: 'E2E CS12 · Publié', kind: 'Manga', genre: 'Seinen', status: 'publié', slug: 'e2e-cs12-publie', step: null, nextReleaseAt: null },
     ];
     for (const p of PROJECTS) {
-      await prisma.project.create({ data: { id: p.id, ownerId: owner, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt } });
+      // Same CS-1 bridge as the wizard (projects.service.ts:221): a Project with no Work 404s its
+      // own workspace (`!project.work` → « Projet introuvable »), and CS-10's permission model hangs
+      // off WorkCreator. Upsert-by-slug keeps the seed re-runnable (the projects above are wiped and
+      // recreated, the works are not).
+      const work = await prisma.work.upsert({
+        where: { slug: p.slug },
+        create: { slug: p.slug, title: p.title, genre: p.genre, meta: 'E2E CS12 · 0 ch.' },
+        update: {},
+      });
+      await prisma.workCreator.upsert({
+        where: { workId_accountId: { workId: work.id, accountId: owner } },
+        create: { workId: work.id, accountId: owner, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+        update: { groupRole: 'leader' },
+      });
+      await prisma.project.create({ data: { id: p.id, ownerId: owner, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt, workId: work.id } });
     }
 
     // Accepted collaborator on the "en cours" project → members[] = [owner(self), collab].
@@ -649,8 +670,15 @@ async function main() {
       });
     }
 
+    // `Project.workId` is NOT NULL — seed the Work half too. Upsert-by-slug so the re-run reuses it
+    // (the Project above is deleted each run, which frees the unique `workId` again).
+    const mc12Work = await prisma.work.upsert({
+      where: { slug: 'e2e-mc12-projet-fixture' },
+      create: { slug: 'e2e-mc12-projet-fixture', title: 'MC12 Projet fixture', genre: 'Seinen', meta: 'E2E MC12 · 0 ch.' },
+      update: {},
+    });
     const mc12Project = await prisma.project.create({
-      data: { ownerId: a, title: 'MC12 Projet fixture', kind: 'Manga' },
+      data: { ownerId: a, title: 'MC12 Projet fixture', kind: 'Manga', workId: mc12Work.id },
     });
     const mc12ProjectGroup = await prisma.conversation.create({
       data: {

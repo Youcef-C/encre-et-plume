@@ -166,7 +166,7 @@ export class CardCollabService {
       // CS-10 D-2: always the shared gate select, so the write variant below can actually gate.
       include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
     return project;
   }
 

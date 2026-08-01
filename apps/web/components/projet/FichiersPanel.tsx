@@ -4,12 +4,13 @@
 // prototype IMPORT section (data-page="import"): filter tabs, dashed drop zone + source options,
 // "Importés récemment" grid — plus the induced additions (search/sort/card-filter bar, per-file
 // version history, in-app preview). Uploads go through the F-10 presigned direct-to-storage flow.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AssetItem,
   AssetListResponse,
   AssetSort,
   AssetType,
+  WorkspaceChapter,
   WorkspacePage,
 } from '@encre-et-plume/shared';
 import {
@@ -18,7 +19,7 @@ import {
   createProjectAssetFromUrl,
   deleteAsset,
 } from '../../lib/api';
-import { DRAWING_SOURCE_EXTENSIONS } from '@encre-et-plume/shared';
+import { DRAWING_SOURCE_EXTENSIONS, chapterChipLabel } from '@encre-et-plume/shared';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import OnBrandSelect from '../form/OnBrandSelect';
 import { DownloadIcon, EyeIcon, FileTextIcon, TrashIcon } from '../icons';
@@ -86,13 +87,29 @@ type UploadRow = {
 export interface FichiersPanelProps {
   slug: string;
   pages: WorkspacePage[];
+  /**
+   * R5-6a — the project's chapters, only so a card can be shown WITH its chapter. Chapter-scoped
+   * auto-numbering lets two cards both read « Page 3 », which made both the « Toutes les cartes »
+   * filter and the « Lier à une carte » picker ambiguous.
+   */
+  chapters?: WorkspaceChapter[];
   // Non-members viewing a public project get a read-only view: grid + search/filter + preview stay,
   // but every write affordance (import, drop zone, link-to-card, new version) is hidden. Mirrors the
   // Tableau/Infos panels; every write is member-gated server-side too.
   readOnly?: boolean;
 }
 
-export default function FichiersPanel({ slug, pages, readOnly = false }: FichiersPanelProps) {
+export default function FichiersPanel({ slug, pages, chapters = [], readOnly = false }: FichiersPanelProps) {
+  // Resolved ONCE and shared with LinkCardModal — the label format lives in `chapterChipLabel`.
+  const chapterLabels = useMemo(
+    () => new Map(chapters.map((c) => [c.id, chapterChipLabel(c)])),
+    [chapters],
+  );
+  /** « Page 3 · Ch. 2 » — the card's title plus its chapter, when we can resolve one. */
+  const cardLabel = (p: WorkspacePage) => {
+    const chapter = p.chapterId ? chapterLabels.get(p.chapterId) : undefined;
+    return chapter ? `${p.title} · ${chapter}` : p.title;
+  };
   const [data, setData] = useState<AssetListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -343,7 +360,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
             <option value="">Toutes les cartes</option>
             {pages.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.title}
+                {cardLabel(p)}
               </option>
             ))}
           </OnBrandSelect>
@@ -556,6 +573,7 @@ export default function FichiersPanel({ slug, pages, readOnly = false }: Fichier
         <LinkCardModal
           asset={linkTarget}
           pages={pages}
+          chapterLabels={chapterLabels}
           onClose={() => setLinkTarget(null)}
           onLinked={(updated) => {
             // Bubble each toggle to the grid live; the modal stays open for multi-linking and is

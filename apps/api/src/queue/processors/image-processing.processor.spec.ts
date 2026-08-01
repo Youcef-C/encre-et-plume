@@ -87,7 +87,6 @@ describe('ImageProcessingProcessor', () => {
           messages: [],
         }),
       }));
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { MediaService: FreshMediaService } = require('../../media/media.service');
 
       const captured: Array<[string, Buffer, string, string?]> = [];

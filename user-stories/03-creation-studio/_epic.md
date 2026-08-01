@@ -27,6 +27,7 @@ The Creation Studio is where Creators, Writers, and Illustrators turn an idea in
 - [[CS-16]] — Delete a project "Supprimer le projet"
 - [[CS-17]] — Zoom in the editor "Zoom dans l'éditeur"
 - [[CS-18]] — Scenario version comparison "Comparer les versions"
+- [[CS-19]] — Version merge validation "Fusion des versions" (build before [[CS-18]])
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-3]] Profile, [[F-5]] Notifications

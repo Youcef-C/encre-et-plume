@@ -405,9 +405,11 @@ describe('InvitationsService', () => {
       expect(prisma.workCreator.create).not.toHaveBeenCalled();
     });
 
-    it('accepts a project invite whose work is gone: no crash, no WorkCreator write', async () => {
+    // `Project.workId` is NOT NULL since the CS-7 follow-up, so "the work is gone" is unrepresentable;
+    // the surviving case is a deleted project.
+    it('accepts a project invite whose project is gone: no crash, no WorkCreator write', async () => {
       prisma.invitation.findUnique.mockResolvedValue(INV({ projectId: 'proj-1' }));
-      prisma.project.findUnique.mockResolvedValue({ workId: null });
+      prisma.project.findUnique.mockResolvedValue(null);
       await service.respond('acc-to', 'inv-1', { status: 'accepted' });
       expect(prisma.workCreator.create).not.toHaveBeenCalled();
     });

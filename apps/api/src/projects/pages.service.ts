@@ -31,7 +31,7 @@ export const WORKSPACE_PAGE_INCLUDE = {
 type PageRow = {
   id: string;
   projectId: string;
-  chapterId: string | null;
+  chapterId: string;
   title: string;
   stage: PageStage;
   fileTags: string[];
@@ -78,6 +78,11 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
  * card badge is a derived rollup of `linkedFiles`. A stage→corrections transition fires the F-5
  * `project_activity` notification to the other members.
  */
+// The WIRE shapes: `chapterId` may arrive missing or null even though the shared request types
+// require it, so the service can answer the R2-1 / R2-5c 400 rather than trusting the client.
+type CreatePageBody = Omit<CreatePageRequest, 'chapterId'> & { chapterId?: string | null };
+type UpdatePageBody = Omit<UpdatePageRequest, 'chapterId'> & { chapterId?: string | null };
+
 @Injectable()
 export class PagesService {
   private readonly logger = new Logger(PagesService.name);
@@ -87,12 +92,17 @@ export class PagesService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async createPage(accountId: string, slug: string, body: CreatePageRequest): Promise<WorkspacePage> {
+  async createPage(accountId: string, slug: string, body: CreatePageBody): Promise<WorkspacePage> {
     const project = await this.resolveWritableProject(accountId, slug);
 
     const stage = this.assertStage(body.stage ?? 'scenario');
+    // R2-1 (user rule, 2026-07-31): a chapter is a PREREQUISITE for a card. This deliberately changes
+    // the shipped CS-2 create contract — the board hides "＋ Ajouter une carte" until a chapter is
+    // selected, and this is the server-side truth behind it. R2-1d then made `Page.chapterId` NOT
+    // NULL, so this 400 is the boundary check in front of a constraint, not the only guard.
     const chapterId = body.chapterId ?? null;
-    if (chapterId) await this.assertChapterInWork(chapterId, project.workId!);
+    if (!chapterId) throw new BadRequestException('Créez un chapitre avant d’ajouter une carte.');
+    await this.assertChapterInWork(chapterId, project.workId);
 
     const title = body.title?.trim()
       ? body.title.trim()
@@ -106,7 +116,7 @@ export class PagesService {
     return toWorkspacePage(page as PageRow);
   }
 
-  async updatePage(accountId: string, pageId: string, body: UpdatePageRequest): Promise<WorkspacePage> {
+  async updatePage(accountId: string, pageId: string, body: UpdatePageBody): Promise<WorkspacePage> {
     // Editing a card's fields is an ordinary « Écriture » write (CS-10 D-1 covers only create and
     // delete explicitly — this is the inferred reading, recorded in the notes).
     const page = await this.loadWritablePage(accountId, pageId);
@@ -114,7 +124,11 @@ export class PagesService {
     if (body.fileTags && body.fileTags.some((t) => !FILE_TAGS.has(t))) {
       throw new BadRequestException('Type de fichier invalide');
     }
-    if (body.chapterId) await this.assertChapterInWork(body.chapterId, page.project.workId!);
+    // R2-5 — moving a card between chapters reuses THIS route (no parallel "move" endpoint). The
+    // target must belong to the same work/project, and clearing the chapter is refused outright:
+    // under R2-1d a chapterless card is not a representable state (the column is NOT NULL).
+    if (body.chapterId === null) throw new BadRequestException('Une carte doit appartenir à un chapitre.');
+    if (body.chapterId) await this.assertChapterInWork(body.chapterId, page.project.workId);
 
     const data: Record<string, unknown> = {};
     if (body.title !== undefined) data.title = body.title;
@@ -306,7 +320,7 @@ export class PagesService {
       where: { slug },
       include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project, accountId)) throw new ForbiddenException('Réservé aux membres du projet');
     assertCanWrite(project, accountId);
     return project;

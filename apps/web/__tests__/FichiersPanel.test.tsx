@@ -5,6 +5,7 @@ import type {
   AssetItem,
   AssetListResponse,
   MediaResponse,
+  WorkspaceChapter,
   WorkspacePage,
 } from '@encre-et-plume/shared';
 
@@ -44,6 +45,12 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
 const pages = [
   makePage({ id: 'pg7', title: 'Page 7' }),
   makePage({ id: 'pg6', title: 'Page 6', stage: 'nemu' }),
+];
+
+// R5-6: chapter-scoped auto-numbering means two cards can legitimately share a title.
+const chapters: WorkspaceChapter[] = [
+  { id: 'c1', number: 0, title: 'L’orage', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 },
+  { id: 'c2', number: 2, title: 'La rencontre', status: 'draft', plancheCount: 0, targetPages: 20, progressPct: 0 },
 ];
 
 const dessin: AssetItem = {
@@ -90,8 +97,9 @@ const XHRMock = vi.fn().mockImplementation(function () {
   return xhr;
 });
 
-function renderPanel(props?: { readOnly?: boolean }) {
-  return render(<FichiersPanel slug="lames-de-brume" pages={pages} {...props} />);
+function renderPanel(props?: { readOnly?: boolean; pages?: WorkspacePage[] }) {
+  const { pages: p = pages, ...rest } = props ?? {};
+  return render(<FichiersPanel slug="lames-de-brume" pages={p} chapters={chapters} {...rest} />);
 }
 
 describe('FichiersPanel', () => {
@@ -215,7 +223,8 @@ describe('FichiersPanel', () => {
     renderPanel();
     await screen.findByText('ruelle-nemu.png');
     await userEvent.click(screen.getByRole('combobox', { name: 'Filtrer par carte' }));
-    await userEvent.click(screen.getByRole('option', { name: 'Page 7' }));
+    // R5-6c: the option now carries the chapter alongside the title.
+    await userEvent.click(screen.getByRole('option', { name: 'Page 7 · Prologue' }));
     await waitFor(() =>
       expect(api.listProjectAssets).toHaveBeenLastCalledWith(
         'lames-de-brume',
@@ -226,6 +235,22 @@ describe('FichiersPanel', () => {
     await waitFor(() =>
       expect(api.listProjectAssets).toHaveBeenLastCalledWith('lames-de-brume', {}),
     );
+  });
+
+  // R5-6c — « Page 3 » alone is ambiguous across chapters; the option carries the chapter label.
+  it('names the chapter in the card filter options, with no native select in the DOM', async () => {
+    const { container } = renderPanel({
+      pages: [
+        makePage({ id: 'a', chapterId: 'c1', title: 'Page 3' }),
+        makePage({ id: 'b', chapterId: 'c2', title: 'Page 3' }),
+      ],
+    });
+    await screen.findByText('ruelle-nemu.png');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Filtrer par carte' }));
+
+    expect(screen.getByRole('option', { name: 'Page 3 · Prologue' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Page 3 · Ch. 2' })).toBeInTheDocument();
+    expect(container.querySelector('select')).toBeNull();
   });
 
   it('shows the filtered-empty message', async () => {

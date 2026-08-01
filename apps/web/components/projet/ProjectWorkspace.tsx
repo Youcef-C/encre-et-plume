@@ -14,6 +14,7 @@ import KanbanBoard from './KanbanBoard';
 import InfosPanel from './InfosPanel';
 import PlaceholderPanel from './PlaceholderPanel';
 import FichiersPanel from './FichiersPanel';
+import ChaptersPanel from './ChaptersPanel';
 
 export const WORKSPACE_TABS = [
   'tableau',
@@ -169,6 +170,8 @@ export interface ProjectWorkspaceProps {
   workspace: ProjectWorkspaceResponse;
   tab: WorkspaceTab;
   onTabChange: (tab: WorkspaceTab) => void;
+  /** CS-7: called when a panel mutated data the other tabs read (chapters ↔ board cards). */
+  onWorkspaceStale?: () => void;
 }
 
 export default function ProjectWorkspace({
@@ -176,6 +179,7 @@ export default function ProjectWorkspace({
   workspace,
   tab,
   onTabChange,
+  onWorkspaceStale,
 }: ProjectWorkspaceProps) {
   const [title, setTitle] = useState(workspace.title);
   const isMember = workspace.viewer.isMember;
@@ -389,6 +393,10 @@ export default function ProjectWorkspace({
               isOwner={workspace.viewer.isOwner}
               viewerId={account?.id ?? null}
               canManage={workspace.viewer.canManage}
+              // R4-1: the board is rendered conditionally, so leaving this tab unmounts it and
+              // returning re-seeds from `workspace.pages`. Its mutations must refresh that payload
+              // through the SAME seam the chapters panel uses, or they are lost on the way back.
+              onWorkspaceStale={onWorkspaceStale}
             />
           )}
           {tab === 'infos' && (
@@ -399,12 +407,17 @@ export default function ProjectWorkspace({
               onTitleSaved={setTitle}
             />
           )}
+          {/* CS-7: create/edit/link/delete are « Écriture »-gated server-side — mirror it here so a
+              member without the permission isn't offered actions that would 403. */}
           {tab === 'chapitres' && (
-            <PlaceholderPanel title="Chapitres" note="La gestion des chapitres arrive bientôt." />
+            <ChaptersPanel slug={slug} canWrite={canWrite} onChaptersChanged={onWorkspaceStale} />
           )}
           {/* CS-10 B-4: upload/version/delete are « Écriture »-gated server-side — mirror that here
               so a member without it isn't offered actions that would 403. */}
-          {tab === 'fichiers' && <FichiersPanel slug={slug} pages={workspace.pages} readOnly={!canWrite} />}
+          {/* R5-6: `chapters` only so a card can be shown with the chapter it belongs to. */}
+          {tab === 'fichiers' && (
+            <FichiersPanel slug={slug} pages={workspace.pages} chapters={workspace.chapters} readOnly={!canWrite} />
+          )}
           {tab === 'discussion' && (
             <PlaceholderPanel
               title="Discussion du projet"

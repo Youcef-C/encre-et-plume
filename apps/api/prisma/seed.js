@@ -215,8 +215,11 @@ const EDITOR_PICKS = [
 
 // "Sorties programmées" — countdowns match the prototype (dans 1/4/7/16 j, lines 460-463) as
 // relative offsets from "now" so the seed stays correct whenever it's run.
+// CS-7 made `(workId, number)` UNIQUE. A scheduled chapter must therefore take the NEXT free number
+// of its work, never one an already-published chapter holds — lames-de-brume publishes 1…12 below,
+// so its "Sortie programmée" is 13 (it was 2, which now collides and failed the whole seed).
 const SCHEDULED_CHAPTERS = [
-  { workSlug: 'lames-de-brume', number: 2, publishAt: inDays(1) },
+  { workSlug: 'lames-de-brume', number: 13, publishAt: inDays(1) },
   { workSlug: 'onibi', number: 7, publishAt: inDays(4) },
   { workSlug: 'vertige', number: 3, publishAt: inDays(7) },
   { workSlug: 'encre-blanche', number: 9, publishAt: inDays(16) },
@@ -809,7 +812,23 @@ async function main() {
   const camille = await prisma.account.findUnique({ where: { profileSlug: 'dr1-camille-roux' } });
   if (camille) {
     for (const p of PROJECTS) {
-      const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt };
+      // Every Project MUST carry the Work half of the CS-1 bridge (projects.service.ts:221 creates
+      // both in one transaction). Without it `GET /projects/:slug` 404s « Projet introuvable » for
+      // the owner — CS-2/CS-3/CS-7/CS-10 all hang off Work (the CS-10 permission model lives on
+      // WorkCreator). Upsert-by-slug so `lames-de-brume`, which already exists as a DR work, is
+      // REUSED, not duplicated; a fresh work stays out of the catalog (`publishedAt: null`).
+      const work = await prisma.work.upsert({
+        where: { slug: p.slug },
+        create: { slug: p.slug, title: p.title, genre: p.genre ?? 'Fantastique', meta: `${camille.displayName} · 0 ch.` },
+        update: {},
+      });
+      // …and the owner's group row, so "Gérer le groupe" (CS-10) resolves for these projects too.
+      await prisma.workCreator.upsert({
+        where: { workId_accountId: { workId: work.id, accountId: camille.id } },
+        create: { workId: work.id, accountId: camille.id, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+        update: { groupRole: 'leader' },
+      });
+      const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt, workId: work.id };
       await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
     }
 

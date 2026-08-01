@@ -652,8 +652,8 @@ describe('ProjectsService workspace (CS-2)', () => {
         { accountId: 'acc-yuki', role: 'dessinateur', order: 1, groupRole: 'member', permissions: ['ecriture', 'corrections'], account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg', profile: { creatorRoles: ['dessinateur'] } } },
       ],
       chapters: [
-        { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3 },
-        { id: 'ch-1', number: 1, title: null, status: 'draft', plancheCount: 0 },
+        { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3, targetPages: 2 },
+        { id: 'ch-1', number: 1, title: null, status: 'draft', plancheCount: 0, targetPages: 20 },
       ],
       reviews: [
         { id: 'r1', authorName: 'Lea', storyRating: 4, artRating: 5, text: 'super', hidden: false, createdAt: new Date('2024-03-02') },
@@ -694,6 +694,16 @@ describe('ProjectsService workspace (CS-2)', () => {
 
   // ── getWorkspace ───────────────────────────────────────────────────────────
   describe('getWorkspace', () => {
+    // R2-8b — the Tableau's chip row draws a progress bar, so the workspace payload carries the same
+    // derived value as the Chapitres tab. Derived in-memory from the pages already loaded (no N+1).
+    it('carries a targetPages / progressPct for EVERY chapter (R3-2 — never null)', async () => {
+      const res = await service.getWorkspace('acc-me', 'lames-de-brume');
+      // ch-0: 1 linked card, not at the terminal stage → 0 done of 2 planned.
+      expect(res.chapters[0]).toMatchObject({ targetPages: 2, progressPct: 0 });
+      // ch-1: nobody planned it by hand, so it carries the default 20 — still a real percentage.
+      expect(res.chapters[1]).toMatchObject({ targetPages: 20, progressPct: 0 });
+    });
+
     it('returns the full payload for a member: ordered members/chapters, pages, review summary, hidden text blanked', async () => {
       const res = await service.getWorkspace('acc-me', 'lames-de-brume');
       expect(res.title).toBe('Lames de Brume');

@@ -20,6 +20,9 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** The action is impossible right now (e.g. CS-7 R2-6: the chapter still holds cards) — state the
+   *  blocker and offer no destroy button rather than one that would 409. */
+  blocked?: boolean;
   /** Above the card modal (z-index 70) when nested inside it. */
   zIndex?: number;
 }
@@ -31,6 +34,7 @@ export default function ConfirmDialog({
   cancelLabel = 'Annuler',
   onConfirm,
   onCancel,
+  blocked = false,
   zIndex = 80,
 }: ConfirmDialogProps) {
   useScrollLock();
@@ -103,8 +107,9 @@ export default function ConfirmDialog({
               minHeight: 40,
             }}
           >
-            {cancelLabel}
+            {blocked ? 'Fermer' : cancelLabel}
           </button>
+          {!blocked && (
           <button
             type="button"
             onClick={onConfirm}
@@ -126,6 +131,7 @@ export default function ConfirmDialog({
           >
             {confirmLabel}
           </button>
+          )}
         </div>
       </div>
     </div>,

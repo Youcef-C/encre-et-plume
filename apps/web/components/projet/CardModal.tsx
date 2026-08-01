@@ -16,6 +16,7 @@ import {
   MULTI_LINK_ASSET_TYPES,
   type PageStage,
   type PageFileTag,
+  type WorkspaceChapter,
   type WorkspaceMember,
   type WorkspacePage,
   type PageDetailResponse,
@@ -83,10 +84,18 @@ const toRef = (a: AssetItem): PageLinkedFileRef => ({
   version: a.currentVersion,
 });
 
+/** Same chip vocabulary as the board (`Prologue` for n° 0), plus the chapter's own title. */
+function chapterOptionLabel(c: WorkspaceChapter): string {
+  const base = c.number === 0 ? 'Prologue' : `Ch. ${c.number}`;
+  return c.title ? `${base} — ${c.title}` : base;
+}
+
 export interface CardModalProps {
   pageId: string;
   slug: string;
   members: WorkspaceMember[];
+  /** R2-5 — this project's chapters, for the « CHAPITRE » move field. */
+  chapters?: WorkspaceChapter[];
   labels: ProjectLabelItem[];
   viewerId: string | null;
   isOwner: boolean;
@@ -99,6 +108,9 @@ export interface CardModalProps {
   onDeleted: (id: string) => void;
   /** Bubble the full palette up so the board's filter row + card bars re-render. */
   onLabelsChange: (labels: ProjectLabelItem[]) => void;
+  /** R4-1 — a write has PERSISTED, so the once-fetched workspace payload the board is re-seeded
+   *  from on remount is stale. Never rung from the optimistic update that precedes the request. */
+  onWorkspaceStale?: () => void;
 }
 
 function withCounts(d: PageDetailResponse): PageDetailResponse {
@@ -114,6 +126,7 @@ export default function CardModal({
   pageId,
   slug,
   members,
+  chapters = [],
   labels,
   viewerId,
   isOwner,
@@ -123,6 +136,7 @@ export default function CardModal({
   onPageChange,
   onDeleted,
   onLabelsChange,
+  onWorkspaceStale,
 }: CardModalProps) {
   const [detail, setDetail] = useState<PageDetailResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -207,6 +221,16 @@ export default function CardModal({
     [onPageChange],
   );
 
+  // Same, for a write the server has ACKNOWLEDGED: the board's local state is updated AND the
+  // workspace payload it is re-seeded from on remount is marked stale (R4-1).
+  const persisted = useCallback(
+    (page: WorkspacePage) => {
+      onPageChange(page);
+      onWorkspaceStale?.();
+    },
+    [onPageChange, onWorkspaceStale],
+  );
+
   // ── Debounced autosave (title/description/dueDate/labels) ────────────────────
   const flush = useCallback(async () => {
     const delta = pendingRef.current;
@@ -217,11 +241,11 @@ export default function CardModal({
       const updated = await updatePage(pageId, delta);
       setSaveState('saved');
       setDetail((prev) => (prev ? withCounts({ ...prev, ...updated }) : prev));
-      onPageChange(updated);
+      persisted(updated);
     } catch {
       setSaveState('error');
     }
-  }, [pageId, onPageChange]);
+  }, [pageId, persisted]);
 
   const schedule = useCallback(
     (delta: UpdatePageRequest) => {
@@ -232,10 +256,40 @@ export default function CardModal({
     [flush],
   );
 
+  // R7-2 (data loss, pre-existing CS-2) — an edit made inside the 600 ms debounce was thrown away
+  // when the modal went: `flush` only ever ran from that timer, and no close path or cleanup
+  // touched it. Every close path now cancels the timer and awaits the SAME flush (never a second
+  // save path); `flush` no-ops on an empty delta, so a debounce that already fired can't double-save.
+  const closeAfterFlush = useCallback(async () => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      await flush();
+    }
+    onClose();
+  }, [flush, onClose]);
+
+  // Unmounting is a close path too (the parent can drop the modal without calling onClose). Read
+  // `flush` from a ref so the cleanup, which runs once, never fires a stale closure's delta.
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        void flushRef.current();
+      }
+    },
+    [],
+  );
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      onClose();
+      void closeAfterFlush();
     }
   }
 
@@ -304,7 +358,7 @@ export default function CardModal({
     try {
       const updated = await updatePage(pageId, { assigneeIds: nextAssignees.map((a) => a.accountId) });
       setDetail((d) => (d ? withCounts({ ...d, ...updated }) : d));
-      onPageChange(updated);
+      persisted(updated);
     } catch {
       setDetail(prev);
       onPageChange(prev);
@@ -318,10 +372,31 @@ export default function CardModal({
     try {
       const updated = await updatePageStage(pageId, stage);
       setDetail((d) => (d ? withCounts({ ...d, ...updated }) : d));
-      onPageChange(updated);
+      persisted(updated);
     } catch {
       setDetail(prev);
       onPageChange(prev);
+    }
+  }
+
+  // R2-5 — move the card to another chapter of this project. Reuses CS-2's card-update route (no
+  // parallel "move" endpoint) and bubbles the moved card so the board drops it from the current
+  // chapter's columns. Clearing the chapter is never offered: a card always belongs to a chapter, so
+  // the only move is chapter → chapter.
+  async function onChapterChange(chapterId: string) {
+    if (readOnly || !detail || chapterId === detail.chapterId) return;
+    const prev = detail;
+    emit({ ...detail, chapterId });
+    setSaveState('saving');
+    try {
+      const updated = await updatePage(pageId, { chapterId });
+      setDetail((d) => (d ? withCounts({ ...d, ...updated }) : d));
+      persisted(updated);
+      setSaveState('saved');
+    } catch {
+      setDetail(prev);
+      onPageChange(prev);
+      setSaveState('error');
     }
   }
 
@@ -334,6 +409,11 @@ export default function CardModal({
   }
 
   async function onDelete() {
+    // R7-2 — deliberately NOT flushed: the card is being destroyed, so a pending save is pointless
+    // and would race the delete. Dropping the delta also disarms the unmount flush above.
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    pendingRef.current = {};
     try {
       await deletePage(pageId);
       onDeleted(pageId);
@@ -382,7 +462,7 @@ export default function CardModal({
   }
 
   return (
-    <Overlay onBackdrop={onClose}>
+    <Overlay onBackdrop={() => void closeAfterFlush()}>
       <Panel panelRef={panelRef} titleId={titleId} onKeyDown={onKeyDown}>
         {/* Pinned header (title + close + save state) — the body below scrolls under it. */}
         <div style={{ flex: 'none', padding: 18, borderBottom: '2px solid var(--border)', background: 'var(--card)' }}>
@@ -416,7 +496,7 @@ export default function CardModal({
               </div>
             )}
           </div>
-          <button type="button" aria-label="Fermer" onClick={onClose} style={closeBtn}>
+          <button type="button" aria-label="Fermer" onClick={() => void closeAfterFlush()} style={closeBtn}>
             <XIcon size={16} />
           </button>
         </div>
@@ -464,6 +544,25 @@ export default function CardModal({
               <option value="double">⇿ Double page</option>
             </OnBrandSelect>
           </div>
+          {/* R2-5 — CHAPITRE. Only for writers; the server is the real gate. */}
+          {!readOnly && chapters.length > 0 && (
+            <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+              <div style={sectionLabel}>CHAPITRE</div>
+              <OnBrandSelect
+                aria-label="Chapitre"
+                value={detail.chapterId ?? ''}
+                onChange={(e) => void onChapterChange(e.target.value)}
+              >
+                {/* No "aucun chapitre" option (R2-5c): a card always belongs to a chapter. An
+                    orphan shows its empty trigger until the writer picks one. */}
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {chapterOptionLabel(c)}
+                  </option>
+                ))}
+              </OnBrandSelect>
+            </div>
+          )}
         </div>
 
         {/* CS-5 — when the card is in Corrections, deep-link to the review screen. */}

@@ -36,6 +36,21 @@ function roleSelect(page: Page, name: string) {
   return page.getByRole('combobox', { name: `Statut de ${name}` });
 }
 
+/**
+ * R2-1: a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES the board
+ * (no chip row at all), so the only affordance is its « Créer un chapitre » CTA. Wait for whichever
+ * of the two renders before deciding — the board is fetched client-side, and checking too early used
+ * to fall through to a chip that does not exist.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
+
 test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B invitee)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -132,7 +147,8 @@ test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B inv
     await login(page, A_EMAIL);
     await page.goto(`/projet/${SLUG}`);
     const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 1', { exact: true })).toBeVisible({ timeout: 5_000 });
     const cardLink = page.locator('div[draggable="true"]').filter({ hasText: 'Page 1' }).getByRole('link', { name: 'Éditer le scénario' });
     await cardLink.click();

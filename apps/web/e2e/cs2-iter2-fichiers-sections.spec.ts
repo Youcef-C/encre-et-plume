@@ -45,6 +45,7 @@ async function createProject(page: Page, title: string, opts?: { public?: boolea
 async function addCard(page: Page, index = 1): Promise<string> {
   const title = `Page ${index}`;
   const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
+  await ensureChapter(page);
   await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
   await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 });
   return title;
@@ -55,6 +56,21 @@ function assetCard(page: Page, filename: string) {
 }
 
 const dialog = (page: Page) => page.getByRole('dialog');
+
+/**
+ * R2-1: a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES the board
+ * (no chip row at all), so the only affordance is its « Créer un chapitre » CTA. Wait for whichever
+ * of the two renders before deciding — the board is fetched client-side, and checking too early used
+ * to fall through to a chip that does not exist.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
 
 test.describe('CS-2 iter2 — FICHIERS sections fillability + unlink + delete (owner, fresh project)', () => {
   test.describe.configure({ mode: 'serial' });

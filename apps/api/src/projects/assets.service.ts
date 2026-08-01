@@ -138,7 +138,7 @@ export class AssetsService {
   async createFromUrl(accountId: string, slug: string, body: { url: string; filename?: string; type?: AssetType }): Promise<AssetItem> {
     // Gate BEFORE fetching — never fetch on behalf of a non-member, and never burn a server-side fetch
     // + S3 ingest for a caller `createAsset` is going to refuse anyway (CS-10 B-4 follow-up N1).
-    const project = await this.resolveWritableProject(accountId, slug);
+    await this.resolveWritableProject(accountId, slug);
     const { buffer, contentType } = await this.fetchGuarded(body.url);
     const media = await this.media.ingestAsset(accountId, buffer, contentType);
     const filename = (body.filename ?? lastPathSegment(body.url)).trim() || 'fichier';
@@ -490,6 +490,20 @@ export class AssetsService {
     };
   }
 
+  /**
+   * CS-7 R6-1b — thumbnail URL per media id, batched: ONE `Media` query, then the same public/signed
+   * resolution `resolveThumb` gives the asset list and the preview. The chapter strip calls this
+   * instead of growing a second signing path next to it. Unknown / thumb-less media map to `null`.
+   */
+  async thumbnailUrlsByMediaId(mediaIds: string[]): Promise<Map<string, string | null>> {
+    const urls = new Map<string, string | null>();
+    const ids = [...new Set(mediaIds)];
+    if (ids.length === 0) return urls;
+    const rows = (await this.prisma.media.findMany({ where: { id: { in: ids } } })) as unknown as MediaRow[];
+    await Promise.all(rows.map(async (m) => urls.set(m.id, await this.resolveThumb(m))));
+    return urls;
+  }
+
   /** Thumbnail from the media's `thumb` variant — public → as stored, private → short-lived signed;
    *  documents/psd have no thumb variant → null (FE renders a placeholder tile). */
   private async resolveThumb(media: MediaRow | undefined): Promise<string | null> {
@@ -522,7 +536,7 @@ export class AssetsService {
       // downstream, which is exactly how the write routes below stayed open to any member.
       include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project, accountId)) {
       if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
       throw new NotFoundException('Projet introuvable');

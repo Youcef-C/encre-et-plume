@@ -97,7 +97,7 @@ type GroupProject = {
   title: string;
   ownerId: string;
   visibility: string;
-  workId: string | null;
+  workId: string;
   work: { creators: CreatorRow[] } | null;
   invitations: { id: string; toUser: { displayName: string; avatar: string | null } }[];
 };
@@ -234,8 +234,7 @@ export class MembersService {
     // and turned a `workCreator.update` into a raw Prisma P2025 → 500 instead of the French 400.
     try {
       await this.prisma.$transaction(async (tx) => {
-        // `loadBySlug` already 404s a project with no Work, so the ?? '' branch is unreachable.
-        const rows = await tx.workCreator.findMany({ where: { workId: project.workId ?? '' }, select: { id: true } });
+        const rows = await tx.workCreator.findMany({ where: { workId: project.workId }, select: { id: true } });
         const memberIds = new Set(rows.map((r) => r.id));
         const sent = new Set(shares.map((s) => s.memberId));
         if (shares.length !== memberIds.size || [...memberIds].some((id) => !sent.has(id))) {
@@ -279,7 +278,7 @@ export class MembersService {
       where: { slug },
       include: GROUP_INCLUDE,
     })) as unknown as GroupProject | null;
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project as never, accountId)) {
       if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
       throw new NotFoundException('Projet introuvable');

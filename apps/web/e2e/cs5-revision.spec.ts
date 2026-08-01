@@ -83,6 +83,19 @@ async function resetCard(page: Page, title: string): Promise<void> {
   }
 }
 
+/**
+ * R2-1 (CS-7): a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES
+ * the board (no « ＋ Ajouter une carte » at all), so create one before adding cards.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
+
 async function addCard(page: Page, index: number): Promise<string> {
   const title = `Page ${index}`;
   const scenarioCol = page.getByRole('group').filter({ hasText: /^Scénario/ });
@@ -138,6 +151,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     const page = await browser.newPage();
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${MULTI_SLUG}`);
+    await ensureChapter(page);
     // CI retry-hardening (see `resetCard`) — always start from zero "Page 1"/"Page 2" cards, whether
     // this is the first attempt or a Playwright retry of this whole serial block after a prior failure.
     await resetCard(page, 'Page 1');
@@ -169,6 +183,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await page.goto(`/projet/${MULTI_SLUG}`);
     const card = kanbanCard(page, 'Page 1');
     await card.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('menuitem', { name: 'Déplacer vers une colonne' }).click();
     await page.getByRole('menuitem', { name: 'Corrections' }).click();
     await expect(kanbanCard(page, 'Page 1')).toBeVisible({ timeout: 10_000 });
 

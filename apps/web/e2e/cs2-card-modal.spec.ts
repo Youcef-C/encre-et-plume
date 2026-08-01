@@ -50,12 +50,28 @@ async function createProject(page: Page, title: string): Promise<string> {
 async function addCard(page: Page, index = 1): Promise<string> {
   const title = `Page ${index}`;
   const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
+  await ensureChapter(page);
   await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
   await expect(scenarioCol.getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 });
   return title;
 }
 
 const dialog = (page: Page) => page.getByRole('dialog');
+
+/**
+ * R2-1: a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES the board
+ * (no chip row at all), so the only affordance is its « Créer un chapitre » CTA. Wait for whichever
+ * of the two renders before deciding — the board is fetched client-side, and checking too early used
+ * to fall through to a chip that does not exist.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
 
 test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)', () => {
   test.describe.configure({ mode: 'serial' });
@@ -113,6 +129,23 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
     await page.reload();
     await page.getByText('Page 1', { exact: true }).click();
     await expect(dialog(page).getByLabel('Description')).toHaveValue('Une description e2e CS-2.');
+    await page.keyboard.press('Escape');
+  });
+
+  // R7-2 (data loss) — closing INSIDE the 600 ms autosave debounce used to drop the edit silently.
+  // Deliberately does NOT wait for "Enregistré": waiting is what hid the bug.
+  test('CM-E10: an edit closed inside the autosave debounce is still persisted', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    await page.goto(`/projet/${slug}`);
+    await page.getByText('Page 1', { exact: true }).click();
+    const modal = dialog(page);
+    await modal.getByLabel('Description').fill('Fermée avant la fin du debounce.');
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+
+    await page.reload();
+    await page.getByText('Page 1', { exact: true }).click();
+    await expect(dialog(page).getByLabel('Description')).toHaveValue('Fermée avant la fin du debounce.');
     await page.keyboard.press('Escape');
   });
 
@@ -244,7 +277,8 @@ test.describe('CS-2 card-modal — owner lifecycle (fresh single-member project)
     await page.goto(`/projet/${slug}`);
     // A second card ensures a sibling paints after the first — the z-index regression this covers.
     const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 2', { exact: true })).toBeVisible({ timeout: 5_000 });
 
     const firstCard = scenarioCol.locator('div[draggable="true"]').filter({ hasText: 'Page 1' });

@@ -33,7 +33,7 @@ import * as api from '../lib/api';
 import KanbanBoard from '../components/projet/KanbanBoard';
 import CardModal from '../components/projet/CardModal';
 
-const chapters: WorkspaceChapter[] = [{ id: 'c1', number: 1, title: 'La rencontre', status: 'draft', plancheCount: 1 }];
+const chapters: WorkspaceChapter[] = [{ id: 'c1', number: 1, title: 'La rencontre', status: 'draft', plancheCount: 1, targetPages: 20, progressPct: 0 }];
 
 function makePage(over: Partial<WorkspacePage>): WorkspacePage {
   return {

@@ -58,6 +58,21 @@ function assetCard(page: Page, filename: string) {
   return page.locator('[data-asset-card]').filter({ hasText: filename });
 }
 
+/**
+ * R2-1: a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES the board
+ * (no chip row at all), so the only affordance is its « Créer un chapitre » CTA. Wait for whichever
+ * of the two renders before deciding — the board is fetched client-side, and checking too early used
+ * to fall through to a chip that does not exist.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
+
 test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -258,9 +273,11 @@ test.describe('CS-3 Fichiers — signed in (e2e-cs12-owner)', () => {
     await page.goto(`/projet/${slug}`);
 
     const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 1', { exact: true })).toBeVisible({ timeout: 5_000 });
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 2', { exact: true })).toBeVisible({ timeout: 5_000 });
 
     await page.goto(`/projet/${slug}?tab=fichiers`);

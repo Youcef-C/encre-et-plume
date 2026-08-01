@@ -54,6 +54,21 @@ test('CS2-E0: logged out /projet/{slug} redirects to sign-in', async ({ browser 
   await ctx.close();
 });
 
+/**
+ * R2-1: a card needs a chapter first. On a chapterless board the R2-3 empty state REPLACES the board
+ * (no chip row at all), so the only affordance is its « Créer un chapitre » CTA. Wait for whichever
+ * of the two renders before deciding — the board is fetched client-side, and checking too early used
+ * to fall through to a chip that does not exist.
+ */
+async function ensureChapter(page: Page) {
+  const add = page.getByRole('button', { name: '＋ Ajouter une carte' }).first();
+  const cta = page.getByRole('button', { name: 'Créer un chapitre' });
+  await expect(add.or(cta).first()).toBeVisible({ timeout: 15_000 });
+  if (await add.isVisible().catch(() => false)) return;
+  await cta.click();
+  await expect(add).toBeVisible({ timeout: 8_000 });
+}
+
 test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -81,9 +96,12 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     }
     await expect(tablist.getByRole('tab', { name: 'Tableau' })).toHaveAttribute('aria-selected', 'true');
 
-    // Fresh project: no chapters yet, only the "＋" (Ajouter un chapitre) chip; every column empty.
-    await expect(page.getByRole('button', { name: 'Ajouter un chapitre' })).toBeVisible();
-    await expect(page.getByText('Aucune carte').first()).toBeVisible();
+    // Fresh project: no chapters yet. CS-7 R2-1/R2-3 — a card needs a chapter, so the empty state
+    // REPLACES the board entirely (no chip row, no columns) instead of showing an inert one.
+    await expect(page.getByText('Aucun chapitre pour l’instant')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Créer un chapitre' })).toBeVisible();
+    await expect(page.getByRole('group')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '＋ Ajouter une carte' })).toHaveCount(0);
   });
 
   test('CS2-E2: TABLEAU — "＋ Ajouter une carte" creates a card; dragging it to Nemu changes its stage and persists', async ({ page }) => {
@@ -93,7 +111,8 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
     const nemuCol = page.getByRole('group').filter({ hasText: 'Nemu' });
 
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 1', { exact: true })).toBeVisible({ timeout: 5_000 });
 
     const card = page.locator('div[draggable="true"]').filter({ hasText: 'Page 1' });
@@ -115,6 +134,8 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
     const nemuCol = page.getByRole('group').filter({ hasText: 'Nemu' });
     const card = nemuCol.locator('div[draggable="true"]').filter({ hasText: 'Page 1' });
     await card.getByRole('button', { name: 'Menu' }).click();
+    // R5-3: the stage move lives in the « Déplacer vers une colonne » submenu now.
+    await page.getByRole('menuitem', { name: 'Déplacer vers une colonne' }).click();
     await page.getByRole('menuitem', { name: 'Corrections' }).click();
 
     const correctionsCol = page.getByRole('group').filter({ hasText: 'Corrections' });
@@ -179,7 +200,8 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
 
     await page.getByRole('tab', { name: 'Chapitres' }).click();
     await expect(page).toHaveURL(/\?tab=chapitres/);
-    await expect(page.getByText("La gestion des chapitres arrive bientôt.")).toBeVisible();
+    // The CS-2 placeholder was replaced by the real CS-7 "Chapitres" panel.
+    await expect(page.getByRole('button', { name: '＋ Ajouter un chapitre' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Fichiers' }).click();
     await expect(page).toHaveURL(/\?tab=fichiers/);
@@ -250,7 +272,8 @@ test.describe('CS-2 Espace projet — responsive sweep (375/768/1280)', () => {
     slug = await createProject(page, `E2E CS2 Responsive ${Date.now()}`);
     // Seed one card so the board has content to lay out.
     const scenarioCol = page.getByRole('group').filter({ hasText: 'Scénario' });
-    await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
+    await ensureChapter(page);
+  await scenarioCol.getByRole('button', { name: '＋ Ajouter une carte' }).click();
     await expect(scenarioCol.getByText('Page 1', { exact: true })).toBeVisible({ timeout: 5_000 });
     await page.close();
   });

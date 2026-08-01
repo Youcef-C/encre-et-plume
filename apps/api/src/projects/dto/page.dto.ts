@@ -9,8 +9,11 @@ import type {
 import { PAGE_FILE_TAGS, PAGE_STAGES } from '@encre-et-plume/shared';
 
 // Shape validation only — membership, chapter-in-work, and version rules live in PagesService.
+// The two `chapterId` fields stay laxer than their shared request types (`string | null | undefined`
+// vs `string`) ON PURPOSE: the wire must be able to CARRY a missing/null chapter so the service can
+// answer with the R2-1/R2-5c 400 instead of class-validator swallowing it as a shape error.
 
-export class CreatePageDto implements CreatePageRequest {
+export class CreatePageDto implements Omit<CreatePageRequest, 'chapterId'> {
   @IsOptional()
   @IsString()
   chapterId?: string | null;
@@ -25,7 +28,7 @@ export class CreatePageDto implements CreatePageRequest {
   stage?: PageStage;
 }
 
-export class UpdatePageDto implements UpdatePageRequest {
+export class UpdatePageDto implements Omit<UpdatePageRequest, 'chapterId'> {
   @IsOptional()
   @IsString()
   @MaxLength(120)

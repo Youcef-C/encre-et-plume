@@ -1212,3 +1212,32 @@ export const updateRevenueSplit = (
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+
+// ─── CS-7 · chapters ("Espace projet" → Chapitres tab) ───────────────────────
+import type {
+  ChapterDto,
+  ChapterListResponse,
+  CreateChapterRequest,
+  UpdateChapterRequest,
+} from '@encre-et-plume/shared';
+
+export const getProjectChapters = (slug: string): Promise<ChapterListResponse> =>
+  request<ChapterListResponse>(`/projects/${encodeURIComponent(slug)}/chapters`);
+
+export const createChapter = (slug: string, body: CreateChapterRequest): Promise<ChapterDto> =>
+  request<ChapterDto>(`/projects/${encodeURIComponent(slug)}/chapters`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+export const updateChapter = (id: string, body: UpdateChapterRequest): Promise<ChapterDto> =>
+  request<ChapterDto>(`/chapters/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+// 204, no body. R2-6: 409 while the chapter still holds cards (move or delete them first) and 409
+// on a published chapter — a chapter delete never destroys or orphans a member's cards.
+export const deleteChapter = (id: string): Promise<void> =>
+  request<void>(`/chapters/${encodeURIComponent(id)}`, { method: 'DELETE' });
+

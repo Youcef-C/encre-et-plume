@@ -19,6 +19,10 @@ export default function ProjectWorkspaceClient() {
   const [state, setState] = useState<
     { kind: 'loading' } | { kind: 'ready'; data: ProjectWorkspaceResponse } | { kind: 'error' }
   >({ kind: 'loading' });
+  // CS-7: a chapter create/edit/link/delete changes data the OTHER tabs render (the Tableau's
+  // chapter chips and each card's chapterId). Bumping this refetches the workspace payload in place
+  // — silently, so the panel the user is standing in never flashes back to the skeleton.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const tabParam = search.get('tab');
   const tab: WorkspaceTab = isWorkspaceTab(tabParam) ? tabParam : 'tableau';
@@ -30,7 +34,7 @@ export default function ProjectWorkspaceClient() {
       return;
     }
     let alive = true;
-    setState({ kind: 'loading' });
+    if (reloadKey === 0) setState({ kind: 'loading' });
     getProjectWorkspace(slug)
       .then((data) => {
         if (alive) setState({ kind: 'ready', data });
@@ -41,7 +45,7 @@ export default function ProjectWorkspaceClient() {
     return () => {
       alive = false;
     };
-  }, [slug, account, sessionLoading, router]);
+  }, [slug, account, sessionLoading, router, reloadKey]);
 
   function changeTab(t: WorkspaceTab) {
     const qs = t === 'tableau' ? '' : `?tab=${t}`;
@@ -102,6 +106,12 @@ export default function ProjectWorkspaceClient() {
   }
 
   return (
-    <ProjectWorkspace slug={slug} workspace={state.data} tab={tab} onTabChange={changeTab} />
+    <ProjectWorkspace
+      slug={slug}
+      workspace={state.data}
+      tab={tab}
+      onTabChange={changeTab}
+      onWorkspaceStale={() => setReloadKey((k) => k + 1)}
+    />
   );
 }

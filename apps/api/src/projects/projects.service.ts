@@ -21,7 +21,14 @@ import type {
   WorkspaceReview,
   WorkspaceReviewSummary,
 } from '@encre-et-plume/shared';
-import { GENRES, PROJECTS_PAGE_SIZE, catalogGenreLabel, normalizeHashtags } from '@encre-et-plume/shared';
+import {
+  GENRES,
+  PAGE_STAGES,
+  PROJECTS_PAGE_SIZE,
+  catalogGenreLabel,
+  chapterProgressPct,
+  normalizeHashtags,
+} from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 // Pure function, dereferenced at call time — members.service imports `isMemberOf` back from here, and
 // the resulting file-level cycle is safe for exactly that reason (same pattern as assets.service).
@@ -507,7 +514,7 @@ export class ProjectsService {
         labels: { orderBy: { createdAt: 'asc' } },
       },
     });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
 
     const isOwner = project.ownerId === accountId;
     const isMember = isMemberOf(project, accountId);
@@ -535,12 +542,16 @@ export class ProjectsService {
       visibility: project.visibility as ProjectVisibility,
       cover: work.coverImage ?? null,
       members,
+      // CS-7 R2-7/R2-8b: the chip row draws the same progress the Chapitres tab reports, so derive it
+      // here from the pages ALREADY loaded above (no extra query, no N+1).
       chapters: work.chapters.map((c) => ({
         id: c.id,
         number: c.number,
         title: c.title,
         status: c.status,
         plancheCount: c.plancheCount,
+        targetPages: c.targetPages,
+        progressPct: workspaceChapterProgress(c.targetPages, project.pages as { chapterId: string; stage: string }[], c.id),
       })),
       pages: project.pages.map((p) => toWorkspacePage(p as never)),
       labels: project.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
@@ -614,7 +625,7 @@ export class ProjectsService {
       // cannot gate, which is precisely how B-4 happened.
       include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } },
     });
-    if (!project || !project.work) throw new NotFoundException('Projet introuvable');
+    if (!project) throw new NotFoundException('Projet introuvable');
     if (!isMemberOf(project, accountId)) {
       if (project.visibility === 'public') throw new ForbiddenException('Réservé aux membres du projet');
       throw new NotFoundException('Projet introuvable');
@@ -696,4 +707,19 @@ function deriveSummary(rows: Array<MyProjectItem & { _createdAt: number }>): MyP
     }
   }
   return { active, enRevision, nextReleaseAt: nextMs === null ? null : new Date(nextMs).toISOString() };
+}
+
+/**
+ * CS-7 — the chapter's chip progress: done ÷ « planches prévues ». The arithmetic itself lives in the
+ * shared `chapterProgressPct` (R3-3), which the kanban board also uses when it recomputes locally.
+ * `done` = the chapter's linked cards at the terminal PageStage.
+ */
+function workspaceChapterProgress(
+  targetPages: number,
+  pages: { chapterId: string; stage: string }[],
+  chapterId: string,
+): number {
+  const terminal = PAGE_STAGES[PAGE_STAGES.length - 1];
+  const done = pages.filter((p) => p.chapterId === chapterId && p.stage === terminal).length;
+  return chapterProgressPct(done, targetPages);
 }

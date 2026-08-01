@@ -63,7 +63,7 @@ describe('PagesService', () => {
   describe('createPage', () => {
     it('creates a card in a single page.create; defaults title "Page N", stage scenario, empty linkedFiles', async () => {
       prisma.page.count.mockResolvedValue(6); // 6 existing → new is "Page 7"
-      const res = await service.createPage('acc-me', 'lames-de-brume', {});
+      const res = await service.createPage('acc-me', 'lames-de-brume', { chapterId: 'ch-1' });
       const created = prisma.page.create.mock.calls[0][0].data;
       expect(created).toMatchObject({ projectId: 'proj-1', title: 'Page 7', stage: 'scenario' });
       expect(res.stage).toBe('scenario');
@@ -77,7 +77,22 @@ describe('PagesService', () => {
     });
 
     it('rejects an unknown stage (400)', async () => {
-      await expect(service.createPage('acc-me', 'lames-de-brume', { stage: 'bogus' as never })).rejects.toThrow(BadRequestException);
+      await expect(service.createPage('acc-me', 'lames-de-brume', { stage: 'bogus' as never, chapterId: 'ch-1' })).rejects.toThrow(BadRequestException);
+    });
+
+    // R2-1 (user rule 2026-07-31) — deliberate change to the shipped CS-2 create contract.
+    it('rejects a create with no chapter (400) — a chapter is a prerequisite for a card', async () => {
+      await expect(service.createPage('acc-me', 'lames-de-brume', {})).rejects.toThrow(BadRequestException);
+      await expect(service.createPage('acc-me', 'lames-de-brume', { chapterId: null })).rejects.toThrow(BadRequestException);
+      expect(prisma.page.create).not.toHaveBeenCalled();
+    });
+
+    // The rule is create-time only: `Page.chapterId` stays nullable so chapter deletion can orphan.
+    it('leaves existing null-chapter rows readable and updatable', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ chapterId: null }));
+      await expect(service.updatePage('acc-me', 'page-1', { title: 'Toujours là' })).resolves.toMatchObject({
+        title: 'Toujours là',
+      });
     });
 
     it('rejects a chapterId that does not belong to the project work (400)', async () => {
@@ -113,6 +128,25 @@ describe('PagesService', () => {
     it('404 unknown page id', async () => {
       prisma.page.findUnique.mockResolvedValue(null);
       await expect(service.updatePage('acc-me', 'nope', { title: 'x' })).rejects.toThrow(NotFoundException);
+    });
+
+    // ── R2-5 — move a card between chapters (the only move there is: a card always has one) ──
+    it('moves the card to another chapter of the same project', async () => {
+      prisma.chapter.findUnique.mockResolvedValue({ id: 'ch-2', workId: 'work-1' });
+      await service.updatePage('acc-me', 'page-1', { chapterId: 'ch-2' });
+      expect(prisma.page.update.mock.calls[0][0].data.chapterId).toBe('ch-2');
+    });
+
+    it('rejects a chapter belonging to another project (400) — a card never crosses projects', async () => {
+      prisma.chapter.findUnique.mockResolvedValue({ id: 'ch-x', workId: 'other-work' });
+      await expect(service.updatePage('acc-me', 'page-1', { chapterId: 'ch-x' })).rejects.toThrow(BadRequestException);
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    // R2-5c: under R2-1 a card always belongs somewhere — moving back to "no chapter" is not a move.
+    it('rejects clearing the chapter (400)', async () => {
+      await expect(service.updatePage('acc-me', 'page-1', { chapterId: null })).rejects.toThrow(BadRequestException);
+      expect(prisma.page.update).not.toHaveBeenCalled();
     });
 
     it('403 non-member', async () => {
@@ -339,7 +373,7 @@ describe('PagesService', () => {
 
     // ── write gate: create / update / move ──────────────────────────────────
     describe.each([
-      ['createPage', (a: string) => service.createPage(a, 'lames-de-brume', {})],
+      ['createPage', (a: string) => service.createPage(a, 'lames-de-brume', { chapterId: 'ch-1' })],
       ['updatePage', (a: string) => service.updatePage(a, 'page-1', { title: 'x' })],
       ['updateStage', (a: string) => service.updateStage(a, 'page-1', { stage: 'nemu' })],
     ] as [string, (a: string) => Promise<unknown>][])('%s', (_name, call) => {
@@ -372,7 +406,7 @@ describe('PagesService', () => {
 
     it('createPage stamps createdById with the caller', async () => {
       withRoster();
-      await service.createPage('acc-writer', 'lames-de-brume', {});
+      await service.createPage('acc-writer', 'lames-de-brume', { chapterId: 'ch-1' });
       expect(prisma.page.create.mock.calls[0][0].data).toMatchObject({ createdById: 'acc-writer' });
     });
 
@@ -393,7 +427,7 @@ describe('PagesService', () => {
     // omitted them, so assert the query shape, not just the behaviour.
     it('both resolvers load groupRole + permissions', async () => {
       withRoster();
-      await service.createPage('acc-me', 'lames-de-brume', {});
+      await service.createPage('acc-me', 'lames-de-brume', { chapterId: 'ch-1' });
       expect(prisma.project.findUnique.mock.calls[0][0].include.work.include.creators.select).toMatchObject({
         accountId: true,
         groupRole: true,

@@ -642,6 +642,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Dropdown menu items: accent-soft hover, matching prototype §dropdown */
 .ep-menu-item {
   transition: background 0.08s;
+  background: transparent;
+  color: var(--ink);
 }
 .ep-menu-item:hover,
 .ep-menu-item:focus-visible {
@@ -650,6 +652,16 @@ h1, h2, h3, h4, h5, h6 {
 .ep-menu-item:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+/* Destructive row in a dropdown (R7-3): fills solid danger instead of the neutral accent-soft, so
+   it never flattens into the other items — the same two-step idiom as .ep-btn-danger-outline. */
+.ep-menu-item--danger {
+  color: var(--danger);
+}
+.ep-menu-item--danger:hover,
+.ep-menu-item--danger:focus-visible {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* Theme/role switcher toggle buttons: brightness dim on hover */
@@ -1933,4 +1945,119 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   .ep-group-row .ep-btn-danger-outline { width: 100%; }
   .ep-split-head { display: none; }
   .ep-split-row { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* ── CS-7 Chapitres tab ──────────────────────────────────────────────────────
+   Desktop = the prototype replica (54×72 tiles, TITRE + N° side by side). Down at ≤768px the edit
+   fields stack; at ≤480px the tiles grow so the per-thumbnail unlink control reaches a 44px tap
+   target (a 54px tile cannot host one without breaking the drawn layout). */
+.ep-chapter-fields {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.ep-chapter-title-field {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.ep-chapter-number {
+  width: 64px;
+  flex: none;
+}
+/* R2-7 « PLANCHES PRÉVUES » — third field on the TITRE / N° row. */
+.ep-chapter-target {
+  width: 128px;
+  flex: none;
+}
+.ep-chapter-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* CS-7 R3-1 — the Tableau's chapter selector chip (prototype line 1336), carrying the R2-8b progress
+   bar under its label. R2-8c grew it to 38px/6px 13px to fit the bar; R3-1 scales that back down —
+   still roomier than the bare prototype chip (30px / 4px 10px), which the bar would crowd. The
+   sizing has to live here, not inline: the mobile rule below raises it to the 44px tap-target floor
+   and an inline min-height would win over the media query (the R2-4 lesson). */
+.ep-chapter-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 66px;
+  min-height: 33px;
+  padding: 4px 11px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  font: 700 13px/1.25 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  /* Tap targets ≥ 44px where taps actually happen — non-negotiable against the smaller aesthetic. */
+  .ep-chapter-chip {
+    min-height: 44px;
+    justify-content: center;
+    padding: 6px 12px;
+  }
+}
+
+/* Dashed "＋ Lier une page" tile — prototype hover fills accent-soft. */
+.ep-chapter-link-tile {
+  width: 54px;
+  height: 72px;
+  flex: none;
+  border: 2px dashed var(--ink);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--ink2);
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ep-chapter-link-tile:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* (R2-1d removed the per-thumbnail unlink affordance: a card is never left without a chapter, so
+   `.ep-chapter-unlink` went with it. A card leaves a chapter by moving to another one — R2-5.) */
+
+@media (max-width: 768px) {
+  .ep-chapter-fields {
+    flex-direction: column;
+    gap: 10px;
+  }
+  /* Column direction turns flex-basis into a HEIGHT — reset it or TITRE keeps a 240px-tall box. */
+  .ep-chapter-title-field {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .ep-chapter-number,
+  .ep-chapter-target {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .ep-chapter-thumb,
+  .ep-chapter-link-tile {
+    width: 72px !important;
+    height: 96px !important;
+  }
+  .ep-chapter-form-actions {
+    flex-direction: column-reverse;
+  }
+  .ep-chapter-form-actions > button {
+    width: 100%;
+    margin-right: 0 !important;
+  }
 }

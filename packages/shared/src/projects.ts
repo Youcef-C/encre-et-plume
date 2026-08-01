@@ -214,7 +214,8 @@ export interface PageLinkedFileRef {
 /** A kanban board card (CS-2 `Page`) — NOT the reader `Planche`. */
 export interface WorkspacePage {
   id: string;
-  chapterId: string | null;
+  /** R2-1d — never null: every card belongs to a chapter (DB-enforced). */
+  chapterId: string;
   title: string;
   stage: PageStage;
   fileTags: PageFileTag[];
@@ -245,6 +246,11 @@ export interface WorkspaceChapter {
   title: string | null;
   status: string;
   plancheCount: number;
+  /** CS-7 — « planches prévues ». R3-2: NOT NULL, defaults to 20. */
+  targetPages: number;
+  /** CS-7 — done ÷ targetPages, clamped to 100. R3-2: never null, so every chip draws its bar. The
+   *  board RECOMPUTES this locally from its own `pages` (R3-3) — this is the initial/SSR value. */
+  progressPct: number;
 }
 
 export interface WorkspaceReview {
@@ -303,14 +309,16 @@ export interface UpdateProjectInfoResponse {
 }
 
 export interface CreatePageRequest {
-  chapterId?: string | null;
+  /** R2-1: required — a card always belongs to a chapter (400 otherwise). */
+  chapterId: string;
   title?: string;
   stage?: PageStage;
 }
 
 export interface UpdatePageRequest {
   title?: string;
-  chapterId?: string | null;
+  /** R2-5 — move the card to another chapter of the SAME project. Never null (R2-1d). */
+  chapterId?: string;
   fileTags?: PageFileTag[];
   // NOTE: linkedFileIds is NOT writable here — link state is owned by CS-3's POST /assets/:id/link.
   // CS-2 card-modal extension (all optional; null clears where nullable):
