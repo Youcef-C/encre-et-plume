@@ -90,6 +90,20 @@ not just an access one.
 and constraining it would make the group unmanageable). What these rules stop is taking someone's money,
 staging a coup, and doing either silently.
 
+### 6 · Revocation must never erase a CREDIT (user-specified, 2026-08-02)
+
+Today `revokeMember` runs `tx.workCreator.delete(...)` — the row **is destroyed**, so a co-author who drew
+ten chapters vanishes from the work's credits the moment they leave or are removed. Money and access were
+the first two halves of this abuse; **attribution is the third, and the least reversible.**
+
+- `WorkCreator` is **retired, never deleted**: it gains a lifecycle (`leftAt` / `removedAt`, and why), and
+  every read that renders credits includes former co-authors, marked as such.
+- **A former co-author stays credited on what they actually worked on** — see [[CS-11]] for the
+  attribution rule itself, which is where the constraint belongs.
+- The work continues to appear on their profile; the link between person and contribution is not the
+  group's to sever.
+- Permission and revenue rows may go inactive on revocation; **the credit row may not.**
+
 ## Dependencies
 - [[MC-3]] — collaborator invite.
 - [[F-2]] — role definitions.

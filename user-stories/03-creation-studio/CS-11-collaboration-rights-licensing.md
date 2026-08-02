@@ -27,6 +27,38 @@
 - Side effects: consent requests notify co-authors ([[F-5]]); `ActionLogService.record()` emits `rights_agreement_updated` / `rights_consented` ([[AD-10]]); the signed agreement is visible context for a publisher contract ([[PE-4]]).
 - Shared contracts in `packages/shared/src/rights.ts` (enums, DTOs) + barrel export.
 
+## Attribution / droit moral — a former co-author stays credited (user-specified, 2026-08-02)
+
+**As a** co-author who has left or been removed from a project, **I want** to remain credited on the
+parts I actually made, **so that** my portfolio and reputation survive a fallout with the group.
+
+- **Credits are per CONTRIBUTION, not per current membership.** A chapter, planche or page records who
+  authored it; the work's credit block is built from that, so it cannot be rewritten by changing who is
+  in the group today. This is the same shape as [[CS-10]]'s non-retroactive revenue split: the record of
+  what happened is not editable by whoever holds the keys now.
+- The credit block distinguishes **current** co-authors from those who **also contributed** (former),
+  and names what they worked on where the data supports it («chapitres 1–10»).
+- [[CS-10]] revocation **retires** a `WorkCreator` row, never deletes it. The work keeps appearing on the
+  former co-author's profile.
+- **Removing a credit is not an available operation** — not via the group screen, not via the API. The
+  only path is [[AD-5]]/[[AD-*]] moderation, for impersonation or a credit added in bad faith, and it is
+  logged like any other moderation act.
+- The [[CS-11]] licence agreement governs **exploitation** rights. It does **not** govern attribution:
+  an agreement cannot trade away a co-author's credit, so the consent flow must not present it as
+  negotiable.
+
+> **Why this is a hard constraint, not a courtesy.** Under French copyright law the *droit moral* — and
+> specifically the *droit de paternité* (the right to be named as author) — is **perpétuel, inaliénable
+> et imprescriptible** (CPI art. L121-1): an author cannot waive it even by contract. A French
+> manga-creator platform that lets a group delete someone's credit is therefore not merely being unfair,
+> it is offering an operation the law does not permit its users to perform. Treat this as a design
+> constraint and **have it confirmed by counsel** before the licence copy is finalised — this note is a
+> reason to check, not a legal opinion.
+
+**Related defect, already recorded:** works created through the app get **no `WorkCreator` row at all**
+(see `.claude/pipeline/_seed-coherence-pass.md`), so the credit block is empty from birth. Attribution
+cannot be protected before it is populated — fix that first.
+
 ## Dependencies
 - [[CS-10]] — host surface; complements the revenue split (money ≠ rights) and supplies the member list.
 - [[PUB-1]] / [[CS-9]] — publish is gated on full consent.
