@@ -17,8 +17,13 @@ module.exports = {
   // (dom-serializer@3 / domelementtype@3 / domhandler@6 / domutils@4 / entities@8), all ESM-only
   // ("type":"module"). Node runs them natively; ts-jest must transpile them, so exclude that stack from
   // the node_modules transform-ignore (everything else under .pnpm stays ignored for speed).
+  // marked@18 (legal markdown → HTML for the seed) is ESM-only too; Node 24 requires it natively,
+  // jest 29 cannot, so it joins the transpiled list.
   transformIgnorePatterns: [
-    '/node_modules/.pnpm/(?!(htmlparser2|dom-serializer|domelementtype|domhandler|domutils|entities)@)',
+    '/node_modules/.pnpm/(?!(htmlparser2|dom-serializer|domelementtype|domhandler|domutils|entities|marked)@)',
+    // prisma/*.js are plain CommonJS seed scripts run by `node` — jest can require them as-is.
+    // ts-jest would refuse them (allowJs is off), so keep them out of the transform entirely.
+    '/apps/api/prisma/',
   ],
   maxWorkers: '25%', // ponytail: cap worker pool so parallel/agent test runs don't flood the machine
   // H1: ENABLE_DEV_AUTH_SEAMS opt-in for the dev-latest/token-stash test seams (see test/jest.env.setup.js)

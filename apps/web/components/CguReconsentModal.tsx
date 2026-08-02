@@ -120,7 +120,17 @@ export default function CguReconsentModal() {
           >
             Conditions générales d&apos;utilisation
           </Link>{' '}
-          ont été mises à jour. Veuillez les accepter pour continuer à utiliser Encre &amp; Plume.
+          (dont la{' '}
+          {/* One acceptance covers both — the Charte is an integral part of the CGU. */}
+          <Link
+            href="/charte"
+            target="_blank"
+            rel="noopener"
+            style={{ color: 'var(--accent)', fontWeight: 700 }}
+          >
+            Charte de la communauté
+          </Link>
+          ) ont été mises à jour. Veuillez les accepter pour continuer à utiliser Encre &amp; Plume.
         </p>
 
         {error && (

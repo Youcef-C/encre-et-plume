@@ -13,6 +13,9 @@ const { e2ePrisma } = require('./_e2e-prisma');
 const bcrypt = require('bcryptjs');
 // F-22: single source of truth for hashtag shape — seeded tags match the BE `tag` filter & FE chips.
 const { normalizeHashtags } = require('@encre-et-plume/shared');
+// F-13: the four legal documents are derived from `legal/*.md` at seed time — that folder stays the
+// editable source of truth, so the published rows can never drift from the reviewed text.
+const { loadLegalDocuments } = require('./legal-content');
 
 const prisma = e2ePrisma(5);
 
@@ -617,7 +620,18 @@ const MC8_PENDING_FROM = [
 async function main() {
   const hash = bcrypt.hashSync('password123', 10);
 
-  // F-13: current published cgu/privacy versions (seeded by the f13_legal_consent migration) — used
+  // F-13: publish the four legal documents (cgu / privacy / mentions / charte) from `legal/*.md`.
+  // Upsert on the (kind, version) unique key so re-running picks up an edit to the markdown without
+  // needing a version bump; bumping LEGAL_VERSION publishes a new row and triggers CGU re-consent.
+  for (const doc of loadLegalDocuments()) {
+    await prisma.legalDocument.upsert({
+      where: { kind_version: { kind: doc.kind, version: doc.version } },
+      create: doc,
+      update: { content: doc.content },
+    });
+  }
+
+  // F-13: current published cgu/privacy versions (published just above) — used
   // below to give every loginable seed account a ConsentRecord so needsCguReconsent === false. Without
   // this, a fresh DB leaves the CguReconsentModal's full-viewport backdrop mounted after login, which
   // blocks every click in e2e (mirrors the same guard already in e2e-seed.js).

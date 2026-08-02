@@ -32,6 +32,13 @@ describe('LegalFooter', () => {
     expect(link).toHaveAttribute('href', '/confidentialite');
   });
 
+  // The Charte is an integral part of the CGU (CGU art. 2 & 3), so it must be reachable.
+  it('renders "Charte de la communauté" link pointing to /charte', () => {
+    renderFooter();
+    const link = screen.getByRole('link', { name: /charte de la communauté/i });
+    expect(link).toHaveAttribute('href', '/charte');
+  });
+
   it('renders "Mentions légales" link pointing to /mentions-legales', () => {
     renderFooter();
     const link = screen.getByRole('link', { name: /mentions légales/i });

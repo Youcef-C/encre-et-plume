@@ -25,27 +25,26 @@ Règlement (UE) 2016/679 (RGPD) et loi n° 78-17 du 6 janvier 1978 modifiée.
 | 4 | **Messagerie, discussions de projet et salon communautaire** | Exécution du contrat (art. 6.1.b) | Messages, pièces jointes, participants, horodatages, accusés de lecture, réactions | [DUREE_CONSERVATION_MESSAGES] |
 | 5 | **Notifications et courriels de service** | Exécution du contrat (art. 6.1.b) ; consentement (art. 6.1.a) pour les communications non essentielles | Adresse électronique, préférences de notification, historique d'envoi | Durée du compte ; retrait du consentement à tout moment |
 | 6 | **Vérification de l'âge et accès aux contenus réservés aux majeurs** | Obligation légale (art. 6.1.c) | Date de naissance, statut de majorité, journal des accès aux contenus restreints | Durée du compte |
-| 7 | **Recueil du consentement parental (utilisateurs de 13 à 14 ans)** | Obligation légale (art. 6.1.c ; art. 8 RGPD, art. 45 loi 78-17) | Identité et coordonnées du titulaire de l'autorité parentale, preuve et date du consentement | Durée du compte, puis [DUREE_PREUVE_CONSENTEMENT] à titre de preuve |
-| 8 | **Modération, signalements et sanctions** | Obligation légale (art. 6.1.c — règlement (UE) 2022/2065) et intérêt légitime (art. 6.1.f) : assurer un environnement sûr et traiter les abus | Contenus signalés, motifs, décisions, exposés des motifs, réclamations, historique des mesures | [DUREE_CONSERVATION_MODERATION] à compter de la décision |
-| 9 | **Blocages et masquages entre utilisateurs** | Exécution du contrat (art. 6.1.b) | Identifiants des utilisateurs concernés, type et date de la mesure | Jusqu'à levée par l'utilisateur |
-| 10 | **Sécurité, prévention de la fraude, journaux techniques** | Intérêt légitime (art. 6.1.f) : préserver l'intégrité du service et des comptes | Adresse IP, agent utilisateur, horodatages de connexion, identifiants de session, événements d'erreur | [DUREE_CONSERVATION_LOGS] |
-| 11 | **Authentification à deux facteurs** | Exécution du contrat (art. 6.1.b) | Secret TOTP, codes de secours (hachés), dates d'activation | Jusqu'à désactivation |
-| 12 | **Assistance et réclamations** | Exécution du contrat et intérêt légitime (art. 6.1.f) : traiter les demandes | Objet, contenu du message, coordonnées, échanges | [DUREE_CONSERVATION_SUPPORT] |
-| 13 | **Preuve de l'acceptation des conditions** | Obligation légale (art. 6.1.c) et intérêt légitime | Version acceptée, date, identifiant du compte | [DUREE_PREUVE_ACCEPTATION] |
-| 14 | **Export et suppression des données à la demande** | Obligation légale (art. 6.1.c — art. 15, 17 et 20 RGPD) | Archive générée, date, statut, lien de téléchargement | Archive supprimée après [DUREE_ARCHIVE_EXPORT] |
-| 15 | **Mesure d'audience** | [À CHOISIR : intérêt légitime si la mesure est strictement limitée au sens de la recommandation CNIL, à défaut consentement (art. 6.1.a)] | Pages consultées, données agrégées, identifiant technique | [DUREE_MESURE_AUDIENCE], maximum 25 mois |
+| 7 | **Modération, signalements et sanctions** | Obligation légale (art. 6.1.c — règlement (UE) 2022/2065) et intérêt légitime (art. 6.1.f) : assurer un environnement sûr et traiter les abus | Contenus signalés, motifs, décisions, exposés des motifs, réclamations, historique des mesures | [DUREE_CONSERVATION_MODERATION] à compter de la décision |
+| 8 | **Blocages et masquages entre utilisateurs** | Exécution du contrat (art. 6.1.b) | Identifiants des utilisateurs concernés, type et date de la mesure | Jusqu'à levée par l'utilisateur |
+| 9 | **Sécurité, prévention de la fraude, journaux techniques** | Intérêt légitime (art. 6.1.f) : préserver l'intégrité du service et des comptes | Adresse IP, agent utilisateur, horodatages de connexion, identifiants de session, événements d'erreur | [DUREE_CONSERVATION_LOGS] |
+| 10 | **Authentification à deux facteurs** | Exécution du contrat (art. 6.1.b) | Secret TOTP, codes de secours (hachés), dates d'activation | Jusqu'à désactivation |
+| 11 | **Assistance et réclamations** | Exécution du contrat et intérêt légitime (art. 6.1.f) : traiter les demandes | Objet, contenu du message, coordonnées, échanges | [DUREE_CONSERVATION_SUPPORT] |
+| 12 | **Preuve de l'acceptation des conditions** | Obligation légale (art. 6.1.c) et intérêt légitime | Version acceptée, date, identifiant du compte | [DUREE_PREUVE_ACCEPTATION] |
+| 13 | **Export et suppression des données à la demande** | Obligation légale (art. 6.1.c — art. 15, 17 et 20 RGPD) | Archive générée, date, statut, lien de téléchargement | Archive supprimée après [DUREE_ARCHIVE_EXPORT] |
+| 14 | **Mesure d'audience** | [À CHOISIR : intérêt légitime si la mesure est strictement limitée au sens de la recommandation CNIL, à défaut consentement (art. 6.1.a)] | Pages consultées, données agrégées, identifiant technique | [DUREE_MESURE_AUDIENCE], maximum 25 mois |
 
 > **À vérifier avant publication.** Chaque durée ci-dessus est une décision de l'exploitant, pas une valeur légale. Une politique qui indique « durée nécessaire » sans chiffre est le manquement le plus fréquemment relevé par la CNIL.
 
 ## Article 3 — Données des mineurs
 
-Le Service est accessible à partir de **13 ans**. Pour les utilisateurs de **moins de 15 ans**, le traitement n'est licite que si le consentement est donné **conjointement par le mineur et par le ou les titulaires de l'autorité parentale** (article 8 du RGPD, article 45 de la loi n° 78-17).
+Le Service est accessible **à partir de 15 ans**. Ce seuil est celui à partir duquel un mineur consent seul au traitement de ses données à caractère personnel en France (article 8 du RGPD, article 45 de la loi n° 78-17). **Aucun consentement parental n'est requis, et aucune donnée relative à un titulaire de l'autorité parentale n'est collectée.**
 
-L'Éditeur met en œuvre des **efforts raisonnables** pour vérifier que ce consentement a bien été donné, compte tenu des moyens technologiques disponibles.
+Aucun Compte ne peut être créé par une personne de moins de 15 ans. Un Compte dont il apparaît qu'il a été créé en méconnaissance de cette condition est suspendu, et les données associées sont supprimées dans les meilleurs délais.
 
 Aucune publicité fondée sur le profilage n'est diffusée aux mineurs (article 28 du règlement (UE) 2022/2065).
 
-> **Point d'attention majeur.** L'ouverture du Service à partir de 13 ans crée une obligation de recueil, de traçabilité et de vérification raisonnable du consentement parental. Si cette fonctionnalité n'est pas implémentée, deux options : la construire avant l'ouverture, ou porter l'âge minimum à 15 ans, seuil à partir duquel le mineur consent seul. Un traitement de données de mineurs sans base valable est un risque de sanction significatif et justifie une revue par un professionnel.
+Les Contenus signalés comme réservés aux personnes majeures ne sont ni accessibles ni publiables par un Utilisateur mineur.
 
 ## Article 4 — Destinataires et sous-traitants
 

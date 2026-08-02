@@ -1,8 +1,12 @@
 // F-13: legal documents & consent contracts (FE/BE agree here).
 
-/** Public legal document kinds. `mentions` has no consent, only content. */
-export type LegalKind = 'cgu' | 'privacy' | 'mentions';
-export const LEGAL_KINDS: readonly LegalKind[] = ['cgu', 'privacy', 'mentions'] as const;
+/**
+ * Public legal document kinds. `mentions` has no consent, only content.
+ * `charte` (Charte de la communauté) is an integral part of the CGU (CGU art. 2 & 3) — it is served
+ * and linked like the others, but accepting the CGU accepts it too, so it is NOT a ConsentDocument.
+ */
+export type LegalKind = 'cgu' | 'privacy' | 'mentions' | 'charte';
+export const LEGAL_KINDS: readonly LegalKind[] = ['cgu', 'privacy', 'mentions', 'charte'] as const;
 
 /** Subset of documents a user actively consents to. */
 export type ConsentDocument = 'cgu' | 'privacy';

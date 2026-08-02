@@ -326,6 +326,16 @@ describe('SignupForm', () => {
     expect(privacyLink).toHaveAttribute('target', '_blank');
   });
 
+  // One checkbox covers both: the CGU declare the Charte an integral part of them (art. 2 & 3),
+  // so the label names it rather than adding a second consent control.
+  it('CGU label links the Charte de la communauté as part of the CGU (new tab)', () => {
+    renderForm();
+    const charteLink = screen.getByRole('link', { name: /charte de la communauté/i });
+    expect(charteLink).toHaveAttribute('href', '/charte');
+    expect(charteLink).toHaveAttribute('target', '_blank');
+    expect(cguCheckbox()).toBeInTheDocument();
+  });
+
   it('F-13: submitting with CGU unchecked (via Enter key) shows the inline error', async () => {
     const user = userEvent.setup();
     renderForm();

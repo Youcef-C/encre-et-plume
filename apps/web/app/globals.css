@@ -801,25 +801,243 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ── F-13 legal page content ────────────────────────────────────────────────
-   Prose styles for trusted backend HTML inside .ep-legal-content */
-.ep-legal-content h1,
-.ep-legal-content h2,
+   Prose styles for the trusted backend HTML inside .ep-legal-content. The documents are long,
+   article-numbered legal texts with tables, registers and quoted notes — this reads them as a
+   formatted document, not as a wall of paragraphs. Ink rules + accent red for structure only. */
+.ep-legal-content {
+  /* Long unbroken tokens (placeholder names, e-mails, URLs) must wrap, never overflow.
+     `break-word`, not `anywhere`: `anywhere` also shrinks a table cell's min-content width, which
+     shredded ordinary words down the middle inside the RGPD register ("Authentificati/on"). */
+  overflow-wrap: break-word;
+}
+
+.ep-legal-content h1 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+  margin: 0 0 4px;
+  padding-bottom: 14px;
+  border-bottom: 4px solid var(--accent);
+}
+
+.ep-legal-content h2 {
+  font-family: var(--font-display);
+  font-size: clamp(19px, 3vw, 23px);
+  line-height: 1.25;
+  letter-spacing: 0.3px;
+  color: var(--ink);
+  margin: 2.2em 0 0.6em;
+  padding: 6px 0 6px 14px;
+  border-left: 6px solid var(--accent);
+}
+
 .ep-legal-content h3 {
-  margin-top: 1.4em;
-  margin-bottom: 0.5em;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 1.8em 0 0.5em;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--tone);
 }
 
 .ep-legal-content p {
   margin-bottom: 1em;
-  line-height: 1.65;
+  line-height: 1.7;
   font-size: 15px;
   color: var(--ink);
 }
 
+/* Tailwind's preflight sets `list-style: none` on ul/ol — restore the markers here, otherwise a
+   numbered legal list ("1. … 2. …") silently loses the numbers it is referenced by. */
 .ep-legal-content ul,
 .ep-legal-content ol {
-  margin: 0 0 1em 1.4em;
-  line-height: 1.65;
+  margin: 0 0 1em;
+  padding-left: 1.5em;
+  line-height: 1.7;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.ep-legal-content ul {
+  list-style: disc outside;
+}
+
+.ep-legal-content ol {
+  list-style: decimal outside;
+}
+
+.ep-legal-content li {
+  margin-bottom: 0.45em;
+}
+
+.ep-legal-content li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ep-legal-content strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ep-legal-content a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ep-legal-content a:hover {
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+}
+
+.ep-legal-content hr {
+  border: 0;
+  border-top: 3px solid var(--ink);
+  margin: 2.4em 0;
+  opacity: 0.5;
+}
+
+/* Registers and comparison tables — bold zine borders, ink header band. The wrapper is emitted by
+   prisma/legal-content.js so a wide table scrolls in place instead of overflowing the page. */
+.ep-legal-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 0 1.4em;
+  border: 3px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+.ep-legal-content table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: 14px;
+  line-height: 1.55;
+  background: var(--card);
+}
+
+.ep-legal-content thead th {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.6px;
+  text-align: left;
+  padding: 10px 14px;
+  border-right: 1px solid var(--tone);
+  white-space: nowrap;
+}
+
+.ep-legal-content thead th:last-child {
+  border-right: 0;
+}
+
+.ep-legal-content tbody td {
+  padding: 10px 14px;
+  border-top: 2px solid var(--tone);
+  border-right: 1px solid var(--tone);
+  color: var(--ink);
+  vertical-align: top;
+}
+
+.ep-legal-content tbody td:last-child {
+  border-right: 0;
+}
+
+.ep-legal-content tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--tone) 26%, transparent);
+}
+
+.ep-legal-content tbody td:first-child {
+  font-weight: 700;
+}
+
+/* Editorial notes the drafters left in the source ("À compléter…", CNIL guidance…). */
+.ep-legal-content blockquote {
+  margin: 0 0 1.4em;
+  padding: 14px 18px;
+  border-left: 6px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+}
+
+.ep-legal-content blockquote p {
+  margin: 0 0 0.6em;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.ep-legal-content blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Technical references quoted in the text (field names, formats, ratios). */
+.ep-legal-content code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border: 1px solid var(--tone);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone) 40%, transparent);
+  color: var(--ink);
+}
+
+.ep-legal-content pre {
+  margin: 0 0 1.4em;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 3px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--tone) 30%, var(--card));
+  box-shadow: 4px 4px 0 var(--shadow);
+}
+
+.ep-legal-content pre code {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Draft signalling — the documents ship before every placeholder is filled (legal/README.md § 1).
+   Two classes deep so it outranks `.ep-legal-content p` without !important. */
+.ep-legal-content .ep-legal-draft {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border: 2px dashed var(--accent);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 0 0 28px;
+}
+
+.ep-legal-content mark.ep-legal-todo {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+@media (max-width: 640px) {
+  .ep-legal-content table {
+    min-width: 460px;
+    font-size: 13px;
+  }
 }
 
 /* Paramètres: collapsible section cards (native <details>) */
@@ -870,12 +1088,7 @@ h1, h2, h3, h4, h5, h6 {
   border-bottom: none !important;
 }
 
-/* Legal footer responsive wrap */
-@media (max-width: 480px) {
-  .ep-legal-content {
-    padding: 28px 20px !important;
-  }
-}
+/* Legal page padding is now a clamp() on the component itself — no breakpoint override needed. */
 
 /* ── DR-1 Accueil — responsive reflow ────────────────────────────────────────
    Desktop: main column (flex:1) + 300px sticky sidebar, side by side.

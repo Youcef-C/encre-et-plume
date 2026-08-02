@@ -108,6 +108,14 @@ describe('LegalController (HTTP)', () => {
       expect(legalService.getCurrent).toHaveBeenCalledWith('mentions');
     });
 
+    it('200 for the charte kind (integral part of the CGU — must be reachable)', async () => {
+      legalService.getCurrent.mockResolvedValue({ ...DOC_CGU, kind: 'charte' });
+
+      await request(app.getHttpServer()).get('/legal/charte').expect(200);
+
+      expect(legalService.getCurrent).toHaveBeenCalledWith('charte');
+    });
+
     it('BE-6: 404 for an unknown kind (e.g. "cookies")', async () => {
       await request(app.getHttpServer()).get('/legal/cookies').expect(404);
 

@@ -56,6 +56,18 @@ export default function LegalFooter() {
 
         <span aria-hidden="true" style={{ color: 'var(--tone)' }}>·</span>
 
+        {/* Integral part of the CGU (CGU art. 2 & 3) — served like the other legal documents. */}
+        <Link
+          href="/charte"
+          style={{ color: 'var(--ink2)', textDecoration: 'none' }}
+          onMouseOver={(e) => (e.currentTarget.style.color = 'var(--ink)')}
+          onMouseOut={(e) => (e.currentTarget.style.color = 'var(--ink2)')}
+        >
+          Charte de la communauté
+        </Link>
+
+        <span aria-hidden="true" style={{ color: 'var(--tone)' }}>·</span>
+
         <Link
           href="/mentions-legales"
           style={{ color: 'var(--ink2)', textDecoration: 'none' }}

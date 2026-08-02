@@ -30,9 +30,11 @@ L'utilisation du Service vaut acceptation de la Charte, laquelle a la même forc
 
 ## Article 4 — Conditions d'accès et âge minimum
 
-Le Service est ouvert aux personnes physiques âgées de **treize (13) ans révolus**.
+Le Service est ouvert aux personnes physiques âgées de **quinze (15) ans révolus**.
 
-**Utilisateurs âgés de 13 à 14 ans révolus.** Conformément à l'article 8 du règlement (UE) 2016/679 et à l'article 45 de la loi n° 78-17 du 6 janvier 1978 modifiée, le traitement des données d'un mineur de moins de quinze (15) ans n'est licite que si le consentement est donné conjointement par le mineur et par le ou les titulaires de l'autorité parentale. La création d'un Compte par un Utilisateur de moins de 15 ans requiert donc le recueil et la conservation de ce consentement parental, selon les modalités décrites dans la Politique de confidentialité.
+Ce seuil correspond à l'âge à partir duquel un mineur consent seul au traitement de ses données à caractère personnel en France (article 8 du règlement (UE) 2016/679 et article 45 de la loi n° 78-17 du 6 janvier 1978 modifiée). Aucun consentement parental n'est donc requis pour créer un Compte.
+
+**Utilisateurs mineurs de 15 à 17 ans.** Ils demeurent des mineurs au sens du droit civil. La licence consentie à l'article 8.2 est délibérément **non exclusive, gratuite, limitée aux besoins du Service et révocable à tout moment par la suppression du Contenu**, précisément pour qu'aucun engagement excédant les actes de la vie courante ne leur soit demandé. Il leur est recommandé d'informer un titulaire de l'autorité parentale de leur inscription.
 
 **Contenus réservés aux majeurs.** Certains Contenus sont signalés comme réservés aux personnes majeures. Leur accès est subordonné à une vérification de l'âge déclaré. Aucun Utilisateur mineur ne peut publier ni consulter de tels Contenus.
 

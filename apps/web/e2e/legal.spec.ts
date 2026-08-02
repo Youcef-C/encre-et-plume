@@ -134,6 +134,7 @@ test('FE-4: legal footer present on home page with all required links and copyri
   await page.goto('/');
   await expect(page.getByRole('link', { name: /^cgu$/i })).toBeVisible();
   await expect(page.getByRole('link', { name: /politique de confidentialité/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /charte de la communauté/i })).toBeVisible();
   await expect(page.getByRole('link', { name: /mentions légales/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /gérer les cookies/i })).toBeVisible();
   await expect(page.getByText(/© encre & plume/i)).toBeVisible();
@@ -143,9 +144,10 @@ test('FE-4/FE-2: footer CGU link → /cgu renders content and version', async ({
   await page.goto('/');
   await page.getByRole('link', { name: /^cgu$/i }).click();
   await expect(page).toHaveURL('/cgu', { timeout: 8_000 });
-  // Legal page renders any h1 (seeded placeholder: "CGU") + version badge
+  // Legal page renders the document h1 + the version badge. The version string is owned by
+  // prisma/legal-content.js (LEGAL_VERSION), so assert its shape, not a hardcoded value.
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByText(/version 1\.0/i)).toBeVisible();
+  await expect(page.locator('.ep-legal-version')).toHaveText(/^Version \S+ — /);
 });
 
 test('FE-4/FE-2: footer "Politique de confidentialité" → /confidentialite renders content', async ({
@@ -155,7 +157,7 @@ test('FE-4/FE-2: footer "Politique de confidentialité" → /confidentialite ren
   await page.getByRole('link', { name: /politique de confidentialité/i }).click();
   await expect(page).toHaveURL('/confidentialite', { timeout: 8_000 });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByText(/version 1\.0/i)).toBeVisible();
+  await expect(page.locator('.ep-legal-version')).toHaveText(/^Version \S+ — /);
 });
 
 test('FE-4/FE-2: footer "Mentions légales" → /mentions-legales renders content', async ({
@@ -165,7 +167,34 @@ test('FE-4/FE-2: footer "Mentions légales" → /mentions-legales renders conten
   await page.getByRole('link', { name: /mentions légales/i }).click();
   await expect(page).toHaveURL('/mentions-legales', { timeout: 8_000 });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByText(/version 1\.0/i)).toBeVisible();
+  await expect(page.locator('.ep-legal-version')).toHaveText(/^Version \S+ — /);
+});
+
+test('footer "Charte de la communauté" → /charte renders the real charte text', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: /charte de la communauté/i }).click();
+  await expect(page).toHaveURL('/charte', { timeout: 8_000 });
+  await expect(
+    page.getByRole('heading', { level: 1, name: /charte de la communauté/i }),
+  ).toBeVisible();
+  await expect(page.locator('.ep-legal-version')).toHaveText(/^Version \S+ — /);
+  // The charte links back to the CGU it is an integral part of.
+  await expect(
+    page.locator('.ep-legal-content a[href="/cgu"]').first(),
+  ).toBeVisible();
+});
+
+test('the published legal documents carry the real drafted text, not the placeholder row', async ({
+  page,
+}) => {
+  await page.goto('/cgu');
+  // Article 3 of the drafted CGU — proves the seed loaded legal/cgu.md, not "[Contenu juridique …]".
+  await expect(
+    page.getByText(/case à cocher distincte et non pré-cochée/i).first(),
+  ).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText(/\[Contenu juridique à valider/i)).toHaveCount(0);
+  // Draft signalling stays visible while the placeholders are unfilled.
+  await expect(page.getByText(/Version de travail/i).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -343,17 +372,23 @@ const VIEWPORTS = [
   { label: 'desktop-1280', width: 1280, height: 800 },
 ] as const;
 
+// All four documents, because /confidentialite and /charte carry the wide registers/tables that
+// are the realistic overflow risk once the real text ships.
+const LEGAL_ROUTES = ['/cgu', '/confidentialite', '/mentions-legales', '/charte'] as const;
+
 for (const vp of VIEWPORTS) {
-  test(`FE-8: no horizontal overflow on /cgu at ${vp.label}`, async ({ page }) => {
-    await page.setViewportSize({ width: vp.width, height: vp.height });
-    await page.goto('/cgu');
-    // Wait for content to render before measuring
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 6_000 });
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth,
-    );
-    expect(overflow).toBe(false);
-  });
+  for (const route of LEGAL_ROUTES) {
+    test(`FE-8: no horizontal overflow on ${route} at ${vp.label}`, async ({ page }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto(route);
+      // Wait for content to render before measuring
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 6_000 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      );
+      expect(overflow).toBe(false);
+    });
+  }
 }
 
 test('FE-8: cookie banner at 375px does not cover the full viewport height', async ({ page }) => {

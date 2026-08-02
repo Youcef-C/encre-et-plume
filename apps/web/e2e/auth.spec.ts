@@ -300,11 +300,12 @@ test('FE-7: /inscription form is keyboard-submittable', async ({ page }) => {
   // Chromium's <input type="date"> shadow DOM consumes one Tab press internally after typing
   // (focus stays on the control) before a second Tab actually exits it — two presses are needed.
   await page.keyboard.press('Tab');
-  // F-13: Tab to CGU checkbox, Space to check; the label contains two links
-  // (CGU + Politique de confidentialité) that sit in the tab order before the submit.
+  // F-13: Tab to CGU checkbox, Space to check; the label contains three links
+  // (CGU + Charte de la communauté + Politique de confidentialité) before the submit.
   await page.keyboard.press('Tab'); // move to CGU checkbox
   await page.keyboard.press('Space'); // check the CGU checkbox
   await page.keyboard.press('Tab'); // link: Conditions générales d'utilisation
+  await page.keyboard.press('Tab'); // link: Charte de la communauté (integral part of the CGU)
   await page.keyboard.press('Tab'); // link: Politique de confidentialité
   await page.keyboard.press('Tab'); // submit button
   await page.keyboard.press('Enter');

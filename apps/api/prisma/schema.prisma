@@ -106,6 +106,7 @@ enum LegalKind {
   cgu
   privacy
   mentions
+  charte // Charte de la communauté — integral part of the CGU, served at /charte
 }
 
 enum ConsentDocument {

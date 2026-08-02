@@ -363,7 +363,17 @@ export default function SignupForm() {
               >
                 Conditions générales d&apos;utilisation
               </a>{' '}
-              et la{' '}
+              (dont la{' '}
+              {/* One consent covers both: the CGU declare the Charte an integral part of them. */}
+              <a
+                href="/charte"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', fontWeight: 700 }}
+              >
+                Charte de la communauté
+              </a>
+              ) et la{' '}
               <a
                 href="/confidentialite"
                 target="_blank"
