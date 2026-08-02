@@ -59,6 +59,37 @@ earned**. Four rules, in order of importance:
 **Not in scope:** arbitration of a refused proposal (a deadlocked group is a human problem, not a
 feature), and retroactive correction of an accepted split — the append-only history is the record.
 
+## Protection contre les changements de permissions abusifs (user-specified, 2026-08-02)
+
+The same abuse wearing a different hat. Today `revokeMember` **transfers the revoked member's share to
+the owner** (`members.service.ts:225-236`) to keep the sum at 100 %, and [[MR-5]]/[[MR-6]] read the
+*current* split — so the sequence «wait for revenue to accrue → revoke the co-author → their share lands
+on you → run the payout» pays the owner for money someone else earned. Revocation is a money operation,
+not just an access one.
+
+1. **Revocation never forfeits EARNED revenue — the load-bearing one.** A revoked member keeps their
+   claim on every amount earned while they held a share; the redistribution applies to **future**
+   earnings only. This falls out of the split being versioned and append-only (rule 1 above): the old
+   versions still name them, and [[MR-6]] settles against the version each amount was earned under. Any
+   pending payout survives revocation. **Leaving or being removed from a group is not a waiver.**
+2. **No unilateral action against a peer.** Leadership is equal in this story — which means a co-leader
+   could otherwise demote the leader, or two co-leaders could take turns removing each other. Demoting
+   or revoking a **leader or co-leader** requires either that person's consent or the agreement of
+   **all other** leaders. (The existing "last leader cannot be demoted/revoked" rule stays; it stops the
+   group becoming headless, not a coup.)
+3. **No self-escalation.** Nobody may grant themselves a permission they do not already hold, nor
+   promote their own `groupRole`. A gate that a caller can open for themselves is not a gate.
+4. **Notice and audit.** The affected member is notified ([[F-5]] — the revoke path already does this)
+   and **every** role/permission change joins the same append-only history as the split, readable by the
+   whole group: who changed what, for whom, when, from → to. Silent removal is what makes the money
+   abuse above hard to contest.
+5. **Rate limit.** Same reasoning as the split: a cooldown per project so permissions cannot be
+   flip-flopped to harass.
+
+**Deliberately still allowed:** a leader managing an ordinary member's permissions (that is the feature,
+and constraining it would make the group unmanageable). What these rules stop is taking someone's money,
+staging a coup, and doing either silently.
+
 ## Dependencies
 - [[MC-3]] — collaborator invite.
 - [[F-2]] — role definitions.
