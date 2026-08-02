@@ -238,6 +238,10 @@ model PortfolioItem {
   caption   String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([profileId])
 }
 
 // ── F-11: Email verification token ───────────────────────────────────────────
@@ -282,6 +286,10 @@ model Notification {
 
   @@index([recipientId, readAt])
   @@index([recipientId, createdAt])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([sourceUserId])
 }
 
 // ── MC-3: Collaboration invitations + CS-1 project seam ───────────────────────
@@ -338,6 +346,10 @@ model Invitation {
 
   @@index([fromUserId, status])
   @@index([toUserId, status])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([projectId])
 }
 
 // ── MC-8: Contacts & connexions ───────────────────────────────────────────────
@@ -435,6 +447,10 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@index([replyToId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([senderId])
 }
 
 /// MC-15 — one like per person per message: the composite PK makes a double like unrepresentable
@@ -645,6 +661,10 @@ model WorkCreator {
   sharePct    Int      @default(0) // revenue split %, group invariant: sum = 100
 
   @@unique([workId, accountId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([accountId])
 }
 
 model Planche {
@@ -673,6 +693,10 @@ model Favorite {
 
   @@unique([accountId, workId])
   @@index([accountId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([workId])
 }
 
 model ReadingProgress {
@@ -688,6 +712,11 @@ model ReadingProgress {
 
   @@unique([accountId, chapterId])
   @@index([accountId, updatedAt])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([chapterId])
+  @@index([workId])
 }
 
 // ── DR-8: "Ma liste" saved works (watchlist) — read + remove only; DR-9 owns the add write ────
@@ -702,6 +731,10 @@ model WatchlistItem {
 
   @@unique([accountId, workId])
   @@index([accountId, createdAt])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([workId])
 }
 
 // ── DR-9: like/save toggles for targets with no per-user table (chapter, illustration) ────────
@@ -805,6 +838,10 @@ model ProjectCall {
 
   @@index([status, createdAt])
   @@index([authorId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([projectId])
 }
 
 // MC-4X: a call's sample images (kind 'call_sample') and PDF documents (kind 'call_document'),
@@ -887,6 +924,10 @@ model EditorPick {
   createdAt DateTime @default(now())
 
   @@index([order])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([workId])
 }
 
 // ── DR-5: illustration gallery "Galerie" ──────────────────────────────────────
@@ -920,6 +961,10 @@ model Illustration {
   @@index([weeklyLikeDelta])
   @@index([likeCount])
   @@index([category])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([artistId])
 }
 
 // ── DR-12: illustration collections (many-to-many, ordered per collection) ────
@@ -1030,6 +1075,10 @@ model PageLabel {
   label   ProjectLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([pageId, labelId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([labelId])
 }
 
 model PageAssignee {
@@ -1040,6 +1089,10 @@ model PageAssignee {
   assignedAt DateTime @default(now())
 
   @@id([pageId, userId])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([userId])
 }
 
 model PageChecklistItem {
@@ -1064,6 +1117,10 @@ model PageComment {
   editedAt  DateTime?
 
   @@index([pageId, createdAt])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([authorId])
 }
 
 // ── CS-3: project assets (versioned logical files) ─────────────────────────────
@@ -1125,6 +1182,10 @@ model AssetVersion {
   createdAt DateTime @default(now())
 
   @@unique([assetId, version]) // linear chain, no branching
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([authorId])
 }
 
 // ── CS-4: collaborative script editor ──────────────────────────────────────────
@@ -1179,6 +1240,10 @@ model ScenarioComment {
   createdAt  DateTime         @default(now())
 
   @@index([documentId, caseNo, createdAt])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([authorId])
 }
 
 // ── CS-5: review corrections ───────────────────────────────────────────────────
@@ -1221,4 +1286,8 @@ model Correction {
 
   @@index([pageId, type, status, createdAt])
   @@index([assetId, status])
+  // DB pass 2026-08-02: every FK needs its own index. RESTRICT, SET NULL and CASCADE
+  // all make Postgres look up child rows when a parent is deleted — unindexed that is a
+  // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
+  @@index([authorId])
 }
