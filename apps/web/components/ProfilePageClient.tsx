@@ -497,6 +497,22 @@ export default function ProfilePageClient({ slug }: Props) {
               >
                 {profile.displayName}
               </h1>
+              {/* F-1 : le « @ » choisi à l'inscription EST le slug de profil (@yuki-moreau →
+                  /yuki-moreau). Il était utilisé comme URL mais jamais affiché, si bien qu'on le
+                  choisissait sans jamais le revoir. Il est désormais montré ici — c'est ce qui
+                  permet de l'apprendre, donc de s'en servir pour retrouver quelqu'un (la recherche
+                  l'interroge depuis le 2026-08-02), et de distinguer deux personnes qui portent le
+                  même nom d'affichage. Non modifiable : c'est une URL publique. */}
+              <p
+                style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 700, marginTop: 2 }}
+                data-profile-handle
+              >
+                <span aria-hidden="true">@</span>
+                <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+                  Nom d’utilisateur :{' '}
+                </span>
+                {profile.slug}
+              </p>
               {profile.roleLine && (
                 <p style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500, marginTop: 3 }}>
                   {profile.roleLine}

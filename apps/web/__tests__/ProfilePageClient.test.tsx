@@ -804,3 +804,16 @@ describe('ProfilePageClient — MC-1 §9 creator type(s)', () => {
     expect(body.seeking?.targetRole).toBeNull();
   });
 });
+
+// F-1 — le « @ » (slug de profil) est choisi à l'inscription et sert d'URL publique. Il n'était
+// affiché nulle part, donc jamais apprenable ; il est désormais montré sous le nom (2026-08-02).
+describe('ProfilePageClient — le « @ » sous le nom', () => {
+  it('affiche le slug du profil sous le nom d’affichage', async () => {
+    renderProfile('yuki-moreau');
+    await screen.findByRole('heading', { level: 1 });
+    const handle = document.querySelector('[data-profile-handle]');
+    expect(handle).not.toBeNull();
+    expect(handle!.textContent).toContain('@');
+    expect(handle!.textContent).toContain('yuki-moreau');
+  });
+});
