@@ -553,7 +553,11 @@ export class ProjectsService {
         number: c.number,
         title: c.title,
         status: c.status,
-        plancheCount: c.plancheCount,
+        // DB pass 2026-08-02 — derived, like `progressPct` right below and from the SAME already-loaded
+        // cards. In the studio « planches » means the chapter's board cards (what CS-7's Chapitres tab
+        // counts), not the reader's `Planche` rows; the stored column that used to feed this was never
+        // written by anything and has been dropped.
+        plancheCount: project.pages.filter((p) => p.chapterId === c.id).length,
         targetPages: c.targetPages,
         progressPct: workspaceChapterProgress(c.targetPages, project.pages as { chapterId: string; stage: string }[], c.id),
       })),

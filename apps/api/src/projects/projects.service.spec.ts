@@ -670,8 +670,8 @@ describe('ProjectsService workspace (CS-2)', () => {
         { accountId: 'acc-yuki', role: 'dessinateur', order: 1, groupRole: 'member', permissions: ['ecriture', 'corrections'], account: { id: 'acc-yuki', displayName: 'Yuki', avatar: 'y.jpg', profile: { creatorRoles: ['dessinateur'] } } },
       ],
       chapters: [
-        { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', plancheCount: 3, targetPages: 2 },
-        { id: 'ch-1', number: 1, title: null, status: 'draft', plancheCount: 0, targetPages: 20 },
+        { id: 'ch-0', number: 0, title: 'Prologue', status: 'published', targetPages: 2 },
+        { id: 'ch-1', number: 1, title: null, status: 'draft', targetPages: 20 },
       ],
       reviews: [
         { id: 'r1', authorName: 'Lea', storyRating: 4, artRating: 5, text: 'super', hidden: false, createdAt: new Date('2024-03-02') },
@@ -720,6 +720,17 @@ describe('ProjectsService workspace (CS-2)', () => {
       expect(res.chapters[0]).toMatchObject({ targetPages: 2, progressPct: 0 });
       // ch-1: nobody planned it by hand, so it carries the default 20 — still a real percentage.
       expect(res.chapters[1]).toMatchObject({ targetPages: 20, progressPct: 0 });
+    });
+
+    // DB pass 2026-08-02 — the stored `Chapter.plancheCount` column is gone: nothing in apps/api ever
+    // wrote it, so it stayed at its seeded value forever. In the WORKSPACE the number means "board
+    // cards attached to this chapter" (the same thing CS-7's Chapitres tab counts), NOT the reader's
+    // `Planche` rows — so it is derived from `project.pages`, already loaded by the same query.
+    it('derives plancheCount from the board cards already loaded (no extra query)', async () => {
+      const res = await service.getWorkspace('acc-me', 'lames-de-brume');
+      // ch-0 owns page-1; ch-1 owns nothing.
+      expect(res.chapters.map((c) => c.plancheCount)).toEqual([1, 0]);
+      expect(prisma.project.findUnique).toHaveBeenCalledTimes(1);
     });
 
     it('returns the full payload for a member: ordered members/chapters, pages, review summary, hidden text blanked', async () => {

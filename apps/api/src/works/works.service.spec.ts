@@ -56,7 +56,7 @@ describe('WorksService', () => {
   let prisma: {
     work: { findFirst: jest.Mock; update: jest.Mock };
     chapter: { findMany: jest.Mock; count: jest.Mock };
-    planche: { findMany: jest.Mock };
+    planche: { findMany: jest.Mock; count: jest.Mock };
   };
   let redis: { get: jest.Mock; set: jest.Mock };
 
@@ -64,7 +64,7 @@ describe('WorksService', () => {
     prisma = {
       work: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
       chapter: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
-      planche: { findMany: jest.fn().mockResolvedValue([]) },
+      planche: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     };
     redis = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
     service = new WorksService(prisma as unknown as PrismaService, redis as unknown as RedisService);
@@ -293,7 +293,7 @@ describe('WorksService', () => {
       prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
       prisma.chapter.count.mockResolvedValue(25);
       prisma.chapter.findMany.mockResolvedValue([
-        { id: 'c1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2026-01-01'), likeCount: 1800, premium: false },
+        { id: 'c1', number: 1, title: 'Sous la pluie', _count: { pages: 22 }, publishAt: new Date('2026-01-01'), likeCount: 1800, premium: false },
       ]);
 
       const result = await service.getChapters('lames-de-brume', 2);
@@ -330,7 +330,7 @@ describe('WorksService', () => {
       prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
       prisma.chapter.count.mockResolvedValue(1);
       prisma.chapter.findMany.mockResolvedValue([
-        { id: 'c4', number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
+        { id: 'c4', number: 4, title: null, _count: { pages: 19 }, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
       ]);
 
       const result = await service.getChapters('lames-de-brume', 1);
@@ -342,12 +342,34 @@ describe('WorksService', () => {
       prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
       prisma.chapter.count.mockResolvedValue(1);
       prisma.chapter.findMany.mockResolvedValue([
-        { id: 'c1', number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
+        { id: 'c1', number: 1, title: 'Sous la pluie', _count: { pages: 22 }, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
       ]);
 
       const result = await service.getChapters('lames-de-brume', 1);
 
       expect(result?.items[0]).toMatchObject({ locked: false, lockReason: null });
+    });
+
+    // DB pass 2026-08-02 — `Chapter.plancheCount` was a stored counter with NO writer anywhere in
+    // apps/api: it kept whatever the seed put there while planches were added/removed underneath.
+    // It is now DERIVED from the chapter's reader planches (`Planche` with `chapterId` set), which
+    // is exactly what this list means by "N planches", and the column is gone.
+    it('derives plancheCount from the chapter reader planches, in the SAME query (no N+1)', async () => {
+      prisma.work.findFirst.mockResolvedValue({ id: 'w1' });
+      prisma.chapter.count.mockResolvedValue(2);
+      prisma.chapter.findMany.mockResolvedValue([
+        { id: 'c1', number: 1, title: 'Sous la pluie', _count: { pages: 6 }, publishAt: new Date('2024-03-14'), likeCount: 1800, premium: false },
+        { id: 'c2', number: 2, title: null, _count: { pages: 0 }, publishAt: new Date('2024-06-21'), likeCount: 900, premium: false },
+      ]);
+
+      const result = await service.getChapters('lames-de-brume', 1);
+
+      expect(result?.items.map((i) => i.plancheCount)).toEqual([6, 0]);
+      // The count rides along on the page query — one query for N chapters, not one per chapter.
+      expect(prisma.chapter.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.chapter.findMany.mock.calls[0][0].include).toEqual({ _count: { select: { pages: true } } });
+      expect(prisma.planche.count).not.toHaveBeenCalled();
+      expect(prisma.planche.findMany).not.toHaveBeenCalled();
     });
   });
 

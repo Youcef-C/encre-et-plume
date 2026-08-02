@@ -1,0 +1,11 @@
+-- DB scalability pass (2026-08-02) — drop a counter that nothing ever wrote.
+--
+-- `Chapter.plancheCount` had NO writer anywhere in apps/api: it kept whatever the seed put there
+-- while planches were added or removed underneath, and both of its readers displayed that frozen
+-- value. Nothing sorts or filters on it (verified by grep over orderBy/where), so there is no reason
+-- to store it — the opposite of `Work.chapterCount`, which stays a column precisely because DR-2
+-- orders and filters by it, something Prisma cannot do on a relation count.
+--
+-- Both readers now derive it: the public œuvre page from `_count.pages` (the chapter's reader
+-- planches) in the same query, and the studio workspace from the board cards it already loads.
+ALTER TABLE "Chapter" DROP COLUMN "plancheCount";

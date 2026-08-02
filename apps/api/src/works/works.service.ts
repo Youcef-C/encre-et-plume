@@ -58,7 +58,15 @@ export class WorksService {
       const skip = (page - 1) * WORK_CHAPTER_PAGE_SIZE;
 
       const [rows, total] = await Promise.all([
-        this.prisma.chapter.findMany({ where, orderBy: { number: 'asc' }, skip, take: WORK_CHAPTER_PAGE_SIZE }),
+        this.prisma.chapter.findMany({
+          where,
+          orderBy: { number: 'asc' },
+          skip,
+          take: WORK_CHAPTER_PAGE_SIZE,
+          // DB pass 2026-08-02 — `plancheCount` is DERIVED here, never stored. `_count` rides along on
+          // this one query, so N chapters still cost one round trip (no N+1).
+          include: { _count: { select: { pages: true } } },
+        }),
         this.prisma.chapter.count({ where }),
       ]);
 
@@ -168,10 +176,11 @@ interface ChapterRow {
   id: string;
   number: number;
   title: string | null;
-  plancheCount: number;
   publishAt: Date;
   likeCount: number;
   premium: boolean;
+  /** DR-3/DR-4 « N planches » — the chapter's reader pages (`Planche` rows with `chapterId` set). */
+  _count: { pages: number };
 }
 
 function mapWorkDetail(work: WorkRow, chapterCount: number): WorkDetail {
@@ -273,7 +282,7 @@ function mapChapter(c: ChapterRow) {
     id: c.id,
     number: c.number,
     title: c.title,
-    plancheCount: c.plancheCount,
+    plancheCount: c._count.pages,
     publishedAt: c.publishAt.toISOString(),
     likeCount: c.likeCount,
     locked: c.premium,

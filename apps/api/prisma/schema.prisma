@@ -633,7 +633,11 @@ model Chapter {
   hasCover     Boolean       @default(true)
   publishAt    DateTime      @default(now()) // future + status=scheduled → "Sorties programmées"
   createdAt    DateTime      @default(now())
-  plancheCount Int           @default(0) // ponytail: denormalized; CS owns real page counts later
+  // DB pass 2026-08-02: `plancheCount` was DROPPED. It had no writer anywhere in apps/api, so it kept
+  // whatever the seed put there while planches were added/removed underneath. Both readers now derive
+  // it — the œuvre page from `_count.pages` (reader planches), the studio from the board cards it has
+  // already loaded. Kept as a column only where something SORTS or FILTERS on it (`Work.chapterCount`,
+  // which DR-2 orders by); nothing does here.
   likeCount    Int           @default(0) // ponytail: denormalized; DR-9 owns the increment
 
   // ── DR-4: reader "Lecteur" ────────────────────────────────────────────────

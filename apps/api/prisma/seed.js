@@ -135,25 +135,27 @@ const ROMAN_CHAPTER_1_PARAGRAPHS = [
 ];
 
 // DR-3: ~12 published chapters for the showcase manga — first 3 verbatim from the prototype
-// (title/plancheCount/date/likeCount), the rest generic continuations (all in the past -> published).
+// (title/date/likeCount), the rest generic continuations (all in the past -> published).
+// DB pass 2026-08-02: no `plancheCount` here any more — the column is gone and the number is derived
+// from the CHAPTER_PAGES rows below, so « N planches » is now whatever the seed actually created.
 // DR-4: chapters 4-12 are `premium:true` (verrouillé ★ + paywall + 403 path); chapters 1-3 stay
 // free, matching the prototype.
 const WORK_CHAPTERS = {
   'lames-de-brume': [
     // DR-9: likeCount includes the pre-active REACTIONS seed below (dr1-camille-roux already
     // likes chapter 1) — 1801, not 1800, so the counter isn't off-by-one on first toggle.
-    { number: 1, title: 'Sous la pluie', plancheCount: 22, publishAt: new Date('2024-03-14'), likeCount: 1801, premium: false },
-    { number: 2, title: 'La rencontre', plancheCount: 18, publishAt: new Date('2024-06-21'), likeCount: 1200, premium: false },
-    { number: 3, title: 'Le pacte', plancheCount: 20, publishAt: new Date('2024-09-12'), likeCount: 980, premium: false },
-    { number: 4, title: null, plancheCount: 19, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
-    { number: 5, title: null, plancheCount: 21, publishAt: new Date('2025-01-15'), likeCount: 760, premium: true },
-    { number: 6, title: null, plancheCount: 18, publishAt: new Date('2025-03-01'), likeCount: 700, premium: true },
-    { number: 7, title: null, plancheCount: 20, publishAt: new Date('2025-05-01'), likeCount: 650, premium: true },
-    { number: 8, title: null, plancheCount: 22, publishAt: new Date('2025-07-01'), likeCount: 600, premium: true },
-    { number: 9, title: null, plancheCount: 19, publishAt: new Date('2025-09-01'), likeCount: 550, premium: true },
-    { number: 10, title: null, plancheCount: 20, publishAt: new Date('2025-11-01'), likeCount: 500, premium: true },
-    { number: 11, title: null, plancheCount: 21, publishAt: new Date('2026-01-01'), likeCount: 450, premium: true },
-    { number: 12, title: null, plancheCount: 20, publishAt: new Date('2026-03-01'), likeCount: 400, premium: true },
+    { number: 1, title: 'Sous la pluie', publishAt: new Date('2024-03-14'), likeCount: 1801, premium: false },
+    { number: 2, title: 'La rencontre', publishAt: new Date('2024-06-21'), likeCount: 1200, premium: false },
+    { number: 3, title: 'Le pacte', publishAt: new Date('2024-09-12'), likeCount: 980, premium: false },
+    { number: 4, title: null, publishAt: new Date('2024-11-01'), likeCount: 820, premium: true },
+    { number: 5, title: null, publishAt: new Date('2025-01-15'), likeCount: 760, premium: true },
+    { number: 6, title: null, publishAt: new Date('2025-03-01'), likeCount: 700, premium: true },
+    { number: 7, title: null, publishAt: new Date('2025-05-01'), likeCount: 650, premium: true },
+    { number: 8, title: null, publishAt: new Date('2025-07-01'), likeCount: 600, premium: true },
+    { number: 9, title: null, publishAt: new Date('2025-09-01'), likeCount: 550, premium: true },
+    { number: 10, title: null, publishAt: new Date('2025-11-01'), likeCount: 500, premium: true },
+    { number: 11, title: null, publishAt: new Date('2026-01-01'), likeCount: 450, premium: true },
+    { number: 12, title: null, publishAt: new Date('2026-03-01'), likeCount: 400, premium: true },
   ],
   // DR-4: roman showcase — 1 non-premium chapter with real prose (prototype's "L'odeur du
   // papier" paragraphs verbatim, lines 802-814) so readMode:'prose' renders real content and the
@@ -162,7 +164,6 @@ const WORK_CHAPTERS = {
     {
       number: 1,
       title: "L'odeur du papier",
-      plancheCount: 0,
       publishAt: new Date('2026-06-20'),
       likeCount: 340,
       premium: false,
@@ -186,7 +187,6 @@ function chaptersFor(work) {
     filler.push({
       number: n,
       title: null,
-      plancheCount: isRoman ? 0 : 18 + (n % 5),
       publishAt: inDays(-(target - n) * 14 - 1), // oldest first, never in the future
       likeCount: Math.max(40, 420 - n * 13),
       premium: false,
@@ -1084,7 +1084,6 @@ async function main() {
           title: c.title,
           status: 'published',
           publishAt: c.publishAt,
-          plancheCount: c.plancheCount,
           likeCount: c.likeCount,
           premium: c.premium ?? false,
           prose: c.prose ?? null,
