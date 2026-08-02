@@ -62,7 +62,28 @@ export interface MessageAttachment {
   kind: 'image' | 'document';
 }
 
-export interface MessageDto {
+/**
+ * MC-15 — the message a reply quotes, resolved server-side so no client re-derives it.
+ * `deleted: true` means the quoted message is gone (D-3): the quote still renders, as
+ * « Message supprimé », instead of the reply silently losing its context.
+ */
+export interface MessageReplyRef {
+  id: string;
+  senderId: string;
+  senderName: string;
+  excerpt: string; // truncated server-side to MESSAGE_EXCERPT_MAX; '' when deleted
+  deleted: boolean;
+}
+
+/** MC-15 — the action fields every message surface shows (widget, salon dock, project Discussion). */
+export interface MessageActionFields {
+  replyTo: MessageReplyRef | null;
+  editedAt: string | null; // ISO; non-null ⇒ show « modifié »
+  likeCount: number;
+  likedByMe: boolean;
+}
+
+export interface MessageDto extends MessageActionFields {
   id: string;
   conversationId: string;
   senderId: string;
@@ -80,6 +101,13 @@ export interface MessagesPage {
 export interface SendMessageRequest {
   body?: string;
   attachments?: { mediaId: string }[];
+  /** MC-15: quote a message of the SAME conversation (400 otherwise). */
+  replyToId?: string;
+}
+
+/** MC-15 — PATCH /messages/:id. Author-only; refused (403) on a salon message. */
+export interface EditMessageRequest {
+  text: string;
 }
 
 // ── CS-8: the project's Discussion tab ───────────────────────────────────────
@@ -98,6 +126,8 @@ export interface ProjectChatPage extends MessagesPage {
 export interface SendProjectMessageRequest {
   text?: string;
   attachments?: { mediaId: string }[];
+  /** MC-15: quote a message of the SAME project thread (400 otherwise). */
+  replyToId?: string;
 }
 
 export type CreateConversationRequest =
@@ -135,6 +165,11 @@ export const WS_EVENTS = {
   participantAdded: 'participant:added',
   participantRemoved: 'participant:removed',
   conversationDeleted: 'conversation:deleted',
+  // MC-15 message actions — patched in place by every open surface, no refetch. Sent to the
+  // conversation's participants (user rooms), or to the salon room for a salon message.
+  messageEdited: 'message:edited',
+  messageDeleted: 'message:deleted',
+  messageLiked: 'message:liked',
 } as const;
 
 export interface WsConversationUpdated {
@@ -161,6 +196,25 @@ export interface WsParticipantRemoved {
 }
 export interface WsConversationDeleted {
   conversationId: string;
+}
+
+// MC-15 message-action payloads — the changed field only, never the whole thread.
+export interface WsMessageEdited {
+  conversationId: string;
+  messageId: string;
+  body: string;
+  editedAt: string; // ISO
+}
+export interface WsMessageDeleted {
+  conversationId: string;
+  messageId: string;
+}
+export interface WsMessageLiked {
+  conversationId: string;
+  messageId: string;
+  userId: string; // who (un)liked — the receiver flips likedByMe only for itself
+  liked: boolean;
+  likeCount: number;
 }
 
 export interface WsMessageNew {
@@ -193,6 +247,8 @@ export interface WsSalonPresence {
 }
 
 export const MESSAGE_MAX_LENGTH = 4000;
+/** MC-15: how much of a quoted message the server puts in `MessageReplyRef.excerpt`. */
+export const MESSAGE_EXCERPT_MAX = 120;
 export const MESSAGE_MAX_ATTACHMENTS = 5;
 export const GROUP_NAME_MAX_LENGTH = 80;
 export const SEND_RATE_LIMIT = { max: 30, windowSec: 60 } as const;

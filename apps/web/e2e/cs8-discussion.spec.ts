@@ -99,9 +99,14 @@ test.describe('CS-8 Discussion — the team thread', () => {
 
     const bubble = page.getByText(MEMBER_MSG, { exact: true });
     await expect(bubble).toBeVisible({ timeout: 15_000 });
-    // Only MY messages carry the actions trigger, and it is a real focusable button.
-    const actions = page.getByRole('button', { name: /^Actions du message/ });
-    await expect(actions).toHaveCount(1);
+    // MC-15: EVERY bubble carries the trigger (Répondre / J'aime apply to anyone's message), so the
+    // trigger is scoped to this message's own row instead of counted across the thread.
+    const actions = page
+      .locator('[data-message-id]')
+      .filter({ hasText: MEMBER_MSG })
+      .getByRole('button', { name: /^Actions du message/ })
+      .first();
+    await expect(actions).toBeVisible();
 
     await actions.click();
     await page.getByRole('menuitem', { name: 'Supprimer' }).click();
@@ -123,9 +128,18 @@ test.describe('CS-8 Discussion — the team thread', () => {
     await login(page, A_EMAIL);
     await openDiscussion(page);
     await expect(page.getByText(OWNER_MSG, { exact: true })).toBeVisible({ timeout: 15_000 });
-    // The owner's own message keeps its menu; nothing else does — and no bare delete icon anywhere.
-    await expect(page.getByRole('button', { name: /^Actions du message/ })).toHaveCount(1);
+    // MC-15: my OWN bubble offers the three items…
+    await page
+      .locator('[data-message-id]')
+      .filter({ hasText: OWNER_MSG })
+      .getByRole('button', { name: /^Actions du message/ })
+      .first()
+      .click();
+    await expect(page.getByRole('menu').getByRole('menuitem', { name: 'Supprimer' })).toBeVisible();
+    // …and no bare delete icon survives anywhere (the round-1 affordance is gone, not hidden).
     await expect(page.getByRole('button', { name: 'Supprimer mon message' })).toHaveCount(0);
+    // Someone else's bubble offering Répondre and NOTHING destructive is covered end-to-end by
+    // MC15-E1 (mc15-message-actions.spec.ts), where both members are logged in on the same thread.
   });
 });
 

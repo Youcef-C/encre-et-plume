@@ -17,7 +17,7 @@ only send + delete.
 - **"…" menu**, on the **left** of the bubble, revealed **on hover** (and on keyboard focus — hover-only
   would make it unreachable). Opens a menu with:
   - **Répondre** — quote this specific message.
-  - **Modifier** — own messages only.
+  - **Modifier** — own messages only. **Not offered in the salon** ([[MC-11]]).
   - **Supprimer** — own messages only, with a confirmation step. **Not offered in the salon**
     ([[MC-11]]) — see the surface matrix below.
 - **Reply/quote**: the composer shows the quoted message (author + excerpt) with a way to cancel it; the
@@ -58,8 +58,9 @@ and the server refuses a salon delete regardless of what the client sends.
 - **POST /conversations/{id}/messages** gains `replyToId?`.
 - Entities: `Message { …, replyToId?, editedAt? }`; new `MessageLike { messageId, accountId, createdAt }`
   (composite PK — one like per person per message, so a double like is unrepresentable).
-- Business rules: author-only edit/delete; **`DELETE /messages/{id}` refuses a message whose
-  conversation is `type: 'salon'` (403), enforced server-side and not merely hidden in the UI**;
+- Business rules: author-only edit/delete; **`DELETE /messages/{id}` AND `PATCH /messages/{id}` both
+  refuse a message whose conversation is `type: 'salon'` (403), enforced server-side and not merely
+  hidden in the UI**;
   `replyToId` must belong to the **same** conversation (else 400);
   deleting a message that others quoted leaves the quote showing « Message supprimé » rather than
   orphaning it; likes are visible to every participant.

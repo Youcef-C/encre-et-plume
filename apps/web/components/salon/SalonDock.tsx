@@ -7,16 +7,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   WS_EVENTS,
   SALON_NAME,
+  MESSAGE_EXCERPT_MAX,
+  type MessageReplyRef,
   type SalonMessageDto,
   type SalonOnlineUser,
   type WsSalonMessage,
   type WsSalonMemberJoined,
   type WsSalonMemberLeft,
+  type WsMessageEdited,
+  type WsMessageDeleted,
+  type WsMessageLiked,
 } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
+import { isPlainBubbleTarget, jumpToMessage, useLikeToggle } from '../../lib/messageActions';
 import { ChatIcon } from '../icons';
+import MessageActions from '../messaging/MessageActions';
+import MessageLikeToggle from '../messaging/MessageLikeToggle';
+import MessageQuote from '../messaging/MessageQuote';
 import SalonRoster from './SalonRoster';
 
 // Optimistic / failed local send state layered on the DTO (same shape idea as MC-9).
@@ -58,6 +67,10 @@ export default function SalonDock() {
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState('');
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  // MC-15: the salon gets Répondre + J'aime and NOTHING else — the server refuses a salon edit or
+  // delete (403), so the menu simply never offers them (canEdit / canDelete stay false below).
+  const [replyTo, setReplyTo] = useState<MessageReplyRef | null>(null);
+  const [jumpMiss, setJumpMiss] = useState(false);
 
   // @-mention impact (MC-11 addendum): flashed bubbles, a jump pill when scrolled away, and a
   // distinct collapsed-header indicator. All realtime/client-side off the shared MC-9 socket.
@@ -155,15 +168,60 @@ export default function SalonDock() {
       if (blockedRef.current.has(payload.userId)) return; // a blocked user was never counted → don't decrement
       setOnlineCount((n) => Math.max(0, n - 1));
     };
+    // MC-15: the salon hears the same three message events, broadcast to the whole room. It never
+    // receives an edit or a delete of a salon message (the server refuses both) — but a moderation
+    // removal (AD-5) will travel on `message:deleted`, so the handler is here and correct.
+    const onEdited = (payload: WsMessageEdited) => {
+      setMessages((list) =>
+        list.map((m) => (m.id === payload.messageId ? { ...m, body: payload.body, editedAt: payload.editedAt } : m)),
+      );
+    };
+    const onDeleted = (payload: WsMessageDeleted) => {
+      setMessages((list) =>
+        list
+          .filter((m) => m.id !== payload.messageId)
+          .map((m) =>
+            m.replyTo && m.replyTo.id === payload.messageId
+              ? { ...m, replyTo: { ...m.replyTo, deleted: true, excerpt: '' } }
+              : m,
+          ),
+      );
+    };
+    const onLiked = (payload: WsMessageLiked) => {
+      setMessages((list) =>
+        list.map((m) =>
+          m.id === payload.messageId
+            ? {
+                ...m,
+                likeCount: payload.likeCount,
+                likedByMe: payload.userId === myId ? payload.liked : m.likedByMe,
+              }
+            : m,
+        ),
+      );
+    };
+
     socket.on(WS_EVENTS.salonMessage, onMessage);
     socket.on(WS_EVENTS.salonMemberJoined, onMemberJoined);
     socket.on(WS_EVENTS.salonMemberLeft, onMemberLeft);
+    socket.on(WS_EVENTS.messageEdited, onEdited);
+    socket.on(WS_EVENTS.messageDeleted, onDeleted);
+    socket.on(WS_EVENTS.messageLiked, onLiked);
     return () => {
       socket.off(WS_EVENTS.salonMessage, onMessage);
       socket.off(WS_EVENTS.salonMemberJoined, onMemberJoined);
       socket.off(WS_EVENTS.salonMemberLeft, onMemberLeft);
+      socket.off(WS_EVENTS.messageEdited, onEdited);
+      socket.off(WS_EVENTS.messageDeleted, onDeleted);
+      socket.off(WS_EVENTS.messageLiked, onLiked);
     };
   }, [socket, myId]);
+
+  // MC-15: optimistic like, shared with the widget and the project Discussion (one implementation).
+  const patchMessage = useCallback((id: string, fields: { likeCount: number; likedByMe: boolean }) => {
+    setMessages((list) => list.map((m) => (m.id === id ? { ...m, ...fields } : m)));
+  }, []);
+  const toggleLike = useLikeToggle(patchMessage);
 
   const loadHistory = useCallback(() => {
     setFeedState('loading');
@@ -234,9 +292,9 @@ export default function SalonDock() {
 
   // ── Sending (optimistic, with retry on failure) ──
   const doSend = useCallback(
-    async (tempId: string, body: string) => {
+    async (tempId: string, body: string, replyToId?: string) => {
       try {
-        const real = await api.sendSalonMessage(body);
+        const real = await api.sendSalonMessage(body, replyToId);
         setMessages((list) => merge(list.filter((m) => m.id !== tempId), real));
       } catch (e) {
         const error = (e as { message?: string } | null)?.message;
@@ -252,6 +310,7 @@ export default function SalonDock() {
     const body = draft.trim();
     if (!body) return;
     const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const quoted = replyTo;
     setMessages((list) => [
       ...list,
       {
@@ -260,24 +319,29 @@ export default function SalonDock() {
         senderName: account?.displayName ?? 'Vous',
         body,
         createdAt: new Date().toISOString(),
+        replyTo: quoted,
+        editedAt: null,
+        likeCount: 0,
+        likedByMe: false,
         pending: true,
       },
     ]);
     setDraft('');
+    setReplyTo(null);
     setMentionOpen(false);
     requestAnimationFrame(() => {
       const el = feedRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     });
-    void doSend(tempId, body);
-  }, [draft, myId, account?.displayName, doSend]);
+    void doSend(tempId, body, quoted?.id);
+  }, [draft, myId, account?.displayName, doSend, replyTo]);
 
   const retry = useCallback(
     (m: FeedMessage) => {
       setMessages((list) =>
         list.map((x) => (x.id === m.id ? { ...x, failed: false, error: undefined, pending: true } : x)),
       );
-      void doSend(m.id, m.body);
+      void doSend(m.id, m.body, m.replyTo && !m.replyTo.deleted ? m.replyTo.id : undefined);
     },
     [doSend],
   );
@@ -562,23 +626,68 @@ export default function SalonDock() {
 
             {feedState === 'ready' &&
               visible.map((m) => (
-                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, opacity: m.pending ? 0.6 : 1 }}>
+                <div
+                  key={m.id}
+                  className="ep-msg-row"
+                  data-message-id={m.id}
+                  onDoubleClick={(e) => {
+                    if (!m.pending && !m.failed && isPlainBubbleTarget(e.target)) void toggleLike(m);
+                  }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, opacity: m.pending ? 0.6 : 1 }}
+                >
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', padding: '0 4px' }}>{m.senderName}</div>
-                  <div
-                    className={mentionIds.has(m.id) ? 'ep-mention-flash' : undefined}
-                    style={{
-                      alignSelf: 'flex-start',
-                      maxWidth: '82%',
-                      fontSize: 14,
-                      lineHeight: 1.45,
-                      border: '2px solid var(--ink)',
-                      borderRadius: 10,
-                      padding: '7px 11px',
-                      background: 'var(--card)',
-                      color: 'var(--ink)',
-                    }}
-                  >
-                    {m.body}
+                  {/* MC-15: the quote this message answers. A deleted target reads « Message supprimé ». */}
+                  {m.replyTo && (
+                    <MessageQuote
+                      reply={m.replyTo}
+                      onJump={() => setJumpMiss(!jumpToMessage(feedRef.current, m.replyTo!.id))}
+                    />
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                    <div
+                      className={mentionIds.has(m.id) ? 'ep-mention-flash' : undefined}
+                      style={{
+                        maxWidth: '82%',
+                        fontSize: 14,
+                        lineHeight: 1.45,
+                        border: '2px solid var(--ink)',
+                        borderRadius: 10,
+                        padding: '7px 11px',
+                        background: 'var(--card)',
+                        color: 'var(--ink)',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {m.body}
+                    </div>
+                    {!m.pending && !m.failed && (
+                      <>
+                        {/* The salon room is public: Répondre and J'aime only. canEdit/canDelete are
+                            false BECAUSE the server refuses both here (403) — the omission is the UI
+                            agreeing with the gate, never the gate itself. */}
+                        <MessageActions
+                          authorName={m.senderName}
+                          canEdit={false}
+                          canDelete={false}
+                          onReply={() =>
+                            setReplyTo({
+                              id: m.id,
+                              senderId: m.senderId,
+                              senderName: m.senderName,
+                              excerpt: m.body.slice(0, MESSAGE_EXCERPT_MAX),
+                              deleted: false,
+                            })
+                          }
+                          placement="right"
+                        />
+                        <MessageLikeToggle
+                          liked={m.likedByMe}
+                          count={m.likeCount}
+                          authorName={m.senderName}
+                          onToggle={(next) => void toggleLike(m, next)}
+                        />
+                      </>
+                    )}
                   </div>
                   {m.failed && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
@@ -626,6 +735,27 @@ export default function SalonDock() {
             >
               ↓ Nouvelle mention
             </button>
+          ) : jumpMiss ? (
+            <p
+              role="status"
+              style={{
+                position: 'absolute',
+                left: 12,
+                right: 12,
+                bottom: 12,
+                margin: 0,
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--ink2)',
+                background: 'var(--card)',
+                border: '2px solid var(--ink)',
+                borderRadius: 8,
+                padding: '6px 9px',
+                textAlign: 'center',
+              }}
+            >
+              Le message d’origine n’est pas chargé.
+            </p>
           ) : !atBottom ? (
             <button
               type="button"
@@ -670,7 +800,11 @@ export default function SalonDock() {
               </button>
             </div>
           ) : (
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', borderTop: '3px solid var(--ink)', background: 'var(--card)' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '11px 13px', borderTop: '3px solid var(--ink)', background: 'var(--card)' }}>
+              {/* MC-15: the message being answered, wrapping above the input rather than squeezing it. */}
+              {replyTo && (
+                <MessageQuote reply={replyTo} variant="composer" onCancel={() => setReplyTo(null)} />
+              )}
               {mentionOpen && (
                 <ul
                   id="salon-mention-listbox"

@@ -10,6 +10,8 @@ import {
 import type {
   AddParticipantRequest,
   ConversationItem,
+  EditMessageRequest,
+  MessageReplyRef,
   ConversationRequestAction,
   ConversationsResponse,
   CreateConversationRequest,
@@ -38,7 +40,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
 import { PresenceService } from '../connections/presence.service';
-import { MessagingGateway } from './messaging.gateway';
+import { MessagingGateway, type MessageAudience } from './messaging.gateway';
+import { loadMessageExtras, toReplyRef, type MessageExtras } from './message-extras';
 import { BlocksService } from '../blocks/blocks.service';
 import { ConnectionsService } from '../connections/connections.service';
 
@@ -68,10 +71,15 @@ interface MsgRow {
   attachmentIds?: string[];
   createdAt: Date;
   sender?: { displayName: string };
+  // MC-15
+  editedAt?: Date | null;
+  replyToId?: string | null;
+  replyToDeleted?: boolean | null;
 }
 interface ConvRow {
   id: string;
-  type: 'dm' | 'group';
+  // MC-15: the salon reuses this table, and its rows are refused edit/delete — so the type matters here.
+  type: 'dm' | 'group' | 'salon';
   name: string | null;
   projectId: string | null;
   status: 'open' | 'requested' | 'declined';
@@ -181,7 +189,9 @@ export class MessagesService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     })) as unknown as MsgRow[];
 
-    const items = rows.map((m) => this.toMessageDto(m, conv.participants));
+    // MC-15: likes + resolved quotes for the WHOLE page in a fixed number of queries (never per row).
+    const extras = await loadMessageExtras(this.prisma, rows, accountId);
+    const items = rows.map((m) => this.toMessageDto(m, conv.participants, extras.get(m.id)));
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
     return { items, nextCursor };
   }
@@ -205,6 +215,8 @@ export class MessagesService {
     await this.enforceSendRateLimit(accountId);
     await this.assertCanSend(accountId, conv);
 
+    // MC-15: a quote must point INSIDE this conversation (400 otherwise) — checked before any write.
+    const replyTo = await this.assertReplyTarget(dto.replyToId, conversationId);
     const attachments = await this.resolveAttachments(accountId, attachmentRefs);
 
     // ACID: persist the message + bump the conversation ordering key together.
@@ -216,6 +228,7 @@ export class MessagesService {
           body,
           attachments: attachments as unknown as object,
           attachmentIds: attachments.map((a) => a.mediaId),
+          ...(replyTo ? { replyToId: replyTo.id } : {}),
         },
       }),
       this.prisma.conversation.update({
@@ -224,7 +237,12 @@ export class MessagesService {
       }),
     ])) as unknown as [MsgRow, unknown];
 
-    const message = this.toMessageDto({ ...created, attachments }, conv.participants);
+    // A brand-new message has no likes, and its quote is the row we just validated — no extra query.
+    const message = this.toMessageDto({ ...created, attachments }, conv.participants, {
+      likeCount: 0,
+      likedByMe: false,
+      replyTo,
+    });
 
     // Side effects after commit: realtime emit (sync, first) + offline notification fan-out. Awaited so
     // a notification is never dropped and callers can rely on it (the emit itself is synchronous).
@@ -246,26 +264,111 @@ export class MessagesService {
    * Moderation deletion (someone else's message) belongs to AD-5, not here.
    */
   async deleteMessage(accountId: string, messageId: string): Promise<void> {
-    const message = (await this.prisma.message.findUnique({
-      where: { id: messageId },
-      select: { id: true, senderId: true, conversationId: true },
-    })) as { id: string; senderId: string; conversationId: string } | null;
-    if (!message) throw new NotFoundException(MESSAGE_NOT_FOUND);
+    const { message, conv } = await this.loadMessageForMember(messageId, accountId);
 
-    const conv = await this.loadForMember(message.conversationId, accountId).catch((e) => {
-      if (e instanceof NotFoundException) throw new NotFoundException(MESSAGE_NOT_FOUND);
-      throw e;
-    });
+    // MC-15: the salon is a public room — erasing your own line after the room read and replied to it
+    // rewrites a shared record. Removal there is AD-5's (accountable, logged), never the author's.
+    // Enforced HERE, not merely omitted from the menu: a UI-only omission is a fake gate.
+    if (conv.type === 'salon') {
+      throw new ForbiddenException('Un message du salon ne peut pas être supprimé.');
+    }
     if (message.senderId !== accountId) {
       throw new ForbiddenException('Vous ne pouvez supprimer que vos propres messages.');
     }
 
-    await this.prisma.message.delete({ where: { id: messageId } });
-    // Open panels/lists refetch: the thread drops the row and the list preview stops quoting it.
+    await this.prisma.$transaction([
+      // D-3: the FK nulls the children's `replyToId`, which would erase the fact that they quoted
+      // anything. Record it first so their quote keeps rendering as « Message supprimé ».
+      this.prisma.message.updateMany({
+        where: { replyToId: messageId },
+        data: { replyToDeleted: true },
+      }),
+      this.prisma.message.delete({ where: { id: messageId } }),
+    ]);
+
+    const audience = this.audience(conv);
+    // MC-15: open threads drop the bubble live…
+    this.gateway.emitMessageDeleted(audience, {
+      conversationId: message.conversationId,
+      messageId,
+    });
+    // …and the conversation LIST refetches so its preview stops quoting the deleted message.
     this.gateway.emitConversationUpdated(
       conv.participants.map((p) => p.accountId),
       { conversationId: message.conversationId },
     );
+  }
+
+  // ── PATCH /messages/:id (MC-15) ─────────────────────────────────────────────
+  /**
+   * The author fixes a typo. Author-only ON TOP of membership (never instead of it), same
+   * "non-empty body or attachment" rule as a send, and `createdAt` is untouched so the edit never
+   * reorders the thread (D-4). An edit does NOT re-notify (F-5) — the recipient was already told.
+   */
+  async editMessage(accountId: string, messageId: string, dto: EditMessageRequest): Promise<MessageDto> {
+    const { message, conv } = await this.loadMessageForMember(messageId, accountId);
+
+    // Same rule, same reason as delete (user, 2026-08-02): a salon line the room has already read
+    // and answered cannot be silently rewritten either.
+    if (conv.type === 'salon') {
+      throw new ForbiddenException('Un message du salon ne peut pas être modifié.');
+    }
+    if (message.senderId !== accountId) {
+      throw new ForbiddenException('Vous ne pouvez modifier que vos propres messages.');
+    }
+
+    const body = (dto.text ?? '').trim();
+    if (body.length > MESSAGE_MAX_LENGTH) {
+      throw new BadRequestException(`Le message ne peut pas dépasser ${MESSAGE_MAX_LENGTH} caractères.`);
+    }
+    if (body.length === 0 && normalizeAttachments(message.attachments).length === 0) {
+      throw new BadRequestException('Écrivez un message ou joignez un fichier.');
+    }
+
+    const updated = (await this.prisma.message.update({
+      where: { id: messageId },
+      data: { body, editedAt: new Date() },
+    })) as unknown as MsgRow;
+
+    const extras = await loadMessageExtras(this.prisma, [updated], accountId);
+    const dtoOut = this.toMessageDto(updated, conv.participants, extras.get(updated.id));
+    this.gateway.emitMessageEdited(this.audience(conv), {
+      conversationId: conv.id,
+      messageId,
+      body: dtoOut.body,
+      editedAt: dtoOut.editedAt ?? new Date().toISOString(),
+    });
+    return dtoOut;
+  }
+
+  // ── POST/DELETE /messages/:id/like (MC-15) ──────────────────────────────────
+  /**
+   * Toggle the caller's like. Idempotent BOTH ways by construction: the composite PK makes a second
+   * like the same row, and unliking what was never liked deletes zero rows and still answers 204.
+   * Anyone in the conversation may like anyone's message (it is not author-scoped); a like never
+   * notifies (noise).
+   */
+  async setLike(accountId: string, messageId: string, on: boolean): Promise<void> {
+    const { conv } = await this.loadMessageForMember(messageId, accountId);
+
+    if (on) {
+      await this.prisma.messageLike.upsert({
+        where: { messageId_accountId: { messageId, accountId } },
+        create: { messageId, accountId },
+        update: {},
+      });
+    } else {
+      await this.prisma.messageLike.deleteMany({ where: { messageId, accountId } });
+    }
+
+    const likeCount = await this.prisma.messageLike.count({ where: { messageId } });
+    this.gateway.emitMessageLiked(this.audience(conv), {
+      conversationId: conv.id,
+      messageId,
+      userId: accountId,
+      liked: on,
+      likeCount,
+    });
   }
 
   // ── POST /conversations ─────────────────────────────────────────────────────
@@ -308,6 +411,72 @@ export class MessagesService {
   }
 
   // ── internals ───────────────────────────────────────────────────────────────
+
+  /**
+   * MC-15 — the one gate every message-scoped action shares (delete, edit, like).
+   *
+   * Order is authz-relevant: membership is checked BEFORE authorship or any surface rule, so a
+   * stranger gets the same no-existence-leak 404 as an unknown id — and the SAME 404 TEXT (R2-4), or
+   * a prober learns the id exists. No new gate: `loadForMember` stays the seam.
+   */
+  private async loadMessageForMember(
+    messageId: string,
+    accountId: string,
+  ): Promise<{ message: MsgRow; conv: ConvRow }> {
+    const message = (await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+        body: true,
+        attachments: true,
+        createdAt: true,
+        editedAt: true,
+        replyToId: true,
+        replyToDeleted: true,
+      },
+    })) as unknown as MsgRow | null;
+    if (!message) throw new NotFoundException(MESSAGE_NOT_FOUND);
+
+    const conv = await this.loadForMember(message.conversationId, accountId).catch((e) => {
+      if (e instanceof NotFoundException) throw new NotFoundException(MESSAGE_NOT_FOUND);
+      throw e;
+    });
+    return { message, conv };
+  }
+
+  /**
+   * MC-15 — a reply is a quote, so its target must live in the SAME conversation; anything else is a
+   * 400, never a cross-conversation leak. Returns the resolved quote so the send path can echo it
+   * back without a second read. Public: the salon and the project thread call it through their own
+   * send paths, so the rule has ONE definition.
+   */
+  async assertReplyTarget(replyToId: string | undefined, conversationId: string): Promise<MessageReplyRef | null> {
+    if (!replyToId) return null;
+    const parent = (await this.prisma.message.findUnique({
+      where: { id: replyToId },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+        body: true,
+        attachments: true,
+        sender: { select: { displayName: true } },
+      },
+    })) as
+      | { id: string; senderId: string; conversationId: string; body: string; attachments: unknown; sender?: { displayName: string } }
+      | null;
+    if (!parent || parent.conversationId !== conversationId) {
+      throw new BadRequestException("Ce message n'appartient pas à cette conversation.");
+    }
+    return toReplyRef(parent);
+  }
+
+  /** MC-15: who hears a message action — the public salon room, or this thread's participants. */
+  private audience(conv: ConvRow): MessageAudience {
+    return { salon: conv.type === 'salon', participantIds: conv.participants.map((p) => p.accountId) };
+  }
 
   /** Load the conversation with participants+accounts; 404 if it doesn't exist OR the caller isn't a member. */
   private async loadForMember(conversationId: string, accountId: string): Promise<ConvRow> {
@@ -765,7 +934,7 @@ export class MessagesService {
     };
   }
 
-  private toMessageDto(m: MsgRow, participants: PartRow[]): MessageDto {
+  private toMessageDto(m: MsgRow, participants: PartRow[], extras?: MessageExtras): MessageDto {
     const attachments = normalizeAttachments(m.attachments);
     const readBy = participants
       .filter((p) => p.accountId !== m.senderId && p.lastReadAt >= m.createdAt)
@@ -778,6 +947,11 @@ export class MessagesService {
       attachments,
       createdAt: m.createdAt.toISOString(),
       readBy,
+      // MC-15 — always present, so no client has to guess whether a surface fills them in.
+      replyTo: extras?.replyTo ?? null,
+      editedAt: m.editedAt ? m.editedAt.toISOString() : null,
+      likeCount: extras?.likeCount ?? 0,
+      likedByMe: extras?.likedByMe ?? false,
     };
   }
 }

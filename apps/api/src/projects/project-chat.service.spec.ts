@@ -161,6 +161,17 @@ describe('ProjectChatService (CS-8)', () => {
     expect(msg).toEqual({ id: 'msg-1' });
   });
 
+  // MC-15: a quote is passed straight through — "same conversation or 400" is sendMessage's rule,
+  // so the project surface cannot drift from the widget or the salon.
+  it('send forwards replyToId to MessagesService.sendMessage', async () => {
+    const { service, messages } = build({ conversation: { id: 'conv-1' } });
+    await service.send('acc-me', 'lames-de-brume', { text: 'oui', replyToId: 'msg-9' });
+    expect(messages.sendMessage).toHaveBeenCalledWith('acc-me', 'conv-1', {
+      body: 'oui',
+      replyToId: 'msg-9',
+    });
+  });
+
   it('send propagates the "text or attachment required" 400 from sendMessage', async () => {
     const { service, messages } = build({ conversation: { id: 'conv-1' } });
     messages.sendMessage.mockRejectedValue(new Error('Écrivez un message ou joignez un fichier.'));

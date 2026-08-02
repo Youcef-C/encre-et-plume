@@ -43,6 +43,9 @@ vi.mock('../lib/api', () => ({
   markSalonRead: vi.fn(),
   getMyBlocks: vi.fn(),
   createBlock: vi.fn(),
+  // MC-15
+  likeMessage: vi.fn(),
+  unlikeMessage: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -82,6 +85,11 @@ function msg(over: Partial<SalonMessageDto> = {}): SalonMessageDto {
     senderName: 'Yuki Moreau',
     body: 'Bonjour le comptoir',
     createdAt: '2026-07-09T10:00:00.000Z',
+    // MC-15: the salon DTO carries the same action fields as MessageDto.
+    replyTo: null,
+    editedAt: null,
+    likeCount: 0,
+    likedByMe: false,
     ...over,
   };
 }
@@ -361,7 +369,7 @@ describe('SalonDock', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const input = await screen.findByPlaceholderText('Votre message…');
     await userEvent.type(input, 'unique-echo-body{Enter}');
-    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('unique-echo-body'));
+    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('unique-echo-body', undefined));
     // The socket echo of my own message arrives BEFORE the POST response resolves — must not
     // append a second bubble while the temp one is still pending.
     const real = msg({ id: 'srv-1', senderId: 'me-1', senderName: 'Camille R.', body: 'unique-echo-body' });
@@ -380,7 +388,7 @@ describe('SalonDock', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     const input = await screen.findByPlaceholderText('Votre message…');
     await userEvent.type(input, 'coucou{Enter}');
-    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('coucou'));
+    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('coucou', undefined));
     const retry = await screen.findByRole('button', { name: 'Réessayer' });
     vi.mocked(api.sendSalonMessage).mockResolvedValueOnce(msg({ id: 'real', senderId: 'me-1', senderName: 'Camille R.', body: 'coucou' }));
     await userEvent.click(retry);
@@ -479,5 +487,78 @@ describe('SalonDock', () => {
     expect(line.closest('[data-connected]')).toHaveAttribute('data-connected', 'no');
     await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
     expect(await screen.findByText('Reconnexion…')).toBeInTheDocument();
+  });
+});
+
+// ─── MC-15 · the salon carries Répondre + J'aime, and NEITHER Modifier NOR Supprimer ────────────
+// « Le Comptoir » is a public room: erasing — or silently rewriting — a line the room has already
+// read and answered rewrites a shared record. The server refuses both (403); the dock's menu simply
+// never offers them. The omission is the UI agreeing with the gate, not the gate itself.
+
+describe('SalonDock — MC-15 actions', () => {
+  async function openDockWith(messages: SalonMessageDto[]) {
+    vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
+    vi.mocked(api.getSalonMessages).mockResolvedValue({ items: messages, nextCursor: null });
+    renderDock();
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
+  }
+
+  it('the menu offers Répondre and NOTHING else — no Modifier, no Supprimer', async () => {
+    await openDockWith([msg({ id: 'm-1', senderId: 'me-1', senderName: 'Camille R.', body: 'Coucou' })]);
+    await userEvent.click(await screen.findByRole('button', { name: /^Actions du message/ }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Répondre' })).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: 'Modifier' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Supprimer' })).toBeNull();
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
+  });
+
+  it('Répondre shows the quote in the composer and the send carries replyToId', async () => {
+    await openDockWith([msg({ id: 'm-1', body: 'Qui dessine ce soir ?' })]);
+    vi.mocked(api.sendSalonMessage).mockResolvedValue(
+      msg({ id: 'srv', senderId: 'me-1', senderName: 'Camille R.', body: 'Moi !' }),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Actions du message/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Répondre' }));
+    expect(screen.getByText(/Réponse à/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByPlaceholderText('Votre message…'), 'Moi !{Enter}');
+    await waitFor(() => expect(api.sendSalonMessage).toHaveBeenCalledWith('Moi !', 'm-1'));
+  });
+
+  it('the heart toggles a like optimistically and reverts when the server refuses', async () => {
+    await openDockWith([msg({ id: 'm-1', likeCount: 2 })]);
+    vi.mocked(api.likeMessage).mockRejectedValue({ message: 'Message introuvable.' });
+
+    const heart = await screen.findByRole('button', { name: /J’aime le message de Yuki Moreau/ });
+    await userEvent.click(heart);
+    await waitFor(() => expect(api.likeMessage).toHaveBeenCalledWith('m-1'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /J’aime le message de Yuki Moreau/ })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      ),
+    );
+  });
+
+  it('a like broadcast to the room updates the count live', async () => {
+    await openDockWith([msg({ id: 'm-1' })]);
+    await screen.findByText('Bonjour le comptoir');
+    await fire(WS_EVENTS.messageLiked, {
+      conversationId: 'salon-conv',
+      messageId: 'm-1',
+      userId: 'u-yuki',
+      liked: true,
+      likeCount: 5,
+    });
+    expect(screen.getByText('5')).toBeInTheDocument();
+  });
+
+  it('D-3: a quote whose target is gone reads « Message supprimé »', async () => {
+    await openDockWith([
+      msg({ id: 'm-2', replyTo: { id: '', senderId: '', senderName: '', excerpt: '', deleted: true } }),
+    ]);
+    expect(await screen.findByText('Message supprimé')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 /**
  * POST /salon/messages body. Boundary type check only — trimming, emptiness and length are enforced in
@@ -7,4 +7,10 @@ import { IsString } from 'class-validator';
 export class SendSalonMessageDto {
   @IsString()
   body!: string;
+
+  /** MC-15: quote a message of the salon — cross-conversation targets are a 400. */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  replyToId?: string;
 }

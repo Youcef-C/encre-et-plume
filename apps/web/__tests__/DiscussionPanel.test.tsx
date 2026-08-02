@@ -27,6 +27,10 @@ vi.mock('../lib/api', () => ({
   getProjectMessages: vi.fn(),
   sendProjectMessage: vi.fn(),
   deleteMessage: vi.fn(),
+  // MC-15
+  editMessage: vi.fn(),
+  likeMessage: vi.fn(),
+  unlikeMessage: vi.fn(),
   getMediaSignedUrl: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
@@ -64,6 +68,11 @@ function msg(over: Partial<MessageDto> = {}): MessageDto {
     attachments: [],
     createdAt: '2026-08-01T09:30:00.000Z',
     readBy: [],
+    // MC-15: every message DTO carries the action fields.
+    replyTo: null,
+    editedAt: null,
+    likeCount: 0,
+    likedByMe: false,
     ...over,
   };
 }
@@ -326,22 +335,23 @@ describe('DiscussionPanel — realtime', () => {
   });
 });
 
-// R2-3 (review N-4): the per-bubble delete ICON is replaced by ONE discreet "…" menu on the LEFT of
-// the bubble. The shell only — its single item is « Supprimer »; [[MC-15]] adds Répondre / Modifier /
-// J'aime and rolls the same component out to the MC-9 widget and the MC-11 salon.
-describe('DiscussionPanel — bubble actions menu (R2-3)', () => {
+// R2-3 (review N-4) + MC-15: the per-bubble delete ICON is ONE discreet "…" menu, and MC-15 filled
+// it in — Répondre on every bubble, Modifier / Supprimer on my own only. Same shared component as the
+// MC-9 widget and the MC-11 salon dock.
+describe('DiscussionPanel — bubble actions menu (R2-3 + MC-15)', () => {
   const mine = () => page([msg({ id: 'mine-1', senderId: 'acc-me', body: 'À supprimer.' })]);
   const trigger = () => screen.findByRole('button', { name: /^Actions du message/ });
 
-  it('replaces the delete icon with a "…" trigger named after its message', async () => {
+  it('replaces the delete icon with a "…" trigger named after its message author', async () => {
     mocked.getProjectMessages.mockResolvedValue(mine());
     renderPanel();
-    expect(await trigger()).toHaveAccessibleName('Actions du message « À supprimer. »');
+    // MC-15: the name is the AUTHOR (plan F-D) — CS-8's excerpt form is gone.
+    expect(await trigger()).toHaveAccessibleName('Actions du message de Camille');
     // The round-1 affordance is gone, not merely hidden.
     expect(screen.queryByRole('button', { name: 'Supprimer mon message' })).toBeNull();
   });
 
-  it('opens from the KEYBOARD (hover is never the only path) and holds Supprimer only', async () => {
+  it('opens from the KEYBOARD (hover is never the only path) and holds the three own-message items', async () => {
     mocked.getProjectMessages.mockResolvedValue(mine());
     renderPanel();
     const t = await trigger();
@@ -350,8 +360,10 @@ describe('DiscussionPanel — bubble actions menu (R2-3)', () => {
     await userEvent.keyboard('{Enter}');
 
     const menu = screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Répondre' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Modifier' })).toBeInTheDocument();
     expect(within(menu).getByRole('menuitem', { name: 'Supprimer' })).toBeInTheDocument();
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(3);
   });
 
   // The log scrolls (`overflow-y: auto`) and the panel is a bordered box: an absolutely-positioned
@@ -375,10 +387,16 @@ describe('DiscussionPanel — bubble actions menu (R2-3)', () => {
     expect(t).toHaveFocus();
   });
 
-  it('offers no actions menu on someone else’s message (delete is author-only)', async () => {
+  // MC-15 removed CS-8's `mine` gate: Répondre and J'aime apply to ANYONE's message. Modifier and
+  // Supprimer stay author-only — and the server agrees (403).
+  it('offers Répondre on someone else’s message, but never Modifier or Supprimer', async () => {
     renderPanel();
     await screen.findByText(/Le nemu de la planche 4/);
-    expect(screen.queryByRole('button', { name: /^Actions du message/ })).toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions du message de Yuki' }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getByRole('menuitem', { name: 'Répondre' })).toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: 'Modifier' })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: 'Supprimer' })).toBeNull();
   });
 
   // R3-1/R3-2 — an outgoing (right-aligned) bubble points its menu LEFT, toward the middle of the
@@ -492,5 +510,202 @@ describe('DiscussionPanel — non-member (public project, read-only workspace)',
     expect(await screen.findByText('La discussion est réservée aux membres du projet.')).toBeInTheDocument();
     expect(api.getProjectMessages).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Écrire à l’équipe')).toBeNull();
+  });
+});
+
+// ─── MC-15 · message actions on the project Discussion ──────────────────────────
+// Same shared components as the MC-9 widget and the MC-11 salon dock — what is tested here is the
+// WIRING: the endpoints called, the states rendered, and the realtime patches.
+
+describe('DiscussionPanel — MC-15 actions', () => {
+  const mineMsg = () => msg({ id: 'mine-1', senderId: 'acc-me', body: 'À corriger.' });
+
+  it('F2: Répondre quotes the message in the composer, and the send carries replyToId', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', body: 'Le nemu est prêt.' })]));
+    mocked.sendProjectMessage.mockResolvedValue(msg({ id: 'sent', senderId: 'acc-me', body: 'Oui !' }));
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions du message de Yuki' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Répondre' }));
+    expect(screen.getByText(/Réponse à/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Écrire à l’équipe'), 'Oui !');
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    await waitFor(() =>
+      expect(mocked.sendProjectMessage).toHaveBeenCalledWith('lames-de-brume', {
+        text: 'Oui !',
+        replyToId: 'm-9',
+      }),
+    );
+    // The banner clears once the reply is on its way.
+    expect(screen.queryByText(/Réponse à/)).toBeNull();
+  });
+
+  it('F2: the quote renders above the body and can be cancelled before sending', async () => {
+    mocked.getProjectMessages.mockResolvedValue(
+      page([
+        msg({
+          id: 'reply-1',
+          body: 'Je confirme.',
+          replyTo: { id: 'm-9', senderId: 'acc-yuki', senderName: 'Yuki', excerpt: 'Le nemu est prêt', deleted: false },
+        }),
+      ]),
+    );
+    renderPanel();
+    expect(await screen.findByRole('button', { name: 'Aller au message de Yuki' })).toBeInTheDocument();
+  });
+
+  it('D-3: a quote whose target was deleted reads « Message supprimé »', async () => {
+    mocked.getProjectMessages.mockResolvedValue(
+      page([
+        msg({
+          id: 'orphan',
+          body: 'Je confirme.',
+          replyTo: { id: '', senderId: '', senderName: '', excerpt: '', deleted: true },
+        }),
+      ]),
+    );
+    renderPanel();
+    expect(await screen.findByText('Message supprimé')).toBeInTheDocument();
+  });
+
+  it('F3: Modifier edits in place and the bubble then shows « modifié »', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([mineMsg()]));
+    mocked.editMessage.mockResolvedValue(
+      msg({ id: 'mine-1', senderId: 'acc-me', body: 'Corrigé.', editedAt: '2026-08-02T10:00:00.000Z' }),
+    );
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions du message de Camille' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Modifier' }));
+    const field = screen.getByRole('textbox', { name: 'Modifier le message' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Corrigé.');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(mocked.editMessage).toHaveBeenCalledWith('mine-1', { text: 'Corrigé.' }));
+    expect(await screen.findByText('modifié')).toBeInTheDocument();
+  });
+
+  it('F6: a refused edit keeps the bubble intact and shows the server’s French reason', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([mineMsg()]));
+    mocked.editMessage.mockRejectedValue({ message: 'Vous ne pouvez modifier que vos propres messages.' });
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions du message de Camille' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Modifier' }));
+    const field = screen.getByRole('textbox', { name: 'Modifier le message' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Corrigé.');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Vous ne pouvez modifier que vos propres messages.',
+    );
+    expect(field).toHaveValue('À corriger.');
+  });
+
+  it('F5: double-clicking a bubble likes it optimistically', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', body: 'Le nemu est prêt.' })]));
+    mocked.likeMessage.mockResolvedValue(undefined);
+    renderPanel();
+
+    const bubble = await screen.findByText('Le nemu est prêt.');
+    await userEvent.dblClick(bubble);
+    await waitFor(() => expect(mocked.likeMessage).toHaveBeenCalledWith('m-9'));
+    expect(screen.getByRole('button', { name: /Je n’aime plus le message de Yuki/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('F6: a refused like reverts the heart (optimistic then reconciliation)', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', likeCount: 2 })]));
+    mocked.likeMessage.mockRejectedValue({ message: 'Message introuvable.' });
+    renderPanel();
+
+    const heart = await screen.findByRole('button', { name: /J’aime le message de Yuki/ });
+    await userEvent.click(heart);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /J’aime le message de Yuki/ })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      ),
+    );
+    expect(screen.getByText('2')).toBeInTheDocument(); // the count came back too
+  });
+
+  it('D-5: the count appears only above one like', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', likeCount: 1, likedByMe: true })]));
+    renderPanel();
+    await screen.findByRole('button', { name: /Je n’aime plus/ });
+    expect(screen.queryByText('1')).toBeNull();
+  });
+
+  it('F4: Supprimer asks for confirmation before destroying', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([mineMsg()]));
+    mocked.deleteMessage.mockResolvedValue(undefined);
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Actions du message de Camille' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Supprimer' }));
+    expect(screen.getByText('Supprimer le message')).toBeInTheDocument();
+    expect(mocked.deleteMessage).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => expect(mocked.deleteMessage).toHaveBeenCalledWith('mine-1'));
+  });
+
+  it('F6: a message deleted elsewhere disappears live, and a reply to it keeps its quote', async () => {
+    mocked.getProjectMessages.mockResolvedValue(
+      page([
+        msg({
+          id: 'reply-1',
+          body: 'Je confirme.',
+          replyTo: { id: 'm-9', senderId: 'acc-yuki', senderName: 'Yuki', excerpt: 'Le nemu', deleted: false },
+        }),
+        msg({ id: 'm-9', body: 'Le nemu est prêt.' }),
+      ]),
+    );
+    renderPanel();
+    await screen.findByText('Le nemu est prêt.');
+
+    await fire(WS_EVENTS.messageDeleted, { conversationId: 'conv-1', messageId: 'm-9' });
+    expect(screen.queryByText('Le nemu est prêt.')).toBeNull();
+    expect(screen.getByText('Message supprimé')).toBeInTheDocument();
+  });
+
+  it('F6: an edit made elsewhere patches the bubble in place', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', body: 'Le nemu est prêt.' })]));
+    renderPanel();
+    await screen.findByText('Le nemu est prêt.');
+
+    await fire(WS_EVENTS.messageEdited, {
+      conversationId: 'conv-1',
+      messageId: 'm-9',
+      body: 'Le nemu est prêt (corrigé).',
+      editedAt: '2026-08-02T10:00:00.000Z',
+    });
+    expect(screen.getByText('Le nemu est prêt (corrigé).')).toBeInTheDocument();
+    expect(screen.getByText('modifié')).toBeInTheDocument();
+  });
+
+  it('F6: someone else’s like updates the count without flipping MY state', async () => {
+    mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9' })]));
+    renderPanel();
+    await screen.findByText(/Le nemu de la planche 4/);
+
+    await fire(WS_EVENTS.messageLiked, {
+      conversationId: 'conv-1',
+      messageId: 'm-9',
+      userId: 'acc-yuki',
+      liked: true,
+      likeCount: 4,
+    });
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /J’aime le message de Yuki/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   });
 });

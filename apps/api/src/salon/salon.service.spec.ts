@@ -42,7 +42,16 @@ function makePrisma(over: Record<string, unknown> = {}) {
     message: {
       count: jest.fn().mockResolvedValue(0),
       findMany: jest.fn().mockResolvedValue([]),
+      // MC-15: the quoted-parent lookup shares the model with the page query.
+      findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue(MSG({ senderId: 'acc-1', sender: { displayName: 'Me' } })),
+    },
+    // MC-15: likes live on the same Message rows the salon already writes.
+    messageLike: {
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      count: jest.fn().mockResolvedValue(0),
     },
     account: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -384,5 +393,106 @@ describe('SalonService.getPresence (MC-13 — salon MEMBERSHIP roster, self INCL
     expect(res.count).toBe(SALON_ROSTER_MAX);
     expect(res.items).toHaveLength(SALON_ROSTER_MAX);
     expect(res.count).toBe(res.items.length);
+  });
+});
+
+// ─── MC-15 · the salon inherits the SAME message actions, minus edit and delete ──
+// The salon is a public room: Répondre and J'aime yes, Modifier and Supprimer NEVER (those live in
+// MessagesService and refuse a salon conversation 403 — tested there). Here: the read path carries
+// the same fields, and a quote must belong to the salon.
+
+describe('SalonService — MC-15 read fields', () => {
+  it('every salon message carries likeCount / likedByMe / replyTo / editedAt', async () => {
+    const prisma = makePrisma();
+    (prisma.message as any).findMany.mockResolvedValue([MSG({ id: 'm-1' })]);
+    (prisma.messageLike as any).findMany.mockResolvedValue([
+      { messageId: 'm-1', accountId: 'acc-1' },
+      { messageId: 'm-1', accountId: 'acc-9' },
+    ]);
+    const { service } = build({ prisma });
+
+    const page = await service.getMessages('acc-1', {});
+    expect(page.items[0]).toEqual(
+      expect.objectContaining({ likeCount: 2, likedByMe: true, replyTo: null, editedAt: null }),
+    );
+  });
+
+  it('a previewer (not a member) sees the counts but never likedByMe', async () => {
+    const prisma = makePrisma();
+    (prisma.message as any).findMany.mockResolvedValue([MSG({ id: 'm-1' })]);
+    (prisma.messageLike as any).findMany.mockResolvedValue([{ messageId: 'm-1', accountId: 'acc-2' }]);
+    const { service } = build({ prisma });
+
+    const page = await service.getMessages('non-member', {});
+    expect(page.items[0]).toEqual(expect.objectContaining({ likeCount: 1, likedByMe: false }));
+  });
+
+  it('D-3: a message whose quoted target was deleted renders a deleted quote', async () => {
+    const prisma = makePrisma();
+    (prisma.message as any).findMany.mockResolvedValue([
+      MSG({ id: 'm-2', replyToId: null, replyToDeleted: true }),
+    ]);
+    const { service } = build({ prisma });
+
+    const page = await service.getMessages('acc-1', {});
+    expect(page.items[0]!.replyTo).toMatchObject({ deleted: true });
+  });
+
+  it('no N+1: one like query and one parent query for the whole page', async () => {
+    const prisma = makePrisma();
+    (prisma.message as any).findMany.mockImplementation((args: { where?: { id?: unknown } }) =>
+      Promise.resolve(
+        args?.where?.id
+          ? [MSG({ id: 'm-0' })]
+          : Array.from({ length: 20 }, (_, i) => MSG({ id: `m-${i}`, replyToId: 'm-0' })),
+      ),
+    );
+    const { service } = build({ prisma });
+
+    await service.getMessages('acc-1', {});
+    expect((prisma.messageLike as any).findMany).toHaveBeenCalledTimes(1);
+    expect((prisma.message as any).findMany).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SalonService.sendMessage — replies (MC-15 B4)', () => {
+  it('refuses a replyToId that is not a salon message (400)', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).findUnique.mockResolvedValue({ accountId: 'acc-1' });
+    (prisma.message as any).findUnique.mockResolvedValue({
+      id: 'msg-9',
+      conversationId: 'conv-elsewhere',
+      senderId: 'acc-2',
+      body: 'ailleurs',
+      attachments: [],
+    });
+    const { service } = build({ prisma });
+
+    await expect(
+      service.sendMessage('acc-1', { body: 'hi', replyToId: 'msg-9' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('persists a valid replyToId and echoes the resolved quote back', async () => {
+    const prisma = makePrisma();
+    (prisma.conversationParticipant as any).findUnique.mockResolvedValue({ accountId: 'acc-1' });
+    (prisma.message as any).findUnique.mockResolvedValue({
+      id: 'msg-9',
+      conversationId: 'salon-conv',
+      senderId: 'acc-2',
+      body: 'Le message cité',
+      attachments: [],
+      sender: { displayName: 'Bob' },
+    });
+    const { service } = build({ prisma });
+
+    const sent = await service.sendMessage('acc-1', { body: 'hi', replyToId: 'msg-9' });
+    expect(sent.replyTo).toEqual({
+      id: 'msg-9',
+      senderId: 'acc-2',
+      senderName: 'Bob',
+      excerpt: 'Le message cité',
+      deleted: false,
+    });
   });
 });

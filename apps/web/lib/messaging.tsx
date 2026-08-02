@@ -20,7 +20,11 @@ import {
   type ConversationParticipantDto,
   type ConversationRequestAction,
   type MessageDto,
+  type MessageReplyRef,
   type WsMessageNew,
+  type WsMessageEdited,
+  type WsMessageDeleted,
+  type WsMessageLiked,
   type WsConversationRead,
   type WsConversationUpdated,
   type WsParticipantRemoved,
@@ -80,7 +84,17 @@ interface MessagingCtx {
   respondToRequest: (conversationId: string, action: ConversationRequestAction) => Promise<void>;
   reloadConversations: () => void;
   loadOlderMessages: () => void;
-  sendMessage: (conversationId: string, body: string, attachmentIds?: string[]) => Promise<void>;
+  sendMessage: (
+    conversationId: string,
+    body: string,
+    attachmentIds?: string[],
+    /** MC-15: the message being quoted (Répondre). */
+    replyTo?: MessageReplyRef | null,
+  ) => Promise<void>;
+  /** MC-15: patch one message of the OPEN thread in place (like toggle, edit result). */
+  patchMessage: (messageId: string, fields: Partial<ThreadMessage>) => void;
+  /** MC-15: drop one message of the open thread (its author deleted it). */
+  removeMessage: (messageId: string) => void;
   retryMessage: (message: ThreadMessage) => void;
   emitTyping: (conversationId: string, isTyping: boolean) => void;
   addConversation: (conversation: ConversationItem) => void;
@@ -119,6 +133,8 @@ export const MessagingContext = createContext<MessagingCtx>({
   reloadConversations: noop,
   loadOlderMessages: noop,
   sendMessage: async () => {},
+  patchMessage: noop,
+  removeMessage: noop,
   retryMessage: noop,
   emitTyping: noop,
   addConversation: noop,
@@ -337,6 +353,45 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       reloadConversations();
     });
 
+    // MC-15: message actions on the OPEN thread — patched in place, never a refetch. A message in a
+    // thread I am not looking at needs nothing: opening it reads the fresh state anyway.
+    socket.on(WS_EVENTS.messageEdited, (payload: WsMessageEdited) => {
+      if (activeIdRef.current !== payload.conversationId) return;
+      setActiveMessages((list) =>
+        list.map((m) =>
+          m.id === payload.messageId ? { ...m, body: payload.body, editedAt: payload.editedAt } : m,
+        ),
+      );
+    });
+
+    socket.on(WS_EVENTS.messageDeleted, (payload: WsMessageDeleted) => {
+      if (activeIdRef.current !== payload.conversationId) return;
+      setActiveMessages((list) =>
+        list
+          .filter((m) => m.id !== payload.messageId)
+          .map((m) =>
+            m.replyTo && m.replyTo.id === payload.messageId
+              ? { ...m, replyTo: { ...m.replyTo, deleted: true, excerpt: '' } }
+              : m,
+          ),
+      );
+    });
+
+    socket.on(WS_EVENTS.messageLiked, (payload: WsMessageLiked) => {
+      if (activeIdRef.current !== payload.conversationId) return;
+      setActiveMessages((list) =>
+        list.map((m) =>
+          m.id === payload.messageId
+            ? {
+                ...m,
+                likeCount: payload.likeCount,
+                likedByMe: payload.userId === myId ? payload.liked : m.likedByMe,
+              }
+            : m,
+        ),
+      );
+    });
+
     // MC-12: the last member left → the group is gone. Drop it locally + close the thread if active.
     socket.on(WS_EVENTS.conversationDeleted, (payload: WsConversationDeleted) => {
       if (activeIdRef.current === payload.conversationId) {
@@ -536,13 +591,20 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   );
 
   const doSend = useCallback(
-    async (conversationId: string, tempId: string, body: string, attachmentIds?: string[]) => {
+    async (
+      conversationId: string,
+      tempId: string,
+      body: string,
+      attachmentIds?: string[],
+      replyToId?: string,
+    ) => {
       try {
         const real = await api.sendMessage(conversationId, {
           ...(body ? { body } : {}),
           ...(attachmentIds && attachmentIds.length
             ? { attachments: attachmentIds.map((mediaId) => ({ mediaId })) }
             : {}),
+          ...(replyToId ? { replyToId } : {}),
         });
         setActiveMessages((list) => mergeMessage(list.filter((m) => m.id !== tempId), real));
         setConversations((prev) => {
@@ -572,7 +634,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (conversationId: string, body: string, attachmentIds?: string[]) => {
+    async (conversationId: string, body: string, attachmentIds?: string[], replyTo?: MessageReplyRef | null) => {
       const trimmed = body.trim();
       if (!trimmed && !(attachmentIds && attachmentIds.length)) return;
       const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -584,10 +646,15 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         attachments: [],
         createdAt: new Date().toISOString(),
         readBy: [],
+        // MC-15 — a fresh message has no likes and no edit; the quote is whatever I am answering.
+        replyTo: replyTo ?? null,
+        editedAt: null,
+        likeCount: 0,
+        likedByMe: false,
         pending: true,
       };
       setActiveMessages((list) => [...list, optimistic]);
-      await doSend(conversationId, tempId, trimmed, attachmentIds);
+      await doSend(conversationId, tempId, trimmed, attachmentIds, replyTo?.id);
     },
     [doSend, myId],
   );
@@ -602,6 +669,24 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     },
     [doSend],
   );
+
+  // MC-15: the open thread patches one message in place — an edit, a like or a delete never refetches.
+  const patchMessage = useCallback((messageId: string, fields: Partial<ThreadMessage>) => {
+    setActiveMessages((list) => list.map((m) => (m.id === messageId ? { ...m, ...fields } : m)));
+  }, []);
+
+  const removeMessage = useCallback((messageId: string) => {
+    setActiveMessages((list) =>
+      list
+        .filter((m) => m.id !== messageId)
+        // D-3: a reply to the deleted message keeps its quote, now « Message supprimé ».
+        .map((m) =>
+          m.replyTo && m.replyTo.id === messageId
+            ? { ...m, replyTo: { ...m.replyTo, deleted: true, excerpt: '' } }
+            : m,
+        ),
+    );
+  }, []);
 
   const emitTyping = useCallback((conversationId: string, isTyping: boolean) => {
     socketRef.current?.emit(WS_EVENTS.typing, { conversationId, isTyping });
@@ -651,6 +736,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
         reloadConversations,
         loadOlderMessages,
         sendMessage,
+        patchMessage,
+        removeMessage,
         retryMessage,
         emitTyping,
         addConversation,

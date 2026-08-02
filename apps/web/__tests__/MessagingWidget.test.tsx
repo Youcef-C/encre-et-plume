@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AccountSummary, ConversationItem, MessagesPage } from '@encre-et-plume/shared';
+import { WS_EVENTS } from '@encre-et-plume/shared';
 import { SessionContext } from '../lib/session';
 
 // ── socket.io-client mock: a single-handler event bus we can fire from the test. ──
@@ -43,6 +44,11 @@ vi.mock('../lib/api', () => ({
   createBlock: vi.fn().mockResolvedValue({ id: 'b1', userId: 'u-lea', kind: 'block', createdAt: '2026-07-08T00:00:00.000Z' }),
   getMyBlocks: vi.fn().mockResolvedValue({ items: [] }),
   deleteBlock: vi.fn().mockResolvedValue(undefined),
+  // MC-15
+  editMessage: vi.fn(),
+  deleteMessage: vi.fn(),
+  likeMessage: vi.fn(),
+  unlikeMessage: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -692,5 +698,124 @@ describe('MessagingWidget — Contacts tab (list)', () => {
     (api.getContacts as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [contact()] });
     await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(await screen.findByRole('button', { name: 'Message à Léa B.' })).toBeInTheDocument();
+  });
+});
+
+// ─── MC-15 · message actions in the MC-9 widget (DMs + groups) ──────────────────
+// The SAME components the salon dock and the project Discussion mount — what is asserted here is the
+// widget's own wiring: the full matrix row (Répondre · Modifier · Supprimer · J'aime).
+
+describe('MessagingWidget — MC-15 actions', () => {
+  const mineMsg = {
+    id: 'm-mine',
+    conversationId: 'd1',
+    senderId: 'me-1',
+    body: 'Bonjur',
+    attachments: [],
+    createdAt: '2026-07-08T09:05:00.000Z',
+    readBy: [],
+    replyTo: null,
+    editedAt: null,
+    likeCount: 0,
+    likedByMe: false,
+  };
+  const theirMsg = { ...mineMsg, id: 'm-theirs', senderId: 'u-lea', body: 'Partante pour le Seinen ?' };
+
+  async function openDm(items: typeof mineMsg[]) {
+    vi.mocked(api.getConversations).mockResolvedValue({
+      items: [dmConv],
+      nextCursor: null,
+      totalUnread: 0,
+      requestsCount: 0,
+    });
+    vi.mocked(api.getMessages).mockResolvedValue({ items, nextCursor: null });
+    renderWidget();
+    await userEvent.click(await screen.findByRole('button', { name: 'Messages' }));
+    await userEvent.click(await screen.findByText('Léa B.'));
+  }
+
+  it('my own bubble offers the three items; someone else’s offers Répondre only', async () => {
+    await openDm([theirMsg, mineMsg]);
+    await screen.findByText('Bonjur');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actions du message de moi' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
+      'Répondre',
+      'Modifier',
+      'Supprimer',
+    ]);
+    // NOT Escape: the widget panel is a dialog that closes on Escape, unmounting the thread. Clicking
+    // the other trigger closes the first menu (outside click) and opens the second.
+    await userEvent.click(screen.getByRole('button', { name: 'Actions du message de Léa B.' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Répondre']);
+  });
+
+  it('Répondre carries replyToId on the send', async () => {
+    await openDm([theirMsg]);
+    vi.mocked(api.sendMessage).mockResolvedValue({ ...mineMsg, id: 'sent', body: 'Oui !' });
+    await screen.findByText('Partante pour le Seinen ?');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actions du message de Léa B.' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Répondre' }));
+    expect(screen.getByText(/Réponse à/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Écrire un message'), 'Oui !');
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+    await waitFor(() =>
+      expect(api.sendMessage).toHaveBeenCalledWith('d1', { body: 'Oui !', replyToId: 'm-theirs' }),
+    );
+  });
+
+  it('Modifier saves in place and the bubble shows « modifié »', async () => {
+    await openDm([mineMsg]);
+    vi.mocked(api.editMessage).mockResolvedValue({
+      ...mineMsg,
+      body: 'Bonjour',
+      editedAt: '2026-07-08T09:10:00.000Z',
+    });
+    await screen.findByText('Bonjur');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actions du message de moi' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Modifier' }));
+    const field = screen.getByRole('textbox', { name: 'Modifier le message' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Bonjour');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(api.editMessage).toHaveBeenCalledWith('m-mine', { text: 'Bonjour' }));
+    expect(await screen.findByText('modifié')).toBeInTheDocument();
+  });
+
+  it('Supprimer destroys only after a confirmation', async () => {
+    await openDm([mineMsg]);
+    vi.mocked(api.deleteMessage).mockResolvedValue(undefined);
+    await screen.findByText('Bonjur');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actions du message de moi' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Supprimer' }));
+    expect(api.deleteMessage).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => expect(api.deleteMessage).toHaveBeenCalledWith('m-mine'));
+    await waitFor(() => expect(screen.queryByText('Bonjur')).toBeNull());
+  });
+
+  it('double-clicking a bubble likes it, and the heart unlikes it', async () => {
+    await openDm([theirMsg]);
+    vi.mocked(api.likeMessage).mockResolvedValue(undefined);
+    vi.mocked(api.unlikeMessage).mockResolvedValue(undefined);
+
+    await userEvent.dblClick(await screen.findByText('Partante pour le Seinen ?'));
+    await waitFor(() => expect(api.likeMessage).toHaveBeenCalledWith('m-theirs'));
+
+    await userEvent.click(screen.getByRole('button', { name: /Je n’aime plus le message de Léa B./ }));
+    await waitFor(() => expect(api.unlikeMessage).toHaveBeenCalledWith('m-theirs'));
+  });
+
+  it('a message deleted by its author disappears live from my open thread', async () => {
+    await openDm([theirMsg]);
+    await screen.findByText('Partante pour le Seinen ?');
+    await fire(WS_EVENTS.messageDeleted, { conversationId: 'd1', messageId: 'm-theirs' });
+    expect(screen.queryByText('Partante pour le Seinen ?')).toBeNull();
   });
 });

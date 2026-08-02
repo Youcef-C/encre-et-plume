@@ -148,6 +148,7 @@ model Account {
   connectionsReceived     Connection[]             @relation("ConnectionsReceived") // MC-8: requests addressed to this account
   conversationParticipations ConversationParticipant[] // MC-9: conversations this account is a member of
   messagesSent            Message[]                @relation("MessagesSent") // MC-9: messages this account sent
+  messageLikes            MessageLike[] // MC-15: messages this account liked
   blocksMade              UserBlock[]              @relation("BlocksMade") // MC-10: block/mute rows this account created
   blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
   pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
@@ -413,7 +414,32 @@ model Message {
   attachmentIds  String[]     @default([]) // Media.ids — queryable authz lookup for signed-URL gating (F-10)
   createdAt      DateTime     @default(now())
 
+  // MC-15 — a reply is a QUOTE, not a branch: one nullable pointer, no thread tree.
+  replyToId String?
+  replyTo   Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReply")
+  /// D-3: `SetNull` erases the FACT that this message quoted something, which would make
+  /// « Message supprimé » unrepresentable. The delete path flips this flag on the children in the
+  /// same transaction, so a reply whose target is gone still renders its quote.
+  replyToDeleted Boolean   @default(false)
+  editedAt       DateTime? // MC-15: non-null ⇒ the bubble shows « modifié »
+  likes          MessageLike[]
+
   @@index([conversationId, createdAt])
+  @@index([replyToId])
+}
+
+/// MC-15 — one like per person per message: the composite PK makes a double like unrepresentable
+/// rather than app-enforced (same reasoning as CS-6's cover column, CS-8's @@unique([projectId])).
+model MessageLike {
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([messageId, accountId])
+  @@index([accountId])
 }
 
 // ── F-13: Legal documents & consent records ───────────────────────────────────

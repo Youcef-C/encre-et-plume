@@ -1,6 +1,8 @@
 // MC-11: community salon "Le Comptoir" (dock widget) — shared contracts (FE + BE agree here).
 // One global public room reusing the MC-9 Conversation/Message backend. Types + consts only.
 
+import type { MessageActionFields } from './messaging.js';
+
 export interface SalonSummary {
   conversationId: string;
   name: string; // "Le Comptoir"
@@ -9,7 +11,11 @@ export interface SalonSummary {
   isMember: boolean;
 }
 
-export interface SalonMessageDto {
+/**
+ * The salon's slimmer message shape (no attachments, carries `senderName`). MC-15 adds the SAME
+ * action fields as `MessageDto` — one `Message` table backs both — without merging the two DTOs.
+ */
+export interface SalonMessageDto extends MessageActionFields {
   id: string;
   senderId: string; // drives client-side MC-10 filtering
   senderName: string; // shown above each bubble
@@ -24,6 +30,8 @@ export interface SalonMessagesPage {
 
 export interface SalonSendRequest {
   body: string;
+  /** MC-15: quote another salon message (400 if it belongs elsewhere). */
+  replyToId?: string;
 }
 
 export interface SalonMembershipResponse {

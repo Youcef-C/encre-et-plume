@@ -62,6 +62,8 @@ export class ProjectChatService {
     return this.messages.sendMessage(accountId, conversationId, {
       ...(dto.text !== undefined ? { body: dto.text } : {}),
       ...(dto.attachments ? { attachments: dto.attachments } : {}),
+      // MC-15: the "same conversation" check is sendMessage's too — one definition, three surfaces.
+      ...(dto.replyToId ? { replyToId: dto.replyToId } : {}),
     });
   }
 

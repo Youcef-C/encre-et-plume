@@ -57,6 +57,20 @@ function makePrisma() {
       // CS-8 D-3: author-only message delete.
       findUnique: jest.fn().mockResolvedValue({ id: 'msg-1', senderId: 'acc-1', conversationId: 'conv-1' }),
       delete: jest.fn().mockResolvedValue({}),
+      // MC-15: edit + the D-3 "mark my replies as orphaned" pass.
+      update: jest.fn().mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderId: 'acc-1',
+        body: 'Corrigé',
+        attachments: [],
+        attachmentIds: [],
+        createdAt: new Date('2026-07-07T11:00:00.000Z'),
+        editedAt: new Date('2026-07-07T12:00:00.000Z'),
+        replyToId: null,
+        replyToDeleted: false,
+      }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       create: jest.fn().mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
@@ -70,6 +84,13 @@ function makePrisma() {
     account: {
       findFirst: jest.fn().mockResolvedValue({ id: 'acc-2' }),
       findMany: jest.fn().mockResolvedValue([{ id: 'acc-2' }]),
+    },
+    // MC-15: one like row per (message, person) — the composite PK makes a double like impossible.
+    messageLike: {
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      count: jest.fn().mockResolvedValue(1),
     },
     media: { findMany: jest.fn().mockResolvedValue([]) },
     notification: {
@@ -103,7 +124,14 @@ function build(over: {
   redis?: Partial<RedisService>;
   queue?: { enqueue: jest.Mock };
   presence?: { get: jest.Mock };
-  gateway?: { emitMessageNew: jest.Mock; emitConversationRead: jest.Mock; emitConversationUpdated: jest.Mock };
+  gateway?: {
+    emitMessageNew: jest.Mock;
+    emitConversationRead: jest.Mock;
+    emitConversationUpdated: jest.Mock;
+    emitMessageEdited: jest.Mock;
+    emitMessageDeleted: jest.Mock;
+    emitMessageLiked: jest.Mock;
+  };
   blocks?: { isBlockedPair: jest.Mock };
   connections?: { stateBetween: jest.Mock };
 } = {}) {
@@ -111,7 +139,14 @@ function build(over: {
   const redis = over.redis ?? { incr: jest.fn().mockResolvedValue(1), expire: jest.fn().mockResolvedValue(undefined) };
   const queue = over.queue ?? { enqueue: jest.fn().mockResolvedValue(undefined) };
   const presence = over.presence ?? { get: jest.fn().mockResolvedValue({ 'acc-2': { online: true, lastSeen: null } }) };
-  const gateway = over.gateway ?? { emitMessageNew: jest.fn(), emitConversationRead: jest.fn(), emitConversationUpdated: jest.fn() };
+  const gateway = over.gateway ?? {
+    emitMessageNew: jest.fn(),
+    emitConversationRead: jest.fn(),
+    emitConversationUpdated: jest.fn(),
+    emitMessageEdited: jest.fn(),
+    emitMessageDeleted: jest.fn(),
+    emitMessageLiked: jest.fn(),
+  };
   const blocks = over.blocks ?? { isBlockedPair: jest.fn().mockResolvedValue(false) };
   const connections = over.connections ?? { stateBetween: jest.fn().mockResolvedValue('none') };
   const service = new MessagesService(
@@ -568,7 +603,14 @@ describe('MessagesService.respondToRequest — accept/decline (BE-4)', () => {
     const prisma = makePrisma();
     prisma.conversation.findUnique.mockResolvedValue(CONV({ status: 'requested', requestedBy: 'acc-1' }));
     prisma.conversation.update.mockResolvedValue(CONV({ status: 'open' }));
-    const gateway = { emitMessageNew: jest.fn(), emitConversationRead: jest.fn(), emitConversationUpdated: jest.fn() };
+    const gateway = {
+      emitMessageNew: jest.fn(),
+      emitConversationRead: jest.fn(),
+      emitConversationUpdated: jest.fn(),
+      emitMessageEdited: jest.fn(),
+      emitMessageDeleted: jest.fn(),
+      emitMessageLiked: jest.fn(),
+    };
     const { service } = build({ prisma, gateway });
     const item = await service.respondToRequest('acc-2', 'conv-1', 'accept');
     expect(prisma.conversation.update).toHaveBeenCalledWith(
@@ -585,7 +627,14 @@ describe('MessagesService.respondToRequest — accept/decline (BE-4)', () => {
     const prisma = makePrisma();
     prisma.conversation.findUnique.mockResolvedValue(CONV({ status: 'requested', requestedBy: 'acc-1' }));
     prisma.conversation.update.mockResolvedValue(CONV({ status: 'declined', requestedBy: 'acc-1' }));
-    const gateway = { emitMessageNew: jest.fn(), emitConversationRead: jest.fn(), emitConversationUpdated: jest.fn() };
+    const gateway = {
+      emitMessageNew: jest.fn(),
+      emitConversationRead: jest.fn(),
+      emitConversationUpdated: jest.fn(),
+      emitMessageEdited: jest.fn(),
+      emitMessageDeleted: jest.fn(),
+      emitMessageLiked: jest.fn(),
+    };
     const { service, queue } = build({ prisma, gateway });
     await service.respondToRequest('acc-2', 'conv-1', 'decline');
     expect(prisma.conversation.update).toHaveBeenCalledWith(
@@ -710,5 +759,276 @@ describe('MessagesService — deleteMessage (CS-8 D-3)', () => {
 
     expect((a as Error).message).toBe('Message introuvable.');
     expect((b as Error).message).toBe((a as Error).message);
+  });
+});
+
+// ─── MC-15 · message actions (Répondre · Modifier · Supprimer · J'aime) ─────────
+// One Message table backs the widget, the salon and the project Discussion, so these rules are
+// tested once here and inherited by all three surfaces.
+
+const MSG = (over: Record<string, unknown> = {}) => ({
+  id: 'msg-1',
+  conversationId: 'conv-1',
+  senderId: 'acc-1',
+  body: 'Bonjour',
+  attachments: [],
+  attachmentIds: [],
+  createdAt: new Date('2026-07-07T11:00:00.000Z'),
+  editedAt: null,
+  replyToId: null,
+  replyToDeleted: false,
+  ...over,
+});
+
+describe('MessagesService.editMessage (MC-15 B1)', () => {
+  it('the author edits: the body changes, editedAt is set, and message:edited is emitted', async () => {
+    const { service, prisma, gateway } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+
+    const dto = await service.editMessage('acc-1', 'msg-1', { text: 'Corrigé' });
+
+    expect(prisma.message.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'msg-1' },
+        data: expect.objectContaining({ body: 'Corrigé', editedAt: expect.any(Date) }),
+      }),
+    );
+    expect(dto.body).toBe('Corrigé');
+    expect(dto.editedAt).not.toBeNull();
+    expect(gateway.emitMessageEdited).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to edit someone else's message (403)", async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG({ senderId: 'acc-2' }));
+    await expect(service.editMessage('acc-1', 'msg-1', { text: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.message.update).not.toHaveBeenCalled();
+  });
+
+  // Scope correction 2026-08-02: the salon carries NEITHER edit NOR delete, server-side — silently
+  // rewriting a line the public room has already read and replied to is the same defect as erasing it.
+  it('SALON: refuses to edit a salon message (403) even for its own author', async () => {
+    const { service, prisma } = build();
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ type: 'salon' }));
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await expect(service.editMessage('acc-1', 'msg-1', { text: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.message.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty edit on a message with no attachment (400) — same rule as a send', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await expect(service.editMessage('acc-1', 'msg-1', { text: '   ' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('keeps an edit that empties the body when the message still carries an attachment', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(
+      MSG({ attachments: [{ mediaId: 'm-1', name: 'a.png', kind: 'image' }] }),
+    );
+    await expect(service.editMessage('acc-1', 'msg-1', { text: '' })).resolves.toBeDefined();
+  });
+
+  it('rejects an edit longer than the max (400)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await expect(
+      service.editMessage('acc-1', 'msg-1', { text: 'x'.repeat(4001) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('a non-participant gets the uniform message 404 (no existence leak)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ participants: [] }));
+    const err = await service.editMessage('stranger', 'msg-1', { text: 'x' }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect((err as Error).message).toBe('Message introuvable.');
+  });
+
+  it('B9: an edit does NOT re-notify (no queue job)', async () => {
+    const { service, prisma, queue } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await service.editMessage('acc-1', 'msg-1', { text: 'Corrigé' });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessagesService.deleteMessage — MC-15 additions', () => {
+  it('SALON: refuses a salon delete (403), whatever the client sends', async () => {
+    const { service, prisma } = build();
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ type: 'salon' }));
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await expect(service.deleteMessage('acc-1', 'msg-1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.message.delete).not.toHaveBeenCalled();
+  });
+
+  // D-3: `onDelete: SetNull` erases the FACT that a reply existed. The delete path records it first,
+  // so the orphaned reply still renders « Message supprimé » instead of losing its quote silently.
+  it('D-3: flags the replies that quoted the message before deleting it', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await service.deleteMessage('acc-1', 'msg-1');
+    expect(prisma.message.updateMany).toHaveBeenCalledWith({
+      where: { replyToId: 'msg-1' },
+      data: { replyToDeleted: true },
+    });
+  });
+
+  it('emits message:deleted so open threads drop the bubble live', async () => {
+    const { service, prisma, gateway } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await service.deleteMessage('acc-1', 'msg-1');
+    expect(gateway.emitMessageDeleted).toHaveBeenCalledWith(
+      expect.objectContaining({ participantIds: ['acc-1', 'acc-2'] }),
+      { conversationId: 'conv-1', messageId: 'msg-1' },
+    );
+  });
+});
+
+describe('MessagesService.setLike (MC-15 B3)', () => {
+  it('liking is idempotent: an upsert on the composite PK, never a second row', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await service.setLike('acc-1', 'msg-1', true);
+    await service.setLike('acc-1', 'msg-1', true);
+    expect(prisma.messageLike.upsert).toHaveBeenCalledTimes(2);
+    expect(prisma.messageLike.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { messageId_accountId: { messageId: 'msg-1', accountId: 'acc-1' } },
+      }),
+    );
+  });
+
+  it('unliking a message I never liked resolves (no 404)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.messageLike.deleteMany.mockResolvedValue({ count: 0 });
+    await expect(service.setLike('acc-1', 'msg-1', false)).resolves.toBeUndefined();
+  });
+
+  it('emits message:liked with the fresh count', async () => {
+    const { service, prisma, gateway } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.messageLike.count.mockResolvedValue(3);
+    await service.setLike('acc-1', 'msg-1', true);
+    expect(gateway.emitMessageLiked).toHaveBeenCalledWith(
+      expect.objectContaining({ participantIds: ['acc-1', 'acc-2'] }),
+      { conversationId: 'conv-1', messageId: 'msg-1', userId: 'acc-1', liked: true, likeCount: 3 },
+    );
+  });
+
+  it('a non-participant gets the uniform message 404', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ participants: [] }));
+    await expect(service.setLike('stranger', 'msg-1', true)).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.messageLike.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a like does NOT notify (B9)', async () => {
+    const { service, prisma, queue } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    await service.setLike('acc-1', 'msg-1', true);
+    expect(queue.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessagesService — replies (MC-15 B4/B6)', () => {
+  it('refuses a replyToId that belongs to ANOTHER conversation (400)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG({ id: 'msg-9', conversationId: 'conv-OTHER' }));
+    await expect(
+      service.sendMessage('acc-1', 'conv-1', { body: 'hi', replyToId: 'msg-9' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses an unknown replyToId (400)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(null);
+    await expect(
+      service.sendMessage('acc-1', 'conv-1', { body: 'hi', replyToId: 'ghost' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('a valid replyToId is persisted and echoed back as a resolved quote', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(
+      MSG({ id: 'msg-9', body: 'Le message cité', sender: { displayName: 'Name acc-2' }, senderId: 'acc-2' }),
+    );
+    const dto = await service.sendMessage('acc-1', 'conv-1', { body: 'hi', replyToId: 'msg-9' });
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(dto.replyTo).toEqual({
+      id: 'msg-9',
+      senderId: 'acc-2',
+      senderName: 'Name acc-2',
+      excerpt: 'Le message cité',
+      deleted: false,
+    });
+  });
+});
+
+describe('MessagesService.getMessages — likes + quotes (MC-15 B3 read path)', () => {
+  const page = [
+    MSG({ id: 'm-1' }),
+    MSG({ id: 'm-2', replyToId: 'm-1' }),
+    // D-3: its quoted message is gone — the pointer was nulled but the FACT was kept.
+    MSG({ id: 'm-3', replyToId: null, replyToDeleted: true }),
+  ];
+
+  it('projects likeCount + likedByMe per message', async () => {
+    const { service, prisma } = build();
+    prisma.message.findMany.mockImplementation((args: { where?: { id?: unknown } }) =>
+      Promise.resolve(args?.where?.id ? [MSG({ id: 'm-1', senderId: 'acc-2' })] : page),
+    );
+    prisma.messageLike.findMany.mockResolvedValue([
+      { messageId: 'm-1', accountId: 'acc-1' },
+      { messageId: 'm-1', accountId: 'acc-2' },
+      { messageId: 'm-2', accountId: 'acc-2' },
+    ]);
+
+    const res = await service.getMessages('acc-1', 'conv-1', {});
+    const byId = new Map(res.items.map((m) => [m.id, m]));
+    expect(byId.get('m-1')).toMatchObject({ likeCount: 2, likedByMe: true });
+    expect(byId.get('m-2')).toMatchObject({ likeCount: 1, likedByMe: false });
+    expect(byId.get('m-3')).toMatchObject({ likeCount: 0, likedByMe: false });
+  });
+
+  it('resolves the quoted message once, and marks a deleted one as « supprimé » (D-3)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findMany.mockImplementation((args: { where?: { id?: unknown } }) =>
+      Promise.resolve(
+        args?.where?.id
+          ? [MSG({ id: 'm-1', senderId: 'acc-2', body: 'Le début', sender: { displayName: 'Name acc-2' } })]
+          : page,
+      ),
+    );
+
+    const res = await service.getMessages('acc-1', 'conv-1', {});
+    const byId = new Map(res.items.map((m) => [m.id, m]));
+    expect(byId.get('m-1')!.replyTo).toBeNull();
+    expect(byId.get('m-2')!.replyTo).toMatchObject({ id: 'm-1', senderName: 'Name acc-2', deleted: false });
+    expect(byId.get('m-3')!.replyTo).toMatchObject({ deleted: true });
+  });
+
+  it('no N+1: a page of N messages costs ONE like query and ONE parent query, whatever N is', async () => {
+    const { service, prisma } = build();
+    const big = Array.from({ length: 30 }, (_, i) => MSG({ id: `m-${i}`, replyToId: 'm-0' }));
+    prisma.message.findMany.mockImplementation((args: { where?: { id?: unknown } }) =>
+      Promise.resolve(args?.where?.id ? [MSG({ id: 'm-0' })] : big),
+    );
+
+    await service.getMessages('acc-1', 'conv-1', {});
+    expect(prisma.messageLike.findMany).toHaveBeenCalledTimes(1);
+    // 1 page query + 1 parent query — never one per message.
+    expect(prisma.message.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('skips both extra queries entirely for an empty page', async () => {
+    const { service, prisma } = build();
+    prisma.message.findMany.mockResolvedValue([]);
+    await service.getMessages('acc-1', 'conv-1', {});
+    expect(prisma.messageLike.findMany).not.toHaveBeenCalled();
+    expect(prisma.message.findMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -23,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { MessagingGateway } from '../messaging/messaging.gateway';
+import { loadMessageExtras, toReplyRef, type MessageExtras } from '../messaging/message-extras';
 import { BlocksService } from '../blocks/blocks.service';
 
 interface PageOpts {
@@ -36,6 +37,10 @@ interface SalonMsgRow {
   body: string;
   createdAt: Date;
   sender?: { displayName: string };
+  // MC-15 — the SAME columns MC-9 reads; the salon just renders a slimmer DTO over them.
+  editedAt?: Date | null;
+  replyToId?: string | null;
+  replyToDeleted?: boolean | null;
 }
 
 /**
@@ -94,7 +99,7 @@ export class SalonService {
     };
   }
 
-  async getMessages(_accountId: string, opts: PageOpts): Promise<SalonMessagesPage> {
+  async getMessages(viewerId: string, opts: PageOpts): Promise<SalonMessagesPage> {
     const salon = await this.ensureSalon(); // no membership check — public preview for any authed user
     const limit = clampLimit(opts.limit, SALON_MESSAGES_PAGE_SIZE, SALON_MESSAGES_PAGE_MAX);
     const rows = (await this.prisma.message.findMany({
@@ -104,7 +109,10 @@ export class SalonService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: { sender: { select: { displayName: true } } },
     })) as unknown as SalonMsgRow[];
-    const items = rows.map(toSalonDto);
+    // MC-15: likes + quotes for the whole page in a fixed number of queries — the SAME loader MC-9
+    // uses, because it is the same `Message` table. A previewer simply never matches `likedByMe`.
+    const extras = await loadMessageExtras(this.prisma, rows, viewerId);
+    const items = rows.map((m) => toSalonDto(m, extras.get(m.id)));
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
     return { items, nextCursor };
   }
@@ -160,16 +168,26 @@ export class SalonService {
 
     await this.enforceSendRateLimit(accountId);
 
+    // MC-15: a quote must point at ANOTHER SALON message (a cross-conversation target is a 400).
+    const replyTo = await this.assertSalonReplyTarget(dto.replyToId, salon.id);
+
     // ACID: persist the message + bump the ordering key together (same pattern as MC-9).
     const [created] = (await this.prisma.$transaction([
       this.prisma.message.create({
-        data: { conversationId: salon.id, senderId: accountId, body, attachments: [] },
+        data: {
+          conversationId: salon.id,
+          senderId: accountId,
+          body,
+          attachments: [],
+          ...(replyTo ? { replyToId: replyTo.id } : {}),
+        },
         include: { sender: { select: { displayName: true } } },
       }),
       this.prisma.conversation.update({ where: { id: salon.id }, data: { lastMessageAt: new Date() } }),
     ])) as unknown as [SalonMsgRow, unknown];
 
-    const message = toSalonDto(created);
+    // A brand-new message has no likes, and its quote is the row just validated — no extra query.
+    const message = toSalonDto(created, { likeCount: 0, likedByMe: false, replyTo });
     // Fan-out to the salon room (members AND previewers). No F-5 notifications, no queue.
     this.gateway.emitSalonMessage({ message });
     return message;
@@ -247,6 +265,31 @@ export class SalonService {
     return { id: acc.id, name: acc.displayName, avatarUrl: acc.avatar, slug: acc.profileSlug };
   }
 
+  /**
+   * MC-15 — a salon reply quotes another SALON message. Same rule as MC-9's `assertReplyTarget`,
+   * applied to the salon's own send path (which has its own membership gate, not `loadForMember`).
+   */
+  private async assertSalonReplyTarget(replyToId: string | undefined, salonId: string) {
+    if (!replyToId) return null;
+    const parent = (await this.prisma.message.findUnique({
+      where: { id: replyToId },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+        body: true,
+        attachments: true,
+        sender: { select: { displayName: true } },
+      },
+    })) as
+      | { id: string; senderId: string; conversationId: string; body: string; attachments: unknown; sender?: { displayName: string } }
+      | null;
+    if (!parent || parent.conversationId !== salonId) {
+      throw new BadRequestException("Ce message n'appartient pas au salon.");
+    }
+    return toReplyRef(parent);
+  }
+
   private async enforceSendRateLimit(accountId: string): Promise<void> {
     // Never honor the escape hatch in production.
     if (process.env['DISABLE_RATE_LIMIT'] === 'true' && process.env['NODE_ENV'] !== 'production') return;
@@ -270,12 +313,18 @@ function clampLimit(raw: number | undefined, def: number, max: number): number {
   return Math.min(Math.floor(raw), max);
 }
 
-function toSalonDto(m: SalonMsgRow): SalonMessageDto {
+function toSalonDto(m: SalonMsgRow, extras?: MessageExtras): SalonMessageDto {
   return {
     id: m.id,
     senderId: m.senderId,
     senderName: m.sender?.displayName ?? '',
     body: m.body,
     createdAt: m.createdAt.toISOString(),
+    // MC-15 — the same four fields as MessageDto, over the same columns. Neither DTO is merged into
+    // the other (that refactor is not this story); they just stopped disagreeing about the data.
+    replyTo: extras?.replyTo ?? null,
+    editedAt: m.editedAt ? m.editedAt.toISOString() : null,
+    likeCount: extras?.likeCount ?? 0,
+    likedByMe: extras?.likedByMe ?? false,
   };
 }

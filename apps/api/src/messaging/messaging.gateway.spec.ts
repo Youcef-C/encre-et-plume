@@ -91,7 +91,10 @@ describe('MessagingGateway salon (MC-11)', () => {
     const emit = jest.fn();
     const to = jest.fn().mockReturnValue({ emit });
     (gateway as unknown as { server: unknown }).server = { to };
-    const message = { id: 'm-1', senderId: 'acc-1', senderName: 'Me', body: 'hi', createdAt: 'x' };
+    const message = {
+      id: 'm-1', senderId: 'acc-1', senderName: 'Me', body: 'hi', createdAt: 'x',
+      replyTo: null, editedAt: null, likeCount: 0, likedByMe: false,
+    };
     gateway.emitSalonMessage({ message });
     expect(to).toHaveBeenCalledWith('salon');
     expect(emit).toHaveBeenCalledWith('salon:message', { message });
@@ -101,7 +104,13 @@ describe('MessagingGateway salon (MC-11)', () => {
     const { gateway } = build();
     (gateway as unknown as { server: unknown }).server = undefined;
     expect(() =>
-      gateway.emitSalonMessage({ message: { id: 'm', senderId: 'a', senderName: 'A', body: 'b', createdAt: 'x' } }),
+      gateway.emitSalonMessage({
+        message: {
+          id: 'm', senderId: 'a', senderName: 'A', body: 'b', createdAt: 'x',
+          // MC-15 fields — every message DTO carries them now.
+          replyTo: null, editedAt: null, likeCount: 0, likedByMe: false,
+        },
+      }),
     ).not.toThrow();
   });
 
@@ -198,7 +207,10 @@ describe('MessagingGateway.emitMessageNew', () => {
     (gateway as unknown as { server: unknown }).server = { to };
     gateway.emitMessageNew(['acc-1', 'acc-2'], {
       conversationId: 'conv-1',
-      message: { id: 'm-1', conversationId: 'conv-1', senderId: 'acc-1', body: 'hi', attachments: [], createdAt: 'x', readBy: [] },
+      message: {
+        id: 'm-1', conversationId: 'conv-1', senderId: 'acc-1', body: 'hi', attachments: [], createdAt: 'x', readBy: [],
+        replyTo: null, editedAt: null, likeCount: 0, likedByMe: false,
+      },
       conversationName: 'Name',
       senderName: 'Sender',
     });
@@ -222,5 +234,53 @@ describe('MessagingGateway.notifyUnreadChanged (BE-RT1 — F-5 realtime)', () =>
     const { gateway } = build();
     (gateway as unknown as { server: unknown }).server = undefined;
     expect(() => gateway.notifyUnreadChanged('acc-9')).not.toThrow();
+  });
+});
+
+// ─── MC-15: message actions fan out to the right audience ────────────────────────
+describe('MessagingGateway message actions (MC-15)', () => {
+  function withServer() {
+    const { gateway } = build();
+    const emit = jest.fn();
+    const to = jest.fn().mockReturnValue({ emit });
+    (gateway as unknown as { server: unknown }).server = { to };
+    return { gateway, to, emit };
+  }
+
+  it('a normal conversation reaches its PARTICIPANTS user rooms', () => {
+    const { gateway, to, emit } = withServer();
+    gateway.emitMessageEdited(
+      { salon: false, participantIds: ['acc-1', 'acc-2'] },
+      { conversationId: 'conv-1', messageId: 'm-1', body: 'Corrigé', editedAt: 'x' },
+    );
+    expect(to).toHaveBeenCalledWith(['user:acc-1', 'user:acc-2']);
+    expect(emit).toHaveBeenCalledWith('message:edited', expect.objectContaining({ messageId: 'm-1' }));
+  });
+
+  it('a SALON message reaches the public salon room (members AND previewers)', () => {
+    const { gateway, to, emit } = withServer();
+    gateway.emitMessageLiked(
+      { salon: true, participantIds: ['acc-1'] },
+      { conversationId: 'salon-conv', messageId: 'm-1', userId: 'acc-1', liked: true, likeCount: 2 },
+    );
+    expect(to).toHaveBeenCalledWith(['salon']);
+    expect(emit).toHaveBeenCalledWith('message:liked', expect.objectContaining({ likeCount: 2 }));
+  });
+
+  it('emits message:deleted so open threads drop the bubble live', () => {
+    const { gateway, emit } = withServer();
+    gateway.emitMessageDeleted({ salon: false, participantIds: ['acc-1'] }, { conversationId: 'c', messageId: 'm' });
+    expect(emit).toHaveBeenCalledWith('message:deleted', { conversationId: 'c', messageId: 'm' });
+  });
+
+  it('is a no-op without a socket server (worker context) and with nobody to reach', () => {
+    const { gateway } = build();
+    expect(() =>
+      gateway.emitMessageDeleted({ salon: false, participantIds: ['acc-1'] }, { conversationId: 'c', messageId: 'm' }),
+    ).not.toThrow();
+
+    const withEmpty = withServer();
+    withEmpty.gateway.emitMessageDeleted({ salon: false, participantIds: [] }, { conversationId: 'c', messageId: 'm' });
+    expect(withEmpty.to).not.toHaveBeenCalled();
   });
 });

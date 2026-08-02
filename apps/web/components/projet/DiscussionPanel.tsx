@@ -13,20 +13,34 @@
 // The thread IS MC-9's conversation (Conversation.projectId) — this panel talks to the two
 // project-scoped routes and reuses the shared socket for `message:new`.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { MessageAttachment, MessageDto, WorkspaceMember, WsMessageNew } from '@encre-et-plume/shared';
-import { MESSAGE_MAX_ATTACHMENTS, WS_EVENTS } from '@encre-et-plume/shared';
+import type {
+  MessageAttachment,
+  MessageDto,
+  MessageReplyRef,
+  WorkspaceMember,
+  WsMessageDeleted,
+  WsMessageEdited,
+  WsMessageLiked,
+  WsMessageNew,
+} from '@encre-et-plume/shared';
+import { MESSAGE_EXCERPT_MAX, MESSAGE_MAX_ATTACHMENTS, WS_EVENTS } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import {
   deleteMessage as apiDeleteMessage,
+  editMessage as apiEditMessage,
   getMediaSignedUrl,
   getProjectMessages,
   sendProjectMessage,
 } from '../../lib/api';
 import { ATTACHMENT_ACCEPT, uploadAttachmentFile, validateAttachmentFile } from '../../lib/attachmentUpload';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
+import { isPlainBubbleTarget, jumpToMessage, useLikeToggle } from '../../lib/messageActions';
 import { BrushIcon, FileTextIcon, PenNibIcon } from '../icons';
-import OverflowMenu, { MenuItem } from '../OverflowMenu';
+import MessageActions from '../messaging/MessageActions';
+import MessageEditor from '../messaging/MessageEditor';
+import MessageLikeToggle from '../messaging/MessageLikeToggle';
+import MessageQuote from '../messaging/MessageQuote';
 import ConfirmDialog from './ConfirmDialog';
 
 /** A thread row: a server message, or an optimistic one still in flight / failed. */
@@ -168,70 +182,77 @@ function Bubble({
   mine,
   senderName,
   senderRoles,
+  editing,
   onRetry,
   onDelete,
+  onReply,
+  onEdit,
+  onEditCancel,
+  onEditSave,
+  onLike,
+  onJump,
 }: {
   message: ThreadMessage;
   mine: boolean;
   senderName: string;
   senderRoles: string[];
+  editing: boolean;
   onRetry: () => void;
   onDelete: () => void;
+  onReply: () => void;
+  onEdit: () => void;
+  onEditCancel: () => void;
+  onEditSave: (text: string) => Promise<void>;
+  onLike: (next?: boolean) => void;
+  onJump: () => void;
 }) {
   const hasAttachments = message.attachments.length > 0;
-  // R2-3 — ONE discreet entry point per bubble, on its LEFT, instead of a row of icons. Revealed on
-  // hover AND on focus (CSS below), so the keyboard is never locked out. Its only item today is
-  // « Supprimer »; MC-15 adds Répondre / Modifier / J'aime and reuses this shell on every surface.
-  const excerpt = (message.body || message.attachments[0]?.name || '').trim().slice(0, 40);
+  // MC-15 — ONE discreet entry point per bubble, on the side facing the thread's centre, instead of
+  // a row of icons. Revealed on hover AND on focus (CSS), so the keyboard is never locked out.
+  // CS-8 gated it on `mine`; MC-15 removes that gate — Répondre and J'aime apply to ANYONE's message.
+  const settled = !message.pending && !message.failed;
   return (
     <div
       data-testid={`message-${message.id}`}
+      data-message-id={message.id}
       data-mine={mine ? 'true' : 'false'}
-      className={hasAttachments ? 'ep-discussion-row ep-discussion-row--wide' : 'ep-discussion-row'}
+      className={`ep-msg-row ${hasAttachments ? 'ep-discussion-row ep-discussion-row--wide' : 'ep-discussion-row'}`}
+      // A double-click likes the bubble (F5) — unless it lands on a control or a link inside it.
+      onDoubleClick={(e) => {
+        if (settled && isPlainBubbleTarget(e.target)) onLike();
+      }}
       style={{
         alignSelf: mine ? 'flex-end' : 'flex-start',
         opacity: message.pending ? 0.6 : 1,
         display: 'flex',
+        // Mirrored: the controls always sit on the side facing the middle of the thread, which is
+        // what makes the menu's 'left' / 'right' placement point AWAY from the bubble it acts on.
+        flexDirection: mine ? 'row' : 'row-reverse',
         alignItems: 'center',
         gap: 4,
       }}
     >
-      {mine && !message.pending && !message.failed && (
-        <span className="ep-bubble-actions" style={{ flex: 'none' }}>
-          <OverflowMenu
-            label={excerpt ? `Actions du message « ${excerpt} »` : 'Actions du message'}
-            // R3-1 — the menu opens toward the middle of the thread, so it never points off it. The
-            // caller already decides each bubble's `align-self`; it passes that same direction here
-            // instead of the menu re-deriving it from geometry. Only own (right-aligned) bubbles carry
-            // a menu today — delete is author-only — so 'right' lands when MC-15 adds incoming items.
-            placement={mine ? 'left' : 'right'}
-            width={150}
-            triggerStyle={{
-              border: 'none',
-              background: 'none',
-              color: 'var(--ink2)',
-              minWidth: 34,
-              minHeight: 44,
-              padding: 0,
-              fontSize: 18,
-            }}
-          >
-            {(close) => (
-              <MenuItem
-                accent
-                onClick={() => {
-                  close();
-                  onDelete();
-                }}
-              >
-                Supprimer
-              </MenuItem>
-            )}
-          </OverflowMenu>
-        </span>
+      {settled && (
+        <MessageActions
+          authorName={senderName}
+          canEdit={mine}
+          canDelete={mine}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          placement={mine ? 'left' : 'right'}
+        />
+      )}
+      {settled && (
+        <MessageLikeToggle
+          liked={message.likedByMe}
+          count={message.likeCount}
+          authorName={senderName}
+          onToggle={(next) => onLike(next)}
+        />
       )}
       {/* The bubble column itself keeps the prototype's block stacking (round-1 rendering). */}
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
       {!mine && (
         <div style={{ fontSize: 11, color: 'var(--ink2)', margin: '0 0 3px 4px', fontWeight: 700 }}>
           {senderName}
@@ -239,27 +260,39 @@ function Bubble({
         </div>
       )}
 
+      {/* MC-15: the quote this message answers, above its own body. */}
+      {message.replyTo && <MessageQuote reply={message.replyTo} onJump={onJump} />}
+
       {message.attachments.map((a) => (
         <div key={a.mediaId} style={{ marginBottom: message.body ? 6 : 0 }}>
           <AttachmentTile attachment={a} />
         </div>
       ))}
 
-      {message.body && (
-        <div
-          style={{
-            padding: '9px 13px',
-            fontSize: 14,
-            lineHeight: 1.45,
-            border: '2px solid var(--ink)',
-            overflowWrap: 'anywhere',
-            ...(mine
-              ? { background: 'var(--ink)', color: 'var(--paper)', borderRadius: '12px 12px 3px 12px' }
-              : { background: 'var(--card)', color: 'var(--ink)', borderRadius: '12px 12px 12px 3px' }),
-          }}
-        >
-          {message.body}
-        </div>
+      {editing ? (
+        <MessageEditor
+          initialValue={message.body}
+          hasAttachment={hasAttachments}
+          onSave={onEditSave}
+          onCancel={onEditCancel}
+        />
+      ) : (
+        message.body && (
+          <div
+            style={{
+              padding: '9px 13px',
+              fontSize: 14,
+              lineHeight: 1.45,
+              border: '2px solid var(--ink)',
+              overflowWrap: 'anywhere',
+              ...(mine
+                ? { background: 'var(--ink)', color: 'var(--paper)', borderRadius: '12px 12px 3px 12px' }
+                : { background: 'var(--card)', color: 'var(--ink)', borderRadius: '12px 12px 12px 3px' }),
+            }}
+          >
+            {message.body}
+          </div>
+        )
       )}
 
       <div
@@ -275,6 +308,8 @@ function Bubble({
         <time dateTime={message.createdAt} style={{ fontSize: 11, color: 'var(--ink2)' }}>
           {timeLabel(message.createdAt)}
         </time>
+        {/* MC-15: « modifié » is TEXT, read by a screen reader — never a colour or a title. */}
+        {message.editedAt && <span style={{ fontSize: 11, color: 'var(--ink2)' }}>modifié</span>}
       </div>
 
       {message.failed && (
@@ -331,6 +366,10 @@ export default function DiscussionPanel({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // MC-15: which message I am quoting / editing, and the "the original is not loaded" notice.
+  const [replyTo, setReplyTo] = useState<MessageReplyRef | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [jumpMiss, setJumpMiss] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -406,21 +445,68 @@ export default function DiscussionPanel({
       if (p?.conversationId !== conversationIdRef.current) return;
       setReloadKey((k) => k + 1);
     };
+    // MC-15: patch the message in place — an edit, a delete and a like never refetch the thread.
+    const mine = (p?: { conversationId?: string }) => p?.conversationId === conversationIdRef.current;
+    const onEdited = (payload?: unknown) => {
+      const p = payload as WsMessageEdited | undefined;
+      if (!mine(p)) return;
+      setMessages((list) =>
+        list.map((m) => (m.id === p!.messageId ? { ...m, body: p!.body, editedAt: p!.editedAt } : m)),
+      );
+    };
+    const onDeleted = (payload?: unknown) => {
+      const p = payload as WsMessageDeleted | undefined;
+      if (!mine(p)) return;
+      setMessages((list) =>
+        list
+          .filter((m) => m.id !== p!.messageId)
+          // D-3: a reply to the deleted message keeps its quote, now reading « Message supprimé ».
+          .map((m) =>
+            m.replyTo && m.replyTo.id === p!.messageId
+              ? { ...m, replyTo: { ...m.replyTo, deleted: true, excerpt: '' } }
+              : m,
+          ),
+      );
+    };
+    const onLiked = (payload?: unknown) => {
+      const p = payload as WsMessageLiked | undefined;
+      if (!mine(p)) return;
+      setMessages((list) =>
+        list.map((m) =>
+          m.id === p!.messageId
+            ? {
+                ...m,
+                likeCount: p!.likeCount,
+                // Only the person who (un)liked flips their own state.
+                likedByMe: p!.userId === myId ? p!.liked : m.likedByMe,
+              }
+            : m,
+        ),
+      );
+    };
+
     socket.on(WS_EVENTS.messageNew, onNew);
     socket.on(WS_EVENTS.conversationUpdated, onUpdated);
+    socket.on(WS_EVENTS.messageEdited, onEdited);
+    socket.on(WS_EVENTS.messageDeleted, onDeleted);
+    socket.on(WS_EVENTS.messageLiked, onLiked);
     return () => {
       socket.off(WS_EVENTS.messageNew, onNew);
       socket.off(WS_EVENTS.conversationUpdated, onUpdated);
+      socket.off(WS_EVENTS.messageEdited, onEdited);
+      socket.off(WS_EVENTS.messageDeleted, onDeleted);
+      socket.off(WS_EVENTS.messageLiked, onLiked);
     };
-  }, [socket]);
+  }, [socket, myId]);
 
   // ── send ───────────────────────────────────────────────────────────────────
   const doSend = useCallback(
-    async (tempId: string, text: string, mediaIds: string[]) => {
+    async (tempId: string, text: string, mediaIds: string[], replyToId?: string) => {
       try {
         const real = await sendProjectMessage(slug, {
           ...(text ? { text } : {}),
           ...(mediaIds.length ? { attachments: mediaIds.map((mediaId) => ({ mediaId })) } : {}),
+          ...(replyToId ? { replyToId } : {}),
         });
         setMessages((list) => mergeMessage(list.filter((m) => m.id !== tempId), real));
       } catch (e) {
@@ -438,6 +524,7 @@ export default function DiscussionPanel({
   const send = useCallback(
     (text: string, attachments: MessageAttachment[], mediaIds: string[]) => {
       const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const quoted = replyTo;
       nearBottomRef.current = true; // my own message always scrolls into view
       setMessages((list) => [
         ...list,
@@ -449,12 +536,17 @@ export default function DiscussionPanel({
           attachments,
           createdAt: new Date().toISOString(),
           readBy: [],
+          replyTo: quoted,
+          editedAt: null,
+          likeCount: 0,
+          likedByMe: false,
           pending: true,
         },
       ]);
-      void doSend(tempId, text, mediaIds);
+      setReplyTo(null); // the banner clears as soon as the reply is on its way
+      void doSend(tempId, text, mediaIds, quoted?.id);
     },
-    [doSend, myId],
+    [doSend, myId, replyTo],
   );
 
   const retry = useCallback(
@@ -464,10 +556,32 @@ export default function DiscussionPanel({
         message.id,
         message.body,
         message.attachments.map((a) => a.mediaId),
+        message.replyTo && !message.replyTo.deleted ? message.replyTo.id : undefined,
       );
     },
     [doSend],
   );
+
+  // ── MC-15: like (optimistic, shared), edit in place, jump to a quoted message ──
+  const patchMessage = useCallback((id: string, fields: Partial<ThreadMessage>) => {
+    setMessages((list) => list.map((m) => (m.id === id ? { ...m, ...fields } : m)));
+  }, []);
+  const toggleLike = useLikeToggle(patchMessage);
+
+  const saveEdit = useCallback(
+    async (id: string, text: string) => {
+      // Not optimistic: the server owns "may I edit this", and its refusal must reach the editor
+      // (which restores the previous body) instead of being swallowed.
+      const updated = await apiEditMessage(id, { text });
+      patchMessage(id, { body: updated.body, editedAt: updated.editedAt });
+      setEditingId(null);
+    },
+    [patchMessage],
+  );
+
+  const jump = useCallback((id: string) => {
+    setJumpMiss(!jumpToMessage(logRef.current, id));
+  }, []);
 
   // ── delete (D-3) ───────────────────────────────────────────────────────────
   async function confirmDelete() {
@@ -622,8 +736,23 @@ export default function DiscussionPanel({
                   mine={m.senderId === myId}
                   senderName={sender?.displayName ?? 'Membre'}
                   senderRoles={sender?.roles ?? []}
+                  editing={editingId === m.id}
                   onRetry={() => retry(m)}
                   onDelete={() => setConfirmId(m.id)}
+                  onReply={() =>
+                    setReplyTo({
+                      id: m.id,
+                      senderId: m.senderId,
+                      senderName: sender?.displayName ?? 'Membre',
+                      excerpt: (m.body || m.attachments[0]?.name || '').slice(0, MESSAGE_EXCERPT_MAX),
+                      deleted: false,
+                    })
+                  }
+                  onEdit={() => setEditingId(m.id)}
+                  onEditCancel={() => setEditingId(null)}
+                  onEditSave={(text) => saveEdit(m.id, text)}
+                  onLike={(next) => void toggleLike(m, next)}
+                  onJump={() => m.replyTo && jump(m.replyTo.id)}
                 />
               );
             })}
@@ -631,8 +760,20 @@ export default function DiscussionPanel({
         )}
       </div>
 
+      {/* MC-15: the quoted message is not in the loaded page — say so rather than doing nothing. */}
+      {jumpMiss && (
+        <p
+          role="status"
+          style={{ margin: 0, padding: '6px 16px', fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}
+        >
+          Le message d’origine n’est pas chargé.
+        </p>
+      )}
+
       {/* Composer (proto 1400) */}
-      {isMember && canPost && <Composer onSend={send} />}
+      {isMember && canPost && (
+        <Composer onSend={send} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
+      )}
 
       {confirmId && (
         <ConfirmDialog
@@ -651,8 +792,13 @@ export default function DiscussionPanel({
 
 function Composer({
   onSend,
+  replyTo,
+  onCancelReply,
 }: {
   onSend: (text: string, attachments: MessageAttachment[], mediaIds: string[]) => void;
+  /** MC-15: the message being answered, shown as a cancellable banner above the input. */
+  replyTo: MessageReplyRef | null;
+  onCancelReply: () => void;
 }) {
   const [value, setValue] = useState('');
   const [pending, setPending] = useState<PendingAttachment[]>([]);
@@ -717,6 +863,9 @@ function Composer({
         flexWrap: 'wrap',
       }}
     >
+      {/* The reply banner wraps above the input rather than pushing it off-screen at 375px. */}
+      {replyTo && <MessageQuote reply={replyTo} variant="composer" onCancel={onCancelReply} />}
+
       {pending.length > 0 && (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, width: '100%', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {pending.map((a) => (

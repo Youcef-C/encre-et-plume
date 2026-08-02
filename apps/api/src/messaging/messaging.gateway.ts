@@ -22,6 +22,9 @@ import type {
   WsConversationDeleted,
   WsSalonMemberJoined,
   WsSalonMemberLeft,
+  WsMessageEdited,
+  WsMessageDeleted,
+  WsMessageLiked,
 } from '@encre-et-plume/shared';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +35,12 @@ import { verifySessionToken } from '../auth/session-token';
 const PRESENCE_TOUCH_INTERVAL_MS = 2 * 60 * 1000; // keep idle-but-connected widget users "en ligne" (MC-8)
 const SALON_ROOM = 'salon'; // MC-11: every authed socket joins this room (previewer + member)
 const SALON_PRESENCE_THROTTLE_MS = 2000; // trailing-edge throttle for the "N en ligne" broadcast
+
+/** MC-15: who a message action reaches — the salon room, or a conversation's participants. */
+export interface MessageAudience {
+  salon: boolean;
+  participantIds: string[];
+}
 
 /** Parse a single cookie value from a raw Cookie header (avoids a dep — 3-line manual parse). */
 function readCookie(header: string | undefined, name: string): string | undefined {
@@ -235,6 +244,36 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
   emitConversationDeleted(recipientIds: string[], payload: WsConversationDeleted): void {
     if (recipientIds.length === 0) return;
     this.server.to(recipientIds.map((id) => `user:${id}`)).emit(WS_EVENTS.conversationDeleted, payload);
+  }
+
+  // ── MC-15: message actions (edit / delete / like) ───────────────────────────
+  /**
+   * Who hears a message action. A salon message is public, so it fans out to the whole salon room
+   * (members AND previewers); every other conversation targets its participants' user rooms, exactly
+   * like `message:new`. The caller passes the audience it already loaded — the gateway never
+   * re-derives membership, and no other module needs to know how rooms are named.
+   */
+  private audienceRooms(audience: MessageAudience): string[] {
+    return audience.salon ? [SALON_ROOM] : audience.participantIds.map((id) => `user:${id}`);
+  }
+
+  emitMessageEdited(audience: MessageAudience, payload: WsMessageEdited): void {
+    this.emitToAudience(audience, WS_EVENTS.messageEdited, payload);
+  }
+
+  emitMessageDeleted(audience: MessageAudience, payload: WsMessageDeleted): void {
+    this.emitToAudience(audience, WS_EVENTS.messageDeleted, payload);
+  }
+
+  emitMessageLiked(audience: MessageAudience, payload: WsMessageLiked): void {
+    this.emitToAudience(audience, WS_EVENTS.messageLiked, payload);
+  }
+
+  private emitToAudience(audience: MessageAudience, event: string, payload: unknown): void {
+    if (!this.server) return; // worker context — best-effort, never throws
+    const rooms = this.audienceRooms(audience);
+    if (rooms.length === 0) return;
+    this.server.to(rooms).emit(event, payload);
   }
 
   /**

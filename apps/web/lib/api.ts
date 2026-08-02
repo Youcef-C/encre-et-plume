@@ -960,8 +960,12 @@ export const joinSalon = (): Promise<SalonMembershipResponse> =>
 export const leaveSalon = (): Promise<SalonMembershipResponse> =>
   request<SalonMembershipResponse>('/salon/leave', { method: 'POST' });
 
-export const sendSalonMessage = (body: string): Promise<SalonMessageDto> =>
-  request<SalonMessageDto>('/salon/messages', { method: 'POST', body: JSON.stringify({ body }) });
+/** MC-15: `replyToId` quotes another SALON message (a target elsewhere is a 400). */
+export const sendSalonMessage = (body: string, replyToId?: string): Promise<SalonMessageDto> =>
+  request<SalonMessageDto>('/salon/messages', {
+    method: 'POST',
+    body: JSON.stringify({ body, ...(replyToId ? { replyToId } : {}) }),
+  });
 
 export const markSalonRead = (): Promise<MarkReadResponse> =>
   request<MarkReadResponse>('/salon/read', { method: 'POST' });
@@ -1272,6 +1276,24 @@ export const sendProjectMessage = (slug: string, body: SendProjectMessageRequest
     body: JSON.stringify(body),
   });
 
-/** CS-8 D-3: author-only destroy. 403 on someone else's message, 404 when unknown/not a participant. */
+/** CS-8 D-3: author-only destroy. 403 on someone else's message, 404 when unknown/not a participant.
+ *  MC-15: also 403 on a SALON message — the server refuses it, the dock merely omits the item. */
 export const deleteMessage = (messageId: string): Promise<void> =>
   request<void>(`/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
+
+// ─── MC-15 · message actions (one set of routes, all three surfaces) ─────────
+import type { EditMessageRequest } from '@encre-et-plume/shared';
+
+/** Author-only edit; 403 on someone else's message AND on any salon message. */
+export const editMessage = (messageId: string, body: EditMessageRequest): Promise<MessageDto> =>
+  request<MessageDto>(`/messages/${encodeURIComponent(messageId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+
+/** Idempotent: liking twice is one row (composite PK), unliking an absent like is still a 204. */
+export const likeMessage = (messageId: string): Promise<void> =>
+  request<void>(`/messages/${encodeURIComponent(messageId)}/like`, { method: 'POST' });
+
+export const unlikeMessage = (messageId: string): Promise<void> =>
+  request<void>(`/messages/${encodeURIComponent(messageId)}/like`, { method: 'DELETE' });

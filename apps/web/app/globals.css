@@ -2344,13 +2344,44 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
    fades in with the bubble; it is ALWAYS painted where hover doesn't exist (touch), and focus keeps
    it visible so the keyboard is never locked out of it. */
 @media (hover: hover) {
-  .ep-bubble-actions {
+  .ep-bubble-actions,
+  /* MC-15: an unliked heart is just as discreet — but it is ALWAYS in the DOM, or double-click
+     would be the only way to place the first like (D-2). Once liked it stays painted (below). */
+  .ep-msg-row .ep-like-toggle:not(.ep-like-toggle--on) {
     opacity: 0;
     transition: opacity 0.12s;
   }
   .ep-discussion-row:hover .ep-bubble-actions,
-  .ep-bubble-actions:focus-within {
+  .ep-msg-row:hover .ep-bubble-actions,
+  .ep-msg-row:hover .ep-like-toggle,
+  .ep-msg-row:focus-within .ep-like-toggle,
+  .ep-bubble-actions:focus-within,
+  .ep-like-toggle:focus-visible {
     opacity: 1;
+  }
+}
+
+/* MC-15 — clicking a quote scrolls to the original and flashes it, so the reader sees WHERE they
+   landed. Motion-free for anyone who asked for that. */
+.ep-message-jump {
+  animation: ep-message-jump 1.4s ease-out;
+  border-radius: 12px;
+}
+@keyframes ep-message-jump {
+  0%,
+  60% {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-message-jump {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--accent);
   }
 }
 

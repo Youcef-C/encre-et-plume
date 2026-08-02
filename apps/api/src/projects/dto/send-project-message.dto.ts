@@ -33,4 +33,10 @@ export class SendProjectMessageDto {
   @ValidateNested({ each: true })
   @Type(() => AttachmentRefDto)
   attachments?: AttachmentRefDto[];
+
+  /** MC-15: quote a message of the SAME project thread — cross-conversation targets are a 400. */
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  replyToId?: string;
 }
