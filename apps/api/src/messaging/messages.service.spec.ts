@@ -132,7 +132,7 @@ function build(over: {
     emitMessageDeleted: jest.Mock;
     emitMessageLiked: jest.Mock;
   };
-  blocks?: { isBlockedPair: jest.Mock };
+  blocks?: { isBlockedPair: jest.Mock; blockedPairIds?: jest.Mock };
   connections?: { stateBetween: jest.Mock };
 } = {}) {
   const prisma = over.prisma ?? makePrisma();
@@ -147,7 +147,12 @@ function build(over: {
     emitMessageDeleted: jest.fn(),
     emitMessageLiked: jest.fn(),
   };
-  const blocks = over.blocks ?? { isBlockedPair: jest.fn().mockResolvedValue(false) };
+  const blocks = {
+    isBlockedPair: jest.fn().mockResolvedValue(false),
+    // MC-15 R2-B: the likers list drops blocked pairs, like every other list (MC-13 roster, search).
+    blockedPairIds: jest.fn().mockResolvedValue(new Set<string>()),
+    ...over.blocks,
+  };
   const connections = over.connections ?? { stateBetween: jest.fn().mockResolvedValue('none') };
   const service = new MessagesService(
     prisma as unknown as PrismaService,
@@ -1030,5 +1035,96 @@ describe('MessagesService.getMessages — likes + quotes (MC-15 B3 read path)', 
     await service.getMessages('acc-1', 'conv-1', {});
     expect(prisma.messageLike.findMany).not.toHaveBeenCalled();
     expect(prisma.message.findMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── MC-15 round 2 · R2-B « voir qui a aimé » ───────────────────────────────────
+// A separate on-demand route, NOT a field on the message DTO: embedding the likers would put data
+// almost nobody opens into every page of every thread and undo the 2-queries-per-page property.
+
+describe('MessagesService.listLikes (MC-15 R2-B1)', () => {
+  const LIKE = (accountId: string, over: Record<string, unknown> = {}) => ({
+    accountId,
+    createdAt: new Date('2026-08-01T10:00:00.000Z'),
+    account: { id: accountId, displayName: `Name ${accountId}`, avatar: null },
+    ...over,
+  });
+
+  it('lists who liked, newest first, through the existing participant gate', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.messageLike.findMany.mockResolvedValue([LIKE('acc-2'), LIKE('acc-1')]);
+
+    const page = await service.listLikes('acc-1', 'msg-1', {});
+
+    expect(page.items).toEqual([
+      { accountId: 'acc-2', displayName: 'Name acc-2', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' },
+      { accountId: 'acc-1', displayName: 'Name acc-1', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' },
+    ]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('a non-participant gets the uniform message 404 (no new gate, no existence leak)', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ participants: [] }));
+    const err = await service.listLikes('stranger', 'msg-1', {}).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(NotFoundException);
+    expect((err as Error).message).toBe('Message introuvable.');
+    expect(prisma.messageLike.findMany).not.toHaveBeenCalled();
+  });
+
+  // MC-10: a blocked pair never appears in a list the caller sees — filtered in the WHERE clause so
+  // the page never silently shrinks under the caller.
+  it('MC-10: excludes blocked accounts from the query itself', async () => {
+    const { service, prisma, blocks } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    blocks.blockedPairIds.mockResolvedValue(new Set(['acc-9']));
+
+    await service.listLikes('acc-1', 'msg-1', {});
+
+    expect(prisma.messageLike.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { messageId: 'msg-1', accountId: { notIn: ['acc-9'] } },
+      }),
+    );
+  });
+
+  it('paginates: a full page returns the last accountId as the cursor, and the cursor is applied', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(MSG());
+    prisma.messageLike.findMany.mockResolvedValue([LIKE('acc-2'), LIKE('acc-3')]);
+
+    const page = await service.listLikes('acc-1', 'msg-1', { limit: 2 });
+    expect(page.nextCursor).toBe('acc-3');
+
+    await service.listLikes('acc-1', 'msg-1', { limit: 2, cursor: 'acc-3' });
+    expect(prisma.messageLike.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        cursor: { messageId_accountId: { messageId: 'msg-1', accountId: 'acc-3' } },
+        skip: 1,
+        take: 2,
+      }),
+    );
+  });
+
+  // R2-B2: the round-1 property the review credited must survive — reading a thread must NOT start
+  // resolving likers. Proven by call count, not by inspecting the DTO.
+  it('R2-B2: a thread page still costs 2 extra queries and loads NO liker accounts', async () => {
+    const { service, prisma } = build();
+    const big = Array.from({ length: 30 }, (_, i) => MSG({ id: `m-${i}`, replyToId: 'm-0' }));
+    prisma.message.findMany.mockImplementation((args: { where?: { id?: unknown } }) =>
+      Promise.resolve(args?.where?.id ? [MSG({ id: 'm-0' })] : big),
+    );
+
+    const res = await service.getMessages('acc-1', 'conv-1', {});
+
+    expect(prisma.messageLike.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.message.findMany).toHaveBeenCalledTimes(2);
+    // the ONE like query stays a bare (messageId, accountId) projection — no account join
+    expect(prisma.messageLike.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { messageId: true, accountId: true } }),
+    );
+    expect(res.items[0]).not.toHaveProperty('likers');
   });
 });

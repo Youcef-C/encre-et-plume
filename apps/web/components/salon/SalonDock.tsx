@@ -625,17 +625,36 @@ export default function SalonDock() {
             )}
 
             {feedState === 'ready' &&
-              visible.map((m) => (
+              visible.map((m) => {
+                // R2-A / D-7 (user-approved, 2026-08-02): a DELIBERATE departure from the prototype,
+                // which draws every salon bubble identically (line 2975: flex-start, card fill,
+                // sender name above). Own messages now align RIGHT with the ink fill, like the MC-9
+                // widget and the CS-8 Discussion panel — the room was confusing to read otherwise.
+                // Do not "restore the prototype" here; MC-11's story notes record the same decision.
+                const mine = m.senderId === myId;
+                return (
                 <div
                   key={m.id}
                   className="ep-msg-row"
                   data-message-id={m.id}
+                  data-mine={mine ? 'true' : 'false'}
                   onDoubleClick={(e) => {
                     if (!m.pending && !m.failed && isPlainBubbleTarget(e.target)) void toggleLike(m);
                   }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 2, opacity: m.pending ? 0.6 : 1 }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignSelf: mine ? 'flex-end' : 'flex-start',
+                    alignItems: mine ? 'flex-end' : 'flex-start',
+                    maxWidth: '92%',
+                    gap: 2,
+                    opacity: m.pending ? 0.6 : 1,
+                  }}
                 >
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', padding: '0 4px' }}>{m.senderName}</div>
+                  {/* The side already says the message is mine — repeating my own name above it is noise. */}
+                  {!mine && (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', padding: '0 4px' }}>{m.senderName}</div>
+                  )}
                   {/* MC-15: the quote this message answers. A deleted target reads « Message supprimé ». */}
                   {m.replyTo && (
                     <MessageQuote
@@ -643,30 +662,24 @@ export default function SalonDock() {
                       onJump={() => setJumpMiss(!jumpToMessage(feedRef.current, m.replyTo!.id))}
                     />
                   )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-                    <div
-                      className={mentionIds.has(m.id) ? 'ep-mention-flash' : undefined}
-                      style={{
-                        maxWidth: '82%',
-                        fontSize: 14,
-                        lineHeight: 1.45,
-                        border: '2px solid var(--ink)',
-                        borderRadius: 10,
-                        padding: '7px 11px',
-                        background: 'var(--card)',
-                        color: 'var(--ink)',
-                        overflowWrap: 'anywhere',
-                      }}
-                    >
-                      {m.body}
-                    </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      // Mirrored (D-6): the controls always sit on the side facing the middle of the
+                      // thread, which is what makes the menu's placement point AWAY from its bubble.
+                      flexDirection: mine ? 'row' : 'row-reverse',
+                      alignItems: 'center',
+                      gap: 2,
+                      minWidth: 0,
+                    }}
+                  >
                     {!m.pending && !m.failed && (
                       <>
                         {/* The salon room is public: Répondre and J'aime only. canEdit/canDelete are
                             false BECAUSE the server refuses both here (403) — the omission is the UI
                             agreeing with the gate, never the gate itself. */}
                         <MessageActions
-                          authorName={m.senderName}
+                          authorName={mine ? 'moi' : m.senderName}
                           canEdit={false}
                           canDelete={false}
                           onReply={() =>
@@ -678,16 +691,33 @@ export default function SalonDock() {
                               deleted: false,
                             })
                           }
-                          placement="right"
+                          placement={mine ? 'left' : 'right'}
                         />
                         <MessageLikeToggle
+                          messageId={m.id}
                           liked={m.likedByMe}
                           count={m.likeCount}
-                          authorName={m.senderName}
+                          authorName={mine ? 'moi' : m.senderName}
                           onToggle={(next) => void toggleLike(m, next)}
                         />
                       </>
                     )}
+                    <div
+                      className={mentionIds.has(m.id) ? 'ep-mention-flash' : undefined}
+                      style={{
+                        minWidth: 0,
+                        fontSize: 14,
+                        lineHeight: 1.45,
+                        border: '2px solid var(--ink)',
+                        borderRadius: mine ? '10px 10px 3px 10px' : '10px 10px 10px 3px',
+                        padding: '7px 11px',
+                        background: mine ? 'var(--ink)' : 'var(--card)',
+                        color: mine ? 'var(--paper)' : 'var(--ink)',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {m.body}
+                    </div>
                   </div>
                   {m.failed && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
@@ -704,7 +734,8 @@ export default function SalonDock() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
           </div>
 
           {/* Feed affordances (mutually exclusive so they never overlap): a pending off-screen

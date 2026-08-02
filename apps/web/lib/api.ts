@@ -1282,7 +1282,7 @@ export const deleteMessage = (messageId: string): Promise<void> =>
   request<void>(`/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
 
 // ─── MC-15 · message actions (one set of routes, all three surfaces) ─────────
-import type { EditMessageRequest } from '@encre-et-plume/shared';
+import type { EditMessageRequest, MessageLikesPage } from '@encre-et-plume/shared';
 
 /** Author-only edit; 403 on someone else's message AND on any salon message. */
 export const editMessage = (messageId: string, body: EditMessageRequest): Promise<MessageDto> =>
@@ -1297,3 +1297,13 @@ export const likeMessage = (messageId: string): Promise<void> =>
 
 export const unlikeMessage = (messageId: string): Promise<void> =>
   request<void>(`/messages/${encodeURIComponent(messageId)}/like`, { method: 'DELETE' });
+
+/**
+ * R2-B: WHO liked, fetched only when the reader opens the list. Deliberately not part of the message
+ * DTO — every thread page would otherwise carry likers almost nobody opens. Participant-gated (404),
+ * paginated, MC-10-blocked accounts already excluded server-side.
+ */
+export const getMessageLikes = (messageId: string, cursor?: string): Promise<MessageLikesPage> =>
+  request<MessageLikesPage>(
+    `/messages/${encodeURIComponent(messageId)}/likes${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+  );

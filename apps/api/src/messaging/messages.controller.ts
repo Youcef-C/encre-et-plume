@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
-import type { MessageDto } from '@encre-et-plume/shared';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import type { MessageDto, MessageLikesPage } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { MessagesService } from './messages.service';
 import { EditMessageDto } from './dto/edit-message.dto';
@@ -42,5 +42,23 @@ export class MessagesController {
   @HttpCode(204)
   unlike(@Req() req: AuthRequest, @Param('id') id: string): Promise<void> {
     return this.service.setLike(req.accountId, id, false);
+  }
+
+  /**
+   * MC-15 R2-B: who liked this message — fetched ON DEMAND (never embedded in the message DTO, which
+   * would make every thread page carry likers nobody asked for). Paginated; blocked accounts excluded.
+   */
+  @Get(':id/likes')
+  likes(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ): Promise<MessageLikesPage> {
+    const n = Number(limit);
+    return this.service.listLikes(req.accountId, id, {
+      cursor,
+      limit: Number.isFinite(n) && n > 0 ? n : undefined,
+    });
   }
 }

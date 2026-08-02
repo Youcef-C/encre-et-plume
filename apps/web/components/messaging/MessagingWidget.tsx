@@ -727,6 +727,7 @@ function MessageBubble({
       )}
       {settled && (
         <MessageLikeToggle
+          messageId={message.id}
           liked={message.likedByMe}
           count={message.likeCount}
           authorName={authorName}

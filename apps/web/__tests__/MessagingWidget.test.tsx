@@ -49,6 +49,7 @@ vi.mock('../lib/api', () => ({
   deleteMessage: vi.fn(),
   likeMessage: vi.fn(),
   unlikeMessage: vi.fn(),
+  getMessageLikes: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -810,6 +811,24 @@ describe('MessagingWidget — MC-15 actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Je n’aime plus le message de Léa B./ }));
     await waitFor(() => expect(api.unlikeMessage).toHaveBeenCalledWith('m-theirs'));
+  });
+
+  // R2-B4: the likers list works on this surface too — one component, four surfaces.
+  it('the count beside the heart opens the list of who liked, without toggling the like', async () => {
+    await openDm([{ ...theirMsg, likeCount: 2 }]);
+    vi.mocked(api.getMessageLikes).mockResolvedValue({
+      items: [
+        { accountId: 'u-lea', displayName: 'Léa B.', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' },
+        { accountId: 'u-me', displayName: 'Camille R.', avatar: null, createdAt: '2026-08-01T09:00:00.000Z' },
+      ],
+      nextCursor: null,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Voir qui aime le message de Léa B\./ }));
+    expect(await screen.findByRole('dialog', { name: 'Aimé par' })).toBeInTheDocument();
+    expect(screen.getByText('Camille R.')).toBeInTheDocument();
+    expect(api.likeMessage).not.toHaveBeenCalled();
+    expect(api.unlikeMessage).not.toHaveBeenCalled();
   });
 
   it('a message deleted by its author disappears live from my open thread', async () => {

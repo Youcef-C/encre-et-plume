@@ -110,6 +110,26 @@ export interface EditMessageRequest {
   text: string;
 }
 
+/**
+ * MC-15 R2-B — one person who liked a message, from `GET /messages/:id/likes`.
+ *
+ * Deliberately NOT a field on `MessageDto` / `SalonMessageDto`: a thread page would then carry the
+ * likers of every message, which almost nobody opens, and the read path would lose its
+ * 2-queries-per-page property. This is fetched on demand, when the list is opened.
+ */
+export interface MessageLikerDto {
+  accountId: string;
+  displayName: string;
+  avatar: string | null;
+  createdAt: string; // ISO — when they liked
+}
+
+/** GET /messages/:id/likes — paginated, participant-gated, MC-10-blocked accounts excluded. */
+export interface MessageLikesPage {
+  items: MessageLikerDto[]; // newest like first
+  nextCursor: string | null; // the last accountId of a full page
+}
+
 // ── CS-8: the project's Discussion tab ───────────────────────────────────────
 // A project chat IS a `Conversation { type:'group', projectId }` — there is NO parallel project
 // Message entity. These two shapes are the project-scoped façade over the MC-9 routes.
@@ -258,3 +278,6 @@ export const CONVERSATIONS_PAGE_SIZE = 50;
 export const CONVERSATIONS_PAGE_MAX = 100;
 export const MESSAGES_PAGE_SIZE = 30;
 export const MESSAGES_PAGE_MAX = 100;
+/** MC-15 R2-B: the likers list is paginated like every other list. */
+export const MESSAGE_LIKES_PAGE_SIZE = 30;
+export const MESSAGE_LIKES_PAGE_MAX = 100;

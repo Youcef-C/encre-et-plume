@@ -31,6 +31,7 @@ vi.mock('../lib/api', () => ({
   editMessage: vi.fn(),
   likeMessage: vi.fn(),
   unlikeMessage: vi.fn(),
+  getMessageLikes: vi.fn(),
   getMediaSignedUrl: vi.fn(),
   requestUpload: vi.fn(),
   finalizeMedia: vi.fn(),
@@ -635,11 +636,19 @@ describe('DiscussionPanel — MC-15 actions', () => {
     expect(screen.getByText('2')).toBeInTheDocument(); // the count came back too
   });
 
-  it('D-5: the count appears only above one like', async () => {
+  // D-8 SUPERSEDES D-5 (round 2): the count is no longer decoration, it is the button that opens
+  // « qui a aimé ». Hidden at one like, a single liker would be unknowable.
+  it('D-8: the count appears from the FIRST like and opens the likers list', async () => {
     mocked.getProjectMessages.mockResolvedValue(page([msg({ id: 'm-9', likeCount: 1, likedByMe: true })]));
+    mocked.getMessageLikes.mockResolvedValue({
+      items: [{ accountId: 'u-me', displayName: 'Camille R.', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' }],
+      nextCursor: null,
+    });
     renderPanel();
-    await screen.findByRole('button', { name: /Je n’aime plus/ });
-    expect(screen.queryByText('1')).toBeNull();
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Voir qui aime le message de Yuki/ }));
+    expect(mocked.getMessageLikes).toHaveBeenCalledWith('m-9');
+    expect(await screen.findByText('Camille R.')).toBeInTheDocument();
   });
 
   it('F4: Supprimer asks for confirmation before destroying', async () => {

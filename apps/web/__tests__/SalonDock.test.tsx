@@ -46,6 +46,7 @@ vi.mock('../lib/api', () => ({
   // MC-15
   likeMessage: vi.fn(),
   unlikeMessage: vi.fn(),
+  getMessageLikes: vi.fn(),
 }));
 
 import * as api from '../lib/api';
@@ -560,5 +561,75 @@ describe('SalonDock — MC-15 actions', () => {
       msg({ id: 'm-2', replyTo: { id: '', senderId: '', senderName: '', excerpt: '', deleted: true } }),
     ]);
     expect(await screen.findByText('Message supprimé')).toBeInTheDocument();
+  });
+
+  // R2-B4: « voir qui a aimé » on the salon too — the same component as the other three surfaces.
+  it('R2-B: the count opens the likers list on demand, and never toggles the like', async () => {
+    await openDockWith([msg({ id: 'm-1', likeCount: 2 })]);
+    vi.mocked(api.getMessageLikes).mockResolvedValue({
+      items: [
+        { accountId: 'u-sacha', displayName: 'Sacha Benali', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' },
+        { accountId: 'me-1', displayName: 'Camille R.', avatar: null, createdAt: '2026-08-01T09:00:00.000Z' },
+      ],
+      nextCursor: null,
+    });
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^Voir qui aime le message de Yuki Moreau/ }),
+    );
+    expect(await screen.findByRole('dialog', { name: 'Aimé par' })).toBeInTheDocument();
+    expect(api.getMessageLikes).toHaveBeenCalledWith('m-1');
+    expect(screen.getByText('Sacha Benali')).toBeInTheDocument();
+    expect(api.likeMessage).not.toHaveBeenCalled();
+  });
+
+  // ── R2-A · D-7: own messages align RIGHT in the salon ────────────────────────
+  // A DELIBERATE departure from an `Explicit` replica screen: the prototype (line 2975) draws every
+  // salon bubble identically, left-aligned with the card fill and a sender name above. The user found
+  // it confusing next to the widget and the Discussion panel, and approved the deviation (2026-08-02).
+  // Do NOT "restore the prototype" here — see MC-11's story notes.
+  describe('R2-A — own messages align right (D-7)', () => {
+    const mine = () => msg({ id: 'm-mine', senderId: 'me-1', senderName: 'Camille R.', body: 'Coucou' });
+    const theirs = () => msg({ id: 'm-theirs', senderId: 'u-yuki', senderName: 'Yuki Moreau', body: 'Salut' });
+    const row = (id: string) => document.querySelector(`[data-message-id="${id}"]`) as HTMLElement;
+
+    it('R2-A1: my bubble is right-aligned with the ink fill and carries NO sender label', async () => {
+      await openDockWith([mine(), theirs()]);
+      const bubble = await screen.findByText('Coucou');
+      expect(row('m-mine')).toHaveAttribute('data-mine', 'true');
+      expect(row('m-mine').style.alignSelf).toBe('flex-end');
+      expect(bubble.style.background).toBe('var(--ink)');
+      expect(bubble.style.color).toBe('var(--paper)');
+      // My own name above my own bubble is noise once the side already says it.
+      expect(within(row('m-mine')).queryByText('Camille R.')).toBeNull();
+    });
+
+    it("R2-A1: someone else's bubble stays LEFT with the card fill and its sender label", async () => {
+      await openDockWith([mine(), theirs()]);
+      const bubble = await screen.findByText('Salut');
+      expect(row('m-theirs')).toHaveAttribute('data-mine', 'false');
+      expect(row('m-theirs').style.alignSelf).toBe('flex-start');
+      expect(bubble.style.background).toBe('var(--card)');
+      expect(within(row('m-theirs')).getByText('Yuki Moreau')).toBeInTheDocument();
+    });
+
+    it('R2-A2: the controls mirror — inside my row they sit before the bubble, after it on theirs', async () => {
+      await openDockWith([mine(), theirs()]);
+      await screen.findByText('Coucou');
+      // Same rule as the widget and the Discussion panel: the controls always face the thread's centre.
+      expect(screen.getByText('Coucou').parentElement!.style.flexDirection).toBe('row');
+      expect(screen.getByText('Salut').parentElement!.style.flexDirection).toBe('row-reverse');
+    });
+
+    it('R2-A2: my own menu opens to the LEFT, an incoming one to the RIGHT', async () => {
+      await openDockWith([mine(), theirs()]);
+      await screen.findByText('Coucou');
+      const trigger = within(row('m-mine')).getByRole('button', { name: /^Actions du message/ });
+      trigger.getBoundingClientRect = () =>
+        ({ top: 300, bottom: 344, left: 240, right: 274, width: 34, height: 44 }) as DOMRect;
+      await userEvent.click(trigger);
+      // Glued to the trigger's LEFT edge (240 - 150 - 6), never over the bubble it acts on.
+      expect(screen.getByRole('menu').style.left).toBe('84px');
+    });
   });
 });

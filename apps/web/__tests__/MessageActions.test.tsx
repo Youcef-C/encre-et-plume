@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MessageReplyRef } from '@encre-et-plume/shared';
+
+// R2-B: the likers list is fetched ON DEMAND — the message DTO never carries it.
+vi.mock('../lib/api', () => ({ getMessageLikes: vi.fn() }));
+import * as api from '../lib/api';
 
 import MessageActions from '../components/messaging/MessageActions';
 import MessageQuote from '../components/messaging/MessageQuote';
@@ -130,9 +134,11 @@ describe('MessageQuote — the reply block (F2, D-3)', () => {
 });
 
 describe('MessageLikeToggle — the heart (F5, D-2, D-5)', () => {
+  const HEART = /^J’aime le message|^Je n’aime plus le message/;
+
   it('is a real toggle announcing its state, clickable on its own', async () => {
     const onToggle = vi.fn();
-    render(<MessageLikeToggle liked={false} count={0} authorName="Yuki" onToggle={onToggle} />);
+    render(<MessageLikeToggle messageId="m-1" liked={false} count={0} authorName="Yuki" onToggle={onToggle} />);
     const btn = screen.getByRole('button', { name: /J’aime le message de Yuki/ });
     expect(btn).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(btn);
@@ -141,23 +147,118 @@ describe('MessageLikeToggle — the heart (F5, D-2, D-5)', () => {
 
   it('a liked message toggles OFF on the next click', async () => {
     const onToggle = vi.fn();
-    render(<MessageLikeToggle liked count={1} authorName="Yuki" onToggle={onToggle} />);
-    const btn = screen.getByRole('button');
+    render(<MessageLikeToggle messageId="m-1" liked count={1} authorName="Yuki" onToggle={onToggle} />);
+    const btn = screen.getByRole('button', { name: HEART });
     expect(btn).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(btn);
     expect(onToggle).toHaveBeenCalledWith(false);
   });
 
-  it('D-5: the count is shown only above 1 — a single like is the filled heart alone', () => {
-    const { rerender } = render(<MessageLikeToggle liked count={1} authorName="Yuki" onToggle={vi.fn()} />);
-    expect(screen.queryByText('1')).toBeNull();
-    rerender(<MessageLikeToggle liked count={3} authorName="Yuki" onToggle={vi.fn()} />);
+  // D-8 SUPERSEDES D-5 (round 2): the count is no longer decoration, it is the control that opens
+  // « qui a aimé ». Hiding it at one like would make a single liker unknowable.
+  it('D-8: the count shows from the FIRST like, because it is now the affordance', () => {
+    const { rerender } = render(
+      <MessageLikeToggle messageId="m-1" liked count={1} authorName="Yuki" onToggle={vi.fn()} />,
+    );
+    expect(screen.getByText('1')).toBeInTheDocument();
+    rerender(<MessageLikeToggle messageId="m-1" liked count={3} authorName="Yuki" onToggle={vi.fn()} />);
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
+  it('no like, no count button at all', () => {
+    render(<MessageLikeToggle messageId="m-1" liked={false} count={0} authorName="Yuki" onToggle={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /Voir qui aime/ })).toBeNull();
+  });
+
   it('announces the count, not colour alone', () => {
-    render(<MessageLikeToggle liked count={3} authorName="Yuki" onToggle={vi.fn()} />);
-    expect(screen.getByRole('button')).toHaveAccessibleName(/3 j’aime/);
+    render(<MessageLikeToggle messageId="m-1" liked count={3} authorName="Yuki" onToggle={vi.fn()} />);
+    expect(screen.getByRole('button', { name: HEART })).toHaveAccessibleName(/3 j’aime/);
+  });
+});
+
+// ─── R2-B · « voir qui a aimé » ────────────────────────────────────────────────
+// The trap this solves: the heart is already a toggle (D-2). A control that both toggles AND opens a
+// list on the same gesture is a trap, so the two are SEPARATE controls — heart = toggle, count = list.
+describe('MessageLikers — who liked, on demand (R2-B)', () => {
+  const LIKERS = /^Voir qui aime le message de Yuki/;
+  const likers = (n = 2) => ({
+    items: [
+      { accountId: 'u-1', displayName: 'Yuki Moreau', avatar: null, createdAt: '2026-08-01T10:00:00.000Z' },
+      { accountId: 'u-2', displayName: 'Sacha Benali', avatar: null, createdAt: '2026-08-01T09:00:00.000Z' },
+    ].slice(0, n),
+    nextCursor: null,
+  });
+
+  beforeEach(() => {
+    vi.mocked(api.getMessageLikes).mockReset();
+  });
+
+  function renderToggle(onToggle = vi.fn()) {
+    render(<MessageLikeToggle messageId="m-1" liked count={2} authorName="Yuki" onToggle={onToggle} />);
+    return onToggle;
+  }
+
+  it('R2-B3: opening the list never toggles the like', async () => {
+    vi.mocked(api.getMessageLikes).mockResolvedValue(likers());
+    const onToggle = renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: LIKERS }));
+    expect(await screen.findByRole('dialog', { name: 'Aimé par' })).toBeInTheDocument();
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('R2-B3: toggling the like never opens the list (and fetches nothing)', async () => {
+    const onToggle = renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: /^Je n’aime plus le message/ }));
+    expect(onToggle).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.getMessageLikes).not.toHaveBeenCalled();
+  });
+
+  it('fetches on demand and lists the likers', async () => {
+    vi.mocked(api.getMessageLikes).mockResolvedValue(likers());
+    renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: LIKERS }));
+    const panel = await screen.findByRole('dialog', { name: 'Aimé par' });
+    expect(api.getMessageLikes).toHaveBeenCalledWith('m-1');
+    expect(within(panel).getByText('Yuki Moreau')).toBeInTheDocument();
+    expect(within(panel).getByText('Sacha Benali')).toBeInTheDocument();
+  });
+
+  it('shows a loading state while the list is in flight', async () => {
+    vi.mocked(api.getMessageLikes).mockReturnValue(new Promise(() => {}));
+    renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: LIKERS }));
+    expect(await screen.findByText('Chargement…')).toBeInTheDocument();
+  });
+
+  it('an empty list says so instead of showing a blank box (everyone visible was blocked)', async () => {
+    vi.mocked(api.getMessageLikes).mockResolvedValue({ items: [], nextCursor: null });
+    renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: LIKERS }));
+    expect(await screen.findByText('Personne pour le moment.')).toBeInTheDocument();
+  });
+
+  it('a failed fetch is reported and can be retried', async () => {
+    vi.mocked(api.getMessageLikes).mockRejectedValueOnce(new Error('boom'));
+    renderToggle();
+    await userEvent.click(screen.getByRole('button', { name: LIKERS }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Impossible de charger la liste.');
+
+    vi.mocked(api.getMessageLikes).mockResolvedValue(likers(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('Yuki Moreau')).toBeInTheDocument();
+  });
+
+  it('is keyboard operable: Escape closes it and focus returns to the count', async () => {
+    vi.mocked(api.getMessageLikes).mockResolvedValue(likers());
+    renderToggle();
+    const trigger = screen.getByRole('button', { name: LIKERS });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await screen.findByRole('dialog', { name: 'Aimé par' });
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(trigger).toHaveFocus();
   });
 });
 

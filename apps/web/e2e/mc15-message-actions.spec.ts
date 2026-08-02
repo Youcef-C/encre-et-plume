@@ -216,6 +216,66 @@ test.describe('MC-15 — project Discussion (Répondre · Modifier · Supprimer 
       await ctxB.close();
     }
   });
+
+  /**
+   * R2-B (round 2) — « voir qui a aimé ». The heart is already a toggle (D-2), so a control that
+   * both toggles AND opens a list on the same gesture would be a trap: the heart toggles, the COUNT
+   * opens the list. This proves opening never toggles (R2-B3) and that the list is fetched on demand.
+   */
+  test('MC15-E11 (R2-B): the count opens « Aimé par » with the liker’s name, and never toggles my like', async ({
+    browser,
+  }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const pageA = await ctxA.newPage();
+    const pageB = await ctxB.newPage();
+    const LIKED = `MC15 R2B ${Date.now()}`;
+    try {
+      await login(pageA, A_EMAIL);
+      await openDiscussion(pageA);
+      await sendMessage(pageA, LIKED);
+
+      await login(pageB, B_EMAIL);
+      await openDiscussion(pageB);
+      await expect(pageB.getByText(LIKED, { exact: true })).toBeVisible({ timeout: 15_000 });
+      await pageB
+        .locator('[data-message-id]')
+        .filter({ hasText: LIKED })
+        .getByRole('button', { name: /^J’aime le message/ })
+        .first()
+        .click();
+
+      // A sees the count appear live (D-8: shown from the first like — it IS the affordance).
+      const countBtn = pageA
+        .locator('[data-message-id]')
+        .filter({ hasText: LIKED })
+        .getByRole('button', { name: /^Voir qui aime le message/ })
+        .first();
+      await expect(countBtn).toBeVisible({ timeout: 15_000 });
+      await countBtn.click();
+
+      const panel = pageA.getByRole('dialog', { name: 'Aimé par' });
+      await expect(panel).toBeVisible({ timeout: 10_000 });
+      await expect(panel).toContainText('E2E CS10_B');
+
+      // R2-B3: opening the list did NOT like anything on A's behalf — A's own heart is untouched.
+      await expect(
+        pageA
+          .locator('[data-message-id]')
+          .filter({ hasText: LIKED })
+          .getByRole('button', { name: /^J’aime le message/ })
+          .first(),
+      ).toHaveAttribute('aria-pressed', 'false');
+
+      // Escape closes it and hands focus back to the count (keyboard operable).
+      await pageA.keyboard.press('Escape');
+      await expect(panel).toHaveCount(0);
+      await expect(countBtn).toBeFocused();
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -287,6 +347,50 @@ test.describe('MC-15 — the salon carries NEITHER Modifier NOR Supprimer', () =
     await feed.getByRole('button', { name: /^Actions du message/ }).last().click();
     await page.getByRole('menuitem', { name: 'Répondre' }).click();
     await expect(page.getByText(/Réponse à/)).toBeVisible();
+  });
+
+  /**
+   * R2-A / D-7 (round 2) — a DELIBERATE departure from an `Explicit` replica screen, approved by the
+   * user on 2026-08-02: the prototype (line 2975) draws every salon bubble identically (flex-start,
+   * card fill, sender name above). Own messages now align RIGHT with the ink fill, like the widget
+   * and the Discussion panel. Do NOT "restore the prototype" — MC-11's story notes record this too.
+   */
+  test('MC15-E10 (R2-A): my salon message aligns RIGHT and drops its own label; theirs stays LEFT', async ({
+    browser,
+  }) => {
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const pageA = await ctxA.newPage();
+    const pageB = await ctxB.newPage();
+    const stamp = Date.now();
+    const MINE = `MC15 R2A mine ${stamp}`;
+    const THEIRS = `MC15 R2A theirs ${stamp}`;
+    try {
+      await login(pageA, A_EMAIL);
+      await ctxA.request.post(`${API}/salon/join`);
+      expect((await ctxA.request.post(`${API}/salon/messages`, { data: { body: MINE } })).ok()).toBeTruthy();
+
+      await login(pageB, B_EMAIL);
+      await ctxB.request.post(`${API}/salon/join`);
+      expect((await ctxB.request.post(`${API}/salon/messages`, { data: { body: THEIRS } })).ok()).toBeTruthy();
+
+      await openSalon(pageA);
+      const rowMine = pageA.locator('[data-message-id]').filter({ hasText: MINE }).first();
+      const rowTheirs = pageA.locator('[data-message-id]').filter({ hasText: THEIRS }).first();
+      await expect(rowMine).toBeVisible({ timeout: 15_000 });
+
+      await expect(rowMine).toHaveAttribute('data-mine', 'true');
+      await expect(rowMine).toHaveCSS('align-self', 'flex-end');
+      // My own name above my own bubble is noise once the side already says it.
+      await expect(rowMine).not.toContainText('E2E CS10_A');
+
+      await expect(rowTheirs).toHaveAttribute('data-mine', 'false');
+      await expect(rowTheirs).toHaveCSS('align-self', 'flex-start');
+      await expect(rowTheirs).toContainText('E2E CS10_B');
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
   });
 });
 

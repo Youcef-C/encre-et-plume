@@ -140,7 +140,7 @@ test('MC11-E2: non-member preview — expand shows history (no join needed), no 
 // Join → send → Quitter (member lifecycle)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test('MC11-E3: join → send a message → bubble appears with own display name; Quitter returns to the join panel and posting 403s', async ({
+test('MC11-E3: join → send a message → the bubble is mine (right-aligned, no label, D-7); Quitter returns to the join panel and posting 403s', async ({
   page,
   request,
 }) => {
@@ -159,9 +159,14 @@ test('MC11-E3: join → send a message → bubble appears with own display name;
   await page.getByRole('button', { name: 'Envoyer' }).click();
 
   await expect(salonFeed(page).getByText(uniqueBody)).toBeVisible({ timeout: 10_000 });
-  // The global room's history can carry a same-named sender from an earlier run of this spec —
-  // the just-sent message is the newest one, i.e. the last "MC11 Joiner" name label in the feed.
-  await expect(salonFeed(page).getByText('MC11 Joiner').last()).toBeVisible();
+  // MC-15 R2-A / D-7 (2026-08-02, user-approved): own salon messages align RIGHT with the ink fill
+  // and carry NO sender label — the side already says whose they are. This test used to assert the
+  // opposite ("bubble appears with own display name"), which was the prototype's uniform bubble.
+  // The label now belongs to INCOMING messages only; do not restore it here.
+  const ownRow = page.locator('[data-message-id]').filter({ hasText: uniqueBody }).first();
+  await expect(ownRow).toHaveAttribute('data-mine', 'true');
+  await expect(ownRow).toHaveCSS('align-self', 'flex-end');
+  await expect(ownRow).not.toContainText('MC11 Joiner');
 
   // Quitter → back to the non-member join panel.
   await page.getByRole('button', { name: 'Quitter', exact: true }).click();

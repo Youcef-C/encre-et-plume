@@ -49,3 +49,15 @@
 - Inferred: endpoint shapes, pagination, unread semantics for non-members, flood control, empty-state copy.
 - Single global room for now — the prototype draws exactly one salon. Multi-room ("salons") only if the product asks for it later.
 - No emojis in the UI: the header's 💬 tile is rendered with the shared chat icon from `apps/web/components/icons.tsx`.
+- **Approved deviation from the prototype — own messages align RIGHT (D-7, user decision 2026-08-02, shipped with [[MC-15]] round 2).**
+  The prototype (`Encre et Plume - Prototype.dc.html`, line 2975) draws every salon message identically:
+  `align-self: flex-start`, `background: var(--card)`, sender name above, with no own-vs-others branch —
+  and `SalonDock` replicated that faithfully. The user found it confusing next to the [[MC-9]] widget and
+  the [[CS-8]] Discussion panel, where own messages are right-aligned with the ink fill, and approved
+  deviating. Shipped: **own** salon bubbles are right-aligned (`data-mine="true"`, `align-self: flex-end`)
+  with `background: var(--ink)` / `color: var(--paper)` and **no sender label** (the side already says
+  whose they are); **incoming** bubbles keep the prototype's left-aligned card fill *with* their sender
+  label; the MC-15 action controls mirror to the matching side.
+  This is a deliberate departure on an `Explicit` replica screen — **do not "restore the prototype" here.**
+  Graded by `SalonDock.test.tsx` (« R2-A — own messages align right (D-7) ») and `mc15-message-actions.spec.ts`
+  MC15-E10; `mc11-salon.spec.ts` MC11-E3 was updated from "bubble appears with own display name" to the new rule.

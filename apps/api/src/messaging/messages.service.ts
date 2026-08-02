@@ -18,6 +18,7 @@ import type {
   MarkReadResponse,
   MessageAttachment,
   MessageDto,
+  MessageLikesPage,
   MessagesPage,
   SendMessageRequest,
   WsMessageNew,
@@ -28,6 +29,8 @@ import {
   DM_POLICIES,
   DM_POLICY_DEFAULT,
   GROUP_NAME_MAX_LENGTH,
+  MESSAGE_LIKES_PAGE_MAX,
+  MESSAGE_LIKES_PAGE_SIZE,
   MESSAGE_MAX_ATTACHMENTS,
   MESSAGE_MAX_LENGTH,
   MESSAGES_PAGE_MAX,
@@ -75,6 +78,12 @@ interface MsgRow {
   editedAt?: Date | null;
   replyToId?: string | null;
   replyToDeleted?: boolean | null;
+}
+/** MC-15 R2-B: a like row joined to its account, as loaded by `listLikes`. */
+interface LikeRow {
+  accountId: string;
+  createdAt: Date;
+  account: { id: string; displayName: string; avatar: string | null };
 }
 interface ConvRow {
   id: string;
@@ -266,12 +275,7 @@ export class MessagesService {
   async deleteMessage(accountId: string, messageId: string): Promise<void> {
     const { message, conv } = await this.loadMessageForMember(messageId, accountId);
 
-    // MC-15: the salon is a public room — erasing your own line after the room read and replied to it
-    // rewrites a shared record. Removal there is AD-5's (accountable, logged), never the author's.
-    // Enforced HERE, not merely omitted from the menu: a UI-only omission is a fake gate.
-    if (conv.type === 'salon') {
-      throw new ForbiddenException('Un message du salon ne peut pas être supprimé.');
-    }
+    assertNotSalon(conv, 'supprimé');
     if (message.senderId !== accountId) {
       throw new ForbiddenException('Vous ne pouvez supprimer que vos propres messages.');
     }
@@ -308,11 +312,7 @@ export class MessagesService {
   async editMessage(accountId: string, messageId: string, dto: EditMessageRequest): Promise<MessageDto> {
     const { message, conv } = await this.loadMessageForMember(messageId, accountId);
 
-    // Same rule, same reason as delete (user, 2026-08-02): a salon line the room has already read
-    // and answered cannot be silently rewritten either.
-    if (conv.type === 'salon') {
-      throw new ForbiddenException('Un message du salon ne peut pas être modifié.');
-    }
+    assertNotSalon(conv, 'modifié');
     if (message.senderId !== accountId) {
       throw new ForbiddenException('Vous ne pouvez modifier que vos propres messages.');
     }
@@ -369,6 +369,43 @@ export class MessagesService {
       liked: on,
       likeCount,
     });
+  }
+
+  // ── GET /messages/:id/likes (MC-15 R2-B) ────────────────────────────────────
+  /**
+   * Who liked this message. Fetched ON DEMAND, when the reader opens the list — deliberately NOT a
+   * field on the message DTO: every page of every thread would then carry likers almost nobody
+   * opens, and the read path would lose its 2-queries-per-page property (proven by call count in the
+   * spec). Same gate as every other message action: `loadMessageForMember`, so a stranger gets the
+   * uniform 404 and there is NO new gate. MC-10: a blocked pair never appears in a list the caller
+   * sees — filtered in the WHERE clause, so a page never silently shrinks under the caller.
+   */
+  async listLikes(accountId: string, messageId: string, opts: PageOpts): Promise<MessageLikesPage> {
+    await this.loadMessageForMember(messageId, accountId);
+    const limit = clampLimit(opts.limit, MESSAGE_LIKES_PAGE_SIZE, MESSAGE_LIKES_PAGE_MAX);
+    const blocked = await this.blocks.blockedPairIds(accountId);
+
+    const rows = (await this.prisma.messageLike.findMany({
+      where: { messageId, ...(blocked.size > 0 ? { accountId: { notIn: [...blocked] } } : {}) },
+      // (createdAt, accountId) is a total order, so the cursor can never skip or repeat a row.
+      orderBy: [{ createdAt: 'desc' }, { accountId: 'desc' }],
+      take: limit,
+      ...(opts.cursor
+        ? { cursor: { messageId_accountId: { messageId, accountId: opts.cursor } }, skip: 1 }
+        : {}),
+      include: { account: { select: { id: true, displayName: true, avatar: true } } },
+    })) as unknown as LikeRow[];
+
+    const items = rows.map((r) => ({
+      accountId: r.accountId,
+      displayName: r.account.displayName,
+      avatar: r.account.avatar,
+      createdAt: r.createdAt.toISOString(),
+    }));
+    return {
+      items,
+      nextCursor: items.length === limit ? (items[items.length - 1]?.accountId ?? null) : null,
+    };
   }
 
   // ── POST /conversations ─────────────────────────────────────────────────────
@@ -953,6 +990,23 @@ export class MessagesService {
       likeCount: extras?.likeCount ?? 0,
       likedByMe: extras?.likedByMe ?? false,
     };
+  }
+}
+
+/**
+ * MC-15 — the ONE definition of "the salon is read-only once posted".
+ *
+ * The salon is a public room: erasing OR silently rewriting your own line after the room has read and
+ * replied to it rewrites a shared record. Removal there is AD-5's (accountable, logged), never the
+ * author's. Enforced server-side, not merely omitted from the menu — a UI-only omission is a fake gate.
+ *
+ * One guard rather than a copy per mutating route (review N-1): two branches doing their own version
+ * of the same rule is what caused CS-8's REG-1. A third mutating route inherits it instead of
+ * remembering it.
+ */
+function assertNotSalon(conv: { type: string }, verb: 'modifié' | 'supprimé'): void {
+  if (conv.type === 'salon') {
+    throw new ForbiddenException(`Un message du salon ne peut pas être ${verb}.`);
   }
 }
 
