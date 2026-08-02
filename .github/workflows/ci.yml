@@ -99,6 +99,11 @@ jobs:
       # _e2e-prisma.js) stays comfortably under the ceiling. Uncapped pools + the old default (100)
       # exhausted it → "too many clients", dropped sockets, and partially-applied seeds.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public&connection_limit=10&pool_timeout=30
+      # `directUrl` in schema.prisma — Prisma Migrate must bypass any pooler, because DDL and advisory
+      # locks need one stable session. CI runs NO pooler (the docker-run Postgres above is direct), so
+      # this is the same target; it exists because Prisma validates the env var at schema-load time and
+      # fails P1012 without it, before a single command runs.
+      DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/encre_et_plume_test?schema=public
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-e2e-test-secret
       S3_ENDPOINT: http://localhost:9000
