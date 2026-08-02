@@ -86,10 +86,18 @@ export class CreatorsSearchProvider implements SearchProvider {
   constructor(private readonly prisma: PrismaService) {}
 
   async search(q: string, ctx: SearchContext): Promise<SearchResultItem[]> {
+    // F-1: the handle IS `profileSlug` (`@yuki-moreau` → /yuki-moreau). People type it with or
+    // without the "@", so the sigil is stripped before matching rather than being required — a user
+    // who searches "@yuki" and a user who searches "yuki" are looking for the same person.
+    const handle = q.replace(/^@+/, '');
+
     const accounts = await this.prisma.account.findMany({
       where: {
         OR: [
           { displayName: { contains: q, mode: 'insensitive' } },
+          // The handle is unique and chosen by its owner, so it is the ONE way to find a specific
+          // person when several share a display name. Searchable, never editable (user, 2026-08-02).
+          { profileSlug: { contains: handle, mode: 'insensitive' } },
           { profile: { specialty: { contains: q, mode: 'insensitive' } } },
           { profile: { city: { contains: q, mode: 'insensitive' } } },
           // ponytail: exact tag match only; DR-2 brings the normalized/trigram backbone, swap then

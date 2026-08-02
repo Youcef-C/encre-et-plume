@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { CreatorsSearchProvider } from './search.providers';
 import { IllustrationsSearchProvider, WorksSearchProvider } from './search.providers';
 
 const CTX = { accountId: 'acc-viewer', limit: 8 };
@@ -81,5 +82,33 @@ describe('IllustrationsSearchProvider', () => {
     expect(await provider.search('néons', CTX)).toEqual([
       { id: 'i1', type: 'illustrations', title: 'Pluie de Néons', thumbnail: 'https://cdn/i1.jpg', route: '/illustration/i1' },
     ]);
+  });
+});
+
+// F-1 — the handle (`profileSlug`) is the public "@" chosen at signup: unique, never editable, and the
+// only reliable way to find a specific person when several share a display name (user, 2026-08-02).
+describe('CreatorsSearchProvider — recherche par « @ »', () => {
+  function setup() {
+    const prisma = { account: { findMany: jest.fn().mockResolvedValue([]) } };
+    return { provider: new CreatorsSearchProvider(prisma as unknown as PrismaService), findMany: prisma.account.findMany };
+  }
+  const orOf = (findMany: jest.Mock) => findMany.mock.calls[0][0].where.OR;
+
+  it('matches the handle as well as the display name', async () => {
+    const { provider, findMany } = setup();
+    await provider.search('yuki', { accountId: 'me', limit: 10 });
+    expect(orOf(findMany)).toContainEqual({ profileSlug: { contains: 'yuki', mode: 'insensitive' } });
+  });
+
+  it('strips a leading "@" — searching "@yuki" and "yuki" find the same person', async () => {
+    const { provider, findMany } = setup();
+    await provider.search('@yuki', { accountId: 'me', limit: 10 });
+    expect(orOf(findMany)).toContainEqual({ profileSlug: { contains: 'yuki', mode: 'insensitive' } });
+  });
+
+  it('keeps the raw query for the other fields, so "@" never leaks into a name match', async () => {
+    const { provider, findMany } = setup();
+    await provider.search('@yuki', { accountId: 'me', limit: 10 });
+    expect(orOf(findMany)).toContainEqual({ displayName: { contains: '@yuki', mode: 'insensitive' } });
   });
 });
