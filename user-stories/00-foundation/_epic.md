@@ -32,6 +32,7 @@
 - F-19 — Application settings "Paramètres" (structured settings page hosting Apparence / Notifications / Cookies / Sécurité incl. optional 2FA / Mes données)
 - F-20 — Genre vocabulary & tag picker (shared genres.json base; fixes free-text tag inputs)
 - F-21 — Support & contact (aide page, contact/support form, bug report → staff via queue+email)
+- F-22 — Clickable genre tags & freetext illustration hashtags
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.

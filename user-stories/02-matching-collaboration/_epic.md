@@ -25,6 +25,10 @@ Help "Encre & Plume" creators find the right collaborators and work together. Th
 9. [[MC-9]] — Messaging (floating widget)
 10. [[MC-10]] — Block & mute users
 11. [[MC-11]] — Community salon "Le Comptoir" (dock widget)
+12. [[MC-12]] — Manage group conversations "Gérer le groupe"
+13. [[MC-13]] — Comptoir presence roster + reachable-user search (+ closeIfFilled)
+14. [[MC-14]] — Call capacity: auto-close when full, reopen when a seat frees
+15. [[MC-15]] — Message actions « Répondre · Modifier · Supprimer · J'aime » (all conversation surfaces)
 
 ## Key cross-epic dependencies
 
