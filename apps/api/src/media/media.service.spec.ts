@@ -187,14 +187,14 @@ describe('MediaService', () => {
     it('MC-9: accepts application/pdf for the attachment kind (documents allowed alongside images)', async () => {
       prisma.media.create.mockResolvedValue(makeMedia({ kind: 'attachment', visibility: 'private' }));
       const result = await service.requestUpload('acc-1', { kind: 'attachment', contentType: 'application/pdf', size: 2048 });
-      expect(result.bucketKey).toMatch(/^attachment\/acc-1\/[a-f0-9]+\.pdf$/);
+      expect(result.bucketKey).toMatch(/^attachment\/acc-1\/[a-f0-9-]+\.pdf$/);
     });
 
     // ── MC-4X: document kinds (PDF-only allowlist) ──────────────────────────
     it('accepts application/pdf for the call_document kind (public, .pdf ext)', async () => {
       prisma.media.create.mockResolvedValue(makeMedia({ kind: 'call_document' }));
       const result = await service.requestUpload('acc-1', { kind: 'call_document', contentType: 'application/pdf', size: 2048 });
-      expect(result.bucketKey).toMatch(/^call_document\/acc-1\/[a-f0-9]+\.pdf$/);
+      expect(result.bucketKey).toMatch(/^call_document\/acc-1\/[a-f0-9-]+\.pdf$/);
       expect(prisma.media.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ kind: 'call_document', visibility: 'public' }) }),
       );
@@ -729,7 +729,7 @@ describe('MediaService', () => {
       prisma.media.create.mockResolvedValue(makeMedia({ kind: 'asset', contentType: 'text/html' }));
       await service.ingestAsset('acc-1', Buffer.from('<p>x</p>'), 'text/html');
       const key = s3.putObject.mock.calls.at(-1)![0] as string;
-      expect(key).toMatch(/^asset\/acc-1\/[a-f0-9]+\.html$/);
+      expect(key).toMatch(/^asset\/acc-1\/[a-f0-9-]+\.html$/);
     });
   });
 

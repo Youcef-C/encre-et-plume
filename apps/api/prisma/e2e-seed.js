@@ -12,6 +12,30 @@
 const { e2ePrisma } = require('./_e2e-prisma');
 const bcrypt = require('bcryptjs');
 
+/**
+ * Fixed fixture ids — same convention as `seed.js` (group 05 is this file's range). Primary keys are
+ * native Postgres `uuid` columns, which reject the readable strings these fixtures used to carry;
+ * the map is keyed by the OLD readable name so `grep e2e-cs13-illu-main` still lands here.
+ */
+const FID = {
+  'e2e-inv-project-a': '00000000-0000-7000-8000-000000000501',
+  'e2e-cs12-proj-cours': '00000000-0000-7000-8000-000000000511',
+  'e2e-cs12-proj-revision': '00000000-0000-7000-8000-000000000512',
+  'e2e-cs12-proj-pause': '00000000-0000-7000-8000-000000000513',
+  'e2e-cs12-proj-publie': '00000000-0000-7000-8000-000000000514',
+  'e2e-cs12-illu-1': '00000000-0000-7000-8000-000000000515',
+  'e2e-cs12-illu-2': '00000000-0000-7000-8000-000000000516',
+  'e2e-cs12-illu-3': '00000000-0000-7000-8000-000000000517',
+  'e2e-cs13-illu-main': '00000000-0000-7000-8000-000000000521',
+  'e2e-cs13-illu-2': '00000000-0000-7000-8000-000000000522',
+  'e2e-cs13-illu-3': '00000000-0000-7000-8000-000000000523',
+  'e2e-cs13-illu-4': '00000000-0000-7000-8000-000000000524',
+  'e2e-cs13-illu-5': '00000000-0000-7000-8000-000000000525',
+  'e2e-cs13-illu-6': '00000000-0000-7000-8000-000000000526',
+  'e2e-cs13-illu-7': '00000000-0000-7000-8000-000000000527',
+  'e2e-f3-stale-role-call': '00000000-0000-7000-8000-000000000531',
+};
+
 const SPECS = [
   { key: 'UTILISATEUR', email: 'qa_e2e_utilisateur@test.com', slug: 'e2e-utilisateur' },
   { key: 'TARGET',      email: 'qa_e2e_target@test.com',      slug: 'e2e-target' },
@@ -342,9 +366,9 @@ async function main() {
     });
     const projData = { ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours', workId: invWork.id };
     const proj = await prisma.project.upsert({
-      where: { id: 'e2e-inv-project-a' },
+      where: { id: FID['e2e-inv-project-a'] },
       update: projData,
-      create: { id: 'e2e-inv-project-a', ...projData },
+      create: { id: FID['e2e-inv-project-a'], ...projData },
     });
 
     const D = (iso) => new Date(iso);
@@ -387,10 +411,10 @@ async function main() {
     await prisma.project.deleteMany({ where: { ownerId: owner } });
 
     const PROJECTS = [
-      { id: 'e2e-cs12-proj-cours', title: 'E2E CS12 · En cours', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'e2e-cs12-en-cours', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
-      { id: 'e2e-cs12-proj-revision', title: 'E2E CS12 · En révision', kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'e2e-cs12-en-revision', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
-      { id: 'e2e-cs12-proj-pause', title: 'E2E CS12 · En pause', kind: 'Histoire', genre: 'Aventure', status: 'en pause', slug: 'e2e-cs12-en-pause', step: null, nextReleaseAt: null },
-      { id: 'e2e-cs12-proj-publie', title: 'E2E CS12 · Publié', kind: 'Manga', genre: 'Seinen', status: 'publié', slug: 'e2e-cs12-publie', step: null, nextReleaseAt: null },
+      { id: FID['e2e-cs12-proj-cours'], title: 'E2E CS12 · En cours', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'e2e-cs12-en-cours', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
+      { id: FID['e2e-cs12-proj-revision'], title: 'E2E CS12 · En révision', kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'e2e-cs12-en-revision', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
+      { id: FID['e2e-cs12-proj-pause'], title: 'E2E CS12 · En pause', kind: 'Histoire', genre: 'Aventure', status: 'en pause', slug: 'e2e-cs12-en-pause', step: null, nextReleaseAt: null },
+      { id: FID['e2e-cs12-proj-publie'], title: 'E2E CS12 · Publié', kind: 'Manga', genre: 'Seinen', status: 'publié', slug: 'e2e-cs12-publie', step: null, nextReleaseAt: null },
     ];
     for (const p of PROJECTS) {
       // Same CS-1 bridge as the wizard (projects.service.ts:221): a Project with no Work 404s its
@@ -412,7 +436,7 @@ async function main() {
 
     // Accepted collaborator on the "en cours" project → members[] = [owner(self), collab].
     await prisma.invitation.create({
-      data: { fromUserId: owner, toUserId: collab, projectId: 'e2e-cs12-proj-cours', status: 'accepted', createdAt: inDays(-6), respondedAt: inDays(-5), message: 'On collabore sur ce projet.' },
+      data: { fromUserId: owner, toUserId: collab, projectId: FID['e2e-cs12-proj-cours'], status: 'accepted', createdAt: inDays(-6), respondedAt: inDays(-5), message: 'On collabore sur ce projet.' },
     });
 
     // Illustration collection Work (format 'Illustration(s)') owned by CS12_OWNER, 3 members.
@@ -426,9 +450,12 @@ async function main() {
       create: { workId: collection.id, accountId: owner, role: 'dessinateur', order: 0 },
       update: {},
     });
-    const illuIds = ['e2e-cs12-illu-1', 'e2e-cs12-illu-2', 'e2e-cs12-illu-3'];
-    for (const id of illuIds) {
-      const data = { id, title: `E2E CS12 ${id}`, artistId: owner, artistName: 'E2E CS12_OWNER', category: 'personnages', publishedAt: inDays(-30) };
+    // Titles stay readable (the id is a uuid now, so it can no longer double as the display name).
+    const illuNames = ['e2e-cs12-illu-1', 'e2e-cs12-illu-2', 'e2e-cs12-illu-3'];
+    const illuIds = illuNames.map((name) => FID[name]);
+    for (const name of illuNames) {
+      const id = FID[name];
+      const data = { id, title: `E2E CS12 ${name}`, artistId: owner, artistName: 'E2E CS12_OWNER', category: 'personnages', publishedAt: inDays(-30) };
       await prisma.illustration.upsert({ where: { id }, create: data, update: data });
     }
     await prisma.illustrationCollection.deleteMany({ where: { workId: collection.id } });
@@ -649,13 +676,13 @@ async function main() {
     // 6 illustrations besides the edit target — proves the "Plus de cet·te artiste" cap actually
     // caps (4 shown out of 6 available), not just "happens to be ≤4".
     const cs13Illus = [
-      { id: 'e2e-cs13-illu-main', title: 'E2E CS13 Principale' },
-      { id: 'e2e-cs13-illu-2', title: 'E2E CS13 Autre 2' },
-      { id: 'e2e-cs13-illu-3', title: 'E2E CS13 Autre 3' },
-      { id: 'e2e-cs13-illu-4', title: 'E2E CS13 Autre 4' },
-      { id: 'e2e-cs13-illu-5', title: 'E2E CS13 Autre 5' },
-      { id: 'e2e-cs13-illu-6', title: 'E2E CS13 Autre 6' },
-      { id: 'e2e-cs13-illu-7', title: 'E2E CS13 Autre 7' },
+      { id: FID['e2e-cs13-illu-main'], title: 'E2E CS13 Principale' },
+      { id: FID['e2e-cs13-illu-2'], title: 'E2E CS13 Autre 2' },
+      { id: FID['e2e-cs13-illu-3'], title: 'E2E CS13 Autre 3' },
+      { id: FID['e2e-cs13-illu-4'], title: 'E2E CS13 Autre 4' },
+      { id: FID['e2e-cs13-illu-5'], title: 'E2E CS13 Autre 5' },
+      { id: FID['e2e-cs13-illu-6'], title: 'E2E CS13 Autre 6' },
+      { id: FID['e2e-cs13-illu-7'], title: 'E2E CS13 Autre 7' },
     ];
     for (const { id, title } of cs13Illus) {
       const data = {
@@ -733,10 +760,10 @@ async function main() {
     });
 
     await prisma.application.deleteMany({ where: { applicantId: fixture } });
-    await prisma.projectCall.deleteMany({ where: { id: 'e2e-f3-stale-role-call' } });
+    await prisma.projectCall.deleteMany({ where: { id: FID['e2e-f3-stale-role-call'] } });
     const f3Call = await prisma.projectCall.create({
       data: {
-        id: 'e2e-f3-stale-role-call',
+        id: FID['e2e-f3-stale-role-call'],
         title: 'E2E F3 Stale Role Call',
         authorRoles: ['dessinateur'],
         seekingRoles: ['scenariste'],

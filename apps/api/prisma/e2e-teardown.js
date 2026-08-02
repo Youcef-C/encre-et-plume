@@ -120,7 +120,20 @@ async function main() {
   // IllustrationCollection membership). 4f already removed the WorkCreator + nulled artistId, so these
   // deletes are unblocked; removing them keeps the collection fixtures from leaking across runs.
   await prisma.work.deleteMany({ where: { slug: 'e2e-cs12-carnet' } });
-  await prisma.illustration.deleteMany({ where: { id: { startsWith: 'e2e-cs12-illu' } } });
+  // Ids are native `uuid` columns, so a `startsWith` prefix match is no longer expressible (nor was
+  // it ever a real invariant). The three CS-12 fixture ids are enumerated instead — keep in sync with
+  // e2e-seed.js's FID map (`e2e-cs12-illu-1..3`).
+  await prisma.illustration.deleteMany({
+    where: {
+      id: {
+        in: [
+          '00000000-0000-7000-8000-000000000515',
+          '00000000-0000-7000-8000-000000000516',
+          '00000000-0000-7000-8000-000000000517',
+        ],
+      },
+    },
+  });
 
   // 4h-bis. DR-12: the collection specs create their collections through the API as a SEEDED account
   // (Yuki), so nothing above ever swept them and one `qa-*-collection-<ts>` Work per spec accumulated
@@ -180,7 +193,10 @@ async function main() {
       for (const { table, column } of refs) {
         try {
           removed += await prisma.$executeRawUnsafe(
-            `DELETE FROM "${table}" WHERE "${column}" = ANY($1::text[])`,
+            // `::uuid[]`, not `::text[]`: Account.id and every FK to it are native `uuid` columns,
+            // and `uuid = ANY(text[])` has no operator — the error was swallowed by the catch below,
+            // so nothing was deleted and the account delete then failed on the FK it was meant to clear.
+            `DELETE FROM "${table}" WHERE "${column}" = ANY($1::uuid[])`,
             accountIds,
           );
         } catch {

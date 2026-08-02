@@ -9,7 +9,7 @@ import {
 import sharp from 'sharp';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
-import { randomUUID } from 'node:crypto';
+import { uuidv7 } from '../prisma/uuid.util';
 import {
   MEDIA_KINDS,
   UPLOAD_ALLOWED_CONTENT_TYPES,
@@ -201,7 +201,7 @@ export class MediaService {
     }
 
     const ttl = SIGNED_URL_TTL();
-    const mediaId = randomUUID().replace(/-/g, '');
+    const mediaId = uuidv7(); // Media.id is a native uuid column — the storage key needs it before the row exists
     const ext = extFromContentType(dto.contentType);
     const bucketKey = `${dto.kind}/${accountId}/${mediaId}.${ext}`;
 
@@ -549,7 +549,7 @@ export class MediaService {
     buffer: Buffer,
     filename: string,
   ): Promise<{ mediaId: string }> {
-    const mediaId = randomUUID().replace(/-/g, '');
+    const mediaId = uuidv7(); // Media.id is a native uuid column — the storage key needs it before the row exists
     const bucketKey = `attachment/${ownerId}/${mediaId}.zip`;
 
     await this.s3.putObject(bucketKey, buffer, 'application/zip');
@@ -586,7 +586,7 @@ export class MediaService {
     if (!(ASSET_ALLOWED_CONTENT_TYPES as readonly string[]).includes(contentType)) {
       throw new BadRequestException('Format non pris en charge');
     }
-    const mediaId = randomUUID().replace(/-/g, '');
+    const mediaId = uuidv7(); // Media.id is a native uuid column — the storage key needs it before the row exists
     const ext = extFromContentType(contentType);
     const bucketKey = `asset/${ownerId}/${mediaId}.${ext}`;
     const isImage = contentType.startsWith('image/') && contentType !== PSD_CONTENT_TYPE;

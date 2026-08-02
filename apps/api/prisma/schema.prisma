@@ -13,11 +13,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Runtime traffic goes through PgBouncer (transaction pooling). The URL carries `pgbouncer=true`,
   // which makes Prisma stop using prepared statements — transaction mode cannot share them between
   // clients, and without the flag you get sporadic "prepared statement s0 already exists" errors.
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
   // Prisma Migrate MUST bypass the pooler: DDL and advisory locks need one stable session, which
   // transaction pooling does not provide. Points straight at Postgres:5433.
   directUrl = env("DIRECT_DATABASE_URL")
@@ -114,62 +114,62 @@ enum ConsentDocument {
 }
 
 model Account {
-  id                      String                   @id @default(cuid())
-  displayName             String
-  email                   String                   @unique
-  passwordHash            String
-  role                    Role                     @default(utilisateur)
-  verified                Boolean                  @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
-  profileSlug             String                   @unique
-  avatar                  String?
-  preferences             Json                     @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
-  createdAt               DateTime                 @default(now())
-  emailVerifiedAt         DateTime? // F-11: null = unverified; set on confirmation
-  birthdate               DateTime?                @db.Date // DR-10: RGPD PII, never public; null = not yet declared (prompt on next 18+ access)
-  deletedAt               DateTime? // F-14: null = active; non-null = tombstoned (RGPD erasure)
-  onboardedAt             DateTime? // F-17: null = show onboarding wizard; set on completion/skip
-  profile                 Profile?
-  notificationsReceived   Notification[]           @relation("NotifRecipient")
-  notificationsSent       Notification[]           @relation("NotifSource")
-  notificationPreferences NotificationPreference[]
-  media                   Media[]
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens     PasswordResetToken[]
-  consents                ConsentRecord[] // F-13: append-only acceptance log
-  dataExports             DataExport[] // F-14: export requests
-  twoFactor               TwoFactorCredential? // F-18: TOTP credential (optional; 1-to-1)
-  emailChangeTokens       EmailChangeToken[] // F-18: pending email-change requests
-  workCredits             WorkCreator[] // DR-3: works this account is credited on
-  favorites               Favorite[] // DR-4: favorited works (reads only; DR-9 owns the toggle write)
-  readingProgress         ReadingProgress[] // DR-4: per-chapter reading position (feeds DR-8)
-  illustrations           Illustration[] // DR-5: gallery illustrations credited to this artist
-  watchlist               WatchlistItem[] // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
-  reactions               Reaction[] // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
-  supportTickets          SupportTicket[] // F-21: help/contact/bug tickets submitted while signed in
-  projects                Project[]                @relation("ProjectOwner") // CS-1 seam: projects this account owns
-  invitationsSent         Invitation[]             @relation("InvitationsSent") // MC-3: collab invites sent
-  invitationsReceived     Invitation[]             @relation("InvitationsReceived") // MC-3: collab invites received
-  applications            Application[] // MC-5: call applications this account submitted
-  connectionsSent         Connection[]             @relation("ConnectionsSent") // MC-8: requests this account initiated
-  connectionsReceived     Connection[]             @relation("ConnectionsReceived") // MC-8: requests addressed to this account
+  id                         String                    @id @default(uuid(7)) @db.Uuid
+  displayName                String
+  email                      String                    @unique
+  passwordHash               String
+  role                       Role                      @default(utilisateur)
+  verified                   Boolean                   @default(false) // ponytail: flat flag; AD-3 sets it, no separate Editor table
+  profileSlug                String                    @unique
+  avatar                     String?
+  preferences                Json                      @default("{\"theme\":\"system\"}") // F-6: extensible JSON; promote to sub-model if preferences multiply
+  createdAt                  DateTime                  @default(now())
+  emailVerifiedAt            DateTime? // F-11: null = unverified; set on confirmation
+  birthdate                  DateTime?                 @db.Date // DR-10: RGPD PII, never public; null = not yet declared (prompt on next 18+ access)
+  deletedAt                  DateTime? // F-14: null = active; non-null = tombstoned (RGPD erasure)
+  onboardedAt                DateTime? // F-17: null = show onboarding wizard; set on completion/skip
+  profile                    Profile?
+  notificationsReceived      Notification[]            @relation("NotifRecipient")
+  notificationsSent          Notification[]            @relation("NotifSource")
+  notificationPreferences    NotificationPreference[]
+  media                      Media[]
+  emailVerificationTokens    EmailVerificationToken[]
+  passwordResetTokens        PasswordResetToken[]
+  consents                   ConsentRecord[] // F-13: append-only acceptance log
+  dataExports                DataExport[] // F-14: export requests
+  twoFactor                  TwoFactorCredential? // F-18: TOTP credential (optional; 1-to-1)
+  emailChangeTokens          EmailChangeToken[] // F-18: pending email-change requests
+  workCredits                WorkCreator[] // DR-3: works this account is credited on
+  favorites                  Favorite[] // DR-4: favorited works (reads only; DR-9 owns the toggle write)
+  readingProgress            ReadingProgress[] // DR-4: per-chapter reading position (feeds DR-8)
+  illustrations              Illustration[] // DR-5: gallery illustrations credited to this artist
+  watchlist                  WatchlistItem[] // DR-8: saved "Ma liste" works (reads + remove only; DR-9 owns the add)
+  reactions                  Reaction[] // DR-9: chapter/illustration like+save toggles (works reuse Favorite/WatchlistItem)
+  supportTickets             SupportTicket[] // F-21: help/contact/bug tickets submitted while signed in
+  projects                   Project[]                 @relation("ProjectOwner") // CS-1 seam: projects this account owns
+  invitationsSent            Invitation[]              @relation("InvitationsSent") // MC-3: collab invites sent
+  invitationsReceived        Invitation[]              @relation("InvitationsReceived") // MC-3: collab invites received
+  applications               Application[] // MC-5: call applications this account submitted
+  connectionsSent            Connection[]              @relation("ConnectionsSent") // MC-8: requests this account initiated
+  connectionsReceived        Connection[]              @relation("ConnectionsReceived") // MC-8: requests addressed to this account
   conversationParticipations ConversationParticipant[] // MC-9: conversations this account is a member of
-  messagesSent            Message[]                @relation("MessagesSent") // MC-9: messages this account sent
-  messageLikes            MessageLike[] // MC-15: messages this account liked
-  blocksMade              UserBlock[]              @relation("BlocksMade") // MC-10: block/mute rows this account created
-  blocksReceived          UserBlock[]              @relation("BlocksReceived") // MC-10: rows where this account is the target
-  pageAssignments         PageAssignee[]           @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
-  pagesCreated            Page[]                   @relation("PageAuthor") // CS-10: kanban cards this account created (delete gate)
-  pageComments            PageComment[]            @relation("PageCommentAuthor") // CS-2: card comments this account authored
-  assetVersions           AssetVersion[]           @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
-  scenarioComments        ScenarioComment[]        @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
-  corrections             Correction[]             @relation("CorrectionAuthor") // CS-5: review corrections this account filed
+  messagesSent               Message[]                 @relation("MessagesSent") // MC-9: messages this account sent
+  messageLikes               MessageLike[] // MC-15: messages this account liked
+  blocksMade                 UserBlock[]               @relation("BlocksMade") // MC-10: block/mute rows this account created
+  blocksReceived             UserBlock[]               @relation("BlocksReceived") // MC-10: rows where this account is the target
+  pageAssignments            PageAssignee[]            @relation("PageAssignee") // CS-2: kanban cards this account is assigned to
+  pagesCreated               Page[]                    @relation("PageAuthor") // CS-10: kanban cards this account created (delete gate)
+  pageComments               PageComment[]             @relation("PageCommentAuthor") // CS-2: card comments this account authored
+  assetVersions              AssetVersion[]            @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
+  scenarioComments           ScenarioComment[]         @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
+  corrections                Correction[]              @relation("CorrectionAuthor") // CS-5: review corrections this account filed
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
 
 model Media {
-  id          String          @id @default(cuid())
-  ownerId     String
+  id          String          @id @default(uuid(7)) @db.Uuid
+  ownerId     String          @db.Uuid
   owner       Account         @relation(fields: [ownerId], references: [id])
   kind        MediaKind
   bucketKey   String
@@ -190,11 +190,11 @@ model Media {
 // ── F-14: DataExport ──────────────────────────────────────────────────────────
 
 model DataExport {
-  id          String           @id @default(cuid())
-  accountId   String
+  id          String           @id @default(uuid(7)) @db.Uuid
+  accountId   String           @db.Uuid
   account     Account          @relation(fields: [accountId], references: [id])
   status      DataExportStatus @default(pending)
-  mediaId     String?          @unique
+  mediaId     String?          @unique @db.Uuid
   media       Media?           @relation(fields: [mediaId], references: [id])
   requestedAt DateTime         @default(now())
   readyAt     DateTime?
@@ -205,8 +205,8 @@ model DataExport {
 }
 
 model Profile {
-  id                   String          @id @default(cuid())
-  accountId            String          @unique
+  id                   String          @id @default(uuid(7)) @db.Uuid
+  accountId            String          @unique @db.Uuid
   account              Account         @relation(fields: [accountId], references: [id])
   coverImage           String?
   specialty            String?
@@ -231,8 +231,8 @@ model Profile {
 }
 
 model PortfolioItem {
-  id        String   @id @default(cuid())
-  profileId String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  profileId String   @db.Uuid
   profile   Profile  @relation(fields: [profileId], references: [id])
   image     String
   caption   String?
@@ -243,8 +243,8 @@ model PortfolioItem {
 // ── F-11: Email verification token ───────────────────────────────────────────
 
 model EmailVerificationToken {
-  id         String    @id @default(cuid())
-  accountId  String
+  id         String    @id @default(uuid(7)) @db.Uuid
+  accountId  String    @db.Uuid
   account    Account   @relation(fields: [accountId], references: [id])
   tokenHash  String    @unique // sha256(raw); raw is never stored
   expiresAt  DateTime // createdAt + 24h
@@ -257,8 +257,8 @@ model EmailVerificationToken {
 // ── F-12: Password reset token (mirrors F-11 EmailVerificationToken; TTL 1h) ──
 
 model PasswordResetToken {
-  id         String    @id @default(cuid())
-  accountId  String
+  id         String    @id @default(uuid(7)) @db.Uuid
+  accountId  String    @db.Uuid
   account    Account   @relation(fields: [accountId], references: [id])
   tokenHash  String    @unique // sha256(raw); raw is never stored
   expiresAt  DateTime // createdAt + 1h
@@ -269,13 +269,13 @@ model PasswordResetToken {
 }
 
 model Notification {
-  id           String    @id @default(cuid())
-  recipientId  String
+  id           String    @id @default(uuid(7)) @db.Uuid
+  recipientId  String    @db.Uuid
   recipient    Account   @relation("NotifRecipient", fields: [recipientId], references: [id])
   type         NotifType
-  refId        String?
+  refId        String?   @db.Uuid
   message      String? // CS-2: per-notification copy override (else FE resolves from the type map)
-  sourceUserId String?
+  sourceUserId String?   @db.Uuid
   sourceUser   Account?  @relation("NotifSource", fields: [sourceUserId], references: [id])
   createdAt    DateTime  @default(now())
   readAt       DateTime?
@@ -295,41 +295,41 @@ enum InvitationStatus {
 // CS-1 seam: minimal project shell so MC-3's picker + ownership validation work.
 // CS-1 owns creation/workspace and extends this model (never renames these fields).
 model Project {
-  id          String       @id @default(cuid())
-  ownerId     String
-  owner       Account      @relation("ProjectOwner", fields: [ownerId], references: [id])
-  title       String
-  kind        String       @default("Manga") // "Manga" | "Illustration(s)" | … (picker meta line)
-  genre       String? // fr label, e.g. "Seinen" (picker meta line)
-  status      String       @default("en cours") // "en cours" | "en révision" | … (picker meta line)
-  cover       String? // image URL; null -> halftone placeholder
-  slug        String?      @unique // CS-2 workspace address (GET /projects/{slug}); nullable so legacy rows survive
-  step        String? // CS-12 dashboard: current production step, e.g. "encrage Ch.1" — CS-2/CS-5 own writing it
+  id            String         @id @default(uuid(7)) @db.Uuid
+  ownerId       String         @db.Uuid
+  owner         Account        @relation("ProjectOwner", fields: [ownerId], references: [id])
+  title         String
+  kind          String         @default("Manga") // "Manga" | "Illustration(s)" | … (picker meta line)
+  genre         String? // fr label, e.g. "Seinen" (picker meta line)
+  status        String         @default("en cours") // "en cours" | "en révision" | … (picker meta line)
+  cover         String? // image URL; null -> halftone placeholder
+  slug          String?        @unique // CS-2 workspace address (GET /projects/{slug}); nullable so legacy rows survive
+  step          String? // CS-12 dashboard: current production step, e.g. "encrage Ch.1" — CS-2/CS-5 own writing it
   nextReleaseAt DateTime? // CS-12 dashboard: next scheduled release — CS-9 owns writing it
   // CS-1: the Project↔Work bridge. `workId` shares the Project's slug value, so /projet/{slug} and
   // /oeuvre/{slug} resolve to the same pair. REQUIRED since the CS-7 follow-up: a Work-less Project
   // is the seed defect behind « Projet introuvable », now unrepresentable rather than merely guarded.
-  visibility  String       @default("prive") // 'prive' | 'invitation' | 'public' (workspace/collab)
-  collabOpen  Boolean      @default(false) // CS-2 "Demandes de collaboration" toggle (distinct from visibility; MC candidature reads it)
-  workId      String       @unique // seeded œuvre (Work) — created in one $transaction with the Project
-  work        Work         @relation(fields: [workId], references: [id])
-  createdAt   DateTime     @default(now())
-  invitations Invitation[]
-  calls       ProjectCall[] // MC-4X req6: calls linked to this project
-  pages       Page[] // CS-2 kanban board cards (NOT Planche — see Page model)
-  labels      ProjectLabel[] // CS-2 card-modal: user-created label palette
-  assets      Asset[] // CS-3 imported files (versioned)
+  visibility    String         @default("prive") // 'prive' | 'invitation' | 'public' (workspace/collab)
+  collabOpen    Boolean        @default(false) // CS-2 "Demandes de collaboration" toggle (distinct from visibility; MC candidature reads it)
+  workId        String         @unique @db.Uuid // seeded œuvre (Work) — created in one $transaction with the Project
+  work          Work           @relation(fields: [workId], references: [id])
+  createdAt     DateTime       @default(now())
+  invitations   Invitation[]
+  calls         ProjectCall[] // MC-4X req6: calls linked to this project
+  pages         Page[] // CS-2 kanban board cards (NOT Planche — see Page model)
+  labels        ProjectLabel[] // CS-2 card-modal: user-created label palette
+  assets        Asset[] // CS-3 imported files (versioned)
 
   @@index([ownerId])
 }
 
 model Invitation {
-  id          String           @id @default(cuid())
-  fromUserId  String
+  id          String           @id @default(uuid(7)) @db.Uuid
+  fromUserId  String           @db.Uuid
   fromUser    Account          @relation("InvitationsSent", fields: [fromUserId], references: [id])
-  toUserId    String
+  toUserId    String           @db.Uuid
   toUser      Account          @relation("InvitationsReceived", fields: [toUserId], references: [id])
-  projectId   String?
+  projectId   String?          @db.Uuid
   project     Project?         @relation(fields: [projectId], references: [id])
   message     String           @default("")
   status      InvitationStatus @default(pending)
@@ -351,10 +351,10 @@ enum ConnectionStatus {
 // MC-8: one row per user pair. A `pending` row IS the story's ConnectionRequest; an `accepted` row
 // IS the mutual Connection. Direction (requester→addressee) matters only while pending.
 model Connection {
-  id          String           @id @default(cuid())
-  requesterId String
+  id          String           @id @default(uuid(7)) @db.Uuid
+  requesterId String           @db.Uuid
   requester   Account          @relation("ConnectionsSent", fields: [requesterId], references: [id])
-  addresseeId String
+  addresseeId String           @db.Uuid
   addressee   Account          @relation("ConnectionsReceived", fields: [addresseeId], references: [id])
   status      ConnectionStatus @default(pending)
   context     String           @default("") // D6: derived French context line, frozen at creation
@@ -378,14 +378,16 @@ enum ConversationType {
 }
 
 model Conversation {
-  id            String                    @id @default(cuid())
+  id            String                    @id @default(uuid(7)) @db.Uuid
   type          ConversationType
   name          String? // group only; DM title is computed per-viewer (the OTHER party)
-  projectId     String? // CS-8 seam: a project group chat IS this conversation
-  dmKey         String?                   @unique // dm only: "minId:maxId" — DB backstop, one DM per pair
+  projectId     String?                   @db.Uuid // CS-8 seam: a project group chat IS this conversation
+  // dm only: "minId:maxId" — DB backstop, one DM per pair. Stays `text`: it is a COMPOSITE of two
+  // uuids joined by ':' (73 chars now, was 51 with cuids), not an id, so `uuid` cannot hold it.
+  dmKey         String?                   @unique
   status        String                    @default("open") // 'open' | 'requested' | 'declined' — DM request lifecycle; groups/salon always 'open'
-  requestedBy   String? // accountId of the requester while status != 'open'
-  createdBy     String? // MC-12: group owner accountId; null for dm/salon (every group has one)
+  requestedBy   String?                   @db.Uuid // accountId of the requester while status != 'open'
+  createdBy     String?                   @db.Uuid // MC-12: group owner accountId; null for dm/salon (every group has one)
   createdAt     DateTime                  @default(now())
   lastMessageAt DateTime                  @default(now()) // list ordering key (bumped on each send)
   participants  ConversationParticipant[]
@@ -398,8 +400,8 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  conversationId String
-  accountId      String
+  conversationId String       @db.Uuid
+  accountId      String       @db.Uuid
   lastReadAt     DateTime     @default(now()) // unread = messages after this, not sent by me
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -410,24 +412,24 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String       @id @default(cuid())
-  conversationId String
+  id             String       @id @default(uuid(7)) @db.Uuid
+  conversationId String       @db.Uuid
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderId       String
+  senderId       String       @db.Uuid
   sender         Account      @relation("MessagesSent", fields: [senderId], references: [id])
   body           String       @default("")
   attachments    Json         @default("[]") // MessageAttachment[] denormalized display (mediaId,name,kind)
-  attachmentIds  String[]     @default([]) // Media.ids — queryable authz lookup for signed-URL gating (F-10)
+  attachmentIds  String[]     @default([]) @db.Uuid // Media.ids — queryable authz lookup for signed-URL gating (F-10)
   createdAt      DateTime     @default(now())
 
   // MC-15 — a reply is a QUOTE, not a branch: one nullable pointer, no thread tree.
-  replyToId String?
-  replyTo   Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies   Message[] @relation("MessageReply")
+  replyToId      String?       @db.Uuid
+  replyTo        Message?      @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]     @relation("MessageReply")
   /// D-3: `SetNull` erases the FACT that this message quoted something, which would make
   /// « Message supprimé » unrepresentable. The delete path flips this flag on the children in the
   /// same transaction, so a reply whose target is gone still renders its quote.
-  replyToDeleted Boolean   @default(false)
+  replyToDeleted Boolean       @default(false)
   editedAt       DateTime? // MC-15: non-null ⇒ the bubble shows « modifié »
   likes          MessageLike[]
 
@@ -438,9 +440,9 @@ model Message {
 /// MC-15 — one like per person per message: the composite PK makes a double like unrepresentable
 /// rather than app-enforced (same reasoning as CS-6's cover column, CS-8's @@unique([projectId])).
 model MessageLike {
-  messageId String
+  messageId String   @db.Uuid
   message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  accountId String
+  accountId String   @db.Uuid
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
@@ -453,8 +455,8 @@ model MessageLike {
 // ── F-15: Notification & e-mail preferences ──────────────────────────────────
 
 model NotificationPreference {
-  id        String  @id @default(cuid())
-  accountId String
+  id        String  @id @default(uuid(7)) @db.Uuid
+  accountId String  @db.Uuid
   account   Account @relation(fields: [accountId], references: [id])
   type      String // NotificationPrefType (string — forward-compatible with new categories)
   channel   String // 'in_app' | 'email'
@@ -465,7 +467,7 @@ model NotificationPreference {
 }
 
 model LegalDocument {
-  id          String    @id @default(cuid())
+  id          String    @id @default(uuid(7)) @db.Uuid
   kind        LegalKind
   version     String
   content     String // trusted HTML
@@ -476,8 +478,8 @@ model LegalDocument {
 }
 
 model ConsentRecord {
-  id         String          @id @default(cuid())
-  accountId  String
+  id         String          @id @default(uuid(7)) @db.Uuid
+  accountId  String          @db.Uuid
   account    Account         @relation(fields: [accountId], references: [id])
   document   ConsentDocument
   version    String
@@ -490,8 +492,8 @@ model ConsentRecord {
 // ── F-18: 2FA credential (one per account; enabledAt null = pending/unconfirmed) ──
 
 model TwoFactorCredential {
-  id               String    @id @default(cuid())
-  accountId        String    @unique // one credential per account
+  id               String    @id @default(uuid(7)) @db.Uuid
+  accountId        String    @unique @db.Uuid // one credential per account
   account          Account   @relation(fields: [accountId], references: [id])
   secretEncrypted  String // AES-256-GCM "iv:tag:ciphertext" (base64); never logged
   enabledAt        DateTime? // null = setup pending (secret issued, not confirmed)
@@ -502,8 +504,8 @@ model TwoFactorCredential {
 // ── F-18: Email change token (mirrors F-11 EmailVerificationToken) ────────────
 
 model EmailChangeToken {
-  id         String    @id @default(cuid())
-  accountId  String
+  id         String    @id @default(uuid(7)) @db.Uuid
+  accountId  String    @db.Uuid
   account    Account   @relation(fields: [accountId], references: [id])
   newEmail   String // committed to Account.email on confirm
   tokenHash  String    @unique // sha256(raw); raw never stored (mirror F-11/F-12)
@@ -520,7 +522,7 @@ model EmailChangeToken {
 // existing Account+Profile (role via Profile.creatorRoles, see trendingScore above).
 
 model Work {
-  id                 String    @id @default(cuid())
+  id                 String    @id @default(uuid(7)) @db.Uuid
   slug               String    @unique
   title              String
   coverImage         String? // media URL; null → CSS halftone placeholder on FE
@@ -575,7 +577,7 @@ model Work {
 
   // ── DR-12: illustration collections (format 'Illustration(s)' Works) ──────
   collectionItems IllustrationCollection[] // ordered member illustrations of this collection
-  contestId       String? // FK-by-convention link to Contest (validated in service; no Prisma relation)
+  contestId       String?                  @db.Uuid // FK-by-convention link to Contest (validated in service; no Prisma relation)
   soutien         Json? // ponytail: raw Soutien config {tiers,allowDonations,revenueSplit}; MR-1/MR-2/CS-10 normalize into real tables
 
   // CS-1: back-relation for the Project↔Work bridge (a seeded Work belongs to at most one Project).
@@ -589,8 +591,8 @@ model Work {
 }
 
 model Chapter {
-  id           String        @id @default(cuid())
-  workId       String
+  id           String        @id @default(uuid(7)) @db.Uuid
+  workId       String        @db.Uuid
   work         Work          @relation(fields: [workId], references: [id])
   number       Int
   title        String?
@@ -617,11 +619,11 @@ model Chapter {
   boardCards      Page[]            @relation("ChapterBoardCards") // CS-2 kanban cards attached to this chapter (distinct from `pages` above)
   readingProgress ReadingProgress[]
 
-  @@index([status, publishAt])
   // CS-7 B5: chapter numbers are unique per project. `Project.workId` is 1:1, so work-scoped
   // uniqueness IS project-scoped uniqueness. Replaces the plain @@index (a unique index serves
   // the same lookups).
   @@unique([workId, number])
+  @@index([status, publishAt])
 }
 
 // ── DR-3: work page "Œuvre" (creative team, planches, funding goals, reviews) ──
@@ -629,10 +631,10 @@ model Chapter {
 // per-work role/order, distinct from Profile.creatorRoles (DR-1, an account-level self-declared tag).
 
 model WorkCreator {
-  id        String  @id @default(cuid())
-  workId    String
+  id        String  @id @default(uuid(7)) @db.Uuid
+  workId    String  @db.Uuid
   work      Work    @relation(fields: [workId], references: [id])
-  accountId String
+  accountId String  @db.Uuid
   account   Account @relation(fields: [accountId], references: [id])
   role      String // "scenariste" | "dessinateur" | …
   order     Int     @default(0)
@@ -646,10 +648,10 @@ model WorkCreator {
 }
 
 model Planche {
-  id        String   @id @default(cuid())
-  workId    String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  workId    String   @db.Uuid
   work      Work     @relation(fields: [workId], references: [id])
-  chapterId String? // DR-4: set = reader page; null = DR-3 work-level grid planche
+  chapterId String?  @db.Uuid // DR-4: set = reader page; null = DR-3 work-level grid planche
   chapter   Chapter? @relation(fields: [chapterId], references: [id])
   image     String?
   caption   String?
@@ -662,10 +664,10 @@ model Planche {
 // ── DR-4: reader "Lecteur" (favorites switcher + reading progress) ───────────
 
 model Favorite {
-  id        String   @id @default(cuid())
-  accountId String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  accountId String   @db.Uuid
   account   Account  @relation(fields: [accountId], references: [id])
-  workId    String
+  workId    String   @db.Uuid
   work      Work     @relation(fields: [workId], references: [id])
   createdAt DateTime @default(now())
 
@@ -674,12 +676,12 @@ model Favorite {
 }
 
 model ReadingProgress {
-  id        String   @id @default(cuid())
-  accountId String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  accountId String   @db.Uuid
   account   Account  @relation(fields: [accountId], references: [id])
-  chapterId String
+  chapterId String   @db.Uuid
   chapter   Chapter  @relation(fields: [chapterId], references: [id])
-  workId    String
+  workId    String   @db.Uuid
   work      Work     @relation(fields: [workId], references: [id])
   page      Int
   updatedAt DateTime @updatedAt
@@ -691,10 +693,10 @@ model ReadingProgress {
 // ── DR-8: "Ma liste" saved works (watchlist) — read + remove only; DR-9 owns the add write ────
 
 model WatchlistItem {
-  id        String   @id @default(cuid())
-  accountId String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  accountId String   @db.Uuid
   account   Account  @relation(fields: [accountId], references: [id])
-  workId    String
+  workId    String   @db.Uuid
   work      Work     @relation(fields: [workId], references: [id])
   createdAt DateTime @default(now())
 
@@ -706,11 +708,11 @@ model WatchlistItem {
 // Work reactions reuse Favorite (like) / WatchlistItem (save) — see list.service.ts / reactions.service.ts.
 
 model Reaction {
-  id         String   @id @default(cuid())
-  accountId  String
+  id         String   @id @default(uuid(7)) @db.Uuid
+  accountId  String   @db.Uuid
   account    Account  @relation(fields: [accountId], references: [id])
   targetType String // 'chapter' | 'illustration'
-  targetId   String // Chapter.id | Illustration.id
+  targetId   String   @db.Uuid // Chapter.id | Illustration.id
   kind       String // 'like' | 'save'
   createdAt  DateTime @default(now())
 
@@ -719,8 +721,8 @@ model Reaction {
 }
 
 model FundingGoal {
-  id           String @id @default(cuid())
-  workId       String
+  id           String @id @default(uuid(7)) @db.Uuid
+  workId       String @db.Uuid
   work         Work   @relation(fields: [workId], references: [id])
   title        String
   currentCents Int    @default(0)
@@ -731,10 +733,10 @@ model FundingGoal {
 }
 
 model Review {
-  id          String   @id @default(cuid())
-  workId      String
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workId      String   @db.Uuid
   work        Work     @relation(fields: [workId], references: [id])
-  authorId    String? // nullable: seed fixtures have no real Account
+  authorId    String?  @db.Uuid // nullable: seed fixtures have no real Account
   authorName  String
   storyRating Int
   artRating   Int
@@ -752,9 +754,9 @@ enum BlockKind {
 }
 
 model UserBlock {
-  id        String    @id @default(cuid())
-  blockerId String
-  blockedId String
+  id        String    @id @default(uuid(7)) @db.Uuid
+  blockerId String    @db.Uuid
+  blockedId String    @db.Uuid
   kind      BlockKind
   createdAt DateTime  @default(now())
   blocker   Account   @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
@@ -765,7 +767,7 @@ model UserBlock {
 }
 
 model Announcement {
-  id        String           @id @default(cuid())
+  id        String           @id @default(uuid(7)) @db.Uuid
   type      AnnouncementType
   label     String // French rich text, verbatim from prototype ribbon
   href      String // link target (future PUB-7/PUB-8 route)
@@ -779,25 +781,25 @@ model Announcement {
 // MC-1 ships only the read-preview (GET /calls). MC-4 owns POST, the full board, board
 // filters/pagination, and any extra fields — do not add write logic here.
 model ProjectCall {
-  id               String    @id @default(cuid())
+  id               String             @id @default(uuid(7)) @db.Uuid
   title            String // "« Lames de Brume »"
-  authorRoles      String[]  @default([]) // MC-4X §8: the author's creator role(s), snapshot of profile.creatorRoles (was single authorRole)
-  seekingRoles     String[]  @default([]) // MC-4X req6: role(s) sought (1..2, = seats keys); kept for the board `has` filter
-  seats            Json      @default("{}") // MC-4X §8: seat counts per sought role, e.g. { "dessinateur": 2, "scenariste": 1 }
-  projectId        String? // MC-4X req6: optional link to an author-owned Project
-  project          Project?  @relation(fields: [projectId], references: [id])
-  authorId         String? // nullable, seed-friendly (mirror Illustration.artistId)
+  authorRoles      String[]           @default([]) // MC-4X §8: the author's creator role(s), snapshot of profile.creatorRoles (was single authorRole)
+  seekingRoles     String[]           @default([]) // MC-4X req6: role(s) sought (1..2, = seats keys); kept for the board `has` filter
+  seats            Json               @default("{}") // MC-4X §8: seat counts per sought role, e.g. { "dessinateur": 2, "scenariste": 1 }
+  projectId        String?            @db.Uuid // MC-4X req6: optional link to an author-owned Project
+  project          Project?           @relation(fields: [projectId], references: [id])
+  authorId         String?            @db.Uuid // nullable, seed-friendly (mirror Illustration.artistId)
   authorName       String // denormalized display name
-  tags             String[]  @default([]) // denormalized display chips (genre labels + scope/format)
-  description      String    @default("") // MC-4: card body text
-  genres           String[]  @default([]) // MC-4: GENRES ids (F-20) — used for board filtering
+  tags             String[]           @default([]) // denormalized display chips (genre labels + scope/format)
+  description      String             @default("") // MC-4: card body text
+  genres           String[]           @default([]) // MC-4: GENRES ids (F-20) — used for board filtering
   format           String? // MC-4: 'serie' | 'one_shot'
   scope            String? // MC-4: free text, e.g. "~120 planches"
   closesAt         DateTime? // null → FE meta falls back to applicationCount; MC-4: the deadline
-  applicationCount Int       @default(0)
-  status           String    @default("open") // MC-4 owns transitions
+  applicationCount Int                @default(0)
+  status           String             @default("open") // MC-4 owns transitions
   closedReason     String? // MC-14: 'full' (auto, reopenable) | 'manual' (owner close/deadline, sticky) | null while open
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime           @default(now())
   applications     Application[] // MC-5: applications submitted to this call
   assets           ProjectCallAsset[] // MC-4X: sample images + PDF documents (was single sampleMediaId)
 
@@ -809,8 +811,8 @@ model ProjectCall {
 // ordered by position. Asset TYPE lives on Media.kind (no assetType column). Composite PK — no
 // surrogate id. Backfill preserved every pre-MC-4X call's single sampleMediaId at position 0.
 model ProjectCallAsset {
-  callId   String
-  mediaId  String
+  callId   String      @db.Uuid
+  mediaId  String      @db.Uuid
   position Int
   call     ProjectCall @relation(fields: [callId], references: [id], onDelete: Cascade)
 
@@ -827,17 +829,17 @@ enum ApplicationStatus {
 }
 
 model Application {
-  id                    String            @id @default(cuid())
-  callId                String
-  call                  ProjectCall       @relation(fields: [callId], references: [id], onDelete: Cascade)
-  applicantId           String
-  applicant             Account           @relation(fields: [applicantId], references: [id])
-  sampleUrl             String // denormalized display URL of the FIRST sample — MC-6/MC-7 render this thumbnail
-  message               String            @default("")
-  status                ApplicationStatus @default(pending)
-  appliedAs             String? // the CreatorRole the applicant applied AS (server-derived = call seekingRole); null on historical rows
-  createdAt             DateTime          @default(now())
-  assets                ApplicationAsset[] // MC-4X: 1..3 mixed samples (was single sampleMediaId/samplePortfolioItemId)
+  id          String             @id @default(uuid(7)) @db.Uuid
+  callId      String             @db.Uuid
+  call        ProjectCall        @relation(fields: [callId], references: [id], onDelete: Cascade)
+  applicantId String             @db.Uuid
+  applicant   Account            @relation(fields: [applicantId], references: [id])
+  sampleUrl   String // denormalized display URL of the FIRST sample — MC-6/MC-7 render this thumbnail
+  message     String             @default("")
+  status      ApplicationStatus  @default(pending)
+  appliedAs   String? // the CreatorRole the applicant applied AS (server-derived = call seekingRole); null on historical rows
+  createdAt   DateTime           @default(now())
+  assets      ApplicationAsset[] // MC-4X: 1..3 mixed samples (was single sampleMediaId/samplePortfolioItemId)
 
   @@unique([callId, applicantId]) // one application per user per call — DB-level backstop
   @@index([applicantId, createdAt]) // MC-6 "Mes candidatures" reads
@@ -847,10 +849,10 @@ model Application {
 // ordered by position. Display info denormalized (url/kind/size) so reads need no join — mirrors the
 // existing Application.sampleUrl denormalization. Backfill preserved the single sample at position 0.
 model ApplicationAsset {
-  applicationId   String
+  applicationId   String      @db.Uuid
   application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  mediaId         String? // F-10 Media.id (kind 'application_sample' | 'application_document'), FK-by-convention
-  portfolioItemId String? // F-3 PortfolioItem.id — FK-by-convention
+  mediaId         String?     @db.Uuid // F-10 Media.id (kind 'application_sample' | 'application_document'), FK-by-convention
+  portfolioItemId String?     @db.Uuid // F-3 PortfolioItem.id — FK-by-convention
   url             String // denormalized display URL (image thumb / portfolio image / document CDN url)
   kind            String // 'image' | 'document'
   size            Int? // bytes — documents only
@@ -863,7 +865,7 @@ model ApplicationAsset {
 // ── DR-2: catalog "Découvrir" (Contest banner + editor picks) ────────────────
 
 model Contest {
-  id        String    @id @default(cuid())
+  id        String    @id @default(uuid(7)) @db.Uuid
   category  String // e.g. "CONCOURS"
   title     String // "Prix du jeune mangaka 2026"
   subtitle  String // "Doté par un éditeur · clôture 30 j"
@@ -877,8 +879,8 @@ model Contest {
 }
 
 model EditorPick {
-  id        String   @id @default(cuid())
-  workId    String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  workId    String   @db.Uuid
   work      Work     @relation(fields: [workId], references: [id])
   blurb     String // "« Encre Blanche » repéré par une maison partenaire"
   order     Int      @default(0)
@@ -890,9 +892,9 @@ model EditorPick {
 // ── DR-5: illustration gallery "Galerie" ──────────────────────────────────────
 
 model Illustration {
-  id              String    @id @default(cuid())
+  id              String    @id @default(uuid(7)) @db.Uuid
   title           String
-  artistId        String? // nullable like Review.authorId (seed fixtures may lack a real Account)
+  artistId        String?   @db.Uuid // nullable like Review.authorId (seed fixtures may lack a real Account)
   artist          Account?  @relation(fields: [artistId], references: [id])
   artistName      String // denormalized display name (always present)
   category        String // GALLERY_CATEGORY_KEYS: personnages|couvertures|decors|fanart|process
@@ -909,7 +911,7 @@ model Illustration {
   publishedAt     DateTime? // null = not public; non-null = in gallery + "nouveautes" sort key
   createdAt       DateTime  @default(now())
   // CS-1 (induced): a standalone illustration is also contest-linkable + supportable.
-  contestId       String? // FK-by-convention link to Contest (validated in service; no Prisma relation)
+  contestId       String?   @db.Uuid // FK-by-convention link to Contest (validated in service; no Prisma relation)
   soutien         Json? // ponytail: raw {tiers,allowDonations,goals}; goals folded in here (no workId) — MR-1/MR-2 normalize later
 
   collections IllustrationCollection[] // DR-12: collections (Illustration(s) Works) this piece belongs to
@@ -925,9 +927,9 @@ model Illustration {
 // collection ordering. Composite-unique on (illustrationId, workId) — dedup on re-add; both sides
 // cascade-delete (deleting the collection Work or the Illustration removes the membership row).
 model IllustrationCollection {
-  illustrationId String
+  illustrationId String       @db.Uuid
   illustration   Illustration @relation(fields: [illustrationId], references: [id], onDelete: Cascade)
-  workId         String
+  workId         String       @db.Uuid
   work           Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
   order          Int          @default(0)
 
@@ -940,9 +942,9 @@ model IllustrationCollection {
 // the [status, createdAt] index make tickets staff-listable; no read endpoint ships here.
 
 model SupportTicket {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid(7)) @db.Uuid
   category  String // allowlisted in DTO: general | account | bug | other
-  accountId String? // nullable — visitors submit too
+  accountId String?  @db.Uuid // nullable — visitors submit too
   account   Account? @relation(fields: [accountId], references: [id])
   name      String
   email     String
@@ -969,38 +971,38 @@ enum PageStage {
 }
 
 model Page {
-  id            String        @id @default(cuid())
-  projectId     String
-  project       Project       @relation(fields: [projectId], references: [id])
+  id             String              @id @default(uuid(7)) @db.Uuid
+  projectId      String              @db.Uuid
+  project        Project             @relation(fields: [projectId], references: [id])
   // CS-7 R2-1d (user rule, 2026-07-31): EVERY card belongs to a chapter. There is no orphan bucket —
   // a nullable column is what made the forbidden state representable, so the invariant is enforced
   // here, not in app code. Deleting a chapter that still holds cards is a 409 (R2-6), never a cascade.
-  chapterId     String
-  chapter       Chapter       @relation("ChapterBoardCards", fields: [chapterId], references: [id])
-  title         String // card label, e.g. "Page 7"
-  stage         PageStage     @default(scenario)
-  fileTags      String[]      @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
+  chapterId      String              @db.Uuid
+  chapter        Chapter             @relation("ChapterBoardCards", fields: [chapterId], references: [id])
+  title          String // card label, e.g. "Page 7"
+  stage          PageStage           @default(scenario)
+  fileTags       String[]            @default([]) // PAGE_FILE_TAGS subset: scenario|ref|nemu|double
   // CS-7 R8 — the card's SLOT within its chapter (dense 0..n-1, rewritten on every move). Displayed
   // page numbers are DERIVED from it (`chapterPageNumbers`), a `double` card spanning two of them.
   // Plain index, not @@unique: the service rewrites the whole permutation, which a unique constraint
   // would fight mid-transaction (same call as IllustrationCollection.order).
-  position      Int           @default(0)
-  linkedFileIds String[]      @default([]) // CS-3 Asset/Media ids — stored, not resolved here
-  description   String? // CS-2 card-modal: free-text card description
-  dueDate       DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
+  position       Int                 @default(0)
+  linkedFileIds  String[]            @default([]) @db.Uuid // CS-3 Asset/Media ids — stored, not resolved here
+  description    String? // CS-2 card-modal: free-text card description
+  dueDate        DateTime? // CS-2 card-modal: deadline (date-only; serialized YYYY-MM-DD)
   // CS-10 D-1: who created the card. Nullable because the column landed after the table existed —
   // the migration backfills every pre-existing row to the project owner, and `null` is treated as
   // LEADERSHIP-ONLY at the gate, so a failed/partial backfill fails closed rather than open.
-  createdById   String?
-  createdBy     Account?      @relation("PageAuthor", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  labels        PageLabel[] // CS-2 card-modal: applied labels
-  assignees     PageAssignee[] // CS-2 card-modal: assigned members
+  createdById    String?             @db.Uuid
+  createdBy      Account?            @relation("PageAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  labels         PageLabel[] // CS-2 card-modal: applied labels
+  assignees      PageAssignee[] // CS-2 card-modal: assigned members
   checklistItems PageChecklistItem[] // CS-2 card-modal: checklist rows
-  comments      PageComment[] // CS-2 card-modal: comments
-  assetLinks    AssetPageLink[] // CS-3 assets linked to this card (2026-07-14 many-to-many join)
-  corrections   Correction[] // CS-5 review corrections filed against this card
+  comments       PageComment[] // CS-2 card-modal: comments
+  assetLinks     AssetPageLink[] // CS-3 assets linked to this card (2026-07-14 many-to-many join)
+  corrections    Correction[] // CS-5 review corrections filed against this card
 
   @@index([projectId, chapterId, stage])
   @@index([createdById])
@@ -1010,8 +1012,8 @@ model Page {
 // ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────
 
 model ProjectLabel {
-  id        String      @id @default(cuid())
-  projectId String
+  id        String      @id @default(uuid(7)) @db.Uuid
+  projectId String      @db.Uuid
   project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   name      String // ≤30, trimmed (validated in the DTO/service)
   color     String // hex ∈ LABEL_COLORS (validated in the service)
@@ -1022,18 +1024,18 @@ model ProjectLabel {
 }
 
 model PageLabel {
-  pageId  String
+  pageId  String       @db.Uuid
   page    Page         @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  labelId String
+  labelId String       @db.Uuid
   label   ProjectLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([pageId, labelId])
 }
 
 model PageAssignee {
-  pageId     String
+  pageId     String   @db.Uuid
   page       Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  userId     String
+  userId     String   @db.Uuid
   user       Account  @relation("PageAssignee", fields: [userId], references: [id])
   assignedAt DateTime @default(now())
 
@@ -1041,8 +1043,8 @@ model PageAssignee {
 }
 
 model PageChecklistItem {
-  id     String  @id @default(cuid())
-  pageId String
+  id     String  @id @default(uuid(7)) @db.Uuid
+  pageId String  @db.Uuid
   page   Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
   text   String
   done   Boolean @default(false)
@@ -1052,10 +1054,10 @@ model PageChecklistItem {
 }
 
 model PageComment {
-  id        String    @id @default(cuid())
-  pageId    String
+  id        String    @id @default(uuid(7)) @db.Uuid
+  pageId    String    @db.Uuid
   page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  authorId  String
+  authorId  String    @db.Uuid
   author    Account   @relation("PageCommentAuthor", fields: [authorId], references: [id])
   body      String
   createdAt DateTime  @default(now())
@@ -1075,16 +1077,16 @@ enum AssetType {
 }
 
 model Asset {
-  id             String         @id @default(cuid())
-  projectId      String
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id             String            @id @default(uuid(7)) @db.Uuid
+  projectId      String            @db.Uuid
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   type           AssetType
   filename       String
-  currentVersion Int            @default(1)
+  currentVersion Int               @default(1)
   size           Int // denormalized current-version size → sort=size is one indexed orderBy
-  mediaId        String // current version's Media id (denormalized head of the chain)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  mediaId        String            @db.Uuid // current version's Media id (denormalized head of the chain)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   versions       AssetVersion[]
   pageLinks      AssetPageLink[] // CS-3 cards this asset is linked to (2026-07-14; scenario/texte/ref = many, dessin/page = one)
   scenarioDoc    ScenarioDocument? // CS-4: the editor working draft backed by this scenario asset (1:1)
@@ -1100,9 +1102,9 @@ model Asset {
 // replaces). Both sides cascade-delete. `@@index([pageId])` backs the ?pageId= list filter + the
 // per-card derivation (Page.assetLinks).
 model AssetPageLink {
-  assetId   String
+  assetId   String   @db.Uuid
   asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  pageId    String
+  pageId    String   @db.Uuid
   page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 
@@ -1111,14 +1113,14 @@ model AssetPageLink {
 }
 
 model AssetVersion {
-  id        String   @id @default(cuid())
-  assetId   String
+  id        String   @id @default(uuid(7)) @db.Uuid
+  assetId   String   @db.Uuid
   asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
   version   Int
-  mediaId   String
+  mediaId   String   @db.Uuid
   size      Int
   note      String?
-  authorId  String
+  authorId  String   @db.Uuid
   author    Account  @relation("AssetVersionAuthor", fields: [authorId], references: [id])
   createdAt DateTime @default(now())
 
@@ -1131,8 +1133,8 @@ model AssetVersion {
 // the API); contentJson = readable PlancheDoc projection (the PUB-1-exploitable structured artifact).
 // Both written by autosave PATCH — never touches the AssetVersion chain.
 model ScenarioDocument {
-  id          String            @id @default(cuid())
-  assetId     String            @unique
+  id          String            @id @default(uuid(7)) @db.Uuid
+  assetId     String            @unique @db.Uuid
   asset       Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
   ydocState   Bytes
   contentJson Json
@@ -1147,8 +1149,8 @@ model ScenarioDocument {
 // Append-only live-update log between autosaves (opaque Yjs update bytes). Cleared (compacted) by
 // each autosave PATCH in the same transaction.
 model ScenarioUpdate {
-  id         String           @id @default(cuid())
-  documentId String
+  id         String           @id @default(uuid(7)) @db.Uuid
+  documentId String           @db.Uuid
   document   ScenarioDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   update     Bytes
   createdAt  DateTime         @default(now())
@@ -1158,11 +1160,11 @@ model ScenarioUpdate {
 
 // Per-case comments (right sidebar), keyed by document + case number.
 model ScenarioComment {
-  id         String           @id @default(cuid())
-  documentId String
+  id         String           @id @default(uuid(7)) @db.Uuid
+  documentId String           @db.Uuid
   document   ScenarioDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   caseNo     Int
-  authorId   String
+  authorId   String           @db.Uuid
   author     Account          @relation("ScenarioCommentAuthor", fields: [authorId], references: [id])
   text       String
   // CS-4 item 5 — optional highlighted-text anchor: ProseMirror positions (best-effort) + the durable
@@ -1196,24 +1198,24 @@ enum CorrectionStatus {
 // (the CS-4 comment text-anchor); dessin → { region: { x, y, w, h } } normalized 0–1. Filed against a
 // CS-3 AssetVersion (head at creation), addressed when a newer version resolves it (resolvedInVersion).
 model Correction {
-  id                  String           @id @default(cuid())
-  pageId              String
+  id                  String           @id @default(uuid(7)) @db.Uuid
+  pageId              String           @db.Uuid
   page                Page             @relation(fields: [pageId], references: [id], onDelete: Cascade)
   type                CorrectionType
   anchor              Json
-  assetId             String // the file under review (scenario doc's backing asset | dessin image asset)
+  assetId             String           @db.Uuid // the file under review (scenario doc's backing asset | dessin image asset)
   asset               Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   caseRef             String? // optional "case N" tag shown in the list row
   description         String // "what specifically" — required
   status              CorrectionStatus @default(a_corriger)
-  authorId            String
+  authorId            String           @db.Uuid
   author              Account          @relation("CorrectionAuthor", fields: [authorId], references: [id])
-  assigneeId          String?
+  assigneeId          String?          @db.Uuid
   filedAgainstVersion Int // AssetVersion.version reviewed (head at creation)
   resolvedInVersion   Int? // stamped when marked corrige
   // CS-5 Fb-2 — a scenario correction IS a tagged CS-4 comment. 1:1 link; deleting the comment (editor
   // path) cascades this correction. Legacy scenario corrections keep commentId = null (no comment).
-  commentId           String?          @unique
+  commentId           String?          @unique @db.Uuid
   comment             ScenarioComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
   createdAt           DateTime         @default(now())
 

@@ -162,10 +162,10 @@ export class MessagesService {
       SELECT m."conversationId" AS "conversationId", COUNT(*) AS unread
       FROM "Message" m
       JOIN "ConversationParticipant" p
-        ON p."conversationId" = m."conversationId" AND p."accountId" = ${accountId}
+        ON p."conversationId" = m."conversationId" AND p."accountId" = ${accountId}::uuid
       JOIN "Conversation" c
         ON c."id" = m."conversationId" AND c."type" <> 'salon' AND c."status" = 'open'
-      WHERE m."senderId" <> ${accountId} AND m."createdAt" > p."lastReadAt"
+      WHERE m."senderId" <> ${accountId}::uuid AND m."createdAt" > p."lastReadAt"
       GROUP BY m."conversationId"
     `) as { conversationId: string; unread: bigint | number }[];
 

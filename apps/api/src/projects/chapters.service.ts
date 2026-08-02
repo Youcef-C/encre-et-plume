@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'; // stdlib — the raw INSERT must supply its own id
+import { uuidv7 } from '../prisma/uuid.util'; // the raw INSERT must supply its own id (Prisma's @default can't reach it)
 import {
   BadRequestException,
   ConflictException,
@@ -167,13 +167,15 @@ export class ChaptersService {
     for (let attempt = 0; ; attempt++) {
       try {
         const chapter = await this.prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT 1 FROM "Work" WHERE id = ${workId} FOR UPDATE`;
+          // `::uuid` on every id parameter: the columns are native `uuid` since the UUIDv7 pass, and
+          // a bound JS string arrives as text — `uuid = text` has no operator in Postgres.
+          await tx.$executeRaw`SELECT 1 FROM "Work" WHERE id = ${workId}::uuid FOR UPDATE`;
           const rows = (await tx.$queryRaw`
             INSERT INTO "Chapter" ("id", "workId", "number", "title", "resume", "targetPages", "status")
-            SELECT ${randomUUID()}, ${workId}, next.n,
+            SELECT ${uuidv7()}::uuid, ${workId}::uuid, next.n,
                    COALESCE(${title}::text, 'Chapitre ' || next.n), ${resume}::text,
                    ${targetPages}::int, 'draft'::"ChapterStatus"
-            FROM (SELECT COALESCE(MAX("number"), 0) + 1 AS n FROM "Chapter" WHERE "workId" = ${workId}) next
+            FROM (SELECT COALESCE(MAX("number"), 0) + 1 AS n FROM "Chapter" WHERE "workId" = ${workId}::uuid) next
             RETURNING "id", "workId", "number", "title", "resume", "status", "likeCount", "targetPages"
           `) as unknown as ChapterRow[];
           return rows[0];

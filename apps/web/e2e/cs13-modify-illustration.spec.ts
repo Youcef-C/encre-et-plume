@@ -18,7 +18,8 @@ const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 const PASSWORD = 'password123';
 const OWNER_EMAIL = 'qa_e2e_cs13_owner@test.com';
 const STRANGER_EMAIL = 'qa_e2e_cs13_stranger@test.com';
-const MAIN_ID = 'e2e-cs13-illu-main';
+// Fixture id from e2e-seed.js's FID map (was the readable 'e2e-cs13-illu-main' before ids became uuid).
+const MAIN_ID = '00000000-0000-7000-8000-000000000521';
 const ARTIST_SLUG = 'e2e-cs13-owner';
 const IMAGE_FIXTURE = path.join(__dirname, 'fixtures/avatar-50x50.jpg');
 

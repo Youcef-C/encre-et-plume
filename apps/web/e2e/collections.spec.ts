@@ -279,7 +279,8 @@ test.describe('DR-12 E6-E9 — Galerie browse/search, hashtags, cover-as-member'
     expect(createRes.ok()).toBe(true);
     const { id: collId } = (await createRes.json()) as { id: string };
     const addRes = await page.request.post(`http://localhost:3001/collections/${collId}/illustrations`, {
-      data: { illustrationId: 'dr5-illus-11' },
+      // seed.js FID['dr5-illus-11'] — « Carnet d'encre · planche 12 »
+      data: { illustrationId: '00000000-0000-7000-8000-000000000211' },
     });
     expect(addRes.ok()).toBe(true);
 
@@ -406,7 +407,8 @@ test.describe('DR-12 E10-E13 — catalogue entry, owner edit, manage-view edit, 
     expect(createRes.ok()).toBe(true);
     const { id: collId } = (await createRes.json()) as { id: string };
     const addRes = await page.request.post(`http://localhost:3001/collections/${collId}/illustrations`, {
-      data: { illustrationId: 'dr5-illus-11' },
+      // seed.js FID['dr5-illus-11'] — « Carnet d'encre · planche 12 »
+      data: { illustrationId: '00000000-0000-7000-8000-000000000211' },
     });
     expect(addRes.ok()).toBe(true);
 

@@ -167,7 +167,8 @@ test.describe('MC-3 collaboration invite — signed in (dr1-camille-roux)', () =
 
   test('MC3-E4b: illustration page trigger (DR-6) opens the modal for the linked artist', async ({ page }) => {
     await loginAsCamille(page);
-    await page.goto('/illustration/dr5-illus-1');
+    // seed.js FID['dr5-illus-1'] — « Pluie de Néons » (artist Yuki Moreau)
+    await page.goto('/illustration/00000000-0000-7000-8000-000000000201');
     await expect(page.getByText('Yuki Moreau', { exact: true }).first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Proposer une collab' }).click();

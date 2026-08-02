@@ -19,6 +19,44 @@ const prisma = e2ePrisma(5);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const inDays = (n) => new Date(Date.now() + n * DAY_MS);
 
+/**
+ * Fixed fixture ids.
+ *
+ * Every primary key is a native Postgres `uuid` column, which rejects the readable strings these
+ * fixtures used to carry ('dr5-illus-1', 'mc3-proj-lames-de-brume', …). They are replaced by
+ * hand-written UUIDv7 constants — deterministic like the readable names were, so e2e specs can still
+ * address a fixture by id, and keyed by the OLD readable name so `grep dr5-illus-1` still lands here.
+ *
+ * Shape: `00000000-0000-7000-8000-0000000GGNN` — version nibble 7, variant nibble 8, `GG` a fixture
+ * group, `NN` the item. Nothing derives meaning from it; it is a naming convention, not a protocol.
+ *   01 contests · 02 illustrations · 03 project calls · 04 projects   (05 is e2e-seed.js's range)
+ */
+const FID = {
+  'dr2-contest-1': '00000000-0000-7000-8000-000000000101',
+  'dr5-illus-1': '00000000-0000-7000-8000-000000000201',
+  'dr5-illus-2': '00000000-0000-7000-8000-000000000202',
+  'dr5-illus-3': '00000000-0000-7000-8000-000000000203',
+  'dr5-illus-4': '00000000-0000-7000-8000-000000000204',
+  'dr5-illus-5': '00000000-0000-7000-8000-000000000205',
+  'dr5-illus-6': '00000000-0000-7000-8000-000000000206',
+  'dr5-illus-7': '00000000-0000-7000-8000-000000000207',
+  'dr5-illus-8': '00000000-0000-7000-8000-000000000208',
+  'dr5-illus-9': '00000000-0000-7000-8000-000000000209',
+  'dr5-illus-10': '00000000-0000-7000-8000-000000000210',
+  'dr5-illus-11': '00000000-0000-7000-8000-000000000211',
+  'dr5-illus-12': '00000000-0000-7000-8000-000000000212',
+  'dr5-illus-13': '00000000-0000-7000-8000-000000000213',
+  'dr5-illus-14': '00000000-0000-7000-8000-000000000214',
+  'dr10-illus-plus18': '00000000-0000-7000-8000-000000000299',
+  'mc6-call-fantastique': '00000000-0000-7000-8000-000000000301',
+  'mc6-call-comedie': '00000000-0000-7000-8000-000000000302',
+  'mc6-call-aventure': '00000000-0000-7000-8000-000000000303',
+  'mc7-call-nocturne': '00000000-0000-7000-8000-000000000304',
+  'mc7-call-brouillon': '00000000-0000-7000-8000-000000000305',
+  'mc3-proj-lames-de-brume': '00000000-0000-7000-8000-000000000401',
+  'mc3-proj-spectres-avril': '00000000-0000-7000-8000-000000000402',
+};
+
 // weeklyLikeDelta/priorWeekLikeDelta chosen so round((weekly-prior)/prior*100) matches the
 // prototype's growth arrows (↑24%/↑18%/↑12%/↑9%, lines 429-441).
 // DR-2 adds: themes/format/language/audienceRating/complete/chapterCount/ratingAvg/publishedAt.
@@ -180,10 +218,10 @@ const WATCHLIST = [
 // are non-empty out of the box for QA (dr5-illus-2 is liked-only, dr5-illus-1/7 are saved).
 const REACTIONS = [
   { accountSlug: 'dr1-camille-roux', targetType: 'chapter', workSlug: 'lames-de-brume', chapterNumber: 1, kind: 'like' },
-  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-1', kind: 'like' },
-  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-2', kind: 'like' },
-  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-1', kind: 'save' },
-  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: 'dr5-illus-7', kind: 'save' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: FID['dr5-illus-1'], kind: 'like' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: FID['dr5-illus-2'], kind: 'like' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: FID['dr5-illus-1'], kind: 'save' },
+  { accountSlug: 'dr1-camille-roux', targetType: 'illustration', illustrationId: FID['dr5-illus-7'], kind: 'save' },
 ];
 
 // DR-3: 2 funding goals for the showcase manga (percentages exercise the progress bars).
@@ -207,7 +245,7 @@ const WORK_REVIEWS = {
 // DR-2: "Actualités" concours card + "SÉLECTION ÉDITEUR" pick (namespaced dr2-* per DR-1's
 // slug-collision note — QA fixtures from other stories reuse bare slugs).
 const CONTESTS = [
-  { id: 'dr2-contest-1', category: 'CONCOURS', title: 'Prix du jeune mangaka 2026', subtitle: 'Doté par un éditeur · clôture 30 j', ctaLabel: 'Participer', href: '/concours', active: true },
+  { id: FID['dr2-contest-1'], category: 'CONCOURS', title: 'Prix du jeune mangaka 2026', subtitle: 'Doté par un éditeur · clôture 30 j', ctaLabel: 'Participer', href: '/concours', active: true },
 ];
 const EDITOR_PICKS = [
   { workSlug: 'encre-blanche', blurb: '« Encre Blanche » repéré par une maison partenaire', order: 0 },
@@ -257,50 +295,50 @@ const ANNOUNCEMENTS = [
 const ILLUSTRATIONS = [
   // DR-9: likeCount includes the pre-active REACTIONS seed below (dr1-camille-roux already likes
   // this piece) — 12401, not 12400, so the counter isn't off-by-one on first toggle.
-  { id: 'dr5-illus-1', title: 'Pluie de Néons', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'couvertures', genres: ['Shōnen', 'Aventure'], likeCount: 12401, weeklyLikeDelta: 900, publishAt: inDays(-8),
+  { id: FID['dr5-illus-1'], title: 'Pluie de Néons', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'couvertures', genres: ['Shōnen', 'Aventure'], likeCount: 12401, weeklyLikeDelta: 900, publishAt: inDays(-8),
     description: "Encrage traditionnel rehaussé de trames numériques. Réalisée pour explorer l'ambiance pluvieuse et les reflets néon de la série — pinceau G, trames 60 lpi et quelques heures de patience.",
     hashtags: ['encre', 'noir', 'néon', 'pluie'], width: 2480, height: 3508, tools: 'Encre · CSP', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-2', title: 'Onibi · Esprit du feu', artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai', 'Fantastique'], likeCount: 9700, weeklyLikeDelta: 700, publishAt: inDays(-15),
+  { id: FID['dr5-illus-2'], title: 'Onibi · Esprit du feu', artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai', 'Fantastique'], likeCount: 9700, weeklyLikeDelta: 700, publishAt: inDays(-15),
     description: "Étude de personnage pour un esprit du feu inspiré du folklore japonais — la palette chaude tranche volontairement avec le reste de la série.",
     hashtags: ['yokai', 'feu', 'personnage'], width: 2000, height: 2800, tools: 'Procreate', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-3', title: 'Lames de Brume — Ch.2', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: ['Seinen'], likeCount: 3400, weeklyLikeDelta: 320, publishAt: inDays(-30),
+  { id: FID['dr5-illus-3'], title: 'Lames de Brume — Ch.2', artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: ['Seinen'], likeCount: 3400, weeklyLikeDelta: 320, publishAt: inDays(-30),
     description: 'Planche de production du chapitre 2 — crayonné et encrage côte à côte pour montrer le processus complet.',
     hashtags: ['process', 'encrage', 'lamesdebrume'], width: 2100, height: 2970, tools: 'Encre · CSP', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-4', title: 'Sanctuaire oublié', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Fantastique', 'Horreur'], likeCount: 2100, weeklyLikeDelta: 180, publishAt: inDays(-45),
+  { id: FID['dr5-illus-4'], title: 'Sanctuaire oublié', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Fantastique', 'Horreur'], likeCount: 2100, weeklyLikeDelta: 180, publishAt: inDays(-45),
     description: 'Décor de sanctuaire abandonné, envahi par la végétation — étude de lumière et de perspective.',
     hashtags: ['decor', 'sanctuaire', 'ambiance'], width: 3000, height: 2000, tools: 'Photoshop', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-5', title: 'Rin, sous la pluie', artistName: 'Mira K.', category: 'personnages', genres: ['Drame'], likeCount: 5900, weeklyLikeDelta: 480, publishAt: inDays(-3),
+  { id: FID['dr5-illus-5'], title: 'Rin, sous la pluie', artistName: 'Mira K.', category: 'personnages', genres: ['Drame'], likeCount: 5900, weeklyLikeDelta: 480, publishAt: inDays(-3),
     description: 'Portrait de Rin sous la pluie, un moment de calme avant la tempête.',
     hashtags: ['portrait', 'pluie', 'rin'], width: 2200, height: 3100, tools: 'Procreate', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-6', title: "Étude d'encre #7", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 1300, weeklyLikeDelta: 90, publishAt: inDays(-60),
+  { id: FID['dr5-illus-6'], title: "Étude d'encre #7", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 1300, weeklyLikeDelta: 90, publishAt: inDays(-60),
     description: null, hashtags: [], width: null, height: null, tools: null, license: null },
-  { id: 'dr5-illus-7', title: 'Couverture · Néon Sutra', artistName: 'Léa B.', category: 'couvertures', genres: ['Shōnen'], likeCount: 8100, weeklyLikeDelta: 610, publishAt: inDays(-1),
+  { id: FID['dr5-illus-7'], title: 'Couverture · Néon Sutra', artistName: 'Léa B.', category: 'couvertures', genres: ['Shōnen'], likeCount: 8100, weeklyLikeDelta: 610, publishAt: inDays(-1),
     description: "Couverture pour le tome 1 de Néon Sutra — jeu de contraste entre l'ombre du héros et les néons de la ville.",
     hashtags: ['couverture', 'neonsutra', 'ville'], width: 2480, height: 3508, tools: 'Encre · Photoshop', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-8', title: "Masque de l'oni", artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai'], likeCount: 4600, weeklyLikeDelta: 380, publishAt: inDays(-20),
+  { id: FID['dr5-illus-8'], title: "Masque de l'oni", artistName: 'Inès Khelifi', category: 'personnages', genres: ['Yōkai'], likeCount: 4600, weeklyLikeDelta: 380, publishAt: inDays(-20),
     description: "Étude de masque d'oni traditionnel, revisité avec une palette plus sombre.",
     hashtags: ['oni', 'masque', 'yokai'], width: 2000, height: 2600, tools: 'Procreate', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-9', title: 'Ruelles de Kowloon', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Cyberpunk'], likeCount: 2800, weeklyLikeDelta: 220, publishAt: inDays(-25),
+  { id: FID['dr5-illus-9'], title: 'Ruelles de Kowloon', artistName: 'Hugo Da Silva', category: 'decors', genres: ['Cyberpunk'], likeCount: 2800, weeklyLikeDelta: 220, publishAt: inDays(-25),
     description: 'Décor inspiré de la Cité close de Kowloon — enchevêtrement de câbles, enseignes et linge suspendu.',
     hashtags: ['decor', 'cyberpunk', 'kowloon'], width: 3200, height: 2100, tools: 'Photoshop', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-10', title: 'Fan-art · Le Dernier Ronin', artistName: 'Sasha N.', category: 'fanart', genres: ['Seinen'], likeCount: 6200, weeklyLikeDelta: 520, publishAt: inDays(-5),
+  { id: FID['dr5-illus-10'], title: 'Fan-art · Le Dernier Ronin', artistName: 'Sasha N.', category: 'fanart', genres: ['Seinen'], likeCount: 6200, weeklyLikeDelta: 520, publishAt: inDays(-5),
     description: 'Fan-art réalisé en hommage à la série Le Dernier Ronin.', hashtags: ['fanart', 'ronin'], width: 2100, height: 2970, tools: 'Clip Studio Paint', license: '© Tous droits réservés — fan-art non commercial' },
-  { id: 'dr5-illus-11', title: "Carnet d'encre · planche 12", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 980, weeklyLikeDelta: 60, publishAt: inDays(-70),
+  { id: FID['dr5-illus-11'], title: "Carnet d'encre · planche 12", artistName: 'Yuki Moreau', artistAccountSlug: 'dr1-yuki-moreau', category: 'process', genres: [], likeCount: 980, weeklyLikeDelta: 60, publishAt: inDays(-70),
     description: 'Extrait du carnet de croquis — planche 12, étude de mouvement.',
     hashtags: ['carnet', 'croquis', 'process'], width: 1800, height: 2400, tools: 'Encre', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-12', title: "Spectre d'avril", artistName: 'Camille D.', category: 'personnages', genres: ['Fantastique', 'Horreur'], likeCount: 3000, weeklyLikeDelta: 260, publishAt: inDays(-35),
+  { id: FID['dr5-illus-12'], title: "Spectre d'avril", artistName: 'Camille D.', category: 'personnages', genres: ['Fantastique', 'Horreur'], likeCount: 3000, weeklyLikeDelta: 260, publishAt: inDays(-35),
     description: "Illustration d'un spectre errant, ambiance printanière inquiétante.",
     hashtags: ['spectre', 'fantastique'], width: 2000, height: 2800, tools: 'Procreate', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-13', title: 'Geisha mécanique', artistName: 'Mira K.', category: 'personnages', genres: ['Steampunk'], likeCount: 7300, weeklyLikeDelta: 590, publishAt: inDays(-2),
+  { id: FID['dr5-illus-13'], title: 'Geisha mécanique', artistName: 'Mira K.', category: 'personnages', genres: ['Steampunk'], likeCount: 7300, weeklyLikeDelta: 590, publishAt: inDays(-2),
     description: 'Geisha steampunk, rouages et kimono traditionnel réinventés.',
     hashtags: ['steampunk', 'geisha'], width: 2200, height: 3100, tools: 'Photoshop', license: '© Tous droits réservés' },
-  { id: 'dr5-illus-14', title: 'Forêt de bambous', artistName: 'Léa B.', category: 'decors', genres: ['Aventure'], likeCount: 1900, weeklyLikeDelta: 150, publishAt: inDays(-50),
+  { id: FID['dr5-illus-14'], title: 'Forêt de bambous', artistName: 'Léa B.', category: 'decors', genres: ['Aventure'], likeCount: 1900, weeklyLikeDelta: 150, publishAt: inDays(-50),
     description: 'Décor de forêt de bambous baignée de lumière — étude de perspective et de profondeur.',
     hashtags: ['decor', 'bambous', 'foret'], width: 3000, height: 2000, tools: 'Photoshop', license: '© Tous droits réservés' },
   // DR-10: genres includes 'Érotique' (genres.json id 'erotica', plus18:true) — gives the
   // illustration 18+ hard-gate (hasPlus18Genre) a fixture, distinct from Onibi/Gore above (mature
   // but NOT plus18 — never blurred, only warning-tagged).
-  { id: 'dr10-illus-plus18', title: 'Nuit close', artistName: 'Camille D.', category: 'personnages', genres: ['Érotique'], likeCount: 640, weeklyLikeDelta: 40, publishAt: inDays(-12),
+  { id: FID['dr10-illus-plus18'], title: 'Nuit close', artistName: 'Camille D.', category: 'personnages', genres: ['Érotique'], likeCount: 640, weeklyLikeDelta: 40, publishAt: inDays(-12),
     description: 'Illustration réservée aux adultes (18+) — fixture DR-10 pour le hard-gate illustration.',
     hashtags: ['mature'], width: 2000, height: 2800, tools: 'Procreate', license: '© Tous droits réservés' },
 ];
@@ -384,19 +422,19 @@ const PROJECT_CALLS = [
   // default board total (status:'all') from 5 to 8 — appels.spec's total-count assertions are bumped
   // accordingly. Explicit ids so the applications below can reference them.
   {
-    id: 'mc6-call-fantastique', title: 'Récit fantastique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Théo M.',
+    id: FID['mc6-call-fantastique'], title: 'Récit fantastique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Théo M.',
     genres: ['supernatural'], format: 'one_shot', tags: ['Fantastique', 'One-shot'],
     description: "Univers de brume et de spectres, character design prêt — cherche un·e scénariste pour lui donner une histoire.",
     closesAt: inDays(15), applicationCount: 1, status: 'open', createdAt: inMinutes(-1),
   },
   {
-    id: 'mc6-call-comedie', title: 'Comédie douce-amère', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Maya L.',
+    id: FID['mc6-call-comedie'], title: 'Comédie douce-amère', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Maya L.',
     genres: ['josei', 'romance'], tags: ['Josei', 'Romance'],
     description: 'Série courte feel-good, trait rond et chaleureux — je cherche une plume pour porter les dialogues.',
     closesAt: inDays(22), applicationCount: 1, status: 'open', createdAt: inMinutes(-2),
   },
   {
-    id: 'mc6-call-aventure', title: 'Aventure onirique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Sora K.',
+    id: FID['mc6-call-aventure'], title: 'Aventure onirique', authorRole: 'dessinateur', seekingRoles: ['scenariste'], authorName: 'Sora K.',
     genres: ['adventure'], tags: ['Aventure'],
     description: 'Un voyage initiatique à travers des mondes flottants — décors posés, il me manque le récit.',
     closesAt: inDays(28), applicationCount: 1, status: 'open', createdAt: inMinutes(-3),
@@ -407,7 +445,7 @@ const PROJECT_CALLS = [
   // seekingRoles:['scenariste'] + genre 'action' (non-seinen) so appels.spec's dessinateur→3 / seinen→2
   // filter counts stay valid. Grows the default board total (status:'all') by 1 — appels.spec bumped.
   {
-    id: 'mc7-call-nocturne', title: 'Polar nocturne', authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
+    id: FID['mc7-call-nocturne'], title: 'Polar nocturne', authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
     authorRole: 'dessinateur', seekingRoles: ['scenariste'], genres: ['action'], tags: ['Action'],
     description: 'Un polar urbain sous la pluie — décors et personnages posés, il me manque la plume.',
     closesAt: inDays(25), applicationCount: 3, status: 'open', createdAt: inMinutes(-4),
@@ -419,7 +457,7 @@ const PROJECT_CALLS = [
   // this is the fixture the round-3 edit/delete e2e (E10/E11) exercises. genre 'action' (same
   // no-filter-ripple choice as nocturne). Grows the default board total (status:'all') by a further 1.
   {
-    id: 'mc7-call-brouillon', title: "Brouillon d'été", authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
+    id: FID['mc7-call-brouillon'], title: "Brouillon d'été", authorSlug: 'mc7-appels-fixture', authorName: 'Testeur Appels (MC-7)',
     authorRole: 'dessinateur', seekingRoles: ['scenariste'], genres: ['action'], tags: ['Action'],
     description: 'Idée encore en chantier — un carnet de voyage estival, il me manque la plume pour le texte.',
     closesAt: inDays(20), applicationCount: 1, status: 'open', createdAt: inMinutes(-10),
@@ -431,17 +469,17 @@ const PROJECT_CALLS = [
 // Statuses are seeded directly (MC-7's accept/reject PATCH doesn't exist yet). Distinct createdAt
 // (newest-first: pending → accepted → rejected) so the "Mes candidatures" order is assertable.
 const MY_APPLICATIONS = [
-  { callId: 'mc6-call-fantastique', status: 'pending', createdAt: inDays(-2) },
-  { callId: 'mc6-call-comedie', status: 'accepted', createdAt: inDays(-5) },
-  { callId: 'mc6-call-aventure', status: 'rejected', createdAt: inDays(-9) },
+  { callId: FID['mc6-call-fantastique'], status: 'pending', createdAt: inDays(-2) },
+  { callId: FID['mc6-call-comedie'], status: 'accepted', createdAt: inDays(-5) },
+  { callId: FID['mc6-call-aventure'], status: 'rejected', createdAt: inDays(-9) },
 ];
 
 // MC-3 (CS-1 seam): the sender's projects for the invite modal picker (prototype fixtures).
 // CS-12: slug (CS-2 workspace address), step (current production step) and nextReleaseAt (next
 // release) match the prototype "Mes projets" cards. CS-2/CS-5 will own writing step; CS-9 nextReleaseAt.
 const PROJECTS = [
-  { id: 'mc3-proj-lames-de-brume', title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'lames-de-brume', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
-  { id: 'mc3-proj-spectres-avril', title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-avril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
+  { id: FID['mc3-proj-lames-de-brume'], title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'lames-de-brume', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
+  { id: FID['mc3-proj-spectres-avril'], title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-avril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
 ];
 
 // RETIRED FIXTURE — « Carnet d'encre » used to be seeded here as a `Project` with kind
@@ -501,16 +539,16 @@ const MC7_OWNER_ACCOUNT = {
 // e2e mutates two of them (the seed wipe resets on every reseed → repeatable). Distinct createdAt so
 // the newest-first row order is assertable.
 const MC7_RECEIVED = [
-  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-lea-b', status: 'pending', createdAt: inDays(-1),
+  { callId: FID['mc7-call-nocturne'], applicantSlug: 'mc1-lea-b', status: 'pending', createdAt: inDays(-1),
     message: "Vos ambiances nocturnes collent à mon écriture — 6 chapitres d'un polar lyonnais déjà maquettés." },
-  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-noe-p', status: 'pending', createdAt: inDays(-3), message: '' },
-  { callId: 'mc7-call-nocturne', applicantSlug: 'mc1-diego-s', status: 'rejected', createdAt: inDays(-6),
+  { callId: FID['mc7-call-nocturne'], applicantSlug: 'mc1-noe-p', status: 'pending', createdAt: inDays(-3), message: '' },
+  { callId: FID['mc7-call-nocturne'], applicantSlug: 'mc1-diego-s', status: 'rejected', createdAt: inDays(-6),
     message: "Un pitch SF à tiroirs, si le polar peut glisser vers l'anticipation." },
   // MC-7 round 3: the one pending application on mc7-call-brouillon (F7 — a zero-application call
   // never appears in the MC-7 selector). Diego reused as the applicant: he's already an MC-7 seed
   // account with a portfolio, and grepped confirmed no e2e spec asserts his own "Mes candidatures"
   // count anywhere, so a second application under his name can't perturb another suite.
-  { callId: 'mc7-call-brouillon', applicantSlug: 'mc1-diego-s', status: 'pending', createdAt: inDays(-2),
+  { callId: FID['mc7-call-brouillon'], applicantSlug: 'mc1-diego-s', status: 'pending', createdAt: inDays(-2),
     message: 'Un carnet illustré, je peux poser le texte de voyage qui va avec.' },
 ];
 
@@ -865,15 +903,15 @@ async function main() {
     // so there is no stable id to upsert on).
     await prisma.invitation.deleteMany({ where: { toUserId: camille.id } });
     const RECEIVED_INVITATIONS = [
-      { fromSlug: 'dr1-yuki-moreau', projectId: 'mc3-proj-lames-de-brume', status: 'pending', createdAt: inDays(0),
+      { fromSlug: 'dr1-yuki-moreau', projectId: FID['mc3-proj-lames-de-brume'], status: 'pending', createdAt: inDays(0),
         message: "J'ai adoré ton encrage sur Onibi — ton trait collerait parfaitement à l'ambiance pluvieuse du tome 2. J'imagine un récit en quatre arcs, beaucoup de scènes nocturnes, un chapitre par mois. Dis-moi ce que tu en penses !" },
       { fromSlug: 'mc1-ines-k', projectId: null, status: 'pending', createdAt: inDays(-1),
         message: "J'ai l'univers et les décors, mais il me manque une vraie histoire. Tu serais partant·e ? J'ai déjà une vingtaine de planches de recherches et un bestiaire complet." },
-      { fromSlug: 'mc1-theo-m', projectId: 'mc3-proj-spectres-avril', status: 'pending', createdAt: inDays(-2),
+      { fromSlug: 'mc1-theo-m', projectId: FID['mc3-proj-spectres-avril'], status: 'pending', createdAt: inDays(-2),
         message: 'Une idée de one-shot fantastique, on en parle ?' },
       // Was « Carnet d'encre » — a retired fixture (a collection, never a Project). An invitation is a
       // collaboration on a manga/roman, so it moved to Spectres d'Avril, which gains its second member.
-      { fromSlug: 'mc1-hugo-d', projectId: 'mc3-proj-spectres-avril', status: 'accepted', createdAt: inDays(-4), respondedAt: inDays(-3),
+      { fromSlug: 'mc1-hugo-d', projectId: FID['mc3-proj-spectres-avril'], status: 'accepted', createdAt: inDays(-4), respondedAt: inDays(-3),
         message: 'On lance le projet ensemble, hâte de commencer !' },
       { fromSlug: 'mc1-lea-b', projectId: null, status: 'declined', createdAt: inDays(-8), respondedAt: inDays(-7),
         message: 'Une comédie romantique légère, ça te tente ?' },
@@ -1145,7 +1183,7 @@ async function main() {
   {
     const owner = await prisma.account.findUnique({ where: { profileSlug: 'dr1-yuki-moreau' }, select: { id: true } });
     // Yuki's own seeded illustrations (artistAccountSlug: 'dr1-yuki-moreau'): illus-1, illus-3, illus-6, illus-11.
-    const memberIds = ['dr5-illus-1', 'dr5-illus-3', 'dr5-illus-6'];
+    const memberIds = [FID['dr5-illus-1'], FID['dr5-illus-3'], FID['dr5-illus-6']];
     if (owner) {
       const collectionData = {
         slug: 'carnet-d-encre',

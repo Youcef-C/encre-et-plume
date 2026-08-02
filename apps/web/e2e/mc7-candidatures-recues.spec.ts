@@ -243,7 +243,8 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     const listRes = await page.request.get(`${API}/me/calls/applications`);
     expect(listRes.status()).toBe(200);
     const body = await listRes.json();
-    const group = body.groups.find((g: { callId: string }) => g.callId === 'mc7-call-nocturne');
+    // seed.js FID['mc7-call-nocturne'] — « Polar nocturne »
+    const group = body.groups.find((g: { callId: string }) => g.callId === '00000000-0000-7000-8000-000000000304');
     const diegoApp = group.applications.find((a: { applicant: { name: string } }) => a.applicant.name === 'Diego S.');
     expect(diegoApp).toBeTruthy();
 

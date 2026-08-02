@@ -71,4 +71,29 @@ describe('SentryExceptionFilter', () => {
     filter.catch(new HttpException('forbidden', 403), host as unknown as import('@nestjs/common').ArgumentsHost);
     expect(mockCaptureException).not.toHaveBeenCalled();
   });
+
+  // Ids are native `uuid` columns since the UUIDv7 pass. A path param that is not a UUID cannot
+  // name a row, so it is a 404 (the answer it got while ids were TEXT) — never a 500, and never
+  // Sentry noise.
+  it('maps a malformed-UUID lookup (Prisma P2023) to 404 without capturing it', () => {
+    const host = makeHost('GET', '/illustrations/nope');
+    const err = Object.assign(new Error('Inconsistent column data'), {
+      code: 'P2023',
+      meta: { modelName: 'Illustration', message: 'Error creating UUID, invalid character' },
+    });
+    filter.catch(err, host as unknown as import('@nestjs/common').ArgumentsHost);
+    expect(host.res.status).toHaveBeenCalledWith(404);
+    expect(mockCaptureException).not.toHaveBeenCalled();
+  });
+
+  it('still reports a P2023 that is not about a UUID as a 500', () => {
+    const host = makeHost();
+    const err = Object.assign(new Error('Inconsistent column data'), {
+      code: 'P2023',
+      meta: { modelName: 'Work', message: 'Malformed enum value' },
+    });
+    filter.catch(err, host as unknown as import('@nestjs/common').ArgumentsHost);
+    expect(host.res.status).toHaveBeenCalledWith(500);
+    expect(mockCaptureException).toHaveBeenCalledWith(err);
+  });
 });
