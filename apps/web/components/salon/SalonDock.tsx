@@ -3,7 +3,7 @@
 // MC-11 — Community salon "Le Comptoir": a collapsible dock fixed bottom-left (the MC-9 Messages
 // widget stays bottom-right). Replica of the prototype's `SALON — DOCK COLLAPSABLE` section.
 // Reuses the shared MC-9 socket (via useMessaging().socket) — no second WS connection.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   WS_EVENTS,
   SALON_NAME,
@@ -19,6 +19,7 @@ import {
   type WsMessageLiked,
 } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import { isPlainBubbleTarget, jumpToMessage, useLikeToggle } from '../../lib/messageActions';
@@ -65,6 +66,10 @@ export default function SalonDock() {
   const [messages, setMessages] = useState<FeedMessage[]>([]);
   const [feedState, setFeedState] = useState<FeedState>('idle');
   const [loaded, setLoaded] = useState(false);
+  // P-3 — older history: the API has always been cursor-paginated (30/page); the dock now follows the
+  // cursor upward instead of stopping at page 1.
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   // MC-15: the salon gets Répondre + J'aime and NOTHING else — the server refuses a salon edit or
@@ -88,6 +93,7 @@ export default function SalonDock() {
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pinnedRef = useRef(true); // is the feed scrolled to the bottom?
+  const prependHeightRef = useRef<number | null>(null); // feed height captured before an older page lands
   const expandedRef = useRef(false);
   expandedRef.current = expanded;
   const blockedRef = useRef(blockedIds);
@@ -229,6 +235,7 @@ export default function SalonDock() {
       .getSalonMessages()
       .then((page) => {
         setMessages([...page.items].reverse()); // API newest-first → display oldest→newest
+        setCursor(page.nextCursor);
         setLoaded(true);
         setFeedState('ready');
         requestAnimationFrame(() => {
@@ -238,6 +245,36 @@ export default function SalonDock() {
       })
       .catch(() => setFeedState('error'));
   }, []);
+
+  // P-3 — one page of older messages, prepended above the current ones.
+  const loadOlder = useCallback(async () => {
+    if (!cursor || loadingOlder) return;
+    setLoadingOlder(true);
+    // Remember the height BEFORE the page lands: the layout effect below restores the reading position.
+    prependHeightRef.current = feedRef.current?.scrollHeight ?? null;
+    try {
+      const page = await api.getSalonMessages(cursor);
+      setMessages((list) => [...[...page.items].reverse(), ...list]);
+      setCursor(page.nextCursor);
+    } catch {
+      prependHeightRef.current = null; // nothing was prepended
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [cursor, loadingOlder]);
+
+  // Auto-load when the top of the feed comes into view; the button below stays for keyboard users.
+  const topSentinel = useInfiniteScroll<HTMLDivElement>(loadOlder, cursor != null);
+
+  // Prepending taller content above the viewport would otherwise yank the reader upward by exactly the
+  // height that was added. Only the prepend path touches the scroll here — everything else (opening the
+  // dock, a new message while pinned, sending) keeps its own rAF scroll-to-bottom, unchanged.
+  useLayoutEffect(() => {
+    const el = feedRef.current;
+    if (!el || prependHeightRef.current == null) return;
+    el.scrollTop += el.scrollHeight - prependHeightRef.current;
+    prependHeightRef.current = null;
+  }, [messages]);
 
   const toggle = useCallback(() => {
     setExpanded((prev) => {
@@ -620,8 +657,34 @@ export default function SalonDock() {
               </p>
             )}
 
-            {feedState === 'ready' && visible.length === 0 && (
+            {feedState === 'ready' && visible.length === 0 && !cursor && (
               <p style={{ margin: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>Soyez le premier à écrire.</p>
+            )}
+
+            {/* P-3 — the top of the room: older pages load on scroll, the button is the keyboard path. */}
+            {feedState === 'ready' && cursor && (
+              <>
+                <div ref={topSentinel} aria-hidden="true" />
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                  style={{
+                    alignSelf: 'center',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: 'var(--accent)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: loadingOlder ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                    minHeight: 44,
+                    flex: 'none',
+                  }}
+                >
+                  {loadingOlder ? 'Chargement…' : 'Charger les messages précédents'}
+                </button>
+              </>
             )}
 
             {feedState === 'ready' &&

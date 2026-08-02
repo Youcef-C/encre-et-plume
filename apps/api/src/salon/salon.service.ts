@@ -233,26 +233,29 @@ export class SalonService {
    * Resolved live accounts that are salon members the viewer can see: ALL members (self INCLUDED) minus
    * the viewer's blocked pairs, capped at SALON_ROSTER_MAX. The single source both getPresence (roster)
    * and getSummary (header onlineCount) derive their number from, so header === roster always.
+   *
+   * P-1 (DB scalability pass): ONE query, and the cap is `take`, not a post-fetch slice. « Le Comptoir »
+   * is a single global conversation, so an unbounded participant read is O(all members) every time the
+   * roster or the header renders. Both exclusions (blocked pairs, deleted accounts) live in the WHERE —
+   * the same rule as MC-15's `listLikes`: filtering AFTER the fetch is exactly what makes a naive `take`
+   * return fewer rows than asked, which is why the old shape had to read everything.
+   * The selected page is unchanged: the alphabetically-first SALON_ROSTER_MAX visible members.
    */
   private async visibleMembers(
     salonId: string,
     viewerId: string,
   ): Promise<{ id: string; displayName: string; avatar: string | null; profileSlug: string }[]> {
-    const [members, blocked] = await Promise.all([
-      this.prisma.conversationParticipant.findMany({
-        where: { conversationId: salonId },
-        select: { accountId: true },
-      }) as Promise<{ accountId: string }[]>,
-      this.blocks.blockedPairIds(viewerId), // never contains viewerId (can't block yourself) → self kept
-    ]);
-    const ids = members.map((m) => m.accountId).filter((id) => !blocked.has(id));
-    if (ids.length === 0) return [];
-    const rows = (await this.prisma.account.findMany({
-      where: { id: { in: ids }, deletedAt: null },
-      select: { id: true, displayName: true, avatar: true, profileSlug: true },
-      orderBy: { displayName: 'asc' },
-    })) as { id: string; displayName: string; avatar: string | null; profileSlug: string }[];
-    return rows.slice(0, SALON_ROSTER_MAX); // cap AFTER resolving → count === items.length, bounded response
+    const blocked = await this.blocks.blockedPairIds(viewerId); // never contains viewerId → self kept
+    const rows = (await this.prisma.conversationParticipant.findMany({
+      where: {
+        conversationId: salonId,
+        account: { deletedAt: null, ...(blocked.size > 0 ? { id: { notIn: [...blocked] } } : {}) },
+      },
+      orderBy: { account: { displayName: 'asc' } },
+      take: SALON_ROSTER_MAX, // bounded WORK, not just a bounded response
+      select: { account: { select: { id: true, displayName: true, avatar: true, profileSlug: true } } },
+    })) as unknown as { account: { id: string; displayName: string; avatar: string | null; profileSlug: string } }[];
+    return rows.map((r) => r.account);
   }
 
   /** Map an account to the shared ReachableUser shape for a join broadcast. */

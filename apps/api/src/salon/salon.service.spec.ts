@@ -87,6 +87,34 @@ function build(over: { prisma?: Record<string, unknown>; redis?: Record<string, 
   return { service, prisma, redis, gateway, blocks };
 }
 
+type Person = string | { id: string; displayName?: string; avatar?: string | null; profileSlug?: string };
+
+/**
+ * Salon members as the DB returns them: the roster is ONE participant query that joins the account,
+ * filters (blocked / deleted) in its WHERE and caps with `take` (P-1). The mock honors both so the
+ * cap and the exclusion stay real assertions instead of post-fetch JS the test could never catch.
+ */
+function withMembers(people: Person[], over: Record<string, unknown> = {}) {
+  const prisma = makePrisma(over);
+  const rows = people.map((p) => {
+    const a = typeof p === 'string' ? { id: p } : p;
+    return {
+      account: {
+        id: a.id,
+        displayName: a.displayName ?? a.id,
+        avatar: a.avatar ?? null,
+        profileSlug: a.profileSlug ?? a.id,
+      },
+    };
+  });
+  (prisma.conversationParticipant as any).findMany.mockImplementation((args: any) => {
+    const notIn: string[] = args?.where?.account?.id?.notIn ?? [];
+    const kept = rows.filter((r) => !notIn.includes(r.account.id));
+    return Promise.resolve(args?.take ? kept.slice(0, args.take) : kept);
+  });
+  return prisma;
+}
+
 describe('SalonService.ensureSalon (seeded once, idempotent)', () => {
   it('upserts the singleton on dmKey "salon" with type salon and name Le Comptoir', async () => {
     const { service, prisma } = build();
@@ -126,23 +154,15 @@ describe('SalonService.getSummary', () => {
   });
 
   it('onlineCount = ALL visible salon members INCLUDING self (membership, not app-online sockets)', async () => {
-    const prisma = makePrisma();
     // members query includes self now (no accountId:{not} filter)
-    (prisma.conversationParticipant as any).findMany.mockResolvedValue([{ accountId: 'acc-1' }, { accountId: 'acc-2' }, { accountId: 'acc-3' }]);
-    (prisma.account as any).findMany.mockResolvedValue([
-      { id: 'acc-1', displayName: 'Me', avatar: null, profileSlug: 'me' },
-      { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
-      { id: 'acc-3', displayName: 'Cara', avatar: null, profileSlug: 'cara' },
-    ]);
+    const prisma = withMembers(['acc-1', 'acc-2', 'acc-3']);
     const { service } = build({ prisma });
     const summary = await service.getSummary('acc-1');
     expect(summary.onlineCount).toBe(3); // self counted
   });
 
   it('onlineCount excludes blocked members (per-viewer)', async () => {
-    const prisma = makePrisma();
-    (prisma.conversationParticipant as any).findMany.mockResolvedValue([{ accountId: 'acc-1' }, { accountId: 'blk' }]);
-    (prisma.account as any).findMany.mockResolvedValue([{ id: 'acc-1', displayName: 'Me', avatar: null, profileSlug: 'me' }]);
+    const prisma = withMembers(['acc-1', 'blk']);
     const blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set(['blk'])) };
     const { service } = build({ prisma, blocks });
     const summary = await service.getSummary('acc-1');
@@ -322,15 +342,9 @@ describe('SalonService.getOnlineUsers', () => {
 });
 
 describe('SalonService.getPresence (MC-13 — salon MEMBERSHIP roster, self INCLUDED)', () => {
-  const withMembers = (ids: string[]) => {
-    const prisma = makePrisma();
-    (prisma.conversationParticipant as any).findMany.mockResolvedValue(ids.map((id) => ({ accountId: id })));
-    return prisma;
-  };
-
   it('includes ALL members INCLUDING the caller (flagged self), count === items.length, sorted fr', async () => {
-    const prisma = withMembers(['acc-1', 'acc-2', 'acc-3']); // members query includes self
-    (prisma.account as any).findMany.mockResolvedValue([
+    // members query includes self
+    const prisma = withMembers([
       { id: 'acc-3', displayName: 'Cara', avatar: 'http://cdn/c.webp', profileSlug: 'cara' },
       { id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' }, // the caller
       { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
@@ -339,7 +353,7 @@ describe('SalonService.getPresence (MC-13 — salon MEMBERSHIP roster, self INCL
     const res = await service.getPresence('acc-1');
     // members query is NOT filtered by accountId:{not:viewer} anymore (self is a member too)
     expect((prisma.conversationParticipant as any).findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { conversationId: 'salon-conv' } }),
+      expect.objectContaining({ where: expect.objectContaining({ conversationId: 'salon-conv' }) }),
     );
     expect(res.items).toEqual([
       { id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice', self: true }, // caller flagged
@@ -351,48 +365,82 @@ describe('SalonService.getPresence (MC-13 — salon MEMBERSHIP roster, self INCL
   });
 
   it('excludes ONLY blocked pairs (self stays); count === items.length', async () => {
-    const prisma = withMembers(['acc-1', 'acc-2', 'acc-blocked']);
-    (prisma.account as any).findMany.mockResolvedValue([
-      { id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' },
-      { id: 'acc-2', displayName: 'Bob', avatar: null, profileSlug: 'bob' },
+    const prisma = withMembers([
+      { id: 'acc-1', displayName: 'Alice', profileSlug: 'alice' },
+      { id: 'acc-2', displayName: 'Bob', profileSlug: 'bob' },
+      { id: 'acc-blocked', displayName: 'Zoé', profileSlug: 'zoe' },
     ]);
     const blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set(['acc-blocked'])) };
     const { service } = build({ prisma, blocks });
     const res = await service.getPresence('acc-1');
-    const queriedIds = (prisma.account as any).findMany.mock.calls[0][0].where.id.in as string[];
-    expect(queriedIds).not.toContain('acc-blocked');
-    expect(queriedIds).toContain('acc-1'); // self kept
+    expect(res.items.map((i) => i.id)).toEqual(['acc-1', 'acc-2']); // self kept, blocked gone
     expect(res.count).toBe(2);
     expect(res.count).toBe(res.items.length);
   });
 
   it('caller alone in the salon → { count: 1, items: [<self>] }', async () => {
-    const prisma = withMembers(['acc-1']);
-    (prisma.account as any).findMany.mockResolvedValue([{ id: 'acc-1', displayName: 'Alice', avatar: null, profileSlug: 'alice' }]);
+    const prisma = withMembers([{ id: 'acc-1', displayName: 'Alice', profileSlug: 'alice' }]);
     const { service } = build({ prisma });
     const res = await service.getPresence('acc-1');
     expect(res).toEqual({ count: 1, items: [{ id: 'acc-1', name: 'Alice', avatarUrl: null, slug: 'alice', self: true }] });
   });
 
-  it('no members at all → { count: 0, items: [] } (no account query)', async () => {
+  it('no members at all → { count: 0, items: [] }', async () => {
     const prisma = withMembers([]);
     const { service } = build({ prisma });
     await expect(service.getPresence('acc-1')).resolves.toEqual({ count: 0, items: [] });
-    expect((prisma.account as any).findMany).not.toHaveBeenCalled();
   });
 
   it('caps BOTH count and items at SALON_ROSTER_MAX (count === items.length even when capped)', async () => {
     const many = Array.from({ length: SALON_ROSTER_MAX + 20 }, (_, i) => `u-${i}`);
     const prisma = withMembers(many);
-    // account query returns as many rows as it was asked for (capped ids)
-    (prisma.account as any).findMany.mockImplementation((args: any) =>
-      Promise.resolve((args.where.id.in as string[]).map((id) => ({ id, displayName: id, avatar: null, profileSlug: id }))),
-    );
     const { service } = build({ prisma });
     const res = await service.getPresence('acc-1');
     expect(res.count).toBe(SALON_ROSTER_MAX);
     expect(res.items).toHaveLength(SALON_ROSTER_MAX);
     expect(res.count).toBe(res.items.length);
+  });
+
+  // ── P-1 (DB scalability pass) — the WORK must be bounded, not just the response ──
+  // « Le Comptoir » is ONE global conversation: fetching every participant to render a 100-row list is
+  // O(members) per roster open. The cap and the filters belong in the query, exactly like MC-15's
+  // `listLikes` — filtering AFTER the fetch is what forces the unbounded read in the first place.
+
+  it('P-1: asks the DATABASE for at most SALON_ROSTER_MAX rows (take in the query, no post-fetch slice)', async () => {
+    const prisma = withMembers(Array.from({ length: SALON_ROSTER_MAX + 20 }, (_, i) => `u-${i}`));
+    const { service } = build({ prisma });
+    await service.getPresence('acc-1');
+    expect((prisma.conversationParticipant as any).findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: SALON_ROSTER_MAX }),
+    );
+  });
+
+  it('P-1: excludes blocked accounts + deleted accounts in the WHERE clause, not after the fetch', async () => {
+    const prisma = withMembers(['acc-1', 'acc-2']);
+    const blocks = { blockedPairIds: jest.fn().mockResolvedValue(new Set(['acc-blocked'])) };
+    const { service } = build({ prisma, blocks });
+    await service.getPresence('acc-1');
+    const where = (prisma.conversationParticipant as any).findMany.mock.calls[0][0].where;
+    expect(where.conversationId).toBe('salon-conv');
+    expect(where.account).toEqual(
+      expect.objectContaining({ deletedAt: null, id: { notIn: ['acc-blocked'] } }),
+    );
+  });
+
+  it('P-1: the DB picks the capped page in displayName order (the cap is not an arbitrary subset)', async () => {
+    const prisma = withMembers(['acc-1']);
+    const { service } = build({ prisma });
+    await service.getPresence('acc-1');
+    expect((prisma.conversationParticipant as any).findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { account: { displayName: 'asc' } } }),
+    );
+  });
+
+  it('P-1: never issues a second unbounded account lookup for the roster', async () => {
+    const prisma = withMembers(['acc-1', 'acc-2']);
+    const { service } = build({ prisma });
+    await service.getPresence('acc-1');
+    expect((prisma.account as any).findMany).not.toHaveBeenCalled();
   });
 });
 

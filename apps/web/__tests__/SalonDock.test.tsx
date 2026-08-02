@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, waitFor, act, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AccountSummary, SalonSummary, SalonMessageDto } from '@encre-et-plume/shared';
@@ -631,5 +631,115 @@ describe('SalonDock — MC-15 actions', () => {
       // Glued to the trigger's LEFT edge (240 - 150 - 6), never over the bubble it acts on.
       expect(screen.getByRole('menu').style.left).toBe('84px');
     });
+  });
+});
+
+// ─── P-3 · upward infinite scroll — the dock must be able to reach older history ────────────────
+// The API has always been cursor-paginated (30/page, `nextCursor`); the dock fetched page 1 and then
+// nothing, ever, so anything older than the last 30 lines was unreachable. Loading older pages must
+// NOT move what the reader is looking at — the jump is the bug people actually feel — and opening the
+// dock must still land on the newest message, at the bottom.
+
+describe('SalonDock — older messages (P-3)', () => {
+  // jsdom has no layout: drive scrollHeight from the test so a "prepend" can grow the feed.
+  let feedHeight = 0;
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => feedHeight });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 280 });
+  });
+  afterAll(() => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['scrollHeight'];
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>)['clientHeight'];
+  });
+
+  async function openWithHistory(nextCursor: string | null) {
+    feedHeight = 1000;
+    vi.mocked(api.getSalon).mockResolvedValue(summary({ isMember: true }));
+    vi.mocked(api.getSalonMessages).mockResolvedValue({
+      items: [msg({ id: 'recent', body: 'récent' })],
+      nextCursor,
+    });
+    renderDock();
+    await userEvent.click(await screen.findByRole('button', { name: /^Le Comptoir/ }));
+    await screen.findByText('récent');
+    const feed = screen.getByRole('log');
+    // The dock opens ON the newest message: settle that before a test scrolls anywhere else.
+    await waitFor(() => expect(feed.scrollTop).toBe(1000));
+    return feed;
+  }
+
+  it('still opens on the newest message, scrolled to the bottom, and asks for page 1 with no cursor', async () => {
+    await openWithHistory('c1');
+    expect(vi.mocked(api.getSalonMessages)).toHaveBeenCalledWith();
+  });
+
+  it('offers "Charger les messages précédents" only while the server hands back a cursor', async () => {
+    await openWithHistory(null);
+    expect(screen.queryByRole('button', { name: /Charger les messages précédents/ })).not.toBeInTheDocument();
+  });
+
+  it('prepends the older page above the newer one and stops offering more at the end of history', async () => {
+    await openWithHistory('c1');
+    vi.mocked(api.getSalonMessages).mockResolvedValue({
+      items: [msg({ id: 'old', body: 'ancien' })],
+      nextCursor: null,
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Charger les messages précédents/ }));
+    await screen.findByText('ancien');
+    expect(vi.mocked(api.getSalonMessages)).toHaveBeenLastCalledWith('c1');
+    const bodies = [...screen.getByRole('log').querySelectorAll('[data-message-id]')].map((el) =>
+      el.getAttribute('data-message-id'),
+    );
+    expect(bodies).toEqual(['old', 'recent']); // older above, newest last
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Charger les messages précédents/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('keeps the reading position stable across a prepend (no jump under the reader)', async () => {
+    const feed = await openWithHistory('c1');
+    feed.scrollTop = 120; // the reader scrolled up into history
+    fireEvent.scroll(feed);
+    // The older page adds 600px of content above: the fetch resolving is when the feed grows.
+    vi.mocked(api.getSalonMessages).mockImplementation(async () => {
+      feedHeight = 1600;
+      return { items: [msg({ id: 'old', body: 'ancien' })], nextCursor: null };
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Charger les messages précédents/ }));
+    await screen.findByText('ancien');
+    // Same content under the same pixel: scrollTop moved by exactly the height that was prepended.
+    expect(feed.scrollTop).toBe(720);
+  });
+
+  it('auto-loads the previous page when the top of the feed comes into view', async () => {
+    let io: { cb: IntersectionObserverCallback } | null = null;
+    class MockIO {
+      cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+        io = this;
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', MockIO);
+    try {
+      await openWithHistory('c1');
+      vi.mocked(api.getSalonMessages).mockResolvedValue({
+        items: [msg({ id: 'old', body: 'ancien' })],
+        nextCursor: null,
+      });
+      await act(async () => {
+        io!.cb([{ isIntersecting: true } as IntersectionObserverEntry], io as unknown as IntersectionObserver);
+      });
+      expect(await screen.findByText('ancien')).toBeInTheDocument();
+      expect(vi.mocked(api.getSalonMessages)).toHaveBeenLastCalledWith('c1');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
