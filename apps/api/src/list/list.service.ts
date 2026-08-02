@@ -38,6 +38,16 @@ type IllustrationRow = {
  * in-memory from DR-4's ReadingProgress, one query for the whole account (avoids N+1) — mirrors
  * DR-11's dedupe pattern.
  */
+/**
+ * Plafond des listes personnelles — même convention que MC-8 (`connections.service.ts`) et MC-10
+ * (`blocks.service.ts`), qui la posent déjà pour la même classe de données.
+ *
+ * Ces requêtes sont portées par UN compte : elles ne grandissent pas avec la plateforme, seulement
+ * avec la collection d'une personne. Sans plafond, le travail restait néanmoins non borné.
+ * ponytail : une liste personnelle tient dans 200 ; pagination réelle si un jour ce n'est plus vrai.
+ */
+const LIST_CAP = 200;
+
 @Injectable()
 export class ListService {
   constructor(private readonly prisma: PrismaService) {}
@@ -47,6 +57,7 @@ export class ListService {
       where: { accountId },
       orderBy: { createdAt: 'desc' },
       include: { work: { select: { id: true, slug: true, title: true, coverImage: true, chapterCount: true, format: true } } },
+      take: LIST_CAP,
     })) as unknown as WatchlistRow[];
 
     if (rows.length === 0) return [];
@@ -55,6 +66,7 @@ export class ListService {
       where: { accountId },
       orderBy: { updatedAt: 'desc' },
       include: { chapter: { select: { number: true } } },
+      take: LIST_CAP,
     })) as unknown as ProgressRow[];
 
     // ponytail: in-memory dedupe (per-account volume — mirrors DR-11's readingHistoryService); rows
@@ -90,6 +102,7 @@ export class ListService {
       where: { accountId },
       orderBy: { createdAt: 'desc' },
       include: { work: { select: { slug: true, title: true, coverImage: true, genre: true, likeCount: true, format: true } } },
+      take: LIST_CAP,
     })) as unknown as FavoriteRow[];
 
     return rows.map((row) => ({
@@ -123,6 +136,7 @@ export class ListService {
       where: { accountId, targetType: 'illustration', kind },
       orderBy: { createdAt: 'desc' },
       select: { targetId: true },
+      take: LIST_CAP,
     })) as unknown as IllustrationReactionRow[];
 
     if (reactions.length === 0) return [];

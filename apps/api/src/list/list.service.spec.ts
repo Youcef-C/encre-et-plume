@@ -261,3 +261,18 @@ describe('ListService', () => {
     });
   });
 });
+
+/**
+ * P-2 (audit base de données, 2026-08-02) — les listes personnelles doivent être bornées.
+ *
+ * Elles ne grandissent pas avec la plateforme mais avec la collection d'une personne ; sans plafond,
+ * le travail restait tout de même non borné. Même convention que MC-8 et MC-10, qui la posent déjà.
+ */
+describe('ListService — plafond des listes personnelles', () => {
+  it('borne chacune des quatre requêtes portées par un compte', () => {
+    const src = require('node:fs').readFileSync(require.resolve('./list.service.ts'), 'utf8');
+    // Quatre lectures propriétaires : watchlist, progression de lecture, favoris, réactions.
+    expect((src.match(/take: LIST_CAP/g) ?? []).length).toBe(4);
+    expect(src).toMatch(/const LIST_CAP = 200/);
+  });
+});
