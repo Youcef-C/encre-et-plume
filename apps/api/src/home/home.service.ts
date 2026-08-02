@@ -13,6 +13,7 @@ import { isWork18Plus } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RANKING_ORDER_BY, toRankingRow } from '../ranking/ranking.util';
+import { WORK_META_INCLUDE, workMeta } from '../works/work-meta';
 
 const CACHE_TTL_S = 60; // ponytail: 60s TTL; DR-9 invalidates on like events.
 
@@ -36,13 +37,14 @@ export class HomeService {
       const works = await this.prisma.work.findMany({
         where: { featuredRank: { not: null } },
         orderBy: { featuredRank: 'asc' },
+        include: WORK_META_INCLUDE,
       });
       return works.map((w) => ({
         id: w.id,
         slug: w.slug,
         title: w.title,
         cover: w.coverImage,
-        meta: w.meta,
+        meta: workMeta(w),
         genre: w.genre,
         is18plus: isWork18Plus(w.audienceRating),
       }));
@@ -105,6 +107,7 @@ export class HomeService {
       const works = await this.prisma.work.findMany({
         orderBy: RANKING_ORDER_BY,
         take: 8,
+        include: WORK_META_INCLUDE,
       });
       return works.map(toRankingRow);
     });

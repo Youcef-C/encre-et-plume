@@ -29,6 +29,13 @@ const WORK_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
+// The `q` facet must still find a work by its AUTHOR's name. That used to work only because the
+// author was baked into the dropped `Work.meta` string — it now matches through the WorkCreator
+// relation, and this is the shape that keeps the capability from disappearing silently.
+const CREATOR_NAME_MATCH = (q: string) => ({
+  creators: { some: { account: { displayName: { contains: q, mode: 'insensitive' } } } },
+});
+
 const EMPTY_QUERY: CatalogQuery = {
   genre: [],
   format: [],
@@ -137,7 +144,7 @@ describe('CatalogService', () => {
     expect(where.AND).toEqual([
       { OR: [{ genre: { in: ['Seinen'] } }, { themes: { hasSome: ['Seinen'] } }] },
       { OR: [{ genre: { in: MATURE_FR } }, { themes: { hasSome: MATURE_FR } }] },
-      { OR: [{ title: { contains: 'brume', mode: 'insensitive' } }, { meta: { contains: 'brume', mode: 'insensitive' } }] },
+      { OR: [{ title: { contains: 'brume', mode: 'insensitive' } }, CREATOR_NAME_MATCH('brume')] },
     ]);
   });
 
@@ -171,7 +178,7 @@ describe('CatalogService', () => {
 
     const where = prisma.work.findMany.mock.calls[0][0].where;
     expect(where.AND).toEqual([
-      { OR: [{ title: { contains: 'brume', mode: 'insensitive' } }, { meta: { contains: 'brume', mode: 'insensitive' } }] },
+      { OR: [{ title: { contains: 'brume', mode: 'insensitive' } }, CREATOR_NAME_MATCH('brume')] },
     ]);
   });
 

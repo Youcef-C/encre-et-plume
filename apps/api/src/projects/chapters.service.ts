@@ -16,6 +16,7 @@ import type {
 } from '@encre-et-plume/shared';
 import { DEFAULT_TARGET_PAGES, PAGE_STAGES, chapterProgressPct } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { syncWorkChapterCount } from '../works/chapter-count';
 import { AssetsService } from './assets.service';
 import { isMemberOf } from './projects.service';
 import { GROUP_GATE_SELECT, assertCanWrite, hasGroupPermission } from './members.service';
@@ -147,6 +148,7 @@ export class ChaptersService {
         data: chapterData(workId, assertTitle(body.title ?? ''), number, resume, targetPages),
         select: CHAPTER_SELECT,
       })) as unknown as ChapterRow;
+      await syncWorkChapterCount(this.prisma, workId);
       return toChapterDto(chapter, project.id, []);
     }
 
@@ -180,6 +182,9 @@ export class ChaptersService {
           `) as unknown as ChapterRow[];
           return rows[0];
         });
+        // Outside the transaction on purpose: the quick-create path holds a `FOR UPDATE` lock on
+        // the work row (R3-4) and must stay as short as possible.
+        await syncWorkChapterCount(this.prisma, workId);
         return toChapterDto(chapter, project.id, []);
       } catch (e) {
         if (!isUniqueViolation(e)) throw e;
@@ -273,6 +278,7 @@ export class ChaptersService {
       );
     }
     await this.prisma.chapter.delete({ where: { id: chapterId } });
+    await syncWorkChapterCount(this.prisma, chapter.workId);
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────

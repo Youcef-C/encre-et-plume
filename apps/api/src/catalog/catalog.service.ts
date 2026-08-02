@@ -133,7 +133,10 @@ function buildWhere(query: CatalogQuery): Record<string, any> {
     and.push({
       OR: [
         { title: { contains: query.q, mode: 'insensitive' } },
-        { meta: { contains: query.q, mode: 'insensitive' } },
+        // Search-by-author-name. It used to ride on the `Work.meta` string having the author baked
+        // into it; with that column gone it matches the WorkCreator relation directly — which also
+        // fixes the works whose meta named someone who was never a creator.
+        { creators: { some: { account: { displayName: { contains: query.q, mode: 'insensitive' } } } } },
       ],
     });
   }

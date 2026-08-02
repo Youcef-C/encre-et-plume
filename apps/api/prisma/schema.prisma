@@ -163,6 +163,9 @@ model Account {
   assetVersions              AssetVersion[]            @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
   scenarioComments           ScenarioComment[]         @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
   corrections                Correction[]              @relation("CorrectionAuthor") // CS-5: review corrections this account filed
+
+  // Seed-coherence pass: catalog search-by-author-name matches WorkCreator -> Account.displayName.
+  @@index([displayName])
 }
 
 // ── F-10 Media model ──────────────────────────────────────────────────────────
@@ -547,7 +550,8 @@ model Work {
   // query and maps id→fr via catalogGenreLabel() before filtering
   // this column — see catalog.service.ts. Column itself is unchanged
   // from DR-1: kept as the fr display label, reused verbatim by cards.)
-  meta               String // hero/ranking meta line, e.g. "Léa B. × Hugo D. · 20 ch."
+  // (the `meta` String column was DROPPED 2026-08-02 — the hero/ranking line is derived from
+  //  `creators` + `chapterCount` by shared `workMetaLine()`; see api/src/works/work-meta.ts)
   likeCount          Int       @default(0) // ponytail: denormalized total; DR-9 owns the increment
   weeklyLikeDelta    Int       @default(0) // ponytail: rolling-7d delta; DR-9/DR-4 recompute from events
   priorWeekLikeDelta Int       @default(0) // ponytail: prior-period delta for growth %; same note
@@ -561,7 +565,10 @@ model Work {
   language       String       @default("Français") // one of CATALOG_LANGUAGES
   audienceRating String       @default("Tous publics") // CATALOG_AUDIENCE_RATINGS — DR-10 reads this for 18+ gating
   complete       Boolean      @default(false) // STATUT: true = "Œuvres complètes"
-  chapterCount   Int          @default(0) // ponytail: denormalized card count + LONGUEUR filter; DR-3/CS own real counts
+  chapterCount   Int          @default(0) // published-chapter counter — kept denormalized ON PURPOSE: Prisma cannot
+  // filter or sort on a relation count and DR-2's LONGUEUR facet does exactly
+  // that. It has ONE writer, `syncWorkChapterCount()` (works/chapter-count.ts),
+  // called from every chapter create/delete; never hand-set it.
   ratingAvg      Float        @default(0) // ponytail: denormalized; PUB-3 reviews own it
   publishedAt    DateTime? // null = not in catalog; non-null = published + recency sort key
   editorPicks    EditorPick[]

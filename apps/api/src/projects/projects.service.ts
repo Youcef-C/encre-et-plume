@@ -189,9 +189,8 @@ export class ProjectsService {
 
     const owner = await this.prisma.account.findUnique({
       where: { id: accountId },
-      select: { displayName: true, profile: { select: { creatorRoles: true } } },
+      select: { profile: { select: { creatorRoles: true } } },
     });
-    const ownerName = owner?.displayName ?? '';
     const ownerRole = firstCreatorRole(owner?.profile?.creatorRoles);
 
     const coverUrl = dto.cover?.mediaId ? await this.resolveCover(accountId, dto.cover.mediaId) : null;
@@ -208,7 +207,6 @@ export class ProjectsService {
           themes: themeLabels,
           synopsis: dto.synopsis ?? null,
           hashtags: normalizeHashtags(dto.hashtags ?? []),
-          meta: `${ownerName} · 0 ch.`,
           audienceRating,
           publishedAt: null, // unpublished at creation — PUB-1/CS-9 publish later
           coverImage: coverUrl,

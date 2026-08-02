@@ -1,4 +1,5 @@
 import { HomeService } from './home.service';
+import { WORK_META_INCLUDE } from '../works/work-meta';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -8,7 +9,9 @@ const WORK = (overrides: Partial<Record<string, unknown>> = {}) => ({
   title: 'Néon Sutra',
   coverImage: null,
   genre: 'Shōnen',
-  meta: 'Léa B. × Hugo D. · 24 ch.',
+  format: 'Manga',
+  chapterCount: 24,
+  creators: [{ account: { displayName: 'Léa Bernard' } }, { account: { displayName: 'Hugo Duval' } }],
   likeCount: 8100,
   weeklyLikeDelta: 620,
   priorWeekLikeDelta: 500,
@@ -48,10 +51,11 @@ describe('HomeService', () => {
       expect(prisma.work.findMany).toHaveBeenCalledWith({
         where: { featuredRank: { not: null } },
         orderBy: { featuredRank: 'asc' },
+        include: WORK_META_INCLUDE,
       });
       expect(result).toEqual([
-        { id: 'w1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen', is18plus: false },
-        { id: 'w2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', genre: 'Shōnen', is18plus: false },
+        { id: 'w1', slug: 'neon-sutra', title: 'Néon Sutra', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', genre: 'Shōnen', is18plus: false },
+        { id: 'w2', slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', genre: 'Shōnen', is18plus: false },
       ]);
     });
 
@@ -107,10 +111,11 @@ describe('HomeService', () => {
       expect(prisma.work.findMany).toHaveBeenCalledWith({
         orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
         take: 8,
+        include: WORK_META_INCLUDE,
       });
       expect(result).toEqual([
-        { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
-        { id: 'w2', slug: 'neon-sutra', rank: 2, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
+        { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', is18plus: false },
+        { id: 'w2', slug: 'neon-sutra', rank: 2, title: 'Néon Sutra', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', is18plus: false },
       ]);
     });
   });

@@ -3,6 +3,7 @@
 // Dates are ISO 8601 strings; all counters are plain integers formatted client-side.
 
 import type { CollectionItemDto } from './collections.js';
+import { WORK_FORMAT_ILLUSTRATIONS } from './collections.js';
 
 export const WORK_CHAPTER_PAGE_SIZE = 10;
 export const WORK_CHAPTER_PREVIEW = 3; // FE collapse threshold (prototype shows 3 then "Voir les N…")
@@ -14,6 +15,34 @@ export interface WorkCreatorDto {
   role: string; // "scenariste" | "dessinateur" | …
   city: string | null;
   avatar: string | null;
+}
+
+/**
+ * The ONE hero/ranking/card meta line, e.g. `Camille Roux × Yuki Moreau · 12 ch.`
+ *
+ * Derived from the work's real `WorkCreator` rows and its real chapter count — it is NEVER stored.
+ * It used to be a `Work.meta` String column that nothing kept in sync, and it drifted from BOTH the
+ * creators and the chapter count on 7 of 9 seeded works (see `_seed-coherence-notes.md`). Same idiom
+ * as `chapterChipLabel` / `chapterPageNumbers`: one formatter so two callers cannot disagree.
+ *
+ * A collection work (`format === 'Illustration(s)'`) has no chapters — its line counts members.
+ */
+export function workMetaLine(work: {
+  format?: string | null;
+  creatorNames: string[];
+  chapterCount: number;
+  /** Collection member count; only read when `format === 'Illustration(s)'`. */
+  itemCount?: number;
+}): string {
+  if (work.format === WORK_FORMAT_ILLUSTRATIONS) return collectionMetaLine(work.itemCount ?? 0);
+  const names = work.creatorNames.filter((n) => n && n.trim()).join(' × ');
+  const chapters = `${work.chapterCount} ch.`;
+  return names ? `${names} · ${chapters}` : chapters;
+}
+
+/** The collection variant of the line, on its own — the cards/grids that only ever show a count. */
+export function collectionMetaLine(count: number): string {
+  return `${count} illustration${count === 1 ? '' : 's'} · collection`;
 }
 
 export interface FundingGoalDto {
@@ -44,7 +73,7 @@ export interface WorkDetail {
   format: string; // "Manga" | "One-shot" | "Roman" (type badge / DÉTAILS Type)
   complete: boolean; // "✓ Complet" badge + DÉTAILS Statut
   audienceRating: string; // DÉTAILS Public, e.g. "16+"
-  meta: string; // author line
+  meta: string; // author line — DERIVED server-side via workMetaLine(), never a stored column
   publishedAt: string | null; // ISO — FE derives "Sortie" year (releaseDate)
   synopsis: string | null;
   hashtags: string[];

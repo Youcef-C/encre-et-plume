@@ -69,9 +69,11 @@ describe('ChaptersService', () => {
         findMany: jest.fn().mockResolvedValue([CHAPTER()]),
         create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...CHAPTER(), ...data })),
         aggregate: jest.fn().mockResolvedValue({ _max: { number: null } }),
+        count: jest.fn().mockResolvedValue(0),
         update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ ...CHAPTER(), ...data })),
         delete: jest.fn().mockResolvedValue({}),
       },
+      work: { update: jest.fn().mockResolvedValue({}) },
       page: {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -235,6 +237,19 @@ describe('ChaptersService', () => {
       expect(res.title).toBe('Ch. 1');
     });
 
+    // Seed-coherence pass: `Work.chapterCount` has exactly ONE writer (syncWorkChapterCount). Every
+    // chapter mutation goes through it, so the advertised count can never drift from the rows again.
+    it('re-syncs Work.chapterCount from the real chapter rows', async () => {
+      prisma.chapter.count.mockResolvedValue(4);
+
+      await service.create('acc-yuki', 'lames-de-brume', { title: 'Ch. 1', number: 1 });
+
+      expect(prisma.chapter.count).toHaveBeenCalledWith({
+        where: { workId: 'work-1', status: 'published', publishAt: { lte: expect.any(Date) } },
+      });
+      expect(prisma.work.update).toHaveBeenCalledWith({ where: { id: 'work-1' }, data: { chapterCount: 4 } });
+    });
+
     it('409s when the number is already used in this project', async () => {
       prisma.chapter.findFirst.mockResolvedValue(CHAPTER({ id: 'ch-other', number: 1 }));
       await expect(service.create('acc-me', 'lames-de-brume', { title: 'Ch. 1', number: 1 })).rejects.toThrow(ConflictException);
@@ -383,6 +398,15 @@ describe('ChaptersService', () => {
       prisma.page.count.mockResolvedValue(0);
       await service.remove('acc-yuki', 'ch-1');
       expect(prisma.chapter.delete).toHaveBeenCalledWith({ where: { id: 'ch-1' } });
+    });
+
+    it('re-syncs Work.chapterCount after the delete', async () => {
+      prisma.page.count.mockResolvedValue(0);
+      prisma.chapter.count.mockResolvedValue(2);
+
+      await service.remove('acc-yuki', 'ch-1');
+
+      expect(prisma.work.update).toHaveBeenCalledWith({ where: { id: 'work-1' }, data: { chapterCount: 2 } });
     });
 
     // R2-6: never destroy a member's cards, and never orphan them (R2-1d) — the user empties the

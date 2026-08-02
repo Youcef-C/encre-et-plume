@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ApiError, CollectionSummary, GalleryIllustrationCard } from '@encre-et-plume/shared';
+import { collectionMetaLine } from '@encre-et-plume/shared';
 import { getProfileCollections } from '../lib/api';
 import { coverStyle } from '../lib/cover';
 import { formatLikeCount } from '../lib/home';
@@ -90,7 +91,7 @@ export default function ProfileWorks({ slug }: { slug: string }) {
                 />
                 <b style={{ fontSize: 14, display: 'block', marginTop: 9 }}>{c.title}</b>
                 <span style={{ fontSize: 12, color: 'var(--ink2)' }}>
-                  {c.count} illustration{c.count === 1 ? '' : 's'} · collection
+                  {collectionMetaLine(c.count)}
                 </span>
               </Link>
             ))}

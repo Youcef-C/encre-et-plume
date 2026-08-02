@@ -65,26 +65,32 @@ const FID = {
 // DR-3: synopsis + hashtags backfilled on all 8 works (so any card's /oeuvre/{slug} renders);
 // readCount/favoriteCount default to 0 except the showcase manga (below), which matches the
 // prototype's static "128k lectures / 340 ★ favoris" numbers verbatim.
+//
+// Seed-coherence pass (2026-08-02): `chapterCount` is no longer an ASSERTION, it is the number of
+// published chapters this seed CREATES (see `chaptersFor` below) — works used to advertise 15-20
+// chapters while owning zero rows. After the chapters exist the column is re-derived from them, so
+// the fixture can never again claim a count it does not back. The hero/ranking meta line is gone
+// from here entirely: it is derived from WorkCreator + chapterCount at read time (workMetaLine()).
 const WORKS = [
-  { slug: 'neon-sutra', title: 'Néon Sutra', genre: 'Shōnen', meta: 'Léa B. × Hugo D. · 24 ch.', likeCount: 8100, weeklyLikeDelta: 620, priorWeekLikeDelta: 500, featuredRank: 0, themes: ['Action', 'Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 20, ratingAvg: 4.5, publishedAt: inDays(-120), synopsis: 'Dans une mégapole où les prières se négocient comme des devises, un moine renégat et une hackeuse de temple s’allient pour retrouver le sutra volé qui maintient la ville en vie.', hashtags: ['shonen', 'action', 'aventure'] },
+  { slug: 'neon-sutra', title: 'Néon Sutra', genre: 'Shōnen', likeCount: 8100, weeklyLikeDelta: 620, priorWeekLikeDelta: 500, featuredRank: 0, themes: ['Action', 'Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 20, ratingAvg: 4.5, publishedAt: inDays(-120), synopsis: 'Dans une mégapole où les prières se négocient comme des devises, un moine renégat et une hackeuse de temple s’allient pour retrouver le sutra volé qui maintient la ville en vie.', hashtags: ['shonen', 'action', 'aventure'] },
   // round-2: audienceRating '18+' — gives the PUBLIC "+18" facet a fixture (genre/themes stay
   // non-mature, so "Mature" and "+18" are independently demonstrable, per plan R2-3).
-  { slug: 'le-dernier-ronin', title: 'Le Dernier Ronin', genre: 'Seinen', meta: 'Marc T. · 31 ch.', likeCount: 5700, weeklyLikeDelta: 590, priorWeekLikeDelta: 500, featuredRank: null, themes: ['Action', 'Thriller'], format: 'Manga', language: 'Français', audienceRating: '18+', complete: false, chapterCount: 15, ratingAvg: 4.2, publishedAt: inDays(-90), synopsis: 'Dernier héritier d’une école de sabre dissoute, il traverse un Japon uchronique gangrené par des clans mercenaires, une dette de sang à rembourser chapitre après chapitre.', hashtags: ['seinen', 'sabre', 'vengeance'] },
-  { slug: 'spectres-davril', title: "Spectres d'Avril", genre: 'Fantastique', meta: 'Nadia F. × Sami R. · 15 ch.', likeCount: 4000, weeklyLikeDelta: 560, priorWeekLikeDelta: 500, featuredRank: null, themes: ['Horreur', 'Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 10, ratingAvg: 3.9, publishedAt: inDays(-40), synopsis: 'Chaque printemps, un village normand voit revenir les esprits de ceux qui n’ont pas eu de sépulture. Une exorciste itinérante et son apprenti tentent d’en percer le rituel avant le prochain avril.', hashtags: ['fantastique', 'horreur', 'aventure'] },
-  { slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', meta: 'Camille R. × Yuki M. · 20 ch.', likeCount: 3400, weeklyLikeDelta: 545, priorWeekLikeDelta: 500, featuredRank: 1, themes: ['Action'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: true, chapterCount: 12, ratingAvg: 4.7, publishedAt: inDays(-60), synopsis: 'Deux âmes liées par la brume et le sabre, dans un Japon parallèle où chaque faute du passé prend la forme d’un spectre à abattre.', hashtags: ['seinen', 'duo', 'drame'], readCount: 128000, favoriteCount: 340 },
+  { slug: 'le-dernier-ronin', title: 'Le Dernier Ronin', genre: 'Seinen', likeCount: 5700, weeklyLikeDelta: 590, priorWeekLikeDelta: 500, featuredRank: null, themes: ['Action', 'Thriller'], format: 'Manga', language: 'Français', audienceRating: '18+', complete: false, chapterCount: 15, ratingAvg: 4.2, publishedAt: inDays(-90), synopsis: 'Dernier héritier d’une école de sabre dissoute, il traverse un Japon uchronique gangrené par des clans mercenaires, une dette de sang à rembourser chapitre après chapitre.', hashtags: ['seinen', 'sabre', 'vengeance'] },
+  { slug: 'spectres-davril', title: "Spectres d'Avril", genre: 'Fantastique', likeCount: 4000, weeklyLikeDelta: 560, priorWeekLikeDelta: 500, featuredRank: null, themes: ['Horreur', 'Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 10, ratingAvg: 3.9, publishedAt: inDays(-40), synopsis: 'Chaque printemps, un village normand voit revenir les esprits de ceux qui n’ont pas eu de sépulture. Une exorciste itinérante et son apprenti tentent d’en percer le rituel avant le prochain avril.', hashtags: ['fantastique', 'horreur', 'aventure'] },
+  { slug: 'lames-de-brume', title: 'Lames de Brume', genre: 'Seinen', likeCount: 3400, weeklyLikeDelta: 545, priorWeekLikeDelta: 500, featuredRank: 1, themes: ['Action'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: true, chapterCount: 12, ratingAvg: 4.7, publishedAt: inDays(-60), synopsis: 'Deux âmes liées par la brume et le sabre, dans un Japon parallèle où chaque faute du passé prend la forme d’un spectre à abattre.', hashtags: ['seinen', 'duo', 'drame'], readCount: 128000, favoriteCount: 340 },
   // round-2: themes includes 'Gore' (genres.json id 'gore', mature:true) — gives the PUBLIC
   // "Mature" facet a fixture via genre-OR-themes matching (Onibi's genre 'Fantastique' isn't mature).
-  { slug: 'onibi', title: 'Onibi', genre: 'Fantastique', meta: 'Sana K. · 7 ch.', likeCount: 2600, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Horreur', 'Gore'], format: 'One-shot', language: 'Français', audienceRating: '16+', complete: false, chapterCount: 14, ratingAvg: 4.0, publishedAt: inDays(-10), synopsis: 'Un feu-follet hante les ruines d’un sanctuaire abandonné ; la seule survivante de l’incendie qui l’a créé revient l’affronter, une nuit, pour de bon.', hashtags: ['horreur', 'gore', 'oneshot'] },
-  { slug: 'vertige', title: 'Vertige', genre: 'Shōnen', meta: 'Théo L. · 12 ch.', likeCount: 2200, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 12, ratingAvg: 3.6, publishedAt: inDays(-5), synopsis: 'Un jeune grimpeur découvre qu’une cité entière est bâtie à la verticale d’une falaise sans fond — et que personne n’en est jamais redescendu vivant.', hashtags: ['shonen', 'aventure'] },
+  { slug: 'onibi', title: 'Onibi', genre: 'Fantastique', likeCount: 2600, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Horreur', 'Gore'], format: 'One-shot', language: 'Français', audienceRating: '16+', complete: false, chapterCount: 1, ratingAvg: 4.0, publishedAt: inDays(-10), synopsis: 'Un feu-follet hante les ruines d’un sanctuaire abandonné ; la seule survivante de l’incendie qui l’a créé revient l’affronter, une nuit, pour de bon.', hashtags: ['horreur', 'gore', 'oneshot'] },
+  { slug: 'vertige', title: 'Vertige', genre: 'Shōnen', likeCount: 2200, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Aventure'], format: 'Manga', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 12, ratingAvg: 3.6, publishedAt: inDays(-5), synopsis: 'Un jeune grimpeur découvre qu’une cité entière est bâtie à la verticale d’une falaise sans fond — et que personne n’en est jamais redescendu vivant.', hashtags: ['shonen', 'aventure'] },
   // round-2: language 'English' (was 'Traduit', removed from the vocabulary) — gives the LANGUE
   // "English" facet a fixture.
-  { slug: 'encre-blanche', title: 'Encre Blanche', genre: 'Josei', meta: 'Inès P. · 9 ch.', likeCount: 1800, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Manga', language: 'English', audienceRating: 'Tous publics', complete: false, chapterCount: 8, ratingAvg: 4.3, publishedAt: inDays(-20), synopsis: 'Une restauratrice de livres anciens et un calligraphe itinérant échangent des lettres qu’aucun des deux n’ose signer de son vrai nom.', hashtags: ['josei', 'romance'] },
+  { slug: 'encre-blanche', title: 'Encre Blanche', genre: 'Josei', likeCount: 1800, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Manga', language: 'English', audienceRating: 'Tous publics', complete: false, chapterCount: 8, ratingAvg: 4.3, publishedAt: inDays(-20), synopsis: 'Une restauratrice de livres anciens et un calligraphe itinérant échangent des lettres qu’aucun des deux n’ose signer de son vrai nom.', hashtags: ['josei', 'romance'] },
   // DR-2: new Roman card (prototype "FORMAT" facet — Manga/One-shot/Roman). DR-3: gets proseExcerpt
   // (the prototype's "Extrait · Chapitre 1" paragraph, verbatim) to exercise the roman-only branch.
-  { slug: 'dr2-le-murmure-des-cendres', title: 'Le Murmure des Cendres', genre: 'Fantastique', meta: 'Inès P. · 8 ch.', likeCount: 1200, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Aventure'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: true, chapterCount: 8, ratingAvg: 4.8, publishedAt: inDays(-2), synopsis: 'Dans les cendres d’une bibliothèque incendiée, une archiviste entend les voix de ceux qui y sont morts — et l’une d’elles réclame vengeance.', hashtags: ['roman', 'fantastique'], proseExcerpt: "La pluie n'avait pas cessé depuis trois jours. Elwen poussa la porte de l'archive, et l'odeur du papier humide la prit à la gorge — une odeur qu'elle connaissait par cœur, et qui pourtant, ce matin-là, lui sembla mentir. « Vous cherchez un souvenir précis ? » murmura le gardien, sans lever les yeux…" },
+  { slug: 'dr2-le-murmure-des-cendres', title: 'Le Murmure des Cendres', genre: 'Fantastique', likeCount: 1200, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Aventure'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: true, chapterCount: 8, ratingAvg: 4.8, publishedAt: inDays(-2), synopsis: 'Dans les cendres d’une bibliothèque incendiée, une archiviste entend les voix de ceux qui y sont morts — et l’une d’elles réclame vengeance.', hashtags: ['roman', 'fantastique'], proseExcerpt: "La pluie n'avait pas cessé depuis trois jours. Elwen poussa la porte de l'archive, et l'odeur du papier humide la prit à la gorge — une odeur qu'elle connaissait par cœur, et qui pourtant, ce matin-là, lui sembla mentir. « Vous cherchez un souvenir précis ? » murmura le gardien, sans lever les yeux…" },
   // DR-7: second Roman-format work — so the Classement "Romans" category tab has more than one
   // entry to order (the prototype-user-requested category tab, not just DR-2's format facet fixture).
-  { slug: 'dr7-les-heures-de-verre', title: 'Les Heures de Verre', genre: 'Josei', meta: 'Sana K. · 6 ch.', likeCount: 900, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 6, ratingAvg: 4.1, publishedAt: inDays(-6), synopsis: 'Une horlogère répare le temps des autres et n’a jamais osé remonter le sien — jusqu’à ce qu’un client lui rapporte une montre qui s’arrête toujours à la même heure.', hashtags: ['roman', 'romance'] },
+  { slug: 'dr7-les-heures-de-verre', title: 'Les Heures de Verre', genre: 'Josei', likeCount: 900, weeklyLikeDelta: 0, priorWeekLikeDelta: 0, featuredRank: null, themes: ['Romance'], format: 'Roman', language: 'Français', audienceRating: 'Tous publics', complete: false, chapterCount: 6, ratingAvg: 4.1, publishedAt: inDays(-6), synopsis: 'Une horlogère répare le temps des autres et n’a jamais osé remonter le sien — jusqu’à ce qu’un client lui rapporte une montre qui s’arrête toujours à la même heure.', hashtags: ['roman', 'romance'] },
 ];
 
 // DR-3: creative team (WorkCreator) for EVERY seeded work so the "Équipe créative" box appears on
@@ -161,6 +167,32 @@ const WORK_CHAPTERS = {
     },
   ],
 };
+
+/**
+ * The chapters a work OWNS. Hand-written entries above win (they carry prototype-verbatim titles,
+ * dates, likes and the DR-4 premium/prose fixtures); the rest are generated so the row count matches
+ * the advertised `chapterCount`. Every generated chapter is published and already due, so the count
+ * the reader sees, the DÉTAILS sidebar and the catalog card are the same number.
+ */
+function chaptersFor(work) {
+  const authored = WORK_CHAPTERS[work.slug] ?? [];
+  const target = Math.max(work.chapterCount ?? 0, authored.length);
+  const isRoman = work.format === 'Roman';
+  const filler = [];
+  for (let n = authored.length + 1; n <= target; n++) {
+    filler.push({
+      number: n,
+      title: null,
+      plancheCount: isRoman ? 0 : 18 + (n % 5),
+      publishAt: inDays(-(target - n) * 14 - 1), // oldest first, never in the future
+      likeCount: Math.max(40, 420 - n * 13),
+      premium: false,
+      // A roman is read as prose — a chapter with no prose would render an empty reader.
+      prose: isRoman ? ROMAN_CHAPTER_1_PARAGRAPHS.join('\n\n') : null,
+    });
+  }
+  return [...authored, ...filler];
+}
 
 // DR-3: 6 planche/illustration grid items for the showcase manga (workId only, chapterId=null —
 // these are the "Illustrations & planches" work-page grid, distinct from DR-4's reader pages below).
@@ -256,11 +288,15 @@ const EDITOR_PICKS = [
 // CS-7 made `(workId, number)` UNIQUE. A scheduled chapter must therefore take the NEXT free number
 // of its work, never one an already-published chapter holds — lames-de-brume publishes 1…12 below,
 // so its "Sortie programmée" is 13 (it was 2, which now collides and failed the whole seed).
+// Seed-coherence pass: a scheduled release is the work's NEXT chapter, so its number is DERIVED
+// from the chapters the work actually owns (`chaptersFor`). The old hardcoded numbers collided with
+// them the moment the seed started creating the chapters it advertises (vertige claimed 12 chapters
+// and "announced" chapter 3).
 const SCHEDULED_CHAPTERS = [
-  { workSlug: 'lames-de-brume', number: 13, publishAt: inDays(1) },
-  { workSlug: 'onibi', number: 7, publishAt: inDays(4) },
-  { workSlug: 'vertige', number: 3, publishAt: inDays(7) },
-  { workSlug: 'encre-blanche', number: 9, publishAt: inDays(16) },
+  { workSlug: 'lames-de-brume', publishAt: inDays(1) },
+  { workSlug: 'onibi', publishAt: inDays(4) },
+  { workSlug: 'vertige', publishAt: inDays(7) },
+  { workSlug: 'encre-blanche', publishAt: inDays(16) },
 ];
 
 // Labels verbatim from prototype lines 413/415/417 (type tag rendered separately by the FE
@@ -479,7 +515,7 @@ const MY_APPLICATIONS = [
 // release) match the prototype "Mes projets" cards. CS-2/CS-5 will own writing step; CS-9 nextReleaseAt.
 const PROJECTS = [
   { id: FID['mc3-proj-lames-de-brume'], title: 'Lames de Brume', kind: 'Manga', genre: 'Seinen', status: 'en cours', slug: 'lames-de-brume', step: 'encrage Ch.1', nextReleaseAt: inDays(11) },
-  { id: FID['mc3-proj-spectres-avril'], title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-avril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
+  { id: FID['mc3-proj-spectres-avril'], title: "Spectres d'Avril", kind: 'Manga', genre: 'Fantastique', status: 'en révision', slug: 'spectres-davril', step: 'corrections (2 notes)', nextReleaseAt: inDays(14) },
 ];
 
 // RETIRED FIXTURE — « Carnet d'encre » used to be seeded here as a `Project` with kind
@@ -490,6 +526,12 @@ const PROJECTS = [
 // (DR-12, « Carnet d'Encre » below); the CS-12 dashboard lists them via `collections.getMine` and
 // routes them to /collection/:id/gerer. The row is deleted on seed so existing DBs converge.
 const RETIRED_PROJECT_SLUGS = ['carnet-encre'];
+
+// Seed-coherence pass: « Spectres d'Avril » existed TWICE — the published DR work `spectres-davril`
+// and a second, near-identically-slugged `spectres-avril` Work created by the MC-3 project fixture.
+// The project now reuses the published work (as `lames-de-brume` already did); this converges DBs
+// seeded before the change by removing the leftover duplicate.
+const DUPLICATE_WORK_SLUGS = ['spectres-avril'];
 
 // MC-2: a loginable creator with an EMPTY tag/genre profile — exercises the minimum-data guard
 // (GET /matches/suggestions → { items: [], incompleteProfile: true }, "Complétez votre profil…").
@@ -606,7 +648,7 @@ async function main() {
       }
       await prisma.chapter.deleteMany({ where: { workId: work.id, status: 'scheduled' } });
       await prisma.chapter.create({
-        data: { workId: work.id, number: chapter.number, status: 'scheduled', publishAt: chapter.publishAt },
+        data: { workId: work.id, number: chaptersFor(w).length + 1, status: 'scheduled', publishAt: chapter.publishAt },
       });
     }
   }
@@ -865,17 +907,35 @@ async function main() {
       // REUSED, not duplicated; a fresh work stays out of the catalog (`publishedAt: null`).
       const work = await prisma.work.upsert({
         where: { slug: p.slug },
-        create: { slug: p.slug, title: p.title, genre: p.genre ?? 'Fantastique', meta: `${camille.displayName} · 0 ch.` },
+        create: { slug: p.slug, title: p.title, genre: p.genre ?? 'Fantastique' },
         update: {},
       });
       // …and the owner's group row, so "Gérer le groupe" (CS-10) resolves for these projects too.
+      // `order` appends after the work's declared WORK_CREATORS team (which this loop runs BEFORE):
+      // two creators sharing order 0 make the derived meta line's name order nondeterministic.
+      const teamSize = WORK_CREATORS.filter((wc) => wc.workSlug === p.slug).length;
       await prisma.workCreator.upsert({
         where: { workId_accountId: { workId: work.id, accountId: camille.id } },
-        create: { workId: work.id, accountId: camille.id, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+        create: { workId: work.id, accountId: camille.id, role: 'scenariste', order: teamSize, groupRole: 'leader', sharePct: 100 },
         update: { groupRole: 'leader' },
       });
       const data = { ownerId: camille.id, title: p.title, kind: p.kind, genre: p.genre, status: p.status, cover: null, slug: p.slug, step: p.step, nextReleaseAt: p.nextReleaseAt, workId: work.id };
       await prisma.project.upsert({ where: { id: p.id }, create: { id: p.id, ...data }, update: data });
+    }
+
+    // Remove the duplicate Work left behind by the old `spectres-avril` project fixture. Best-effort
+    // and only when nothing points at it — a work still owned by a project is never touched.
+    for (const slug of DUPLICATE_WORK_SLUGS) {
+      try {
+        const dup = await prisma.work.findUnique({ where: { slug }, select: { id: true, project: { select: { id: true } } } });
+        if (!dup || dup.project) continue;
+        await prisma.chapter.deleteMany({ where: { workId: dup.id } });
+        await prisma.workCreator.deleteMany({ where: { workId: dup.id } });
+        await prisma.work.delete({ where: { id: dup.id } });
+        console.log(`[seed] removed duplicate work « ${slug} » (kept the published « spectres-davril »)`);
+      } catch (err) {
+        console.warn(`[seed] could not remove duplicate work « ${slug} »:`, err.message);
+      }
     }
 
     // Converge DBs seeded before a fixture was retired (see RETIRED_PROJECT_SLUGS). Deleted in
@@ -981,8 +1041,9 @@ async function main() {
 
   // DR-3: published chapters, planches, funding goals, reviews for the showcase manga(s).
   // Each list is cleared and recreated per work (scoped) so reseeding never accumulates duplicates.
-  for (const [slug, chapters] of Object.entries(WORK_CHAPTERS)) {
-    const work = await prisma.work.findUnique({ where: { slug } });
+  for (const w of WORKS) {
+    const chapters = chaptersFor(w);
+    const work = await prisma.work.findUnique({ where: { slug: w.slug } });
     if (!work) continue;
     // DR-11: ReadingProgress FK's to Chapter (no cascade) — delete stale progress rows on the
     // about-to-be-wiped chapters first, otherwise this deleteMany 500s once any account (seeded
@@ -1016,6 +1077,12 @@ async function main() {
         },
       });
     }
+    // Seed-coherence pass: the column is DERIVED from the rows just created, never asserted. Same
+    // rule as `syncWorkChapterCount()` (api/src/works/chapter-count.ts) — published AND already due.
+    const chapterCount = await prisma.chapter.count({
+      where: { workId: work.id, status: 'published', publishAt: { lte: new Date() } },
+    });
+    await prisma.work.update({ where: { id: work.id }, data: { chapterCount } });
   }
 
   // DR-4: reader pages (Planche rows with chapterId set) for the showcase manga's free chapters.
@@ -1192,7 +1259,6 @@ async function main() {
         genre: 'Art',
         themes: [],
         audienceRating: 'Tous publics',
-        meta: `${memberIds.length} illustrations · collection`,
         publishedAt: inDays(-30),
         synopsis: "Un carnet d'encre — recueil de recherches, planches et études réunies en une seule collection.",
       };

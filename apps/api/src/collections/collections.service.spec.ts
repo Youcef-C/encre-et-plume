@@ -91,7 +91,7 @@ describe('CollectionsService', () => {
 
   // ── J1: create ──────────────────────────────────────────────────────────────
   describe('create', () => {
-    it('creates an Illustration(s) Work with a WorkCreator owner row, genre/themes mapping, meta, publishedAt', async () => {
+    it('creates an Illustration(s) Work with a WorkCreator owner row, genre/themes mapping, publishedAt', async () => {
       prisma.work.create.mockResolvedValue(WORK_ROW({ slug: 'carnet-d-encre' }));
       const res = await service.create('acc1', { title: "Carnet d'Encre", genres: ['action', 'adventure'], description: 'Un carnet.' });
 
@@ -101,7 +101,7 @@ describe('CollectionsService', () => {
       expect(data.slug).toBe('carnet-d-encre');
       expect(data.genre).toBe('Action'); // fr label of genres[0]
       expect(data.themes).toEqual(['Aventure']); // fr labels of genres[1..]
-      expect(data.meta).toBe('0 illustrations · collection');
+      expect(data.meta).toBeUndefined(); // the meta line is derived at read time, never written
       expect(data.publishedAt).toBeInstanceOf(Date);
       expect(prisma.workCreator.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ workId: 'w1', accountId: 'acc1', role: 'dessinateur' }) }),
@@ -251,7 +251,7 @@ describe('CollectionsService', () => {
 
   // ── J3: membership + reorder ─────────────────────────────────────────────────
   describe('addIllustration', () => {
-    it('appends at max(order)+1, recomputes meta (singular), rejects a cross-owner illustration with 403', async () => {
+    it('appends at max(order)+1 and writes NO meta (the line is derived from the membership count)', async () => {
       prisma.illustrationCollection.aggregate.mockResolvedValue({ _max: { order: 2 } });
       prisma.illustrationCollection.count.mockResolvedValue(1);
       prisma.illustration.findUnique.mockResolvedValue({ id: 'illuX', artistId: 'acc1', image: null });
@@ -259,9 +259,7 @@ describe('CollectionsService', () => {
       expect(prisma.illustrationCollection.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: expect.objectContaining({ workId: 'w1', illustrationId: 'illuX', order: 3 }) }),
       );
-      expect(prisma.work.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'w1' }, data: { meta: '1 illustration · collection' } }),
-      );
+      expect(prisma.work.update).not.toHaveBeenCalled();
     });
 
     it('rejects a cross-owner illustration with 403', async () => {
@@ -276,15 +274,13 @@ describe('CollectionsService', () => {
   });
 
   describe('removeIllustration', () => {
-    it('deletes the join row and recomputes meta (plural)', async () => {
+    it('deletes the join row and writes no meta', async () => {
       prisma.illustrationCollection.count.mockResolvedValue(2);
       await service.removeIllustration('acc1', 'w1', 'illuX');
       expect(prisma.illustrationCollection.delete).toHaveBeenCalledWith({
         where: { illustrationId_workId: { illustrationId: 'illuX', workId: 'w1' } },
       });
-      expect(prisma.work.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { meta: '2 illustrations · collection' } }),
-      );
+      expect(prisma.work.update).not.toHaveBeenCalled();
     });
 
     it('is idempotent when the row is missing (no throw)', async () => {
@@ -424,7 +420,7 @@ describe('CollectionsService', () => {
 
   // ── J8: cover-as-member rule ──────────────────────────────────────────────────
   describe('cover-as-member', () => {
-    it('create cover:{mediaId} creates a Couverture Illustration + membership at order 0 + coverImage + meta', async () => {
+    it('create cover:{mediaId} creates a Couverture Illustration + membership at order 0 + coverImage', async () => {
       media.getForOwner.mockResolvedValue({ kind: 'cover', status: 'ready', width: 1200, height: 1650, variants: { web: 'http://cdn/cover.webp' } });
       prisma.illustration.create.mockResolvedValue({ id: 'coverIllu1' });
       prisma.illustrationCollection.count.mockResolvedValue(1);
@@ -447,13 +443,12 @@ describe('CollectionsService', () => {
       expect(prisma.illustrationCollection.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ illustrationId: 'coverIllu1', order: 0 }) }),
       );
-      // coverImage set + meta counts the cover member ("1 illustration")
       const coverUpdate = prisma.work.update.mock.calls.find((c: any[]) => c[0].data.coverImage === 'http://cdn/cover.webp');
       expect(coverUpdate).toBeDefined();
-      expect(coverUpdate[0].data.meta).toBe('1 illustration · collection');
+      expect(coverUpdate[0].data.meta).toBeUndefined();
     });
 
-    it('patch cover:{mediaId} shifts members and inserts the new cover at order 0 (meta recomputed)', async () => {
+    it('patch cover:{mediaId} shifts members and inserts the new cover at order 0', async () => {
       media.getForOwner.mockResolvedValue({ kind: 'cover', status: 'ready', width: null, height: null, variants: { web: 'http://cdn/c2.webp' } });
       prisma.illustration.create.mockResolvedValue({ id: 'coverIllu2' });
       prisma.illustrationCollection.count.mockResolvedValue(3); // 2 existing + the new cover
@@ -466,7 +461,7 @@ describe('CollectionsService', () => {
         expect.objectContaining({ data: expect.objectContaining({ illustrationId: 'coverIllu2', order: 0 }) }),
       );
       const coverUpdate = prisma.work.update.mock.calls.find((c: any[]) => c[0].data.coverImage === 'http://cdn/c2.webp');
-      expect(coverUpdate[0].data.meta).toBe('3 illustrations · collection');
+      expect(coverUpdate[0].data.meta).toBeUndefined();
     });
 
     it('promote an EXISTING member via cover:{illustrationId} just sets coverImage (no membership write)', async () => {

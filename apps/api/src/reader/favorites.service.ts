@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { FavoriteWorkDto } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { WORK_META_INCLUDE, workMeta } from '../works/work-meta';
 
 /**
  * DR-4 favorites switcher — reads only. DR-9 owns the toggle write path + Work.favoriteCount
@@ -14,14 +15,14 @@ export class FavoritesService {
     const rows = await this.prisma.favorite.findMany({
       where: { accountId },
       orderBy: { createdAt: 'desc' },
-      include: { work: true },
+      include: { work: { include: WORK_META_INCLUDE } },
     });
 
     return rows.map((r) => ({
       slug: r.work.slug,
       title: r.work.title,
       cover: r.work.coverImage,
-      meta: r.work.meta,
+      meta: workMeta(r.work),
     }));
   }
 }

@@ -116,6 +116,43 @@ async function main() {
     await prisma.project.deleteMany({ where: { ownerId: { in: accountIds } } });
   }
 
+  // 4g-bis. Seed-coherence pass (2026-08-02): deleting a Project does NOT delete its Work — the
+  // bridge is `Project.workId`, and nothing points the other way. So every run left one ORPHAN Work
+  // per project behind: 184 of them had accumulated, each auditing as « a work with no creator »
+  // (which is what the seed-coherence evidence read as "the app never writes WorkCreator" — the app
+  // does; the teardown was deleting the row and keeping the shell). Sweep the shells.
+  // Scoped to the e2e/qa slug prefixes AND to works no Project points at, so a real fixture is never
+  // touched. Best-effort: an unexpected dependent must not abort the rest of this teardown.
+  try {
+    const orphans = await prisma.work.findMany({
+      where: { OR: [{ slug: { startsWith: 'e2e-' } }, { slug: { startsWith: 'qa-' } }], project: null },
+      select: { id: true },
+    });
+    const ids = orphans.map((w) => w.id);
+    if (ids.length > 0) {
+      const chapters = await prisma.chapter.findMany({ where: { workId: { in: ids } }, select: { id: true } });
+      const chapterIds = chapters.map((c) => c.id);
+      if (chapterIds.length > 0) {
+        await prisma.readingProgress.deleteMany({ where: { chapterId: { in: chapterIds } } });
+        await prisma.page.deleteMany({ where: { chapterId: { in: chapterIds } } });
+      }
+      await prisma.readingProgress.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.favorite.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.watchlistItem.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.review.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.fundingGoal.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.planche.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.editorPick.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.illustrationCollection.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.chapter.deleteMany({ where: { workId: { in: ids } } });
+      await prisma.workCreator.deleteMany({ where: { workId: { in: ids } } });
+      const { count } = await prisma.work.deleteMany({ where: { id: { in: ids } } });
+      process.stdout.write(`[e2e-teardown] swept ${count} orphan e2e Work row(s)\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`[e2e-teardown] orphan Work sweep skipped: ${err}\n`);
+  }
+
   // 4h. CS-12: drop the dedicated dashboard collection Work + its illustrations (both cascade their
   // IllustrationCollection membership). 4f already removed the WorkCreator + nulled artistId, so these
   // deletes are unblocked; removing them keeps the collection fixtures from leaking across runs.

@@ -12,7 +12,6 @@ const WORK_ROW = (overrides: Partial<Record<string, unknown>> = {}) => ({
   format: 'Manga',
   complete: true,
   audienceRating: 'Tous publics',
-  meta: 'Camille R. × Yuki M. · 20 ch.',
   publishedAt: new Date('2026-06-01'),
   synopsis: 'Une histoire de brume.',
   themes: ['Action'],
@@ -96,7 +95,7 @@ describe('WorksService', () => {
         format: 'Manga',
         complete: true,
         audienceRating: 'Tous publics',
-        meta: 'Camille R. × Yuki M. · 20 ch.',
+        meta: '12 ch.', // derived: no WorkCreator rows on this fixture
         synopsis: 'Une histoire de brume.',
         themes: ['Action'],
         hashtags: ['#seinen', '#brume'],
@@ -128,6 +127,22 @@ describe('WorksService', () => {
       expect(result?.team).toEqual([
         { id: 'acc1', name: 'Yuki Moreau', slug: 'dr1-yuki-moreau', role: 'dessinateur', city: 'Lyon', avatar: null },
       ]);
+    });
+
+    it('derives meta from the real creators and the real published-chapter count', async () => {
+      prisma.work.findFirst.mockResolvedValue(
+        WORK_ROW({
+          creators: [
+            CREATOR_ROW({ order: 0, role: 'scenariste', account: { id: 'a1', displayName: 'Camille Roux', profileSlug: 'c', avatar: null, profile: null } }),
+            CREATOR_ROW({ order: 1, account: { id: 'a2', displayName: 'Yuki Moreau', profileSlug: 'y', avatar: null, profile: null } }),
+          ],
+        }),
+      );
+      prisma.chapter.count.mockResolvedValue(12);
+
+      const result = await service.getWork('lames-de-brume');
+
+      expect(result?.meta).toBe('Camille Roux × Yuki Moreau · 12 ch.');
     });
 
     it('city is null when the account has no profile', async () => {

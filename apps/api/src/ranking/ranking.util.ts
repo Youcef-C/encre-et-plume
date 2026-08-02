@@ -1,5 +1,9 @@
 import type { RankingEntry, RankingRow } from '@encre-et-plume/shared';
 import { galleryCategoryLabel, hasPlus18Genre, isWork18Plus } from '@encre-et-plume/shared';
+import { workMeta, type WorkMetaRow } from '../works/work-meta';
+
+/** A ranked work carries its creators + chapterCount so the meta line can be DERIVED (see work-meta.ts). */
+type RankedWork = WorkMetaRow & { id: string; slug: string; title: string; coverImage: string | null; audienceRating: string };
 
 /** Bounded top-N; the prototype draws no pager for the all-time ranking (YAGNI). */
 export const RANKING_LIMIT = 50;
@@ -17,17 +21,14 @@ export function rankingWhere(genre?: string): { genre?: string } {
   return genre && genre.trim() ? { genre } : {};
 }
 
-export function toRankingRow(
-  w: { id: string; slug: string; title: string; coverImage: string | null; meta: string; audienceRating: string },
-  index: number,
-): RankingRow {
+export function toRankingRow(w: RankedWork, index: number): RankingRow {
   return {
     id: w.id,
     slug: w.slug,
     rank: index + 1,
     title: w.title,
     cover: w.coverImage,
-    meta: w.meta,
+    meta: workMeta(w),
     is18plus: isWork18Plus(w.audienceRating),
   };
 }
@@ -35,10 +36,7 @@ export function toRankingRow(
 // ── DR-7 Classement category tabs: unified RankingEntry mappers, one per ranked entity ──────────
 
 /** Mangas/Romans tabs: reuses toRankingRow (single truth), adds the work-page href, drops slug. */
-export function toRankingEntryFromWork(
-  w: { id: string; slug: string; title: string; coverImage: string | null; meta: string; audienceRating: string },
-  index: number,
-): RankingEntry {
+export function toRankingEntryFromWork(w: RankedWork, index: number): RankingEntry {
   const row = toRankingRow(w, index);
   return { rank: row.rank, id: row.id, title: row.title, meta: row.meta, cover: row.cover, href: `/oeuvre/${row.slug}`, is18plus: row.is18plus };
 }

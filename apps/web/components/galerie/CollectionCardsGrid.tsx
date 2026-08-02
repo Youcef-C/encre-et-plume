@@ -3,6 +3,7 @@
 // grammar as GalleryGrid (Inferred screen — reuses the DR-5 gallery card patterns/tokens).
 import Link from 'next/link';
 import type { CollectionCard } from '@encre-et-plume/shared';
+import { collectionMetaLine } from '@encre-et-plume/shared';
 import { coverStyle } from '../../lib/cover';
 import { formatLikeCount } from '../../lib/home';
 import { HeartIcon } from '../icons';
@@ -82,7 +83,7 @@ export default function CollectionCardsGrid({
             <b style={{ display: 'block', fontSize: 15, lineHeight: 1.2, marginBottom: 4 }}>{c.title}</b>
             <span style={{ display: 'block', fontSize: 13, color: 'var(--ink2)', fontWeight: 500, marginBottom: 4 }}>{c.artistName}</span>
             <span style={{ display: 'block', fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>
-              <span>{c.count} illustration{c.count === 1 ? '' : 's'} · collection</span> ·{' '}
+              <span>{collectionMetaLine(c.count)}</span> ·{' '}
               <span
                 aria-label={`${formatLikeCount(c.likeCount)} j'aime`}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}

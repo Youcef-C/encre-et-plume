@@ -293,7 +293,6 @@ async function main() {
         slug: 'e2e-mc10-oeuvre-a',
         title: 'E2E MC10 Œuvre A',
         genre: 'Seinen',
-        meta: 'E2E MC10 · 1 ch.',
         format: 'Manga',
         audienceRating: 'Tous publics',
         publishedAt: new Date('2026-07-08T08:00:00.000Z'),
@@ -361,8 +360,15 @@ async function main() {
     // `Project.workId` is NOT NULL, so the Work half is seeded first (upsert-by-slug: re-runnable).
     const invWork = await prisma.work.upsert({
       where: { slug: 'e2e-inv-project-a' },
-      create: { slug: 'e2e-inv-project-a', title: 'Onibi — arc 2', genre: 'Seinen', meta: 'E2E invitations · 0 ch.' },
+      create: { slug: 'e2e-inv-project-a', title: 'Onibi — arc 2', genre: 'Seinen' },
       update: {},
+    });
+    // Seed-coherence pass: every project's owner is a real WorkCreator, so the œuvre/creator block
+    // is never empty and the group model (CS-10) resolves — the same row projects.service writes.
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: invWork.id, accountId: fromA } },
+      create: { workId: invWork.id, accountId: fromA, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader' },
     });
     const projData = { ownerId: fromA, title: 'Onibi — arc 2', kind: 'Manga', genre: 'Seinen', status: 'en cours', workId: invWork.id };
     const proj = await prisma.project.upsert({
@@ -423,7 +429,7 @@ async function main() {
       // recreated, the works are not).
       const work = await prisma.work.upsert({
         where: { slug: p.slug },
-        create: { slug: p.slug, title: p.title, genre: p.genre, meta: 'E2E CS12 · 0 ch.' },
+        create: { slug: p.slug, title: p.title, genre: p.genre },
         update: {},
       });
       await prisma.workCreator.upsert({
@@ -442,7 +448,7 @@ async function main() {
     // Illustration collection Work (format 'Illustration(s)') owned by CS12_OWNER, 3 members.
     const collectionData = {
       slug: 'e2e-cs12-carnet', title: 'E2E CS12 · Carnet', format: 'Illustration(s)', genre: 'Art', themes: [],
-      audienceRating: 'Tous publics', meta: '3 illustrations · collection', publishedAt: inDays(-30), synopsis: 'Collection e2e CS-12.',
+      audienceRating: 'Tous publics', publishedAt: inDays(-30), synopsis: 'Collection e2e CS-12.',
     };
     const collection = await prisma.work.upsert({ where: { slug: 'e2e-cs12-carnet' }, create: collectionData, update: collectionData });
     await prisma.workCreator.upsert({
@@ -477,7 +483,7 @@ async function main() {
     const collab = accounts.CS12_COLLAB.id;
     const workData = {
       slug: 'e2e-cs2-multi', title: 'E2E CS2 · Multi-membre', format: 'Manga', genre: 'Seinen',
-      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+      themes: [], audienceRating: 'Tous publics', publishedAt: null,
     };
     const work = await prisma.work.upsert({ where: { slug: 'e2e-cs2-multi' }, create: workData, update: workData });
     await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
@@ -518,7 +524,7 @@ async function main() {
     const collab = accounts.CS12_COLLAB.id;
     const workData = {
       slug: 'e2e-cs5-review', title: 'E2E CS5 · Révision', format: 'Manga', genre: 'Seinen',
-      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+      themes: [], audienceRating: 'Tous publics', publishedAt: null,
     };
     const work = await prisma.work.upsert({ where: { slug: 'e2e-cs5-review' }, create: workData, update: workData });
     await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
@@ -559,7 +565,7 @@ async function main() {
     const collab = accounts.CS12_COLLAB.id;
     const workData = {
       slug: 'e2e-cs4-multi', title: 'E2E CS4 · Multi-membre', format: 'Manga', genre: 'Seinen',
-      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS12_OWNER · 0 ch.', publishedAt: null,
+      themes: [], audienceRating: 'Tous publics', publishedAt: null,
     };
     const work = await prisma.work.upsert({ where: { slug: 'e2e-cs4-multi' }, create: workData, update: workData });
     await prisma.page.deleteMany({ where: { project: { workId: work.id } } });
@@ -609,7 +615,7 @@ async function main() {
 
     const workData = {
       slug: 'e2e-cs10-groupe', title: 'E2E CS10 · Groupe', format: 'Manga', genre: 'Seinen',
-      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS10_A · 0 ch.', publishedAt: null,
+      themes: [], audienceRating: 'Tous publics', publishedAt: null,
     };
     const work = await prisma.work.upsert({ where: { slug: 'e2e-cs10-groupe' }, create: workData, update: workData });
     const projectData = {
@@ -641,7 +647,7 @@ async function main() {
     const b = accounts.CS10_B.id;
     const workData = {
       slug: 'e2e-cs8-discussion', title: 'E2E CS8 · Discussion', format: 'Manga', genre: 'Seinen',
-      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS8 · 0 ch.', publishedAt: null,
+      themes: [], audienceRating: 'Tous publics', publishedAt: null,
     };
     const work = await prisma.work.upsert({ where: { slug: 'e2e-cs8-discussion' }, create: workData, update: workData });
     const projectData = {
@@ -729,8 +735,13 @@ async function main() {
     // (the Project above is deleted each run, which frees the unique `workId` again).
     const mc12Work = await prisma.work.upsert({
       where: { slug: 'e2e-mc12-projet-fixture' },
-      create: { slug: 'e2e-mc12-projet-fixture', title: 'MC12 Projet fixture', genre: 'Seinen', meta: 'E2E MC12 · 0 ch.' },
+      create: { slug: 'e2e-mc12-projet-fixture', title: 'MC12 Projet fixture', genre: 'Seinen' },
       update: {},
+    });
+    await prisma.workCreator.upsert({
+      where: { workId_accountId: { workId: mc12Work.id, accountId: a } },
+      create: { workId: mc12Work.id, accountId: a, role: 'scenariste', order: 0, groupRole: 'leader', sharePct: 100 },
+      update: { groupRole: 'leader' },
     });
     const mc12Project = await prisma.project.create({
       data: { ownerId: a, title: 'MC12 Projet fixture', kind: 'Manga', workId: mc12Work.id },

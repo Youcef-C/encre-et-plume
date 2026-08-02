@@ -2,6 +2,7 @@ import { RankingService } from './ranking.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RANKING_LIMIT, RANKING_ORDER_BY } from './ranking.util';
+import { WORK_META_INCLUDE } from '../works/work-meta';
 
 const ILLUSTRATION = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 'illus-1',
@@ -28,7 +29,9 @@ const WORK = (overrides: Partial<Record<string, unknown>> = {}) => ({
   title: 'Néon Sutra',
   coverImage: null,
   genre: 'Shōnen',
-  meta: 'Léa B. × Hugo D. · 24 ch.',
+  format: 'Manga',
+  chapterCount: 24,
+  creators: [{ account: { displayName: 'Léa Bernard' } }, { account: { displayName: 'Hugo Duval' } }],
   likeCount: 8100,
   ...overrides,
 });
@@ -54,6 +57,7 @@ describe('RankingService', () => {
       where: {},
       orderBy: RANKING_ORDER_BY,
       take: RANKING_LIMIT,
+      include: WORK_META_INCLUDE,
     });
   });
 
@@ -87,8 +91,8 @@ describe('RankingService', () => {
     const result = await service.getAllTime(undefined, RANKING_LIMIT);
 
     expect(result).toEqual([
-      { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
-      { id: 'w2', slug: 'lames-de-brume', rank: 2, title: 'Lames de Brume', cover: null, meta: 'Léa B. × Hugo D. · 24 ch.', is18plus: false },
+      { id: 'w1', slug: 'neon-sutra', rank: 1, title: 'Néon Sutra', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', is18plus: false },
+      { id: 'w2', slug: 'lames-de-brume', rank: 2, title: 'Lames de Brume', cover: null, meta: 'Léa Bernard × Hugo Duval · 24 ch.', is18plus: false },
     ]);
   });
 
@@ -149,8 +153,8 @@ describe('RankingService', () => {
 
       const result = await service.getByCategory('mangas', RANKING_LIMIT);
 
-      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Manga' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT });
-      expect(result).toEqual([{ rank: 1, id: 'w1', title: 'Néon Sutra', meta: 'Léa B. × Hugo D. · 24 ch.', cover: null, href: '/oeuvre/neon-sutra', is18plus: false }]);
+      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Manga' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT, include: WORK_META_INCLUDE });
+      expect(result).toEqual([{ rank: 1, id: 'w1', title: 'Néon Sutra', meta: 'Léa Bernard × Hugo Duval · 24 ch.', cover: null, href: '/oeuvre/neon-sutra', is18plus: false }]);
     });
 
     it('romans: queries Work with format Roman', async () => {
@@ -158,7 +162,7 @@ describe('RankingService', () => {
 
       await service.getByCategory('romans', RANKING_LIMIT);
 
-      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Roman' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT });
+      expect(prisma.work.findMany).toHaveBeenCalledWith({ where: { format: 'Roman' }, orderBy: RANKING_ORDER_BY, take: RANKING_LIMIT, include: WORK_META_INCLUDE });
     });
 
     it('illustrations: queries published Illustration ordered by likeCount desc, id asc, and maps to RankingEntry', async () => {

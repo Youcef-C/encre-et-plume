@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { CollectionItemDto, FundingGoalDto, PlancheDto, WorkChaptersResponse, WorkCreatorDto, WorkDetail, WorkReviewDto } from '@encre-et-plume/shared';
 import { WORK_CHAPTER_PAGE_SIZE, WORK_FORMAT_ILLUSTRATIONS, galleryCategoryLabel, hasPlus18Genre } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { workMeta } from './work-meta';
 import { RedisService } from '../redis/redis.service';
 
 const CACHE_TTL_S = 60; // ponytail: 60s TTL, mirrors HomeService/CatalogService's cached().
@@ -33,6 +34,9 @@ export class WorksService {
             orderBy: { order: 'asc' },
             include: { illustration: true },
           },
+          // DR-12: a collection work's meta line counts its MEMBERS, not chapters — and it counts
+          // every member, not just the publicly visible ones the grid above filters to.
+          _count: { select: { collectionItems: true } },
         },
       });
       if (!work) return null;
@@ -140,7 +144,6 @@ interface WorkRow {
   format: string;
   complete: boolean;
   audienceRating: string;
-  meta: string;
   publishedAt: Date | null;
   synopsis: string | null;
   themes: string[];
@@ -153,6 +156,7 @@ interface WorkRow {
   fundingGoals: FundingGoalRow[];
   reviews: ReviewRow[];
   collectionItems?: CollectionItemRow[];
+  _count?: { collectionItems: number };
 }
 
 interface CollectionItemRow {
@@ -186,7 +190,9 @@ function mapWorkDetail(work: WorkRow, chapterCount: number): WorkDetail {
     format: work.format,
     complete: work.complete,
     audienceRating: work.audienceRating,
-    meta: work.meta,
+    // Derived, never stored — see work-meta.ts. The live `chapterCount` is the same number the
+    // DÉTAILS sidebar shows, so the hero line and the sidebar can no longer disagree.
+    meta: workMeta({ format: work.format, creators: work.creators, _count: work._count }, chapterCount),
     publishedAt: work.publishedAt ? work.publishedAt.toISOString() : null,
     synopsis: work.synopsis,
     hashtags: work.hashtags,

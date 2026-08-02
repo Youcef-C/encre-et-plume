@@ -1,5 +1,6 @@
 import { FavoritesService } from './favorites.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WORK_META_INCLUDE } from '../works/work-meta';
 
 describe('FavoritesService', () => {
   let service: FavoritesService;
@@ -12,7 +13,16 @@ describe('FavoritesService', () => {
 
   it('maps Favorite rows joined to Work, ordered by createdAt desc', async () => {
     prisma.favorite.findMany.mockResolvedValue([
-      { work: { slug: 'lames-de-brume', title: 'Lames de Brume', coverImage: null, meta: 'Camille R. × Yuki M. · 20 ch.' } },
+      {
+        work: {
+          slug: 'lames-de-brume',
+          title: 'Lames de Brume',
+          coverImage: null,
+          format: 'Manga',
+          chapterCount: 12,
+          creators: [{ account: { displayName: 'Camille Roux' } }, { account: { displayName: 'Yuki Moreau' } }],
+        },
+      },
     ]);
 
     const result = await service.getFavorites('acc-1');
@@ -20,9 +30,11 @@ describe('FavoritesService', () => {
     expect(prisma.favorite.findMany).toHaveBeenCalledWith({
       where: { accountId: 'acc-1' },
       orderBy: { createdAt: 'desc' },
-      include: { work: true },
+      include: { work: { include: WORK_META_INCLUDE } },
     });
-    expect(result).toEqual([{ slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Camille R. × Yuki M. · 20 ch.' }]);
+    expect(result).toEqual([
+      { slug: 'lames-de-brume', title: 'Lames de Brume', cover: null, meta: 'Camille Roux × Yuki Moreau · 12 ch.' },
+    ]);
   });
 
   it('returns an empty array when the account has no favorites', async () => {

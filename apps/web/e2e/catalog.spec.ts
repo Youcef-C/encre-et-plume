@@ -275,3 +275,40 @@ test.describe('Découvrir catalog — 18+ listing treatment (DR-10)', () => {
     expect(row1TitleBox!.y + row1TitleBox!.height).toBeLessThanOrEqual(row2Box!.y + 1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// API (live seed, NOT mocked): search-by-author-name.
+//
+// Seed-coherence pass (2026-08-02). The `q` facet used to match the stored `Work.meta` string, and
+// searching an author worked only because the author's name happened to be baked into it. The
+// column is gone; `q` now matches the WorkCreator relation. Nothing else in this suite would notice
+// if that capability silently disappeared, which is exactly why it is pinned here against real data.
+// ---------------------------------------------------------------------------
+
+test.describe('DR-2 API · q matches the author, not a denormalized string', () => {
+  test('CAT-API-1: GET /catalog?q=<creator displayName> returns that creator\'s work', async ({ request }) => {
+    // « Camille Roux » is a WorkCreator of `lames-de-brume` and appears nowhere in its title.
+    const res = await request.get(`${API}/catalog?q=${encodeURIComponent('Camille Roux')}`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.items.map((w: { slug: string }) => w.slug)).toContain('lames-de-brume');
+  });
+
+  test('CAT-API-2: GET /catalog?q=<title> still matches the title', async ({ request }) => {
+    const res = await request.get(`${API}/catalog?q=brume`);
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    expect(body.items.map((w: { slug: string }) => w.slug)).toContain('lames-de-brume');
+  });
+
+  test('CAT-API-3: every catalog card advertises the chapter count it really owns', async ({ request }) => {
+    const res = await request.get(`${API}/catalog?q=brume`);
+    const card = (await res.json()).items.find((w: { slug: string }) => w.slug === 'lames-de-brume');
+    const work = await (await request.get(`${API}/works/lames-de-brume`)).json();
+    const chapters = await (await request.get(`${API}/works/lames-de-brume/chapters`)).json();
+    expect(card.chapterCount).toBe(work.chapterCount);
+    expect(work.chapterCount).toBe(chapters.total);
+    // …and the hero line is derived from the same two facts, never from a stored string.
+    expect(work.meta).toBe(`${work.team.map((c: { name: string }) => c.name).join(' × ')} · ${work.chapterCount} ch.`);
+  });
+});

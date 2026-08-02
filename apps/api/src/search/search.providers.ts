@@ -11,10 +11,72 @@ export interface SearchContext {
   limit: number;
 }
 
-/** Extensible seam: DR-3 adds WorksSearchProvider, DR-5 adds IllustrationsSearchProvider — no controller change needed. */
+/** Extensible seam: one provider per corpus, registered in search.module.ts — no controller change needed. */
 export interface SearchProvider {
   readonly type: SearchResultType;
   search(query: string, ctx: SearchContext): Promise<SearchResultItem[]>;
+}
+
+/** Case-insensitive `contains` — the one match shape every provider below uses. */
+const like = (q: string) => ({ contains: q, mode: 'insensitive' as const });
+
+/**
+ * DR-3 corpus. `SEARCH_RESULT_TYPES` declared `works` from day one but no provider ever backed it,
+ * so the global search found people and never a title (seed-coherence pass, 2026-08-02).
+ *
+ * Matching on the author's name is deliberate and is the same rule as the catalog's `q` facet: it
+ * goes through the WorkCreator relation, NOT through a denormalized name string (the `Work.meta`
+ * column that used to carry it named the wrong person on 7 of 9 seeded works, and is gone).
+ */
+@Injectable()
+export class WorksSearchProvider implements SearchProvider {
+  readonly type: SearchResultType = 'works';
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async search(q: string, ctx: SearchContext): Promise<SearchResultItem[]> {
+    const works = await this.prisma.work.findMany({
+      where: {
+        publishedAt: { not: null }, // public corpus only — a draft/unpublished project never surfaces
+        OR: [{ title: like(q) }, { creators: { some: { account: { displayName: like(q) } } } }],
+      },
+      orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+      take: ctx.limit,
+    });
+    return works.map((w) => ({
+      id: w.id,
+      type: 'works' as const,
+      title: w.title,
+      thumbnail: w.coverImage,
+      route: `/oeuvre/${w.slug}`,
+    }));
+  }
+}
+
+/** DR-5 corpus. `artistName` is the illustration's own denormalized-at-write display name. */
+@Injectable()
+export class IllustrationsSearchProvider implements SearchProvider {
+  readonly type: SearchResultType = 'illustrations';
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async search(q: string, ctx: SearchContext): Promise<SearchResultItem[]> {
+    const illustrations = await this.prisma.illustration.findMany({
+      where: {
+        publishedAt: { not: null },
+        OR: [{ title: like(q) }, { artistName: like(q) }],
+      },
+      orderBy: [{ likeCount: 'desc' }, { id: 'asc' }],
+      take: ctx.limit,
+    });
+    return illustrations.map((i) => ({
+      id: i.id,
+      type: 'illustrations' as const,
+      title: i.title,
+      thumbnail: i.image,
+      route: `/illustration/${i.id}`,
+    }));
+  }
 }
 
 @Injectable()

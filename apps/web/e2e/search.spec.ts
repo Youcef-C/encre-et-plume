@@ -3,11 +3,13 @@
  *
  * Acceptance criteria covered:
  *   API: GET /search 401 when logged out; 200 empty when q < 2 chars; 200 creators match
- *        by name/specialty; scope param narrows; invalid scope → 400; works/illustrations always [].
+ *        by name/specialty; works match by title AND by author name; illustrations match by title
+ *        and artist; scope param narrows; invalid scope → 400.
  *   UI:  header button opens overlay; single-char stays idle; query ≥ 2 → Créateur·rices group;
  *        click result → navigates to /<slug>; no-match → "Aucun résultat"; logged-out →
  *        "Connectez-vous"; Escape closes + returns focus; ArrowDown roving focus;
- *        works/illustrations groups hidden (empty seam confirmed).
+ *        Œuvres + Illustrations groups render (seed-coherence pass 2026-08-02: the two providers
+ *        `SEARCH_RESULT_TYPES` declared from day one are now registered).
  *
  * Accounts seeded by global-setup.ts (e2e-seed.js). Profile data seeded in beforeAll via API.
  * Uses existing e2e accounts: UTILISATEUR (searcher) and TARGET (search subject).
@@ -82,8 +84,6 @@ test('F7-API-3: GET /search?q=E2E+TARGET → creators contains TARGET', async ({
   const res = await request.get(`${API}/search?q=E2E+TARGET`);
   expect(res.status()).toBe(200);
   const body = await res.json();
-  expect(body.works).toEqual([]);
-  expect(body.illustrations).toEqual([]);
   const found = body.creators.find((c: { title: string }) => c.title === 'E2E TARGET');
   expect(found).toBeDefined();
   expect(found.route).toBe('/e2e-target');
@@ -138,16 +138,61 @@ test('F7-API-6: GET /search?q=E2E+TARGET&scope=creators → only creators filled
   expect(body.creators.length).toBeGreaterThan(0);
 });
 
-test('F7-API-7: GET /search?q=E2E+TARGET&scope=works → 200 all-empty (no works provider)', async ({
+test('F7-API-7: GET /search?q=E2E+MC10&scope=works → only the works group is filled', async ({
   request,
 }) => {
   await loginApi(request, ACCOUNTS.UTILISATEUR.email);
-  const res = await request.get(`${API}/search?q=E2E+TARGET&scope=works`);
+  const res = await request.get(`${API}/search?q=E2E+MC10&scope=works`);
   expect(res.status()).toBe(200);
   const body = await res.json();
-  expect(body.works).toEqual([]);
   expect(body.creators).toEqual([]);
   expect(body.illustrations).toEqual([]);
+  expect(body.works.length).toBeGreaterThan(0);
+});
+
+// ---------------------------------------------------------------------------
+// API: works + illustrations corpora (seed-coherence pass — the two providers
+// SEARCH_RESULT_TYPES declared and nothing ever backed)
+// ---------------------------------------------------------------------------
+
+test('F7-API-9: GET /search?q=MC10+Œuvre → works contains the published work, routed to /oeuvre/:slug', async ({
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  const res = await request.get(`${API}/search?q=${encodeURIComponent('MC10 Œuvre')}`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  const found = body.works.find((w: { title: string }) => w.title === 'E2E MC10 Œuvre A');
+  expect(found).toBeDefined();
+  expect(found.type).toBe('works');
+  expect(found.route).toBe('/oeuvre/e2e-mc10-oeuvre-a');
+  expect(found).toHaveProperty('thumbnail');
+});
+
+// THE regression guard for the dropped `Work.meta` column: searching an AUTHOR's name used to work
+// only because that name was baked into the stored meta string. It now matches through WorkCreator.
+test('F7-API-10: GET /search?q=E2E+MC10_A → the work is found by its AUTHOR name, not just its title', async ({
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  const res = await request.get(`${API}/search?q=E2E+MC10_A`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  // "E2E MC10_A" appears nowhere in the work's title — only in its creator's displayName.
+  expect(body.works.map((w: { title: string }) => w.title)).toContain('E2E MC10 Œuvre A');
+});
+
+test('F7-API-11: GET /search?q=MC10+Illustration → illustrations contains the published piece', async ({
+  request,
+}) => {
+  await loginApi(request, ACCOUNTS.UTILISATEUR.email);
+  const res = await request.get(`${API}/search?q=MC10+Illustration`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  const found = body.illustrations.find((i: { title: string }) => i.title === 'E2E MC10 Illustration A');
+  expect(found).toBeDefined();
+  expect(found.type).toBe('illustrations');
+  expect(found.route).toBe(`/illustration/${found.id}`);
 });
 
 test('F7-API-8: GET /search?q=foo&scope=invalid → 400', async ({ request }) => {
@@ -310,12 +355,10 @@ test('F7-UI-8: ArrowDown from input moves focus to first result option', async (
 });
 
 // ---------------------------------------------------------------------------
-// UI: works & illustrations groups hidden (deferred seam — no corpus yet)
+// UI: works & illustrations groups now render (providers registered)
 // ---------------------------------------------------------------------------
 
-test('F7-UI-9: Œuvres and Illustrations group headings are NOT rendered (empty seam)', async ({
-  page,
-}) => {
+test('F7-UI-9: Œuvres and Illustrations groups render when the corpora match', async ({ page }) => {
   await page.goto('/connexion');
   await page.getByLabel(/e-mail/i).fill(ACCOUNTS.UTILISATEUR.email);
   await page.getByLabel(/mot de passe/i).fill(PASSWORD);
@@ -324,14 +367,12 @@ test('F7-UI-9: Œuvres and Illustrations group headings are NOT rendered (empty 
 
   await page.getByRole('button', { name: /rechercher/i }).click();
   const input = page.getByRole('combobox', { name: /rechercher/i });
-  await input.fill('E2E TARGET');
+  await input.fill('E2E MC10');
 
-  // Wait for the creators group
-  await expect(page.getByText('Créateur·rices')).toBeVisible({ timeout: 8_000 });
-
-  // Works and Illustrations headings must be absent (empty provider seam)
-  await expect(page.getByText('Œuvres')).not.toBeVisible();
-  await expect(page.getByText('Illustrations')).not.toBeVisible();
+  await expect(page.getByText('Œuvres')).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole('option', { name: /E2E MC10 Œuvre A/i })).toBeVisible();
+  await expect(page.getByText('Illustrations', { exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: /E2E MC10 Illustration A/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

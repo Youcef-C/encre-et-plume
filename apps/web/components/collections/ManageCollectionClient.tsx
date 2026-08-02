@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  collectionMetaLine,
   resolveGenreId,
   type ActiveContest,
   type ApiError,
@@ -301,7 +302,7 @@ export default function ManageCollectionClient({ id }: { id: string }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginBottom: 22 }}>
         <h1 style={{ fontSize: 36, textTransform: 'uppercase', margin: 0 }}>{detail.title}</h1>
-        <span style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500 }}>{detail.count} illustration{detail.count === 1 ? '' : 's'} · collection</span>
+        <span style={{ fontSize: 14, color: 'var(--ink2)', fontWeight: 500 }}>{collectionMetaLine(detail.count)}</span>
         <Link href={`/oeuvre/${detail.slug}`} style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
           Voir l’œuvre →
         </Link>

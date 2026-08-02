@@ -71,7 +71,6 @@ export class CollectionsService {
           themes: genres.slice(1).map((id) => catalogGenreLabel(id)),
           synopsis: dto.description ?? null,
           hashtags: normalizeHashtags(dto.hashtags ?? []),
-          meta: metaLine(0),
           audienceRating: 'Tous publics',
           publishedAt: new Date(),
           coverImage: null,
@@ -92,7 +91,7 @@ export class CollectionsService {
       if (dto.cover) {
         cover = await this.applyCoverAsMember(tx, { workId: created.id, ownerId: accountId, ownerName, workTitle: title }, dto.cover);
         count = await tx.illustrationCollection.count({ where: { workId: created.id } });
-        await tx.work.update({ where: { id: created.id }, data: { coverImage: cover, meta: metaLine(count) } });
+        await tx.work.update({ where: { id: created.id }, data: { coverImage: cover } });
       }
       return { work: created, count, cover };
     });
@@ -207,8 +206,7 @@ export class CollectionsService {
           await tx.work.update({ where: { id: work.id }, data: { coverImage: null } }); // keeps members (D15)
         } else {
           const coverImage = await this.applyCoverAsMember(tx, { workId: work.id, ownerId: accountId, ownerName, workTitle }, dto.cover);
-          const count = await tx.illustrationCollection.count({ where: { workId: work.id } });
-          await tx.work.update({ where: { id: work.id }, data: { coverImage, meta: metaLine(count) } });
+          await tx.work.update({ where: { id: work.id }, data: { coverImage } });
         }
       }
       if (dto.goals !== undefined) {
@@ -257,7 +255,6 @@ export class CollectionsService {
       create: { illustrationId, workId: work.id, order },
       update: {},
     });
-    await this.recomputeMeta(work.id);
     await this.invalidate(work.slug);
     return (await this.getById(work.id, accountId))!;
   }
@@ -277,7 +274,6 @@ export class CollectionsService {
     if (illu?.image && illu.image === work.coverImage) {
       await this.prisma.work.update({ where: { id: work.id }, data: { coverImage: null } });
     }
-    await this.recomputeMeta(work.id);
     await this.invalidate(work.slug);
   }
 
@@ -314,7 +310,7 @@ export class CollectionsService {
     }
   }
 
-  /** Append an illustration to a collection (append order, meta recompute). Caller enforces ownership. */
+  /** Append an illustration to a collection (append order). Caller enforces ownership. */
   async appendMembership(workId: string, illustrationId: string): Promise<void> {
     const max = await this.prisma.illustrationCollection.aggregate({ where: { workId }, _max: { order: true } });
     const order = (max._max.order ?? -1) + 1;
@@ -323,7 +319,6 @@ export class CollectionsService {
       create: { illustrationId, workId, order },
       update: {},
     });
-    await this.recomputeMeta(workId);
     const work = await this.prisma.work.findUnique({ where: { id: workId }, select: { slug: true } });
     if (work) await this.invalidate(work.slug);
   }
@@ -337,11 +332,6 @@ export class CollectionsService {
     });
     if (!work) throw new NotFoundException('Collection introuvable');
     return work;
-  }
-
-  private async recomputeMeta(workId: string): Promise<void> {
-    const count = await this.prisma.illustrationCollection.count({ where: { workId } });
-    await this.prisma.work.update({ where: { id: workId }, data: { meta: metaLine(count) } });
   }
 
   /** Public so CS-1 ProjectsService + GalleryService reuse the one open-contest gate (400 if closed/unknown). */
@@ -449,7 +439,9 @@ export class CollectionsService {
       genres: [work.genre, ...work.themes],
       hashtags: work.hashtags ?? [], // D17: public — searchable by design (seeds the manage form)
       items,
-      owner: owner ? { id: owner.id, name: owner.displayName, slug: owner.profileSlug } : { id: '', name: work.meta, slug: null },
+      // A collection always gets an order-0 WorkCreator at creation; the fallback only guards a
+      // legacy row whose creator was deleted (it must never leak a meta string as a person's name).
+      owner: owner ? { id: owner.id, name: owner.displayName, slug: owner.profileSlug } : { id: '', name: '', slug: null },
     };
     if (isOwner) {
       base.contestId = work.contestId ?? null;
@@ -459,10 +451,6 @@ export class CollectionsService {
     }
     return base;
   }
-}
-
-function metaLine(count: number): string {
-  return `${count} illustration${count === 1 ? '' : 's'} · collection`;
 }
 
 /** BE-6: WHERE for the public collections list — mirrors the DR-5 gallery `q`/`genre`/`tags` mechanics. */

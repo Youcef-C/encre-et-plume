@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { RankingCategory, RankingEntry, RankingRow } from '@encre-et-plume/shared';
 import { CREATOR_ROLES, isRankingCategory } from '@encre-et-plume/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { WORK_META_INCLUDE } from '../works/work-meta';
 import { RedisService } from '../redis/redis.service';
 import {
   RANKING_ORDER_BY,
@@ -36,6 +37,7 @@ export class RankingService {
         where: rankingWhere(g),
         orderBy: RANKING_ORDER_BY,
         take: limit,
+        include: WORK_META_INCLUDE,
       });
       return works.map(toRankingRow);
     });
@@ -65,7 +67,7 @@ export class RankingService {
   }
 
   private async rankWorksByFormat(format: string, limit: number): Promise<RankingEntry[]> {
-    const works = await this.prisma.work.findMany({ where: { format }, orderBy: RANKING_ORDER_BY, take: limit });
+    const works = await this.prisma.work.findMany({ where: { format }, orderBy: RANKING_ORDER_BY, take: limit, include: WORK_META_INCLUDE });
     return works.map(toRankingEntryFromWork);
   }
 
