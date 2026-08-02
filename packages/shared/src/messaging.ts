@@ -82,6 +82,24 @@ export interface SendMessageRequest {
   attachments?: { mediaId: string }[];
 }
 
+// ── CS-8: the project's Discussion tab ───────────────────────────────────────
+// A project chat IS a `Conversation { type:'group', projectId }` — there is NO parallel project
+// Message entity. These two shapes are the project-scoped façade over the MC-9 routes.
+
+/** GET /projects/{slug}/messages — the project thread's page, plus the conversation it belongs to
+ *  (the panel needs the id to match realtime `message:new` events). */
+export interface ProjectChatPage extends MessagesPage {
+  conversationId: string;
+  /** The viewer may post — i.e. is a project member. Read-only viewers never see the composer. */
+  canPost: boolean;
+}
+
+/** POST /projects/{slug}/messages */
+export interface SendProjectMessageRequest {
+  text?: string;
+  attachments?: { mediaId: string }[];
+}
+
 export type CreateConversationRequest =
   | { participantId: string } // DM (get-or-create)
   | { name?: string; participantIds: string[] }; // group — the name is OPTIONAL, settable later

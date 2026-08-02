@@ -605,6 +605,34 @@ async function main() {
     });
   }
 
+  // ── CS-8: project Discussion fixture — a project with TWO members ──────────────────────────────
+  // Reuses the CS-10 accounts (A owner, B co-author) on a SEPARATE project so the CS-10 spec's
+  // invite/revoke flow can't interfere. The thread itself is provisioned lazily by the API on first
+  // access (that is CS-8's whole provisioning path), so nothing seeds a Conversation here.
+  {
+    const a = accounts.CS10_A.id;
+    const b = accounts.CS10_B.id;
+    const workData = {
+      slug: 'e2e-cs8-discussion', title: 'E2E CS8 · Discussion', format: 'Manga', genre: 'Seinen',
+      themes: [], audienceRating: 'Tous publics', meta: 'E2E CS8 · 0 ch.', publishedAt: null,
+    };
+    const work = await prisma.work.upsert({ where: { slug: 'e2e-cs8-discussion' }, create: workData, update: workData });
+    const projectData = {
+      ownerId: a, title: 'E2E CS8 · Discussion', kind: 'Manga', genre: 'Seinen', status: 'en cours',
+      slug: 'e2e-cs8-discussion', workId: work.id, visibility: 'prive',
+    };
+    const project = await prisma.project.upsert({ where: { slug: 'e2e-cs8-discussion' }, create: projectData, update: projectData });
+    for (const [accountId, role, order, groupRole] of [[a, 'scenariste', 0, 'leader'], [b, 'dessinateur', 1, 'member']]) {
+      await prisma.workCreator.upsert({
+        where: { workId_accountId: { workId: work.id, accountId } },
+        create: { workId: work.id, accountId, role, order, groupRole, sharePct: order === 0 ? 100 : 0, permissions: ['ecriture'] },
+        update: { groupRole, permissions: ['ecriture'] },
+      });
+    }
+    // Hermetic: every run starts on an empty thread (the conversation cascades its messages).
+    await prisma.conversation.deleteMany({ where: { projectId: project.id } });
+  }
+
   // ── CS-13: "Modifier une illustration" fixtures for the dedicated CS13_OWNER account ───────────
   // 5 published, standalone illustrations owned by CS13_OWNER: "e2e-cs13-illu-main" is the edit
   // target (PATCH-able, incl. a Licence value the test changes); the other 4 exist purely so

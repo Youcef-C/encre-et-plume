@@ -100,6 +100,17 @@ then it stops and reports. Agents hand off through files in `.claude/pipeline/<I
   the trigger. Genre/tag entry is never free
   text: use `GenreChip` + `GenreSuggestInput` backed by the `packages/shared/src/genres.json` vocabulary
   (`F-20`). Filter UIs auto-apply on change (no "Appliquer" button) with debounced text inputs.
+- **Floating layers escape their parents** (user rule — this keeps recurring): a menu, dropdown, listbox,
+  popover, tooltip or picker must **never** be `position: absolute` inside the flow. Some ancestor —
+  a scrolling list, a card with `overflow: hidden`, a panel — always ends up clipping it, and the bug
+  only shows on one screen. Anchor it instead: `position: fixed` at coordinates measured from the
+  trigger's `getBoundingClientRect()`, plus the native **`popover` attribute (top layer)** when the
+  browser has it (feature-detect imperatively in an effect, never in JSX — an SSR/client attribute
+  mismatch), and re-place it on `scroll` (**capture**, so inner scrollers count) + `resize`. Clamp into
+  the viewport and keep the popover off the row it acts on. `OverflowMenu.tsx` and `OnBrandSelect.tsx`
+  are the reference implementations — reuse them rather than hand-rolling a fourth popover. **Never**
+  "fix" a clipped menu by adding `overflow: visible` to an ancestor: that breaks the ancestor's own
+  scrolling and the next parent clips it anyway.
 - **Prototype REPLICA (not approximation)** — the UI must be a faithful **replica** of the interactive
   prototype, the single source of truth: **`Manga creator collaboration platform/Encre et Plume - Prototype.dc.html`**.
   Do NOT invent layouts, nav items, controls, icons, or copy — reproduce what the prototype draws.

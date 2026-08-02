@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type {
   CreateProjectResponse,
+  MessageDto,
   MyProjectsResponse,
+  ProjectChatPage,
   ProjectWorkspaceResponse,
   UpdateProjectInfoResponse,
   WorkspacePage,
@@ -9,9 +11,11 @@ import type {
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { ProjectsService } from './projects.service';
 import { PagesService } from './pages.service';
+import { ProjectChatService } from './project-chat.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectInfoDto } from './dto/update-project-info.dto';
 import { CreatePageDto } from './dto/page.dto';
+import { SendProjectMessageDto } from './dto/send-project-message.dto';
 import { parseMyProjectsQuery } from './parse-my-projects-query';
 
 /**
@@ -27,6 +31,7 @@ export class ProjectsController {
   constructor(
     private readonly service: ProjectsService,
     private readonly pages: PagesService,
+    private readonly chat: ProjectChatService,
   ) {}
 
   // NOTE: '/mine' is declared BEFORE ':slug' so the literal route wins over the param route.
@@ -61,5 +66,30 @@ export class ProjectsController {
     @Body() dto: CreatePageDto,
   ): Promise<WorkspacePage> {
     return this.pages.createPage(req.accountId, slug, dto);
+  }
+
+  // CS-8 « Discussion » — the project's team thread. Member-only (the gate lives in the service);
+  // the thread itself is MC-9's conversation reached through `Conversation.projectId`.
+  @Get(':slug/messages')
+  messages(
+    @Req() req: AuthRequest,
+    @Param('slug') slug: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ): Promise<ProjectChatPage> {
+    const parsed = Number(limit);
+    return this.chat.list(req.accountId, slug, {
+      cursor,
+      limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+    });
+  }
+
+  @Post(':slug/messages')
+  sendMessage(
+    @Req() req: AuthRequest,
+    @Param('slug') slug: string,
+    @Body() dto: SendProjectMessageDto,
+  ): Promise<MessageDto> {
+    return this.chat.send(req.accountId, slug, dto);
   }
 }

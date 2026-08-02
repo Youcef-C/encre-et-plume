@@ -11,6 +11,7 @@ import { GROUP_PERMISSIONS, GROUP_ROLES, effectiveGroupPermissions } from '@encr
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMemberOf } from './projects.service';
+import { setProjectConversationMember } from './project-conversation';
 
 const ROLES = new Set<string>(GROUP_ROLES);
 const PERMS = new Set<string>(GROUP_PERMISSIONS);
@@ -226,6 +227,10 @@ export class MembersService {
     const ownerRow = project.work?.creators.find((c) => c.accountId === project.ownerId);
     await this.prisma.$transaction(async (tx) => {
       await tx.workCreator.delete({ where: { id: memberId } });
+      // CS-8 R2-1c: evict them from the project's Discussion thread HERE, in the same transaction.
+      // MC-9's /conversations/:id/messages authorizes on the participant row alone, so a row left
+      // behind is read+write access to the team thread for an account that is no longer a member.
+      await setProjectConversationMember(tx as never, project.id, row.accountId, 'remove');
       if (ownerRow && row.sharePct > 0) {
         // N2: atomic increment — a precomputed `ownerRow.sharePct + row.sharePct` read from the
         // pre-transaction snapshot loses one transfer when two revokes race (sum ≠ 100).

@@ -210,7 +210,8 @@ test.describe('CS-2 Espace projet — signed in (e2e-cs12-owner)', () => {
 
     await page.getByRole('tab', { name: 'Discussion' }).click();
     await expect(page).toHaveURL(/\?tab=discussion/);
-    await expect(page.getByText("La discussion d'équipe arrive bientôt.")).toBeVisible();
+    // The CS-2 placeholder was replaced by the real CS-8 "Discussion du projet" panel.
+    await expect(page.getByText('Discussion du projet')).toBeVisible();
 
     await page.getByRole('tab', { name: 'Soutien' }).click();
     await expect(page).toHaveURL(/\?tab=soutien/);

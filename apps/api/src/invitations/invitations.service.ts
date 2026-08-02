@@ -21,6 +21,7 @@ import { ConnectionsService } from '../connections/connections.service';
 import { BlocksService } from '../blocks/blocks.service';
 import { toProjectSummary } from '../projects/projects.service';
 import { canManageProject } from '../projects/members.service';
+import { setProjectConversationMember } from '../projects/project-conversation';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { RespondInvitationDto } from './dto/respond-invitation.dto';
 
@@ -260,8 +261,10 @@ export class InvitationsService {
   /**
    * Grant the accepter workspace membership on a project invite: a WorkCreator row on the project's
    * linked Work. Idempotent (skips if already a member) and a no-op when the project is gone.
-   * ponytail: findFirst+count+create isn't a single tx — the @@unique([workId,accountId]) index is the
-   * real guard against duplicates; add a tx if concurrent double-accepts ever surface.
+   *
+   * CS-8 R2-1b: this is the ONE place project membership is granted, so it is also where the accepter
+   * joins the project's Discussion thread — both writes in one transaction, so a half-applied accept
+   * can never leave a member without the thread (or a participant without membership).
    */
   private async addProjectMembership(
     projectId: string,
@@ -277,6 +280,9 @@ export class InvitationsService {
 
     const order = await this.prisma.workCreator.count({ where: { workId } });
     const role = creatorRoles?.find((r) => r === 'scenariste' || r === 'dessinateur') ?? 'scenariste';
-    await this.prisma.workCreator.create({ data: { workId, accountId, role, order } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workCreator.create({ data: { workId, accountId, role, order } });
+      await setProjectConversationMember(tx as never, projectId, accountId, 'add');
+    });
   }
 }

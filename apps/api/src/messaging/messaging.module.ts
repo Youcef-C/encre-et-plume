@@ -2,6 +2,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { getJwtSecret } from '../auth/jwt-secret';
 import { ConversationsController } from './conversations.controller';
+import { MessagesController } from './messages.controller';
 import { MessagesService } from './messages.service';
 import { MessagingGateway } from './messaging.gateway';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,7 +33,7 @@ import { ConnectionsModule } from '../connections/connections.module';
     BlocksModule, // MC-10: blocked-pair check on DM send / getOrCreateDm
     ConnectionsModule, // MC-9 delta / F-19: stateBetween('connected') for DM policy routing
   ],
-  controllers: [ConversationsController],
+  controllers: [ConversationsController, MessagesController],
   providers: [
     MessagesService,
     MessagingGateway,

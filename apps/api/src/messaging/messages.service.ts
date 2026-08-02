@@ -44,6 +44,8 @@ import { ConnectionsService } from '../connections/connections.service';
 
 // No-existence-leak: unknown conversation AND non-participant both return this 404 (MC-7/MC-8 pattern).
 const NOT_FOUND = 'Conversation introuvable.';
+// R2-4: DELETE /messages/:id answers this for an unknown id AND for a message the caller cannot see.
+const MESSAGE_NOT_FOUND = 'Message introuvable.';
 
 interface PageOpts {
   cursor?: string;
@@ -229,6 +231,41 @@ export class MessagesService {
     await this.afterSend(conv, accountId, message);
 
     return message;
+  }
+
+  // ── DELETE /messages/:id ────────────────────────────────────────────────────
+  /**
+   * CS-8 D-3: the author destroys their own message. MC-9 shipped no delete at all; the project
+   * Discussion panel creates messages, so the lifecycle needs its destroy — and the widget can adopt
+   * the same route later.
+   *
+   * Order is authz-relevant: membership is checked BEFORE authorship, so a stranger gets the same
+   * no-existence-leak 404 as an unknown id instead of a 403 that confirms the message exists.
+   * R2-4: and the same 404 TEXT — the two paths used to differ («Message introuvable.» vs
+   * «Conversation introuvable.»), which told a prober the id exists.
+   * Moderation deletion (someone else's message) belongs to AD-5, not here.
+   */
+  async deleteMessage(accountId: string, messageId: string): Promise<void> {
+    const message = (await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { id: true, senderId: true, conversationId: true },
+    })) as { id: string; senderId: string; conversationId: string } | null;
+    if (!message) throw new NotFoundException(MESSAGE_NOT_FOUND);
+
+    const conv = await this.loadForMember(message.conversationId, accountId).catch((e) => {
+      if (e instanceof NotFoundException) throw new NotFoundException(MESSAGE_NOT_FOUND);
+      throw e;
+    });
+    if (message.senderId !== accountId) {
+      throw new ForbiddenException('Vous ne pouvez supprimer que vos propres messages.');
+    }
+
+    await this.prisma.message.delete({ where: { id: messageId } });
+    // Open panels/lists refetch: the thread drops the row and the list preview stops quoting it.
+    this.gateway.emitConversationUpdated(
+      conv.participants.map((p) => p.accountId),
+      { conversationId: message.conversationId },
+    );
   }
 
   // ── POST /conversations ─────────────────────────────────────────────────────

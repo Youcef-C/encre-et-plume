@@ -9,6 +9,7 @@ import './projects.module';
 import { ScenarioDocumentsService } from './scenario-documents.service';
 import { CorrectionsService } from './corrections.service';
 import { ChaptersService } from './chapters.service';
+import { ProjectChatService } from './project-chat.service';
 
 describe('ProjectsModule DI wiring (no circular-require holes)', () => {
   it('ScenarioDocumentsService constructor paramtypes have no undefined entry', () => {
@@ -27,6 +28,14 @@ describe('ProjectsModule DI wiring (no circular-require holes)', () => {
   // chapters → assets → corrections edge. Same guard, so that edge can never go undefined either.
   it('ChaptersService constructor paramtypes have no undefined entry', () => {
     const params = Reflect.getMetadata('design:paramtypes', ChaptersService) as unknown[];
+    expect(params).toBeDefined();
+    expect(params).not.toContain(undefined);
+  });
+
+  // CS-8 adds a projects → messaging edge (the Discussion tab delegates to MessagesService). Messaging
+  // must never import back, or MessagesService bakes in as `undefined` here and the app fails to boot.
+  it('ProjectChatService constructor paramtypes have no undefined entry', () => {
+    const params = Reflect.getMetadata('design:paramtypes', ProjectChatService) as unknown[];
     expect(params).toBeDefined();
     expect(params).not.toContain(undefined);
   });

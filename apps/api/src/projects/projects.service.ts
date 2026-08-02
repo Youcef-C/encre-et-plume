@@ -34,6 +34,7 @@ import { PrismaService } from '../prisma/prisma.service';
 // the resulting file-level cycle is safe for exactly that reason (same pattern as assets.service).
 import { GROUP_GATE_SELECT, assertCanWrite, canManageProject, hasGroupPermission } from './members.service';
 import { WORKSPACE_PAGE_INCLUDE, toWorkspacePage } from './pages.service';
+import { createProjectConversation } from './project-conversation';
 import { CollectionsService, buildSoutien } from '../collections/collections.service';
 import { SlugService } from '../slug/slug.service';
 import { MediaService } from '../media/media.service';
@@ -238,6 +239,10 @@ export class ProjectsService {
           visibility,
         },
       });
+      // R2-1a: the project's Discussion thread is provisioned WITH the project, so it is listed in
+      // every member's Messages widget from day one instead of appearing only once somebody opens
+      // the Discussion tab (review BLK-3).
+      await createProjectConversation(tx as never, { id: project.id, title, ownerId: accountId });
       return { project: project as { id: string }, workId: work.id };
     });
 

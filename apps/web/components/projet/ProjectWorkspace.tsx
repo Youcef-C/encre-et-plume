@@ -15,6 +15,7 @@ import InfosPanel from './InfosPanel';
 import PlaceholderPanel from './PlaceholderPanel';
 import FichiersPanel from './FichiersPanel';
 import ChaptersPanel from './ChaptersPanel';
+import DiscussionPanel from './DiscussionPanel';
 
 export const WORKSPACE_TABS = [
   'tableau',
@@ -424,11 +425,10 @@ export default function ProjectWorkspace({
           {tab === 'fichiers' && (
             <FichiersPanel slug={slug} pages={workspace.pages} chapters={workspace.chapters} readOnly={!canWrite} />
           )}
+          {/* CS-8: the project's team thread. Chatting is coordination, not « Écriture » — every
+              MEMBER may post, so this panel is NOT gated on canWrite (the server agrees). */}
           {tab === 'discussion' && (
-            <PlaceholderPanel
-              title="Discussion du projet"
-              note="La discussion d'équipe arrive bientôt."
-            />
+            <DiscussionPanel slug={slug} members={workspace.members} isMember={workspace.viewer.isMember} />
           )}
           {tab === 'soutien' && (
             <PlaceholderPanel title="Soutien du projet" note="Le panneau de soutien arrive bientôt." />

@@ -1254,3 +1254,24 @@ export const updateChapterPageOrder = (id: string, body: UpdateChapterPageOrderR
 
 /** Designate the chapter's cover card; `{ pageId: null }` clears back to the implicit first page. */
 
+
+// ─── CS-8 · project discussion ("Espace projet" → Discussion tab) ────────────
+// The project thread IS MC-9's conversation reached through `Conversation.projectId` — these two
+// routes are its project-scoped façade. Member-only server-side (404 private / 403 public).
+import type { ProjectChatPage, SendProjectMessageRequest } from '@encre-et-plume/shared';
+
+/** Newest-first page of the project's thread + the conversationId to match `message:new` against. */
+export const getProjectMessages = (slug: string, cursor?: string): Promise<ProjectChatPage> =>
+  request<ProjectChatPage>(
+    `/projects/${encodeURIComponent(slug)}/messages${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+  );
+
+export const sendProjectMessage = (slug: string, body: SendProjectMessageRequest): Promise<MessageDto> =>
+  request<MessageDto>(`/projects/${encodeURIComponent(slug)}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+/** CS-8 D-3: author-only destroy. 403 on someone else's message, 404 when unknown/not a participant. */
+export const deleteMessage = (messageId: string): Promise<void> =>
+  request<void>(`/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });

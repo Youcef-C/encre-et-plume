@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
@@ -54,6 +54,9 @@ function makePrisma() {
     },
     message: {
       findMany: jest.fn().mockResolvedValue([]),
+      // CS-8 D-3: author-only message delete.
+      findUnique: jest.fn().mockResolvedValue({ id: 'msg-1', senderId: 'acc-1', conversationId: 'conv-1' }),
+      delete: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
@@ -660,5 +663,52 @@ describe('MessagesService.listConversations — requests filter + counts (BE-5)'
     const res = await service.listConversations('acc-1', {});
     expect(res.items[0].status).toBe('requested');
     expect(res.items[0].requestedBy).toBe('acc-1');
+  });
+});
+
+// CS-8 D-3 — DELETE /messages/:id. MC-9 shipped no message delete at all; the Discussion panel
+// creates messages, so it must be able to destroy its own. Author-only; moderation delete is AD-5's.
+describe('MessagesService — deleteMessage (CS-8 D-3)', () => {
+  it('deletes my own message', async () => {
+    const { service, prisma, gateway } = build();
+    await service.deleteMessage('acc-1', 'msg-1');
+    expect(prisma.message.delete).toHaveBeenCalledWith({ where: { id: 'msg-1' } });
+    // The other participants' open panels drop the row.
+    expect(gateway.emitConversationUpdated).toHaveBeenCalledWith(['acc-1', 'acc-2'], { conversationId: 'conv-1' });
+  });
+
+  it("refuses to delete someone else's message (403)", async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue({ id: 'msg-1', senderId: 'acc-2', conversationId: 'conv-1' });
+    await expect(service.deleteMessage('acc-1', 'msg-1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.message.delete).not.toHaveBeenCalled();
+  });
+
+  it('unknown message → 404', async () => {
+    const { service, prisma } = build();
+    prisma.message.findUnique.mockResolvedValue(null);
+    await expect(service.deleteMessage('acc-1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('a non-participant gets the same 404 (no existence leak, checked before authorship)', async () => {
+    const { service, prisma } = build();
+    prisma.conversation.findUnique.mockResolvedValue(CONV({ participants: [] }));
+    await expect(service.deleteMessage('stranger', 'msg-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.message.delete).not.toHaveBeenCalled();
+  });
+
+  // R2-4 (review N-1): both 404s must read IDENTICALLY. The wording used to differ
+  // («Message introuvable.» vs «Conversation introuvable.»), which told a prober that the id exists.
+  it('R2-4: the unknown-id 404 and the non-participant 404 carry the SAME message', async () => {
+    const unknown = build();
+    unknown.prisma.message.findUnique.mockResolvedValue(null);
+    const a = await unknown.service.deleteMessage('acc-1', 'nope').catch((e: Error) => e);
+
+    const stranger = build();
+    stranger.prisma.conversation.findUnique.mockResolvedValue(CONV({ participants: [] }));
+    const b = await stranger.service.deleteMessage('stranger', 'msg-1').catch((e: Error) => e);
+
+    expect((a as Error).message).toBe('Message introuvable.');
+    expect((b as Error).message).toBe((a as Error).message);
   });
 });

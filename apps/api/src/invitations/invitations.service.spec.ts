@@ -53,6 +53,9 @@ describe('InvitationsService', () => {
       count: jest.Mock;
       create: jest.Mock;
     };
+    conversation: { findUnique: jest.Mock };
+    conversationParticipant: { createMany: jest.Mock };
+    $transaction: jest.Mock;
   };
   let notifications: { create: jest.Mock };
   let connections: { ensureConnected: jest.Mock };
@@ -92,6 +95,10 @@ describe('InvitationsService', () => {
         count: jest.fn().mockResolvedValue(1),
         create: jest.fn().mockResolvedValue({}),
       },
+      // R2-1b: the accepter also joins the project's Discussion thread (Conversation.projectId).
+      conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'conv-1' }) },
+      conversationParticipant: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     };
     notifications = { create: jest.fn().mockResolvedValue(null) };
     connections = { ensureConnected: jest.fn().mockResolvedValue(undefined) };
@@ -377,6 +384,29 @@ describe('InvitationsService', () => {
       expect(prisma.workCreator.create).toHaveBeenCalledWith({
         data: { workId: 'work-1', accountId: 'acc-to', role: 'scenariste', order: 2 },
       });
+    });
+
+    // R2-1b (review BLK-1/BLK-3): membership is written where membership CHANGES. Accepting is the
+    // one place a co-author is granted, so it is the one place they join the project's thread —
+    // no waiting for some other member to open the Discussion tab.
+    it('R2-1b: accepting a project invite adds the accepter to the project thread, in the same transaction', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(
+        INV({ projectId: 'proj-1', toUser: userRow('acc-to', ['scenariste']) }),
+      );
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.conversationParticipant.createMany).toHaveBeenCalledWith({
+        data: [{ conversationId: 'conv-1', accountId: 'acc-to' }],
+        skipDuplicates: true,
+      });
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('R2-1b: a project that predates R2-1 has no thread yet — the join still succeeds', async () => {
+      prisma.invitation.findUnique.mockResolvedValue(INV({ projectId: 'proj-1' }));
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await service.respond('acc-to', 'inv-1', { status: 'accepted' });
+      expect(prisma.workCreator.create).toHaveBeenCalled();
+      expect(prisma.conversationParticipant.createMany).not.toHaveBeenCalled();
     });
 
     it('CS-10: a new member joins with the schema defaults (member, 0 %, écriture+corrections)', async () => {

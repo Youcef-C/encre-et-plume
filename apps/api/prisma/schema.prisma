@@ -384,7 +384,9 @@ model Conversation {
   participants  ConversationParticipant[]
   messages      Message[]
 
-  @@index([projectId])
+  // CS-8: ONE thread per project, made unrepresentable rather than app-enforced (two members opening
+  // the Discussion tab at once cannot create two). NULL repeats freely, so DMs/salon are unaffected.
+  @@unique([projectId])
   @@index([lastMessageAt])
 }
 

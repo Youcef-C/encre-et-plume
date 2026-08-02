@@ -439,6 +439,7 @@ describe('ProjectsService.create', () => {
       },
       workCreator: { create: jest.fn().mockResolvedValue({}) },
       fundingGoal: { create: jest.fn().mockResolvedValue({}) },
+      conversation: { create: jest.fn().mockResolvedValue({ id: 'conv-1' }) },
       $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     } as any;
     collections = { resolveContestId: jest.fn(async (id?: string) => id ?? null) };
@@ -521,6 +522,23 @@ describe('ProjectsService.create', () => {
     expect((prisma.workCreator as Record<string, jest.Mock>).create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ workId: 'work-1', accountId: 'acc-me', role: 'dessinateur', order: 0 }) }),
     );
+  });
+
+  // R2-1a (review BLK-3): the project's Discussion thread is provisioned WITH the project, inside the
+  // same transaction — not lazily on the first Discussion-tab visit. Until this, a brand new project
+  // showed no « Projet · … » row in anyone's Messages widget.
+  it('R2-1a: provisions the project conversation with the owner as its participant, in the same transaction', async () => {
+    await service.create('acc-me', dto({ title: 'Lames de Brume' }));
+    const conv = (prisma.conversation as Record<string, jest.Mock>).create;
+    expect(conv).toHaveBeenCalledTimes(1);
+    expect(conv.mock.calls[0][0].data).toMatchObject({
+      type: 'group',
+      projectId: 'proj-1',
+      name: 'Lames de Brume',
+      createdBy: 'acc-me',
+      participants: { create: [{ accountId: 'acc-me' }] },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it('CS-10: the owner row is the group leader holding the whole revenue split', async () => {

@@ -71,6 +71,9 @@ describe('MembersService', () => {
         update: jest.fn().mockResolvedValue({}),
         delete: jest.fn().mockResolvedValue({}),
       },
+      // R2-1c: revoke evicts the member from the project's Discussion thread in the same transaction.
+      conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'conv-1' }) },
+      conversationParticipant: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn((arg: unknown) =>
         typeof arg === 'function' ? (arg as (tx: unknown) => Promise<unknown>)(prisma) : Promise.all(arg as Promise<unknown>[]),
       ),
@@ -267,6 +270,29 @@ describe('MembersService', () => {
         where: { id: 'wc-owner' },
         data: { sharePct: { increment: 40 } },
       });
+    });
+
+    // R2-1c (review BLK-1): revocation must EVICT the member from the project's Discussion thread
+    // here, in the same transaction — MC-9's own /conversations/:id/messages gates on the
+    // participant row alone, so leaving it behind kept a revoked co-author reading AND writing the
+    // team thread until some OTHER member happened to reopen the tab.
+    it('R2-1c: removes the revoked member from the project thread, in the same transaction', async () => {
+      await service.revokeMember('acc-me', 'wc-yuki');
+      expect(prisma.conversation.findUnique).toHaveBeenCalledWith({
+        where: { projectId: 'proj-1' },
+        select: { id: true },
+      });
+      expect(prisma.conversationParticipant.deleteMany).toHaveBeenCalledWith({
+        where: { conversationId: 'conv-1', accountId: 'acc-yuki' },
+      });
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('R2-1c: a project that has no thread yet still revokes cleanly', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await service.revokeMember('acc-me', 'wc-yuki');
+      expect(prisma.workCreator.delete).toHaveBeenCalled();
+      expect(prisma.conversationParticipant.deleteMany).not.toHaveBeenCalled();
     });
 
     it('notifies the revoked member (F-5)', async () => {

@@ -3,12 +3,14 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 import { PagesService } from './pages.service';
+import { ProjectChatService } from './project-chat.service';
 import { SessionGuard } from '../auth/guards/session.guard';
 
 describe('ProjectsController', () => {
   let controller: ProjectsController;
   let service: { getMine: jest.Mock; getWorkspace: jest.Mock; updateInfo: jest.Mock };
   let pages: { createPage: jest.Mock };
+  let chat: { list: jest.Mock; send: jest.Mock };
 
   beforeEach(async () => {
     service = {
@@ -17,11 +19,16 @@ describe('ProjectsController', () => {
       updateInfo: jest.fn().mockResolvedValue({ title: 'x' }),
     };
     pages = { createPage: jest.fn().mockResolvedValue({ id: 'page-1' }) };
+    chat = {
+      list: jest.fn().mockResolvedValue({ items: [], nextCursor: null, conversationId: 'conv-1', canPost: true }),
+      send: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProjectsController],
       providers: [
         { provide: ProjectsService, useValue: service },
         { provide: PagesService, useValue: pages },
+        { provide: ProjectChatService, useValue: chat },
       ],
     })
       .overrideGuard(SessionGuard)
@@ -59,5 +66,21 @@ describe('ProjectsController', () => {
   it('POST :slug/pages → pages.createPage(accountId, slug, body)', async () => {
     await controller.createPage({ accountId: 'acc-me' } as never, 'lames-de-brume', { stage: 'nemu' } as never);
     expect(pages.createPage).toHaveBeenCalledWith('acc-me', 'lames-de-brume', { stage: 'nemu' });
+  });
+
+  // ── CS-8 discussion routes ─────────────────────────────────────────────────
+  it('GET :slug/messages → chat.list(accountId, slug, { cursor, limit })', async () => {
+    await controller.messages({ accountId: 'acc-me' } as never, 'lames-de-brume', 'msg-9', '10');
+    expect(chat.list).toHaveBeenCalledWith('acc-me', 'lames-de-brume', { cursor: 'msg-9', limit: 10 });
+  });
+
+  it('GET :slug/messages ignores a non-numeric limit (service default wins)', async () => {
+    await controller.messages({ accountId: 'acc-me' } as never, 'lames-de-brume', undefined, 'abc');
+    expect(chat.list).toHaveBeenCalledWith('acc-me', 'lames-de-brume', { cursor: undefined, limit: undefined });
+  });
+
+  it('POST :slug/messages → chat.send(accountId, slug, body)', async () => {
+    await controller.sendMessage({ accountId: 'acc-me' } as never, 'lames-de-brume', { text: 'Salut' } as never);
+    expect(chat.send).toHaveBeenCalledWith('acc-me', 'lames-de-brume', { text: 'Salut' });
   });
 });

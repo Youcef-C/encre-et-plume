@@ -2323,3 +2323,70 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
     min-width: 44px;
   }
 }
+
+/* ─── CS-8 · Discussion tab (« Espace projet ») ──────────────────────────────
+   The prototype's pane is a fixed height:460px (proto 1392). D-4: a min-height instead, so a tall
+   desktop viewport is used and a 375px phone never overflows. */
+.ep-discussion {
+  min-height: 460px;
+}
+.ep-discussion-log {
+  padding: 18px;
+}
+/* Bubble rows — max-width lives here (not inline) so the mobile widening is one media query. */
+.ep-discussion-row {
+  max-width: 70%;
+}
+.ep-discussion-row--wide {
+  max-width: 78%;
+}
+/* R2-3 — the bubble's "⋯" actions trigger: discreet, revealed on hover. On a pointer device it
+   fades in with the bubble; it is ALWAYS painted where hover doesn't exist (touch), and focus keeps
+   it visible so the keyboard is never locked out of it. */
+@media (hover: hover) {
+  .ep-bubble-actions {
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .ep-discussion-row:hover .ep-bubble-actions,
+  .ep-bubble-actions:focus-within {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) {
+  .ep-discussion {
+    /* Fill what is left under the header + tab bar without ever pushing the composer off-screen. */
+    min-height: min(70dvh, 460px);
+  }
+  .ep-discussion-log {
+    padding: 12px;
+  }
+  .ep-discussion-row,
+  .ep-discussion-row--wide {
+    max-width: 85%;
+  }
+  /* The 160px attachment plate would crowd a 375px column. */
+  .ep-discussion-thumb {
+    width: 100% !important;
+    max-width: 160px;
+  }
+  /* R2-2 (review BLK-2) — the global MC-9 messaging FAB and the MC-11 « Le Comptoir » dock are
+     position:fixed in the band 26px..84px above the viewport bottom. At 375px the composer landed
+     inside it, so a hit test at the input's own painted edge resolved to the salon dock and « Envoyer »
+     to the FAB icon: the screen's primary control was unreachable at rest. Sticking the composer 92px
+     above the viewport bottom RESERVES that band — the composer can never paint inside it, at any
+     scroll position — which `toBeVisible()` could never catch. Fixed here rather than by moving the
+     global widgets: that is MC-9's call and would touch every screen. */
+  .ep-discussion-composer {
+    padding: 10px 12px;
+    position: sticky;
+    bottom: 92px;
+    z-index: 1;
+    background: var(--card);
+  }
+  /* Room under the composer so parking it above the band never hides the last message. */
+  .ep-discussion {
+    padding-bottom: 92px;
+  }
+}
