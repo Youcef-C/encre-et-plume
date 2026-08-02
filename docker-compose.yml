@@ -1,4 +1,12 @@
 services:
+  # The dev database. Published on 5433 to match DIRECT_DATABASE_URL in .env — it used to be 5432,
+  # which nothing pointed at, so this service had NEVER been started and the real database was a
+  # hand-made `ep-postgres-test` container on an anonymous volume that no file in the repo described.
+  # A fresh clone therefore got a Postgres its own app could not reach, and `docker volume prune`
+  # silently destroyed the only copy of the data. Compose now owns the database, on a named volume.
+  #
+  # Apps talk to pgbouncer (6432), NOT here. 5433 stays published for migrations, psql and seeding —
+  # Prisma Migrate needs a direct connection (see `directUrl` in schema.prisma).
   postgres:
     image: postgres:16-alpine
     environment:
@@ -6,9 +14,46 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: encre_et_plume
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command:
+      - postgres
+      # With a pooler in front, hundreds of backends are pointless: each costs memory, and the pooler
+      # caps itself at 80 (max_db_connections). The live server was at 300 with no pooler at all —
+      # the anti-pattern this whole change exists to fix.
+      - -c
+      - max_connections=100
+      # "Do not wait forever" (user, 2026-08-02). A transaction left open is the single worst way to
+      # exhaust a pool: it holds its server connection until someone notices. 60s, then it is killed.
+      - -c
+      - idle_in_transaction_session_timeout=60000
+      # Bound a runaway query rather than letting it hold a connection indefinitely.
+      - -c
+      - statement_timeout=30000
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d encre_et_plume"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # PgBouncer — mandated by ARCHITECTURE.md and CLAUDE.md, never actually deployed until now.
+  # Transaction pooling; full rationale and every timeout live in infra/pgbouncer/pgbouncer.ini.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "6432:6432"
+    volumes:
+      - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine

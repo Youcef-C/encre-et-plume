@@ -14,7 +14,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Runtime traffic goes through PgBouncer (transaction pooling). The URL carries `pgbouncer=true`,
+  // which makes Prisma stop using prepared statements — transaction mode cannot share them between
+  // clients, and without the flag you get sporadic "prepared statement s0 already exists" errors.
   url      = env("DATABASE_URL")
+  // Prisma Migrate MUST bypass the pooler: DDL and advisory locks need one stable session, which
+  // transaction pooling does not provide. Points straight at Postgres:5433.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum Role {
