@@ -29,7 +29,11 @@
 ## Dependencies
 - [[MR-5]] — "Versements" is a Revenus tab; "prochain versement" displayed there.
 - [[MR-1]] / [[MR-3]] — subscriptions and donations build the balance.
-- [[CS-10]] — only the creator's own split share is withdrawable.
+- [[CS-10]] — only the creator's own split share is withdrawable, and it is computed from the split
+  **version each amount was earned under**, never the current one ([[CS-10]]'s non-retroactivity rule,
+  2026-08-02). A payout that re-reads the live split lets a leader change the ratio the day before a
+  run and take money already earned by someone else — money is the one place a stale read is theft
+  rather than a glitch.
 - [[F-8]] — payouts run as idempotent, retryable queue jobs (Stripe transfers + webhook confirmation), with dead-letter on permanent failure.
 
 ## Notes

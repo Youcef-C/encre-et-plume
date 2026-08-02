@@ -24,12 +24,12 @@
 - [ ] GET /revenue/by-tier — revenue and subscriber counts grouped by tier.
 - [ ] GET /revenue/activity — recent events { type: new_sub|donation|tier_upgrade|cancellation, actor, amount, createdAt }.
 - [ ] Entities: read-models aggregating Subscription ([[MR-1]]/[[MR-4]]) and Donation ([[MR-3]]); project share from RevenueSplit ([[CS-10]]).
-- [ ] Business rules: gross is the project's total monthly recurring + donations; "ma part" applies the co-author split ratio from [[CS-10]]; "prochain versement" comes from the payout schedule ([[MR-6]]); deltas computed vs previous month/year.
+- [ ] Business rules: gross is the project's total monthly recurring + donations; "ma part" applies the co-author split ratio from [[CS-10]] **as it stood WHEN each amount was earned, never the current one** — [[CS-10]]'s non-retroactivity rule (2026-08-02). Each earning carries the split VERSION it was earned under; applying today's ratio to accumulated gross is exactly the abuse that rule exists to stop, and it would silently restate history the moment a split changes; "prochain versement" comes from the payout schedule ([[MR-6]]); deltas computed vs previous month/year.
 - [ ] Validation/authorization: a creator sees only revenue for projects/profile they own or co-author; share figures must reconcile with [[CS-10]] (sum of co-author shares = 100 %).
 - [ ] Side effects: none (read-only reporting).
 
 ## Dependencies
-- [[CS-10]] — co-author revenue split drives "Ma part" per project.
+- [[CS-10]] — co-author revenue split drives "Ma part" per project, **versioned and non-retroactive**: read the version each amount was earned under, not the live one.
 - [[MR-1]] / [[MR-2]] — "Ma page de soutien" tab edits profile-scoped tiers & goals.
 - [[MR-3]] — "Dons" tab.
 - [[MR-4]] — subscriber counts and per-tier data.
