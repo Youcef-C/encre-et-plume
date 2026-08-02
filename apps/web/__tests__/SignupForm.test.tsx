@@ -381,3 +381,45 @@ describe('SignupForm', () => {
     expect(api.signup).not.toHaveBeenCalled();
   });
 });
+
+// CGU art. 4 — âge minimum 15 ans (décision utilisateur, 2026-08-02). Le contrôle client est un
+// confort : le serveur revalide avec la MÊME règle partagée (`isOldEnoughToSignUp`).
+describe('SignupForm — âge minimum (CGU art. 4)', () => {
+  function birthdateForAge(age: number): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - age);
+    return d.toISOString().slice(0, 10);
+  }
+
+  it('refuse en dessous de 15 ans, avec un message distinct de « Date invalide »', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Ado Test');
+    await user.type(emailField(), 'ado@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), birthdateForAge(13));
+    await user.click(cguCheckbox());
+    await user.click(submitBtn());
+
+    expect(await screen.findByText(/au moins 15 ans/i)).toBeInTheDocument();
+    expect(screen.queryByText('Date invalide')).toBeNull();
+    expect(api.signup).not.toHaveBeenCalled();
+  });
+
+  it('accepte à partir de 15 ans', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(nameField(), 'Juste Quinze');
+    await user.type(emailField(), 'quinze@example.com');
+    await user.type(passwordField(), 'password123');
+    await user.type(confirmField(), 'password123');
+    await user.type(birthdateField(), birthdateForAge(15));
+    await user.click(cguCheckbox());
+    await user.click(submitBtn());
+
+    expect(screen.queryByText(/au moins 15 ans/i)).toBeNull();
+  });
+});

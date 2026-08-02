@@ -78,8 +78,22 @@ describe('SignupDto — birthdate (DR-10)', () => {
     expect(await errorsForBirthdate('1990-01-01')).toHaveLength(0);
   });
 
-  it('accepts a plausible minor birthdate (D4: no minimum signup age)', async () => {
-    expect(await errorsForBirthdate('2015-01-01')).toHaveLength(0);
+  // Comportement CHANGÉ le 2026-08-02 : D4 (« pas d'âge minimum ») est remplacé par le seuil de 15 ans
+  // des CGU art. 4. 2015-01-01 rend l'utilisateur trop jeune et n'est donc plus accepté.
+  it('rejects a birthdate below the 15-year minimum, with its OWN message', async () => {
+    const errors = await errorsForBirthdate('2015-01-01');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].property).toBe('birthdate');
+    const message = Object.values(errors[0].constraints ?? {}).join(' ');
+    expect(message).toMatch(/au moins 15 ans/i);
+    // La date est valide : elle ne doit PAS être qualifiée d'invalide.
+    expect(message).not.toMatch(/date invalide/i);
+  });
+
+  it('accepts a minor who is at least 15', async () => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 16);
+    expect(await errorsForBirthdate(d.toISOString().slice(0, 10))).toHaveLength(0);
   });
 
   it('rejects a missing birthdate with "Date invalide"', async () => {

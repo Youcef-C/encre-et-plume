@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ApiError } from '@encre-et-plume/shared';
-import { isPlausibleBirthdate } from '@encre-et-plume/shared';
+import { isOldEnoughToSignUp, isPlausibleBirthdate } from '@encre-et-plume/shared';
 import { signup } from '../lib/api';
 import OnBrandCheckbox from './form/OnBrandCheckbox';
 
@@ -60,6 +60,11 @@ function validate(
   // (packages/shared/src/age.ts) so client and server never disagree.
   if (!birthdate || !isPlausibleBirthdate(birthdate)) {
     errors.birthdate = 'Date invalide';
+    // CGU art. 4 — 15 ans minimum. Message distinct de « Date invalide » : la date est correcte, c'est
+    // l'inscription qui n'est pas ouverte. Même règle partagée que le serveur, qui revalide (le
+    // contrôle client est un confort, jamais la barrière).
+  } else if (!isOldEnoughToSignUp(birthdate)) {
+    errors.birthdate = 'Vous devez avoir au moins 15 ans pour créer un compte';
   }
   return errors;
 }
