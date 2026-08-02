@@ -1,5 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+
+/**
+ * Un objet média n'est JAMAIS réécrit sous une clé déjà servie : `bucketKey` vaut
+ * `${kind}/${accountId}/${uuidv7()}.${ext}` et les dérivés en dérivent — une nouvelle version produit
+ * une nouvelle clé. C'est la condition qui rend `immutable` sûr : le navigateur ne revalide plus du
+ * tout, et le CDN sert depuis son cache pendant un an.
+ *
+ * C'est le levier de coût principal d'une plateforme de manga : une planche est lourde, lue par
+ * beaucoup de monde, et ne change jamais après publication. Sans en-tête, chaque lecture repart vers
+ * l'origine ; avec, la même planche n'est payée qu'une fois par point de présence.
+ *
+ * `immutable` supprime aussi les requêtes conditionnelles (304) : ce n'est pas seulement la bande
+ * passante qui est économisée, c'est l'aller-retour lui-même.
+ */
+export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Readable } from 'node:stream';
 
@@ -77,6 +92,7 @@ export class S3StorageService {
       Body: buffer,
       ContentType: contentType,
       ContentLength: buffer.length,
+      CacheControl: IMMUTABLE_CACHE_CONTROL,
       ...(contentDisposition ? { ContentDisposition: contentDisposition } : {}),
     });
     await this.client.send(cmd);
