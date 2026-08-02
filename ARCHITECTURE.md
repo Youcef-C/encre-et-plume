@@ -25,6 +25,11 @@ only if a measured bottleneck (e.g. realtime, or media processing) forces it.
    WebSocket gateway must use a **Redis adapter** so messages fan out across instances.
 2. **Database.** Postgres handles this easily *if*: good indexes, **pagination on every list**, no N+1
    (Prisma `include` discipline), and a **connection pooler (PgBouncer)** in front. Read replicas only later.
+   **PgBouncer is deployed** (2026-08-02) — `infra/pgbouncer/pgbouncer.ini`, transaction pooling, app on
+   `:6432`, migrations direct on `:5433` via Prisma `directUrl`. Transaction mode is only safe because the
+   API uses **no session-scoped Postgres features** (no `LISTEN/NOTIFY`, no session advisory locks, no
+   `SET SESSION`) — **keep it that way**, or the pool mode has to drop to `session` and stops buying
+   throughput. Prisma's URL must keep `pgbouncer=true` (transaction mode cannot share prepared statements).
 3. **Media delivery — the real concern for a manga platform.** Chapter pages, galleries, avatars, uploads
    belong on a **CDN + object storage (S3/R2)** with an image pipeline (resize/transcode), never served
    from the app server. This matters more than raw user count.
@@ -78,10 +83,24 @@ delivery is the dominant scaling concern**, so the app must never store or proxy
   Scrub PII/secrets from logs and error payloads (RGPD).
 
 ## Roadmap — now vs defer
-- **Now (cheap, high-leverage):** keep the modular monolith; WS Redis adapter; PgBouncer; indexes +
-  pagination; Redis caching; CDN + object storage for media; stand up observability (`F-9`).
+- **Done (2026-08-02 DB pass):** PgBouncer in transaction mode with pool sizing + idle/wait timeouts;
+  **every foreign key indexed** (Postgres indexes none automatically, and RESTRICT/SET NULL/CASCADE all
+  scan the child table on a parent delete — `F-14` erasure and `CS-16` project delete hit exactly those);
+  **UUIDv7 primary keys in native `uuid` columns** (time-ordered so inserts stay local, 16 bytes vs TEXT's
+  36+ across every index and FK). Findings deliberately left open are in
+  `.claude/pipeline/_db-scalability-pass.md`.
+- **Now (cheap, high-leverage):** keep the modular monolith; WS Redis adapter; remaining pagination gaps
+  (per-account lists, the salon roster + its message history); Redis caching; CDN + object storage for
+  media; stand up observability (`F-9`).
 - **Before monetization:** the job queue (`F-8`) — so `MR-*` is built on idempotent, transactional,
   retryable payment processing from day one.
+- **When a host is chosen — managed-database checklist.** There is no cloud DB yet (compose only;
+  `deploy.yml` is a secret-guarded stub), so instance autoscaling cannot be configured against anything.
+  On the day a provider is picked, settle: storage autogrow and its ceiling; compute autoscaling (and
+  whether it restarts connections — the pooler must survive a failover); `max_connections` on the managed
+  instance vs PgBouncer's `max_db_connections`; whether the provider fronts its own pooler (do **not**
+  stack two); PITR/backup retention; and where `DIRECT_DATABASE_URL` points, since migrations must bypass
+  every pooler.
 - **Later (only on a measured bottleneck):** Postgres read replicas; a real search engine (OpenSearch) if
   Postgres FTS is outgrown; extract a single service (realtime or media) only if its scaling profile demands
   it — measured, never preemptive.

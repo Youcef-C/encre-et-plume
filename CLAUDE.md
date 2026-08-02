@@ -18,8 +18,28 @@ Reader (lecteur·rice), Writer (scénariste), Illustrator (dessinateur·rice), P
   persists the raw event (dedup on Stripe `event.id`), returns 200 fast, then enqueues; the worker does the
   money write inside an **ACID Postgres transaction** with an idempotency key; a reconciliation job catches
   drift. The queue does NOT replace the DB transaction — both are required.
-- **Database:** index + **paginate every list**, avoid N+1, use a connection pooler (PgBouncer); read
-  replicas only later if reads dominate.
+- **Database:** index + **paginate every list**, avoid N+1, use a connection pooler (PgBouncer, deployed —
+  transaction mode, so **never introduce session-scoped Postgres state**: no `LISTEN/NOTIFY`, no session
+  advisory locks, no `SET SESSION`); **index every foreign key** (Postgres indexes none automatically, and
+  RESTRICT/SET NULL/CASCADE each scan the child table on a parent delete); PKs are **UUIDv7 in native
+  `uuid` columns**; read replicas only later if reads dominate.
+- **A membership change affects the FUTURE — it never rewrites the past** (user rule, 2026-08-02; the
+  cross-cutting form of [[CS-10]] / [[CS-11]] / [[MR-5]] / [[MR-6]]). Whoever holds the keys today must not
+  be able to edit the record of what already happened. Three concrete invariants, and they bind any story
+  that touches groups or money, not just the ones that named them:
+  - **Revenue is attributed when EARNED**, against the split version in force at that moment. `RevenueSplit`
+    is versioned and append-only; every earning records its version; payouts settle against **that**, never
+    the live split. A payout that re-reads the current ratio lets a leader change it the day before a run
+    and take money someone else earned.
+  - **Revocation is a money and attribution operation, not just an access one.** Leaving or being removed
+    never forfeits revenue already earned, and never deletes a credit: `WorkCreator` is **retired, never
+    deleted**. Credits are per **contribution**, not per current membership.
+  - **Nothing consequential is unilateral or silent**: a change that reduces someone's share needs their
+    consent; a leader/co-leader is demoted or revoked only with their consent or all other leaders';
+    nobody grants themselves a permission they lack; every such change lands in an append-only history the
+    whole group can read.
+  Attribution additionally is **not negotiable** — under French law the *droit de paternité* is
+  inaliénable (CPI L121-1), so "remove a credit" must not exist as an operation (only [[AD-5]] moderation).
 - **Media/images (`F-10`):** bytes live in S3-compatible object storage (never Postgres / the app server);
   uploads go **direct-to-storage via presigned URLs** (the API never proxies bytes), derivatives via the
   `image-processing` queue, delivery via **CDN** (public URLs) or short-lived **signed URLs** (private:
