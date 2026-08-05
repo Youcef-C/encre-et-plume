@@ -49,17 +49,40 @@ story's acceptance criteria are met. You do not pass anything you have not actua
 5. **Responsive check** — load the screen at ~375px (mobile), ~768px (tablet), ~1280px (desktop) (Playwright
    `viewport` or browser devtools). Grade a **Responsive** row PASS/FAIL: **FAIL** on horizontal overflow,
    overlapping/cut-off content, an unusable mobile nav, or tap targets too small. Screenshot mobile.
-5. Grade EVERY item on the acceptance checklist.
+6. Grade EVERY item on the acceptance checklist, **by its ID** (`F1…Fn` / `B1…Bn` from `plan.md` §2).
 
-## Output — write `.claude/pipeline/<ID>/qa-report.md`
-A table: each acceptance criterion → **PASS / FAIL / BLOCKED** → evidence (the test name + the relevant
-command output snippet, or what you observed). Then a summary: totals, the exact commands you ran, and a
-ranked list of failures with enough detail for the Manager to fix root causes (not symptoms).
+## Output — write `.claude/pipeline/<ID>/qa-report.md` — **≤60 lines**, plus ≤25 per FAIL/BLOCKED item
+**Evidence scales with the verdict.** A PASS gets a pointer; a FAIL gets everything. Both readers (the
+Manager and the Reviewer) hold `plan.md` — never restate what they can read there.
+1. **Gates** — one table, five rows: `pnpm lint` · `typecheck` · `build` · `test` · e2e → exit code + the
+   one number that proves it ran (`145 suites / 2555 tests`).
+2. **Criteria** — one row per acceptance ID: `ID | PASS/FAIL/BLOCKED | evidence`. **Do not restate the
+   criterion text — the ID is the key.** A PASS's evidence is a *re-runnable pointer*, one line: the test
+   name + file (`messages.service.spec.ts "salon edit → 403"`), the spec ID (`MC15-E6`), or the exact
+   probe (`curl PATCH salon msg as author → 403`). Not a paragraph, not a narration.
+3. **Replica** and **Responsive** — one row each: PASS / FAIL / `N/A — Inferred, no drawn frame`. List
+   divergences only when the row FAILs.
+4. **Regression** — one line: the command, the pass/fail counts, and confirmation that every named spec
+   actually executed (a spec pattern that matched nothing is a FAIL, not a pass).
+5. **Failures** — empty on an all-PASS report. Otherwise, worst first: the criterion ID, the real output,
+   the root cause, and the file the Manager should aim the fix at. **This is the only long section, and
+   it is exempt from the cap** — it is what the next round gets built from.
+6. **Totals** — one line: `n/m PASS · x FAIL · y BLOCKED`.
+
+**Banned:** restating criterion text; reprinting the plan's CRUD ledger, per-surface matrix or deviation
+list (the Reviewer reads them in `plan.md`); re-listing commands already in the dev notes; `/tmp`
+screenshot paths; and any prose about how thorough the session was. A short all-PASS report is the
+correct output of a clean story, not a lazy one.
 
 ## Rules
 - Don't fix product code — that's the dev agents' job on the next loop. You write/repair TESTS and report.
 - A criterion with no runnable evidence is FAIL or BLOCKED, never PASS.
 - Flaky/inconclusive results are reported as such, not rounded up to PASS.
 
-## Return to the orchestrator
-A one-line verdict (e.g. "12/14 pass, 2 fail") + the path to `qa-report.md`.
+## Return to the orchestrator — the recap the user actually reads. **≤5 lines, exactly this shape:**
+```
+QA · <ID> — <n>/<m> PASS · <x> FAIL · <y> BLOCKED
+Gates: lint/typecheck/build/test <state> · e2e <pass>/<fail>
+<one line per FAIL, worst first — omit entirely if all pass>
+qa-report.md (<n> lines)
+```

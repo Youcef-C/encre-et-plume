@@ -48,9 +48,22 @@ written) before starting Part B, and in Part B consume your own `backend-notes.m
 4. Wire WebSocket events / Stripe hooks only when the story requires them.
 5. Run the API test suite and migrations; get them green before moving to Part B.
 
-**backend-notes.md** — the endpoints you built (`METHOD /path`, request/response shape, required role), the
-Prisma models + migration name, the shared types added, env vars introduced, and the exact commands to
-run/migrate/test. This is the contract Part B consumes — be precise about field names and shapes.
+**backend-notes.md — ≤90 lines** (a later round appends ≤30, it never rewrites). This is a contract sheet
+for Part B, QA and the Reviewer — **tables, not prose**:
+1. **Endpoints** — `METHOD /path` | body type | response | who may call.
+2. **Errors** — case | status | the exact French copy, verbatim (the UI and QA quote it byte-for-byte).
+3. **Shared types** — the code block you added to `packages/shared`, plus any field Part B must bind by
+   name. Be precise about field names and shapes; this is the anti-drift contract.
+4. **Realtime** — event | payload | audience. Omit the section entirely if the story has none.
+5. **Files changed** — path | one clause. No "why" column.
+6. **Deviations from the plan** — `# | what | why`, one line each. The **only** place a "why" belongs,
+   because QA and the Reviewer grade the deviation against its reason.
+7. **For the human** — migration name · env vars introduced (or `none`) · the exact commands to
+   migrate/run/test. **Never cut this section**; it is the only part anyone reads six months from now.
+8. **Tests** — one line: command → result (`npx jest → 145 suites / 2550 tests green`).
+
+**Banned:** rejected alternatives, retrospectives, restating `plan.md`, pasted test output, and per-test
+descriptions. A decision that needs defending is one line in §6.
 
 ---
 
@@ -96,8 +109,21 @@ Source of truth: `Manga creator collaboration platform/Encre et Plume - Prototyp
 5. Accessibility basics: labelled controls, keyboard operability, semantic landmarks, status text not
    color-only. Run lint/typecheck/tests green before finishing.
 
-**frontend-notes.md** — routes/components added, which endpoints each calls, states handled, French labels
-used, test command + result, and any contract mismatch you hit (don't paper over it — report it).
+**frontend-notes.md — ≤100 lines** (a later round appends ≤30). Tables, not prose:
+1. **Components/routes added** — path | one clause.
+2. **Endpoints consumed** — call | endpoint | where.
+3. **States** — state | rendering, one line each.
+4. **French copy used** — the verbatim list only. QA grades fidelity against it.
+5. **Deviations** — `# | what | why`, continuing the plan's `D-` numbering.
+6. **A11y + responsive** — ≤6 lines total: the a11y contract you met and what you did at 375/768/1280.
+7. **Existing tests changed** — test | change | why, one line each. Never change one silently.
+8. **Contract mismatches / notes for QA + the Reviewer** — numbered, one line each. Anything the plan got
+   wrong, or that you resolved against it. **Don't paper over it — report it.**
+9. **Tests** — one line per suite: command → result, plus one line `RED first: <the first failure you saw>`.
+
+**Banned:** pasted test output, per-test descriptions, `/tmp` screenshot paths (dead before anyone reads
+them), and any transcript — QA is explicitly told to produce *fresh* evidence and never reuse yours, so a
+run log here is read by nobody.
 
 ---
 
@@ -116,7 +142,11 @@ note explicitly why it's out of scope — rather than silently shipping a half-C
   it in the relevant notes file rather than silently guessing.
 - Both halves are test-first. Backend green before you touch the frontend.
 
-## Return to the orchestrator
-A short summary: endpoints + models/migration built, components/routes built, endpoints consumed, the
-CRUD operations covered (call out DELETE), test commands + results (green), and the paths to BOTH
-`backend-notes.md` and `frontend-notes.md`.
+## Return to the orchestrator — the recap the user actually reads. **≤5 lines, exactly this shape:**
+```
+Built · <ID> — <n> endpoints · <models + migration name> · <n> components on <n> screens
+CRUD: C ok · R ok · U ok · D <state — name DELETE explicitly, every time>
+Tests: api <x> green · web <y> green · lint/typecheck/build green
+Watch: <the one contract mismatch or deviation, or "none">
+backend-notes.md (<n> lines) · frontend-notes.md (<n> lines)
+```

@@ -34,25 +34,24 @@ FAIL even though you planned it.
 
 ## 1 · Manager  (loop entry — re-enters here on a failed review)
 Follow `.claude/agents/project-manager.md` against the story file. On `iteration > 1`, first read
-`review.md` and `qa-report.md` and fold the feedback in, adding a "Changes this round" section. Write
-`plan.md`.
+`review.md` and `qa-report.md`, **keep the existing `plan.md`** — its §1 constraints and §3 deviations are
+what stop the next round re-litigating settled decisions — and **append** a "Changes this round" section.
+Write `plan.md`.
 
-**Plan pre-flight — clear this before dispatching the Dev.** A blocking FAIL re-runs Manager + Dev + QA +
-Reviewer, so a round costs far more than getting the plan right. These are what actually fail the gate here;
-each must be answered in `plan.md` (a deliberate "N/A because …" is a valid answer, silence is not):
-- **DELETE exists.** For every resource the story lets users create: Create, Read/list, Update **and
-  Delete** — route + server-side authz ([[F-2]]) + FE affordance (Delete gets a confirmation step) + a test.
-  Delete is the one that gets dropped.
-- **The prototype section is named**, by banner + line range, for every screen the story touches — plus any
-  **induced deviation** written down with its reason, so QA and the Reviewer grade the deviation.
-- **Design-system rules that keep biting:** buttons use one shared `.ep-btn-*` intent class (destructive →
-  `danger`), never inline colors; no emojis and no literal `✓`/`✕` — icons from `components/icons.tsx`; no
-  bare native checkbox/select — `OnBrand*`; genre/tag entry via the shared vocabulary; page wrappers paint
-  no `background`.
-- **All three breakpoints** (~375 / ~768 / ~1280) are in the plan's frontend tasks, not assumed.
-- **Every list endpoint is paginated + indexed**, no N+1; any user-authored HTML reaching an `innerHTML`
-  sink is server-side sanitized.
-- **Acceptance checklist** maps each story criterion to the test that proves it.
+**Plan pre-flight — ONE table in `plan.md` §0, cleared before dispatching the Dev.** A blocking FAIL
+re-runs Manager + Dev + QA + Reviewer, so a round costs far more than getting the plan right. These six
+rows are what actually fail the gate. Each is **one line**: `OK` plus a pointer (task ID, file, banner +
+line range) or `N/A — <reason>`. Silence is not an answer; a row that wants a paragraph belongs in the
+task list, not here.
+
+| Row | Cleared when |
+|---|---|
+| **DELETE exists** | every user-creatable resource has Create/Read/Update/**Delete** — route + server-side authz ([[F-2]]) + FE affordance (Delete gets a confirmation step) + a test. Delete is the one that gets dropped. |
+| **Prototype named** | banner + line range for every screen touched; each induced deviation is a row in §3 with its reason, so QA and the Reviewer grade the deviation. |
+| **Design system** | one shared `.ep-btn-*` intent class (destructive → `danger`), never inline colors; no emojis, no literal `✓`/`✕` — icons from `components/icons.tsx`; no bare native checkbox/select — `OnBrand*`; genre/tag via the shared vocabulary; page wrappers paint no `background`. |
+| **Breakpoints** | ~375 / ~768 / ~1280 named in the frontend tasks, not assumed. |
+| **Data safety** | every list endpoint paginated + indexed, no N+1; user-authored HTML reaching an `innerHTML` sink is sanitized server-side. |
+| **Checklist** | every story criterion has an ID, a task, and the test that proves it. |
 
 ## 2 · Full-Stack Dev  (dispatched)
 Dispatch the **fullstack-developer** agent. Pass the story path + `.claude/pipeline/$1/plan.md` — paths
@@ -68,9 +67,9 @@ Follow `.claude/agents/reviewer.md` against the story + `plan.md` + `qa-report.m
 `review.md` and the `verdict` in `state.json`.
 
 ## 6 · Gate
-- **VERDICT: PASS** → the story is done. Summarize to the user: what was built (key files/endpoints/
-  components), how to run it, the QA result, and any non-blocking follow-ups from `review.md`. If iterating
-  an epic, move to the next story. Stop the loop for this story.
+- **VERDICT: PASS** → the story is done. **≤8 lines to the user:** what was built (endpoints · models ·
+  screens), the run/migrate command, the QA result, and the non-blocking follow-ups from `review.md`, one
+  line each. If iterating an epic, move to the next story. Stop the loop for this story.
 - **VERDICT: FAIL and iteration < 3** → increment `iteration` in `state.json`, briefly relay the blocking
   findings to the user, and **go back to step 1 (Manager)** — the Manager folds the feedback in and the
   devs/QA/Reviewer run again.
@@ -92,4 +91,10 @@ Follow `.claude/agents/reviewer.md` against the story + `plan.md` + `qa-report.m
 - **Never read the prototype HTML whole** — it's one enormous file. `grep -n '<!-- =\{4,\}'` for the banner
   line numbers, then `Read` only your section's range (`offset`/`limit`). Applies to every stage.
 - Between stages, sanity-check the expected artifact was actually written before proceeding.
-- Announce each stage to the user as you go (e.g. "Round 1 · Backend…") so the run is followable.
+- Announce each stage as you go (e.g. "Round 1 · Backend…"), and when it finishes **relay that stage's
+  recap verbatim — ≤5 lines, the format in that agent's file.** The recap is the user's deliverable; the
+  artifacts are for the next stage, not for them. Never paste an artifact into the chat.
+- **Artifact budgets** (hard; repeated in each agent's file): `plan.md` ≤180 · `backend-notes.md` ≤90 ·
+  `frontend-notes.md` ≤100 · `qa-report.md` ≤60 · `review.md` ≤40 lines. **Failure detail is exempt** — a
+  FAIL/BLOCKED item or a blocking finding gets all the room it needs, and a retry round appends its own
+  section rather than rewriting. An artifact over budget isn't thorough, it's padded.

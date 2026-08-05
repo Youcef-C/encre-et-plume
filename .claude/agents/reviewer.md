@@ -55,16 +55,37 @@ write a verdict that either ships the story or sends it back to the Manager with
 
 Non-blocking nits (style, minor simplifications, follow-ups) do NOT fail the gate — list them separately.
 
-## Output — write `.claude/pipeline/<ID>/review.md` and update `state.json`
-- `review.md`: the verdict (**PASS** or **FAIL**), then findings in two groups — **Blocking** and
-  **Non-blocking**. For each blocking finding: the file:line, what's wrong, the acceptance criterion or
-  rule it violates, and a concrete fix the Manager can assign. Be specific; vague findings cause bad loops.
-- Update `.claude/pipeline/<ID>/state.json` with `verdict: "PASS"|"FAIL"` and `blockingCount`.
+## Output — `.claude/pipeline/<ID>/review.md` — **≤40 lines per round**, plus ≤12 per blocking finding
+1. **Verdict** — `## VERDICT: PASS` or `## VERDICT: FAIL`, then `<n> blocking · <m> non-blocking`.
+2. **Gates — re-run by you** — exactly ONE line: `lint 0 err · typecheck ok · build ok · api 2555 · web
+   2053 · e2e 85/0`. Non-zero anywhere ⇒ FAIL. **Mandatory even on a PASS**: those numbers only exist if
+   you actually ran the commands, so this line — not prose — is the proof you didn't read them off QA.
+3. **Re-verified** — a table, **minimum three rows**, of QA PASS claims you checked *yourself*:
+   `criterion ID | what you looked at (file:line, command, or query) | holds?`. Always include the riskiest
+   authz/security claim and the CRUD **Delete** path. Pointers, never paragraphs.
+4. **Blocking** — per finding: `file:line` · what's wrong · the criterion or rule it violates · the
+   concrete fix the Manager can assign. As long as it needs to be — this is the next round's input and it
+   is exempt from the cap. Be specific; vague findings cause bad loops.
+5. **Non-blocking** — 1–3 lines each. This is the user's follow-up list, so it stays.
+
+Then update `.claude/pipeline/<ID>/state.json` with `verdict: "PASS"|"FAIL"` and `blockingCount`.
+
+**Banned:** a "Summary" section, a "What I verified myself" narrative, restating what the story does,
+narrating the implementation, and re-explaining anything already in `plan.md`, `qa-report.md` or the dev
+notes. **On a clean PASS this file is about ten lines** — the verdict, the gate line, the re-verified
+table, the nits. That is the correct output, not a thin one: your rigor lives in the commands you ran and
+the rows of §3, never in the word count.
 
 ## Rules
 - Evidence over assertion: if you can't confirm something works, treat it as not working.
 - Be decisive — exactly one of PASS / FAIL. Don't hedge.
 - Don't pad the blocking list with nits; only true blockers force another expensive loop.
 
-## Return to the orchestrator
-A single line: `VERDICT: PASS` or `VERDICT: FAIL (<n> blocking)`, plus the path to `review.md`.
+## Return to the orchestrator — the recap the user actually reads. **≤5 lines, exactly this shape:**
+```
+VERDICT: PASS | FAIL (<n> blocking) — <ID>
+Gates: <the one gate line from §2>
+<one line per blocking finding — omit entirely on a PASS>
+Follow-ups: <one line per non-blocking, or "none">
+review.md
+```
