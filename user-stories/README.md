@@ -54,6 +54,8 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-19](00-foundation/F-19-application-settings.md) — Application settings "Paramètres" *(inferred)*
 - [F-20](00-foundation/F-20-genre-vocabulary-tag-picker.md) — Genre vocabulary & tag picker *(inferred)*
 - [F-21](00-foundation/F-21-support-contact-bug-report.md) — Support & contact (aide, contact form, bug report) *(inferred)*
+- [F-23](00-foundation/F-23-mesure-audience-sans-cookie.md) — Mesure d'audience sans cookie (événements, agrégats, conversion) *(inferred)*
+- [F-24](00-foundation/F-24-seo-indexabilite.md) — SEO : indexabilité et Search Console *(inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
@@ -68,6 +70,7 @@ Reader-facing: home, catalog, work page, reader, gallery, ranking, library.
 - [DR-9](01-discovery-reading/DR-9-like-favorite.md) — Like / favorite
 - [DR-10](01-discovery-reading/DR-10-age-verification-18-plus-gating.md) — Age verification & 18+ content gating *(inferred)*
 - [DR-11](01-discovery-reading/DR-11-reading-history-resume.md) — Reading history & resume "Reprendre la lecture" *(inferred)*
+- [DR-13](01-discovery-reading/DR-13-defiger-compteurs-tendance.md) — Défiger les compteurs de tendance *(defect)*
 - [DR-12](01-discovery-reading/DR-12-illustration-collections.md) — Illustration collections "Collection" *(mixed)*
 
 ### [02 · Matching & Collaboration](02-matching-collaboration/_epic.md) — `MC`

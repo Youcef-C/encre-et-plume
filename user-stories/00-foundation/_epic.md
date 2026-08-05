@@ -33,6 +33,8 @@
 - F-20 — Genre vocabulary & tag picker (shared genres.json base; fixes free-text tag inputs)
 - F-21 — Support & contact (aide page, contact/support form, bug report → staff via queue+email)
 - F-22 — Clickable genre tags & freetext illustration hashtags
+- F-23 — Mesure d'audience sans cookie (événements, agrégats, conversion)
+- F-24 — SEO : indexabilité et Search Console
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.
