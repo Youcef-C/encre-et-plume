@@ -27,6 +27,7 @@ Give every visitor and member of "Encre & Plume" a compelling way to find manga,
 11. [[DR-11]] — Reading history & resume "Reprendre la lecture"
 12. [[DR-12]] — Illustration collections "Collection"
 13. [[DR-13]] — Défiger les compteurs de tendance (défaut : weeklyLikeDelta / trendingScore sans écrivain)
+14. [[DR-14]] — Chargement résilient : squelette + nouvelle tentative automatique (défaut : ~12 blocs d'erreur copiés-collés)
 
 ## Key cross-epic dependencies
 

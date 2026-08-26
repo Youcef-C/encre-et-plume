@@ -10,6 +10,7 @@ import { EmailProcessor } from './processors/email.processor';
 import { DataExportProcessor } from './processors/data-export.processor';
 import { AccountErasureProcessor } from './processors/account-erasure.processor';
 import { CloseCallProcessor } from './processors/close-call.processor';
+import { TrendingProcessor } from './processors/trending.processor';
 import { QUEUE_PROCESSORS } from './job-processor';
 import { QueueHealthController } from './queue-health.controller';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -44,6 +45,7 @@ import { PreferencesModule } from '../preferences/preferences.module';
     DataExportProcessor,     // F-14
     AccountErasureProcessor, // F-14
     CloseCallProcessor,      // MC-4
+    TrendingProcessor,       // DR-13
     // F-16: EMAIL_TRANSPORT in QueueModule (not EmailModule) — avoids circular dep:
     // EmailService (in EmailModule) injects QueueService (in QueueModule @Global).
     { provide: EMAIL_TRANSPORT, useFactory: createEmailTransport },
@@ -60,8 +62,9 @@ import { PreferencesModule } from '../preferences/preferences.module';
         dataExport: DataExportProcessor,
         accountErasure: AccountErasureProcessor,
         closeCall: CloseCallProcessor,
-      ) => [fanout, imgProc, emailProc, dataExport, accountErasure, closeCall],
-      inject: [NotificationsFanoutProcessor, ImageProcessingProcessor, EmailProcessor, DataExportProcessor, AccountErasureProcessor, CloseCallProcessor],
+        trending: TrendingProcessor,
+      ) => [fanout, imgProc, emailProc, dataExport, accountErasure, closeCall, trending],
+      inject: [NotificationsFanoutProcessor, ImageProcessingProcessor, EmailProcessor, DataExportProcessor, AccountErasureProcessor, CloseCallProcessor, TrendingProcessor],
     },
     PrismaService,
     SessionGuard,

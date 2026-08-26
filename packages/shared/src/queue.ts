@@ -11,6 +11,7 @@ export const QUEUE_NAMES = [
   'data-export',     // F-14: packages user data into a zip archive
   'account-erasure', // F-14: RGPD art. 17 erasure flow
   'calls',           // MC-4: auto-close an "Appels à projets" call at its deadline
+  'analytics',       // DR-13: nightly trending recompute; F-23/AD-7 hang off the same cron
 ] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 

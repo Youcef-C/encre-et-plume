@@ -32,6 +32,7 @@ import { MessagingModule } from './messaging/messaging.module';
 import { SalonModule } from './salon/salon.module';
 import { BlocksModule } from './blocks/blocks.module';
 import { CollectionsModule } from './collections/collections.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -63,6 +64,7 @@ import { CollectionsModule } from './collections/collections.module';
   // SalonModule (MC-11): authenticated /salon* — public community room "Le Comptoir" reusing MC-9's backend.
   // BlocksModule (MC-10): self-service /me/blocks; exports BlocksService for enforcement consumers.
   // CollectionsModule (DR-12): /collections* — illustration collections "Collection"; exports CollectionsService to GalleryModule.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule, CollectionsModule],
+  // AnalyticsModule (DR-13): no routes — owns the nightly `analytics` cron that recomputes the trending columns.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule, CollectionsModule, AnalyticsModule],
 })
 export class AppModule {}
