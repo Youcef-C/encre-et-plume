@@ -15,7 +15,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "e2e": "turbo run e2e",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "clean:cache": "find .turbo/cache -maxdepth 1 -type f -mtime +7 -delete 2>/dev/null; rm -rf apps/web/.next/cache/webpack; echo 'pruned turbo cache (>7d) + webpack cache'"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
