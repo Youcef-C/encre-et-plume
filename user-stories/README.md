@@ -57,6 +57,7 @@ Cross-cutting: accounts, roles, profile, navigation, notifications, theme, searc
 - [F-23](00-foundation/F-23-mesure-audience-sans-cookie.md) — Mesure d'audience sans cookie (événements, agrégats, conversion) *(inferred)*
 - [F-24](00-foundation/F-24-seo-indexabilite.md) — SEO : indexabilité et Search Console *(inferred)*
 - [F-25](00-foundation/F-25-ramasse-miettes-retention.md) — Ramasse-miettes : purge des données périmées *(defect)*
+- [F-26](00-foundation/F-26-fabrique-client-redis.md) — Une seule fabrique de clients Redis *(technical / inferred)*
 
 ### [01 · Discovery & Reading](01-discovery-reading/_epic.md) — `DR`
 Reader-facing: home, catalog, work page, reader, gallery, ranking, library.

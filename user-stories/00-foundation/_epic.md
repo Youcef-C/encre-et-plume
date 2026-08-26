@@ -36,6 +36,7 @@
 - F-23 — Mesure d'audience sans cookie (événements, agrégats, conversion)
 - F-24 — SEO : indexabilité et Search Console
 - F-25 — Ramasse-miettes : purge des données périmées *(defect)*
+- F-26 — Une seule fabrique de clients Redis *(technical / prevention)*
 
 ## Key cross-epic dependencies
 - [[AD-3]] — Editor verification gates the `editor` role surfaced in F-2/F-3.
