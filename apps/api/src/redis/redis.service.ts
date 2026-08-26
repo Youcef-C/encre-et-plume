@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
+import { closeRedis, createRedisClient } from './redis-client.factory';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
@@ -7,18 +8,11 @@ export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
   constructor() {
-    this.client = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', {
-      // B-2: without these three, a Redis outage makes commands QUEUE awaiting reconnection
-      // (ioredis defaults `enableOfflineQueue: true`) instead of rejecting — so every fail-open
-      // `.catch()` below is dead code exactly when it is needed, and the request hangs.
-      // Rejecting promptly is what makes fail-open real. This client issues no blocking command
-      // (no BLPOP/BRPOP/subscribe), so a command timeout is safe; BullMQ and the WebSocket
-      // adapter each own a separate connection and are deliberately left untouched.
-      commandTimeout: 200,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    });
-    // Suppress unhandled error events; methods fail-open via try-catch
+    // F-26: the `command` profile (commandTimeout 200 / maxRetriesPerRequest 1 /
+    // enableOfflineQueue false) and the reason it differs from the others live in the factory.
+    this.client = createRedisClient('command');
+    // The factory already swallows `error` so an outage cannot raise an unhandled event; this
+    // listener adds RedisService's warn on top (ioredis allows several).
     this.client.on('error', (err: Error) => {
       if (process.env['NODE_ENV'] !== 'test') this.logger.warn(`Redis: ${err.message}`);
     });
@@ -129,8 +123,6 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    // B-2: with the offline queue disabled, QUIT itself rejects while Redis is down — without the
-    // fallback the socket and its reconnect timer outlive shutdown and hold the process open.
-    await this.client.quit().catch(() => this.client.disconnect());
+    await closeRedis(this.client);
   }
 }

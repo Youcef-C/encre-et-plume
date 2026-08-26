@@ -7,22 +7,7 @@ import { JobMetrics } from './job-metrics';
 import { QUEUE_PROCESSORS } from './job-processor';
 import type { JobProcessor } from './job-processor';
 import { requestContext } from '../observability/request-context';
-
-/** Parse REDIS_URL into plain BullMQ connection opts (same helper pattern as QueueService). */
-function parseBullmqOpts(url: string): { host: string; port: number; password?: string; db?: number; maxRetriesPerRequest: null } {
-  try {
-    const u = new URL(url);
-    return {
-      host: u.hostname || 'localhost',
-      port: Number(u.port) || 6379,
-      password: u.password || undefined,
-      db: u.pathname.length > 1 ? Number(u.pathname.slice(1)) : undefined,
-      maxRetriesPerRequest: null,
-    };
-  } catch {
-    return { host: 'localhost', port: 6379, maxRetriesPerRequest: null };
-  }
-}
+import { bullmqConnectionOpts } from '../redis/redis-client.factory';
 
 /**
  * WorkerRunner: starts one BullMQ Worker per registered processor.
@@ -43,7 +28,7 @@ export class WorkerRunner implements OnModuleDestroy {
   run(): void {
     if (this.workers.length > 0) return; // idempotent
 
-    const connectionOpts = parseBullmqOpts(process.env['REDIS_URL'] ?? 'redis://localhost:6379');
+    const connectionOpts = bullmqConnectionOpts();
     const prefix = process.env['BULLMQ_PREFIX'] ?? '{bull}';
 
     for (const processor of this.processors) {

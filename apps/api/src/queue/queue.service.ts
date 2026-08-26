@@ -1,31 +1,12 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import type { JobsOptions } from 'bullmq';
-import Redis from 'ioredis';
+import type Redis from 'ioredis';
 import type { EnqueueOptions, QueueName } from '@encre-et-plume/shared';
 import { DEAD_LETTER_QUEUE } from '@encre-et-plume/shared';
+import { bullmqConnectionOpts, closeRedis, createRedisClient } from '../redis/redis-client.factory';
 
 const IDEMPOTENCY_TTL_S = 60 * 60 * 24 * 7; // 7 days
-
-/**
- * Parses REDIS_URL into a plain options object for BullMQ.
- * ponytail: pass opts not a Redis instance — avoids ioredis version mismatch between BullMQ's
- * bundled ioredis and the project's. BullMQ creates its own internal connection.
- */
-function parseBullmqOpts(url: string): { host: string; port: number; password?: string; db?: number; maxRetriesPerRequest: null } {
-  try {
-    const u = new URL(url);
-    return {
-      host: u.hostname || 'localhost',
-      port: Number(u.port) || 6379,
-      password: u.password || undefined,
-      db: u.pathname.length > 1 ? Number(u.pathname.slice(1)) : undefined,
-      maxRetriesPerRequest: null,
-    };
-  } catch {
-    return { host: 'localhost', port: 6379, maxRetriesPerRequest: null };
-  }
-}
 
 /**
  * Enqueue seam: feature services inject QueueService and call enqueue() without touching queue wiring.
@@ -37,23 +18,17 @@ export class QueueService implements OnModuleDestroy {
   private readonly redis: Redis;
   // BullMQ Queue instances are created lazily (plain connection opts, not a Redis instance)
   private readonly queues = new Map<string, Queue>();
-  private readonly bullmqOpts: ReturnType<typeof parseBullmqOpts>;
+  private readonly bullmqOpts: ReturnType<typeof bullmqConnectionOpts>;
   private readonly prefix: string;
 
   constructor() {
-    const url = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
     this.prefix = process.env['BULLMQ_PREFIX'] ?? '{bull}';
-    this.bullmqOpts = parseBullmqOpts(url);
-    // B-4: the idempotency client is NOT BullMQ's connection (that one is built from
-    // `parseBullmqOpts` above and MUST keep `maxRetriesPerRequest: null`). Left unconfigured, this
-    // one queued commands during an outage instead of rejecting — which is how a Redis outage
+    this.bullmqOpts = bullmqConnectionOpts();
+    // B-4/F-26: the idempotency client is NOT BullMQ's connection (that one is `bullmqOpts` above
+    // and MUST keep `maxRetriesPerRequest: null` — the inverse of this one). Left unconfigured, this
+    // one queued commands during an outage instead of rejecting, which is how a Redis outage
     // crashed the worker via `isProcessed()` and hung signup via the verification-email enqueue.
-    this.redis = new Redis(url, {
-      commandTimeout: 200,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-    });
-    this.redis.on('error', () => {}); // fail-open; suppress unhandled error event
+    this.redis = createRedisClient('command');
   }
 
   async enqueue<T>(queue: QueueName | 'dead-letter', name: string, data: T, opts?: EnqueueOptions): Promise<void> {
@@ -117,8 +92,6 @@ export class QueueService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await Promise.all([...this.queues.values()].map((q) => q.close()));
-    // B-4: same as RedisService — with the offline queue disabled QUIT rejects while Redis is down,
-    // and without the disconnect() fallback the socket + reconnect timer hold the process open.
-    await this.redis.quit().catch(() => this.redis.disconnect());
+    await closeRedis(this.redis);
   }
 }
