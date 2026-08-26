@@ -85,20 +85,22 @@ test.describe('DR-14 — chargement résilient', () => {
     await expect(page.getByText(TOAST)).toHaveCount(0);
   });
 
-  test('the terminal 404 path does not regress: « Œuvre introuvable » is immediate', async ({ page }) => {
-    let calls = 0;
-    await page.route(`${API}/works/inconnu-xyz**`, (route) => {
-      calls += 1;
-      return route.fulfill({ status: 404, json: { statusCode: 404, message: 'Œuvre introuvable', error: 'NOT_FOUND' } });
-    });
+  // F-24 changed the SHAPE of this path, not the guarantee: the server wrapper now calls
+  // `notFound()` when the work's metadata fetch 404s, so an unknown slug is a real HTTP 404 rendering
+  // « Page introuvable » — the client component never mounts, so there is no client fetch to retry.
+  // DR-14's own guarantee (a terminal failure never enters the retry loop and never toasts) is what
+  // is still asserted here; the client-side « Œuvre introuvable » view stays covered by
+  // `__tests__/OeuvreClient.test.tsx` ("does not retry a 404").
+  test('the terminal 404 path does not regress: an unknown slug is an immediate HTTP 404', async ({ page }) => {
+    const response = await page.goto('/oeuvre/inconnu-xyz');
 
-    await page.goto('/oeuvre/inconnu-xyz');
-    await expect(page.getByText('Œuvre introuvable')).toBeVisible();
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { level: 1, name: 'Page introuvable' })).toBeVisible();
     await expect(page.getByText(TOAST)).toHaveCount(0);
 
     // No retry loop on a terminal failure.
     await page.waitForTimeout(1500);
-    expect(calls).toBe(1);
+    await expect(page.getByText(TOAST)).toHaveCount(0);
   });
 
   test('the toast stays readable and tappable at 375 / 768 / 1280', async ({ page }) => {

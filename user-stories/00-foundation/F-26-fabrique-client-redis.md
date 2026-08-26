@@ -29,11 +29,24 @@ files, each with different correct options:
 |---|---|---|
 | `redis/redis.service.ts:10` | general commands | `commandTimeout`, `maxRetriesPerRequest: 1`, `enableOfflineQueue: false` |
 | `queue/queue.service.ts:51` | BullMQ idempotency | same as above |
-| `messaging/redis-io.adapter.ts:25` | socket.io pub/sub | `enableOfflineQueue: false`, **no `commandTimeout`** — `subscribe` is a long-lived blocking command and a timeout tears down an idle socket |
+| `messaging/redis-io.adapter.ts:25` | socket.io pub/sub | `enableOfflineQueue: false`, **no `commandTimeout`**, **and an awaited `ready` before first use** — see the boot bug below |
 | `queue/queue.service.ts:15-27` (`parseBullmqOpts`) | BullMQ's own connection | **`maxRetriesPerRequest: null`** — BullMQ requires it; the opposite of the others |
 
 Three of those four are subtly different, and one is the *inverse* of the rest. That is not a rule anyone
 holds in their head while adding a fifth client — it is a factory.
+
+**The pub/sub profile proved that the hard way, after F-23 had already "fixed" all three sites.** Commit
+`04c7b67` set `enableOfflineQueue: false` on the socket.io clients — correct for bounding memory, and it
+made the API **fail to boot every time**. A subscriber's first command is issued *before* ioredis finishes
+connecting, and with the offline queue disabled ioredis throws
+`Stream isn't writeable and enableOfflineQueue options is false` instead of buffering it, so the process
+died before `listen()`. Reproduced directly: the shipped options threw on `psubscribe`; the same options
+plus an awaited `ready` succeeded. Nothing caught it because no Jest spec boots the WS adapter and
+`pnpm build` never starts a server — it surfaced only when the next story tried to run e2e.
+
+So the pub/sub profile is not "the command profile minus `commandTimeout`". It additionally needs a
+**capped wait for `ready` before the client is handed to `createAdapter`**. That is three non-obvious
+rules for one of four profiles, which is the argument for this story in one paragraph.
 
 ## Backend
 
@@ -83,6 +96,7 @@ holds in their head while adding a fifth client — it is a factory.
   - Every `new Redis(` in `apps/api/src` outside the factory is gone, and the guard test fails when one is
     reintroduced (prove it by adding one temporarily).
   - The parameterised outage suite passes for each profile against a dead port, and the pub/sub profile is
-    asserted to carry **no** `commandTimeout`.
+    asserted to carry **no** `commandTimeout` **and** to wait for `ready` before its first subscribe —
+    `messaging/redis-io.adapter.spec.ts` is the existing regression test for that and must keep passing.
   - `pnpm test` and a real `docker stop <redis>` smoke both behave exactly as they do after F-23: the
     ingest endpoint 204s, chapter reads and signups complete, the worker does not crash.

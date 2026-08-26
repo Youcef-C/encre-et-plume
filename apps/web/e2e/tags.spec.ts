@@ -5,9 +5,22 @@
  * as work.spec.ts / illustration.spec.ts / gallery.spec.ts) so the suite doesn't depend on the
  * shared dev DB's seed data or ordering.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
 const API = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
+
+// F-24: `/illustration/[id]` is server-rendered now — the server fetches the illustration in Node and
+// calls `notFound()` on a 404, and `page.route` only intercepts BROWSER traffic. So the illustration
+// tests below borrow ONE real seeded id (the server fetch then resolves) while every payload stays
+// mocked: the client refetch is intercepted as before and still wins.
+let ILLU_ID = '';
+async function ensureIllustrationId(request: APIRequestContext): Promise<string> {
+  if (!ILLU_ID) {
+    const res = await request.get(`${API}/illustrations?page=1`);
+    ILLU_ID = (await res.json()).items[0].id as string;
+  }
+  return ILLU_ID;
+}
 
 // ── Fixtures — Œuvre (genre chip -> Découvrir) ────────────────────────────────
 const work = {
@@ -101,7 +114,7 @@ async function mockIllustrationAndGalleryFeeds(page: Page) {
   await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
   await page.route(`${API}/illustrations/*/preview`, (route) => route.fulfill({ json: detail }));
   await page.route(`${API}/illustrations/*/more`, (route) => route.fulfill({ json: [] }));
-  await page.route(`${API}/illustrations/i1`, (route) => route.fulfill({ json: detail }));
+  await page.route(`${API}/illustrations/${ILLU_ID}`, (route) => route.fulfill({ json: detail }));
   await page.route(`${API}/illustrations?**`, (route) => {
     const url = new URL(route.request().url());
     const genre = url.searchParams.getAll('genre');
@@ -132,9 +145,10 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.locator('.ep-catalog-grid').getByText('Néon Sutra')).not.toBeVisible();
   });
 
-  test('2. clicking a genre chip on an illustration opens Galerie filtered to that genre', async ({ page }) => {
+  test('2. clicking a genre chip on an illustration opens Galerie filtered to that genre', async ({ page, request }) => {
+    await ensureIllustrationId(request);
     await mockIllustrationAndGalleryFeeds(page);
-    await page.goto('/illustration/i1');
+    await page.goto(`/illustration/${ILLU_ID}`);
 
     await page.getByRole('link', { name: 'Filtrer par Yōkai' }).click();
 
@@ -144,9 +158,10 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.getByText('Lames de Brume — Ch.2')).not.toBeVisible();
   });
 
-  test('3. clicking a hashtag chip on an illustration opens Galerie filtered to that exact tag; the active #tag chip is removable', async ({ page }) => {
+  test('3. clicking a hashtag chip on an illustration opens Galerie filtered to that exact tag; the active #tag chip is removable', async ({ page, request }) => {
+    await ensureIllustrationId(request);
     await mockIllustrationAndGalleryFeeds(page);
-    await page.goto('/illustration/i1');
+    await page.goto(`/illustration/${ILLU_ID}`);
 
     await page.getByRole('link', { name: 'Rechercher le hashtag #encre' }).click();
 
@@ -227,10 +242,11 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.getByText('Tendances cette semaine', { exact: true })).toHaveCount(0);
   });
 
-  test('3b. at 375px, the hashtag chip is clickable and wraps without overflow', async ({ page }) => {
+  test('3b. at 375px, the hashtag chip is clickable and wraps without overflow', async ({ page, request }) => {
+    await ensureIllustrationId(request);
     await mockIllustrationAndGalleryFeeds(page);
     await page.setViewportSize({ width: 375, height: 900 });
-    await page.goto('/illustration/i1');
+    await page.goto(`/illustration/${ILLU_ID}`);
 
     await page.getByRole('link', { name: 'Rechercher le hashtag #encre' }).click();
     await expect(page).toHaveURL('/galerie?tags=encre');
@@ -262,10 +278,11 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
     await expect(page.getByRole('img', { name: 'Illustration 18+' })).toBeVisible();
   });
 
-  test('regression: the illustration detail "Contenu mature"/18+ interstitial is unaffected by the new genres chip row', async ({ page }) => {
+  test('regression: the illustration detail "Contenu mature"/18+ interstitial is unaffected by the new genres chip row', async ({ page, request }) => {
+    await ensureIllustrationId(request);
     await page.route(`${API}/illustrations/trending`, (route) => route.fulfill({ json: [] }));
     await page.route(`${API}/illustrations/*/more`, (route) => route.fulfill({ json: [] }));
-    await page.route(`${API}/illustrations/i1`, (route) => route.fulfill({ json: { ...detail, genres: ['Yaoi'], is18plus: true } }));
+    await page.route(`${API}/illustrations/${ILLU_ID}`, (route) => route.fulfill({ json: { ...detail, genres: ['Yaoi'], is18plus: true } }));
     await page.route(`${API}/illustrations?**`, (route) =>
       route.fulfill({ json: { items: allGalleryItems, total: allGalleryItems.length, page: 1, pageSize: 12, totalPages: 1, summary } }),
     );
@@ -273,7 +290,7 @@ test.describe('F-22 — clickable genre tags & freetext hashtags', () => {
       route.fulfill({ status: 401, json: { statusCode: 401, message: 'Non authentifié', error: 'UNAUTHORIZED' } }),
     );
 
-    await page.goto('/illustration/i1');
+    await page.goto(`/illustration/${ILLU_ID}`);
     await expect(page.getByRole('dialog', { name: /contenu réservé aux adultes/i })).toBeVisible();
   });
 });

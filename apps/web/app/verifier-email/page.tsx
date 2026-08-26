@@ -1,7 +1,8 @@
 import { Suspense } from 'react';
 import VerifierEmailClient from './VerifierEmailClient';
 
-export const metadata = { title: 'Vérification e-mail — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Vérification e-mail — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function VerifierEmailPage() {
   return (

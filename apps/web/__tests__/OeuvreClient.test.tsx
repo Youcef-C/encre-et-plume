@@ -79,6 +79,27 @@ describe('OeuvreClient (DR-3 FE-1)', () => {
     expect(screen.getByText('ÉQUIPE CRÉATIVE')).toBeInTheDocument();
   });
 
+  // F-24 FE-6: the server wrapper seeds the first render so a crawler reads the title and synopsis.
+  // The prop is additive — every test above renders WITHOUT it and still passes.
+  it('renders the work immediately from initialWork, with no skeleton', () => {
+    mockReady();
+    render(<OeuvreClient slug="lames-de-brume" initialWork={work} />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: /chargement/i })).not.toBeInTheDocument();
+  });
+
+  it('still refetches after the seed, so the signed-in view wins', async () => {
+    mockReady();
+    vi.mocked(api.getWork).mockResolvedValue({ ...work, title: 'Lames de Brume (à jour)' });
+    render(<OeuvreClient slug="lames-de-brume" initialWork={work} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume (à jour)' })).toBeInTheDocument(),
+    );
+    expect(api.getWork).toHaveBeenCalledWith('lames-de-brume');
+  });
+
   it('renders Partager/Signaler above the ÉQUIPE CRÉATIVE box (DR-3 2026-07-09)', async () => {
     mockReady();
     render(<OeuvreClient slug="lames-de-brume" />);

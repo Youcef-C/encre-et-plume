@@ -1,7 +1,8 @@
 import { Suspense } from 'react';
 import EnvoyeClient from './EnvoyeClient';
 
-export const metadata = { title: 'Vérifiez votre e-mail — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Vérifiez votre e-mail — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function VerifierEmailEnvoyePage() {
   return (

@@ -1,3 +1,6 @@
+
+// F-24 F5: private surface — never indexed.
+export const metadata = { robots: { index: false, follow: false } };
 // Stub — real content arrives in PE-1.
 export default function EspaceEditeurPage() {
   return (

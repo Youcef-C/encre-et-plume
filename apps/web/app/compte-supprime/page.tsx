@@ -2,6 +2,9 @@
 import Link from 'next/link';
 import { CheckIcon } from '../../components/icons';
 
+// F-24 F5: private surface — never indexed.
+export const metadata = { robots: { index: false, follow: false } };
+
 export default function CompteSupprimePage() {
   return (
     <main

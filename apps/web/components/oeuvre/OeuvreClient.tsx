@@ -24,13 +24,16 @@ import ShareReportBox from './ShareReportBox';
 
 type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
-export default function OeuvreClient({ slug }: { slug: string }) {
+// F-24 FE-6: `initialWork` is the anonymous payload the server wrapper already fetched for the
+// page's metadata. It seeds the first render (so a crawler reads the title and synopsis) and is
+// then replaced by the client refetch below, which is the one that carries the session.
+export default function OeuvreClient({ slug, initialWork = null }: { slug: string; initialWork?: WorkDetail | null }) {
   const { account } = useSession();
   const router = useRouter();
   const cleared = useAgeCleared(account);
   // DR-14: the shared hook owns the loop — a transient failure keeps the skeleton above and retries,
   // so only a terminal 4xx still reaches 'notfound' / 'age-refused' / 'error' (DR-3, DR-10 intact).
-  const workFeed = useFetchState(() => api.getWork(slug), [slug]);
+  const workFeed = useFetchState(() => api.getWork(slug), [slug], initialWork);
   const work: WorkDetail | null = workFeed.data;
   const error = workFeed.error as ApiError | null;
   const state: State =

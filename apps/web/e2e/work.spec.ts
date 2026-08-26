@@ -132,9 +132,14 @@ test.describe('Œuvre work page', () => {
     await expect(page).toHaveURL('/connexion');
   });
 
-  test('unknown slug shows a 404 view', async ({ page }) => {
-    await page.goto('/oeuvre/inconnu-xyz');
-    await expect(page.getByText('Œuvre introuvable')).toBeVisible();
+  // F-24: the server wrapper calls `notFound()` when the work's metadata fetch 404s, so an unknown
+  // slug is a real HTTP 404 rendering « Page introuvable ». The client's « Œuvre introuvable » view is
+  // still covered by `__tests__/OeuvreClient.test.tsx`.
+  test('unknown slug returns HTTP 404 and renders « Page introuvable »', async ({ page }) => {
+    const response = await page.goto('/oeuvre/inconnu-xyz');
+
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole('heading', { level: 1, name: 'Page introuvable' })).toBeVisible();
   });
 
   test('"Lire" links at the reader route (DR-4 stub)', async ({ page }) => {

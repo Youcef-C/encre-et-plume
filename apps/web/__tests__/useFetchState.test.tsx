@@ -215,6 +215,59 @@ describe('useFetchState (DR-14 FE-1)', () => {
     expect(fetcher).toHaveBeenCalledTimes(3); // a, b, then only b's retry — a's loop is gone
     expect(fetcher).toHaveBeenLastCalledWith('b');
   });
+
+  // F-24 FE-6: the server component seeds the first render so a crawler (and the first paint) sees
+  // real content. The refetch still runs — it just must not blank the seed while it is in flight.
+  describe('initialData (F-24)', () => {
+    it('starts "ready" with the seed instead of "loading"', () => {
+      const { result } = renderHook(() => useFetchState(vi.fn(() => new Promise<string>(() => {})), [], 'seed'));
+
+      expect(result.current.state).toBe('ready');
+      expect(result.current.data).toBe('seed');
+    });
+
+    it('still refetches and replaces the seed, without ever blanking it', async () => {
+      const fetcher = vi.fn().mockResolvedValue('fresh');
+      const seen: (string | null)[] = [];
+      const { result } = renderHook(() => {
+        const r = useFetchState(fetcher, [], 'seed');
+        seen.push(r.data as string | null);
+        return r;
+      });
+
+      await tick(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(result.current.data).toBe('fresh');
+      expect(seen).not.toContain(null); // no flash of empty between seed and fresh
+    });
+
+    it('keeps the seed visible while a transient failure retries', async () => {
+      const fetcher = vi.fn().mockRejectedValueOnce(http(500)).mockResolvedValueOnce('fresh');
+      const { result } = renderHook(() => useFetchState(fetcher, [], 'seed'));
+
+      await tick(0);
+      expect(result.current.state).toBe('ready');
+      expect(result.current.data).toBe('seed');
+
+      await tick(500);
+      expect(result.current.data).toBe('fresh');
+    });
+
+    it('surfaces a terminal failure from the refetch even though it was seeded', async () => {
+      const { result } = renderHook(() => useFetchState(vi.fn().mockRejectedValue(http(404)), [], 'seed'));
+
+      await tick(0);
+      expect(result.current.state).toBe('error');
+      expect(result.current.data).toBeNull();
+    });
+
+    it('is inert when omitted — the hook still starts loading with no data', () => {
+      const { result } = renderHook(() => useFetchState(vi.fn(() => new Promise(() => {})), []));
+
+      expect(result.current.state).toBe('loading');
+      expect(result.current.data).toBeNull();
+    });
+  });
 });
 
 describe('useOverride (DR-14 · local edits layered over a fetched value)', () => {

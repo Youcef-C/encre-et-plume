@@ -9,6 +9,10 @@ import Redis from 'ioredis';
  * main.ts via app.useWebSocketAdapter(new RedisIoAdapter(app)) BEFORE app.listen. Never wired in
  * worker.ts (createApplicationContext has no HTTP server — the gateway never binds there).
  */
+/** Resolves once the client's socket is usable (ioredis connects asynchronously). */
+const whenReady = (client: Redis): Promise<void> =>
+  client.status === 'ready' ? Promise.resolve() : new Promise<void>((resolve) => client.once('ready', () => resolve()));
+
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor?: ReturnType<typeof createAdapter>;
   private pubClient?: Redis;
@@ -27,6 +31,15 @@ export class RedisIoAdapter extends IoAdapter {
     // Fail-open on transient Redis errors — surfaced by the F-9 readiness probe, not by crashing here.
     this.pubClient.on('error', () => {});
     this.subClient.on('error', () => {});
+    // The adapter psubscribes as soon as socket.io initialises the namespace, and `enableOfflineQueue:
+    // false` makes that throw ("Stream isn't writeable and enableOfflineQueue options is false")
+    // unless the socket is already up. ioredis connects asynchronously, so without this wait the API
+    // crashes on boot before `listen()`. Capped at 5 s so an unreachable Redis fails the same way it
+    // does today instead of hanging the process with no output.
+    await Promise.race([
+      Promise.all([whenReady(this.pubClient), whenReady(this.subClient)]),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000).unref()),
+    ]);
     this.adapterConstructor = createAdapter(this.pubClient, this.subClient);
   }
 

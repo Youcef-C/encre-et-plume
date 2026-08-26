@@ -138,6 +138,27 @@ describe('ProfilePageClient — loading', () => {
   });
 });
 
+// F-24 FE-6: the server wrapper seeds the first render so a crawler reads the profile. The prop is
+// additive — every other test in this file renders without it.
+describe('ProfilePageClient — initialProfile seed (F-24)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getProfile).mockReturnValue(new Promise(() => {}));
+  });
+
+  it('renders the profile immediately instead of the loading state', () => {
+    render(
+      <SessionContext.Provider value={{ account: null, loading: false, refresh: vi.fn(), logout: vi.fn() }}>
+        <ProfilePageClient slug="yuki-moreau" initialProfile={mockProfile} />
+      </SessionContext.Provider>,
+    );
+
+    // Synchronously, on the very first render — `getProfile` is a promise that never settles here,
+    // so nothing but the seed can have produced this.
+    expect(screen.getByText('Yuki Moreau')).toBeInTheDocument();
+  });
+});
+
 describe('ProfilePageClient — loaded', () => {
   beforeEach(() => {
     vi.clearAllMocks();

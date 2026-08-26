@@ -50,7 +50,10 @@ const editLegendStyle: React.CSSProperties = {
 
 // F-2 — Public profile page client component.
 // Props receive the resolved slug from the server-component wrapper.
-type Props = { slug: string };
+// F-24 FE-6: `initialProfile` is the anonymous payload the server wrapper already fetched for the
+// page's metadata; it seeds the first render and the client refetch below replaces it with the
+// viewer-specific one (block flags, connection state).
+type Props = { slug: string; initialProfile?: ProfileResponse | null };
 
 type EditData = {
   bio: string | null;
@@ -198,12 +201,12 @@ function AvatarLightbox({
   );
 }
 
-export default function ProfilePageClient({ slug }: Props) {
+export default function ProfilePageClient({ slug, initialProfile = null }: Props) {
   const session = useSession();
   const { account } = session;
   // DR-14: the shared hook owns the load; a transient failure keeps the skeleton and retries, so
   // only a terminal 4xx reaches the "Profil introuvable" / "Erreur" view below.
-  const feed = useFetchState(() => getProfile(slug), [slug]);
+  const feed = useFetchState(() => getProfile(slug), [slug], initialProfile);
   const fetchError = feed.error as ApiError | null;
   const loading = feed.state === 'loading';
   // Local edits (avatar upload/delete, profile save) layered over the fetched profile; a refetch or

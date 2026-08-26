@@ -64,6 +64,16 @@ describe('IllustrationClient (DR-6 FE-T1)', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toBeInTheDocument());
   });
 
+  // F-24 FE-6: the server wrapper seeds the first render; the prop is additive (every other test
+  // here renders without it).
+  it('renders the illustration immediately from initialIllustration, with no placeholder', () => {
+    mockReady();
+    render(<IllustrationClient id="dr5-illus-1" initialIllustration={detail} />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Pluie de Néons' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('shows a 404 view for an unknown id (FE-10)', async () => {
     vi.mocked(api.getIllustration).mockRejectedValue({ statusCode: 404, message: 'Illustration introuvable' });
     vi.mocked(api.getIllustrationMore).mockResolvedValue([]);

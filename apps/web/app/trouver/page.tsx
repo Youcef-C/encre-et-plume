@@ -2,7 +2,8 @@
 // client component; the Header's "Trouver" nav link already points here.
 import TrouverClient from '../../components/trouver/TrouverClient';
 
-export const metadata = { title: 'Trouver un·e partenaire — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Trouver un·e partenaire — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function TrouverPage() {
   return <TrouverClient />;

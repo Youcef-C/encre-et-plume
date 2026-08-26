@@ -289,10 +289,15 @@ test('F3-UI-5: /e2e-target portfolio grid renders 3 items', async ({ page }) => 
 // UI: 404 unknown slug
 // ---------------------------------------------------------------------------
 
-test('F3-UI-6: /nonexistent-slug-xyz shows "Profil introuvable"', async ({ page }) => {
-  await page.goto('/nonexistent-slug-xyz-f3');
-  await expect(page.getByText('Profil introuvable')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("Ce profil n'existe pas ou a été supprimé.")).toBeVisible();
+// F-24: `app/[slug]` is the ROOT catch-all, so this used to answer HTTP 200 with a client-rendered
+// « Profil introuvable » for EVERY unknown top-level URL. It is a real 404 now. The client's
+// « Profil introuvable » view stays covered by `__tests__/ProfilePageClient.test.tsx`.
+test('F3-UI-6: /nonexistent-slug-xyz returns HTTP 404 and renders « Page introuvable »', async ({ page }) => {
+  const response = await page.goto('/nonexistent-slug-xyz-f3');
+
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole('heading', { level: 1, name: 'Page introuvable' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Cette page n'existe pas ou a été déplacée.")).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

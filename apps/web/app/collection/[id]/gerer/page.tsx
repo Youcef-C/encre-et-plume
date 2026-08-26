@@ -2,7 +2,8 @@
 // delegates to the owner-gated client (fetch, session, and all states live there).
 import ManageCollectionClient from '../../../../components/collections/ManageCollectionClient';
 
-export const metadata = { title: 'Gérer la collection — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Gérer la collection — Encre & Plume', robots: { index: false, follow: false } };
 
 type Props = { params: Promise<{ id: string }> };
 

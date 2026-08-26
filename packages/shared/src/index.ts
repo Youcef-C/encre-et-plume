@@ -43,3 +43,4 @@ export * from './messaging.js';
 export * from './salon.js';
 export * from './blocks.js';
 export * from './analytics.js';
+export * from './sitemap.js';

@@ -3,7 +3,8 @@
 // and the PATCH round-trip. Owner-gating is enforced server-side on PATCH; the client mirrors it.
 import ModifierIllustrationClient from '../../../../components/illustration/ModifierIllustrationClient';
 
-export const metadata = { title: 'Modifier l’illustration — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Modifier l’illustration — Encre & Plume', robots: { index: false, follow: false } };
 
 type Props = { params: Promise<{ id: string }> };
 

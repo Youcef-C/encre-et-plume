@@ -2,6 +2,9 @@
 import { Suspense } from 'react';
 import DesabonnementClient from './DesabonnementClient';
 
+// F-24 F5: private surface — never indexed.
+export const metadata = { robots: { index: false, follow: false } };
+
 export default function DesabonnementPage() {
   return (
     <Suspense

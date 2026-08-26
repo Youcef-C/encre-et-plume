@@ -2,7 +2,8 @@ import Link from 'next/link';
 import SignupForm from '../../components/SignupForm';
 import GuestOnly from '../../components/GuestOnly';
 
-export const metadata = { title: 'Inscription — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Inscription — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function InscriptionPage() {
   return (

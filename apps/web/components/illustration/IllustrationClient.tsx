@@ -22,13 +22,15 @@ import EditIllustrationForm from './EditIllustrationForm';
 
 type State = 'loading' | 'ready' | 'notfound' | 'error' | 'age-refused';
 
-export default function IllustrationClient({ id }: { id: string }) {
+// F-24 FE-6: `initialIllustration` is the anonymous payload the server wrapper already fetched for
+// the page's metadata; it seeds the first render and the client refetch below replaces it.
+export default function IllustrationClient({ id, initialIllustration = null }: { id: string; initialIllustration?: IllustrationDetail | null }) {
   const { account } = useSession();
   const router = useRouter();
   const cleared = useAgeCleared(account);
   // DR-14: the shared hook owns the loop — a transient failure keeps the skeleton and retries, so
   // only a terminal 4xx reaches 'notfound' / 'age-refused' / 'error'.
-  const feed = useFetchState(() => api.getIllustration(id), [id]);
+  const feed = useFetchState(() => api.getIllustration(id), [id], initialIllustration);
   const moreFeed = useFetchState(() => api.getIllustrationMore(id), [id]);
   const more: GalleryIllustrationCard[] = moreFeed.data ?? [];
   const error = feed.error as ApiError | null;

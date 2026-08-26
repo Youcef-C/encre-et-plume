@@ -76,12 +76,20 @@ function canAttempt(): boolean {
   return true;
 }
 
-export function useFetchState<T>(fetcher: () => Promise<T>, deps: unknown[]): FetchResult<T> {
-  const [result, setResult] = useState<Omit<FetchResult<T>, 'retry'>>({
-    state: 'loading',
-    data: null,
-    error: null,
-  });
+/**
+ * `initialData` (F-24 FE-6): the server component already fetched this payload to build the page's
+ * metadata, so it seeds the FIRST render — a crawler and the first paint see real content instead of
+ * a skeleton. The client still refetches immediately (the seed is anonymous and shared across
+ * viewers by `revalidate`; the signed-in view is whatever the refetch returns), it just never blanks
+ * the seed while that request is in flight. Omit it and the hook behaves exactly as before.
+ */
+export function useFetchState<T>(fetcher: () => Promise<T>, deps: unknown[], initialData?: T | null): FetchResult<T> {
+  const seed = initialData ?? null;
+  const [result, setResult] = useState<Omit<FetchResult<T>, 'retry'>>(
+    seed === null ? { state: 'loading', data: null, error: null } : { state: 'ready', data: seed, error: null },
+  );
+  // Only the FIRST effect run may keep the seed; a dep change (a new slug) must reset to loading.
+  const seeded = useRef(seed !== null);
   const [arm, setArm] = useState(0);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -101,11 +109,15 @@ export function useFetchState<T>(fetcher: () => Promise<T>, deps: unknown[]): Fe
       clearFromBus = null;
     };
 
-    setResult((prev) =>
-      prev.state === 'loading' && prev.data === null && prev.error === null
-        ? prev
-        : { state: 'loading', data: null, error: null },
-    );
+    const keepSeed = seeded.current;
+    seeded.current = false;
+    if (!keepSeed) {
+      setResult((prev) =>
+        prev.state === 'loading' && prev.data === null && prev.error === null
+          ? prev
+          : { state: 'loading', data: null, error: null },
+      );
+    }
 
     const run = async () => {
       if (cancelled || settled || inFlight || !canAttempt()) return;

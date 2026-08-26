@@ -2,7 +2,8 @@ import Link from 'next/link';
 import LoginForm from '../../components/LoginForm';
 import GuestOnly from '../../components/GuestOnly';
 
-export const metadata = { title: 'Connexion — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Connexion — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function ConnexionPage() {
   return (

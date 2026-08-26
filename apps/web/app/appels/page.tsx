@@ -2,7 +2,8 @@
 import { Suspense } from 'react';
 import AppelsClient from '../../components/appels/AppelsClient';
 
-export const metadata = { title: 'Appels à projets — Encre & Plume' };
+// F-24 F5: private surface — never indexed.
+export const metadata = { title: 'Appels à projets — Encre & Plume', robots: { index: false, follow: false } };
 
 export default function AppelsPage() {
   // Suspense boundary: AppelsClient reads the `?call=` deep-link via useSearchParams (MC-6).
