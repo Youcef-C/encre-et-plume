@@ -128,8 +128,10 @@ describe('DecouvrirClient (DR-2 FE-8)', () => {
     expect(screen.getByText('SÉLECTION ÉDITEUR')).toBeInTheDocument();
   });
 
-  it('shows an error state with a working retry when the catalog fetch fails', async () => {
-    vi.mocked(api.getCatalog).mockRejectedValueOnce(new Error('boom'));
+  // DR-14: the red block is now the TERMINAL path only. A 4xx that retrying cannot fix still shows it,
+  // with its « Réessayer » button intact.
+  it('shows an error state with a working retry when the catalog fetch fails terminally', async () => {
+    vi.mocked(api.getCatalog).mockRejectedValueOnce({ statusCode: 404, message: 'Introuvable', error: 'NOT_FOUND' });
     const user = userEvent.setup();
     render(<DecouvrirClient />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -137,6 +139,20 @@ describe('DecouvrirClient (DR-2 FE-8)', () => {
     vi.mocked(api.getCatalog).mockResolvedValueOnce(catalogPage1);
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+  });
+
+  // DR-14 F1 — a transient failure keeps the skeleton and retries silently; no red block, ever.
+  it('keeps the skeleton and retries on a transient failure, never showing the red block', async () => {
+    vi.mocked(api.getCatalog).mockRejectedValueOnce({ statusCode: 503, message: 'Indisponible', error: 'UNAVAILABLE' });
+    render(<DecouvrirClient />);
+    await waitFor(() => expect(api.getCatalog).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Chargement du catalogue…')).toBeInTheDocument();
+
+    vi.mocked(api.getCatalog).mockResolvedValue(catalogPage1);
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('auto-loads the next page when the infinite-scroll sentinel intersects (button stays as fallback)', async () => {

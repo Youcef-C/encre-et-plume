@@ -3,8 +3,8 @@
 // DR-1 — "Accueil" showroom composition. Fetches all six /home/* feeds in parallel;
 // each section owns its own loading/error state independently (F-h) — one rejected
 // feed never blanks the sibling sections. Replica of prototype ACCUEIL lines 385-495.
-import { useEffect, useState } from 'react';
 import * as api from '../lib/api';
+import { useFetchState } from '../lib/useFetchState';
 import HeroCarousel from './HeroCarousel';
 import AnnouncementRibbon from './AnnouncementRibbon';
 import TrendingGrid from './TrendingGrid';
@@ -13,6 +13,9 @@ import ScheduledReleases from './ScheduledReleases';
 import CommunityBand from './CommunityBand';
 import RankingSidebar from './RankingSidebar';
 
+// DR-14 F13: the private `useHomeSection` (a hand-rolled loading/error effect with its own
+// `cancelled` flag) was the first caller retired in favour of the shared `useFetchState` — same
+// per-section independence, but a transient failure now keeps the skeleton and retries.
 interface SectionState<T> {
   loading: boolean;
   error: boolean;
@@ -20,24 +23,8 @@ interface SectionState<T> {
 }
 
 function useHomeSection<T>(fetcher: () => Promise<T>): SectionState<T> {
-  const [state, setState] = useState<SectionState<T>>({ loading: true, error: false, data: null });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetcher()
-      .then((data) => {
-        if (!cancelled) setState({ loading: false, error: false, data });
-      })
-      .catch(() => {
-        if (!cancelled) setState({ loading: false, error: true, data: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return state;
+  const { state, data } = useFetchState(fetcher, []);
+  return { loading: state === 'loading', error: state === 'error', data };
 }
 
 function Section<T>({

@@ -368,11 +368,13 @@ test.describe('MC-7 "Mes appels à projets" — signed in as the call owner (mc7
     }
   });
 
-  test('MC7-E7: error state on load + "Réessayer" retries and succeeds', async ({ page }) => {
+  // DR-14: a 500 is TRANSIENT now (skeleton + silent retry behind the toast), so the fixture that
+  // must reach the red block is a terminal 4xx.
+  test('MC7-E7: error state on a terminal load failure + "Réessayer" retries and succeeds', async ({ page }) => {
     let calls = 0;
     await page.route(`${API}/me/calls/applications`, (route) => {
       calls += 1;
-      if (calls === 1) return route.fulfill({ status: 500, json: { message: 'boom' } });
+      if (calls === 1) return route.fulfill({ status: 403, json: { statusCode: 403, message: 'boom', error: 'FORBIDDEN' } });
       return route.continue();
     });
 

@@ -72,11 +72,25 @@ describe('IllustrationClient (DR-6 FE-T1)', () => {
     expect(screen.getByRole('link', { name: /Galerie/i })).toHaveAttribute('href', '/galerie');
   });
 
-  it('shows a generic error state on non-404 failure', async () => {
-    vi.mocked(api.getIllustration).mockRejectedValue({ statusCode: 500, message: 'Erreur serveur' });
+  // DR-14: a 500 is transient now — only a terminal, non-404 4xx reaches the generic error state.
+  it('shows a generic error state on a terminal non-404 failure', async () => {
+    vi.mocked(api.getIllustration).mockRejectedValue({ statusCode: 403, message: 'Accès refusé', error: 'FORBIDDEN' });
     vi.mocked(api.getIllustrationMore).mockResolvedValue([]);
     render(<IllustrationClient id="dr5-illus-1" />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
+  // DR-14 F1/F17 — a transport failure keeps the skeleton, retries, and never leaks the browser's
+  // English "Failed to fetch" into a role="alert".
+  it('keeps the skeleton on a transport failure and never renders the browser message', async () => {
+    vi.mocked(api.getIllustration).mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.mocked(api.getIllustrationMore).mockResolvedValue([]);
+    render(<IllustrationClient id="dr5-illus-1" />);
+
+    await waitFor(() => expect(api.getIllustration).toHaveBeenCalled());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Chargement de l'illustration…")).toBeInTheDocument();
   });
 
   // ── DR-10: 18+ age gate ───────────────────────────────────────────────────────

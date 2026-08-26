@@ -37,10 +37,23 @@ describe('PortfolioGrid', () => {
     expect(await screen.findByText(/aucune œuvre pour l'instant/i)).toBeInTheDocument();
   });
 
-  it('shows error message on fetch failure', async () => {
-    vi.mocked(getProfilePortfolio).mockRejectedValue({ statusCode: 500, message: 'Erreur', error: 'SERVER_ERROR' });
+  // DR-14: a 500 is transient (retried behind the skeleton); only a terminal 4xx shows the block.
+  it('shows error message with a « Réessayer » on a terminal fetch failure (F16)', async () => {
+    vi.mocked(getProfilePortfolio).mockRejectedValue({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     render(<PortfolioGrid slug="yuki-moreau" />);
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton (and it animates now: .ep-skeleton-delayed, F16) and retries.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(getProfilePortfolio)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur', error: 'SERVER_ERROR' })
+      .mockResolvedValue([]);
+    render(<PortfolioGrid slug="yuki-moreau" />);
+    expect(await screen.findByLabelText('Chargement du portfolio…')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(await screen.findByText(/aucune œuvre pour l'instant/i)).toBeInTheDocument();
   });
 
   it('renders portfolio items in a grid', async () => {

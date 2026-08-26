@@ -76,12 +76,24 @@ describe('NotificationsInbox', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('shows error state when fetch fails', async () => {
-    vi.mocked(api.getNotifications).mockRejectedValue(new Error('network'));
+  // DR-14: the error block is the TERMINAL path only.
+  it('shows error state when the fetch fails terminally', async () => {
+    vi.mocked(api.getNotifications).mockRejectedValue({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     renderInbox();
     await waitFor(() =>
       expect(screen.getByText(/une erreur est survenue/i)).toBeInTheDocument()
     );
+  });
+
+  // DR-14 F1 — a network failure keeps the skeleton and retries; no error block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getNotifications)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue([]);
+    renderInbox();
+    await waitFor(() => expect(api.getNotifications).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/une erreur est survenue/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/aucune notification/i)).toBeInTheDocument());
   });
 
   it('shows "Aucune notification" when list is empty', async () => {

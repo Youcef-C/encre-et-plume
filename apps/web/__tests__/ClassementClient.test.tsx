@@ -149,8 +149,9 @@ describe('ClassementClient (DR-7 category tabs)', () => {
     );
   });
 
-  it('shows an error state with a working "Réessayer" retry', async () => {
-    vi.mocked(api.getRankingByCategory).mockRejectedValueOnce(new Error('boom'));
+  // DR-14: the red block is the TERMINAL path only.
+  it('shows an error state with a working "Réessayer" retry on a terminal failure', async () => {
+    vi.mocked(api.getRankingByCategory).mockRejectedValueOnce({ statusCode: 404, message: 'Introuvable', error: 'NOT_FOUND' });
     const user = userEvent.setup();
     render(<ClassementClient />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
@@ -158,5 +159,18 @@ describe('ClassementClient (DR-7 category tabs)', () => {
     vi.mocked(api.getRankingByCategory).mockResolvedValueOnce(mangas);
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(screen.getByText('Néon Sutra')).toBeInTheDocument());
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getRankingByCategory)
+      .mockRejectedValueOnce({ statusCode: 503, message: 'Indisponible', error: 'UNAVAILABLE' })
+      .mockResolvedValue(mangas);
+    render(<ClassementClient />);
+
+    await waitFor(() => expect(api.getRankingByCategory).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Néon Sutra')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

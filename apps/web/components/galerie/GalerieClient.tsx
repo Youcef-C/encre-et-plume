@@ -11,6 +11,7 @@ import type { CollectionCard, GalleryIllustrationCard, GalleryFeatureCard, Galle
 import * as api from '../../lib/api';
 import { parseGalleryFilters, filtersToGalleryQuery, EMPTY_GALLERY_FILTERS, TRI_LABELS, type GalerieFilters } from '../../lib/gallery';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
+import { useFetchState } from '../../lib/useFetchState';
 import GalerieHeader from './GalerieHeader';
 import CategoryChips from './CategoryChips';
 import SortSelect from './SortSelect';
@@ -89,20 +90,11 @@ export default function GalerieClient() {
     ...filters.genre.map((id) => catalogGenreLabel(id)),
   ];
 
-  const [items, setItems] = useState<GalleryIllustrationCard[]>([]);
-  const [summary, setSummary] = useState<GallerySummary>(EMPTY_SUMMARY);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [gridState, setGridState] = useState<GalleryGridState>('loading');
-  const [retryKey, setRetryKey] = useState(0);
-
-  const [trending, setTrending] = useState<GalleryFeatureCard[]>([]);
-
-  // Collections view (FE-8) — parallel to the illustrations grid, only one is active at a time.
-  const [collections, setCollections] = useState<CollectionCard[]>([]);
-  const [collState, setCollState] = useState<GalleryGridState>('loading');
-  const [collPage, setCollPage] = useState(1);
-  const [collTotalPages, setCollTotalPages] = useState(1);
+  // DR-14 F16: the trending feed used to swallow its failure into an empty rail
+  // (`.catch(() => setTrending([]))`), indistinguishable from "aucune tendance". It now goes through
+  // the shared hook: a transient failure retries behind the toast, a terminal one hides the feature.
+  const trendingFeed = useFetchState(api.getGalleryTrending, []);
+  const trending: GalleryFeatureCard[] = trendingFeed.data ?? [];
 
   const collectionsQuery = useCallback(
     (pageNum: number) => {
@@ -120,59 +112,46 @@ export default function GalerieClient() {
   );
 
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [previewState, setPreviewState] = useState<QuickPreviewState>('loading');
-  const [preview, setPreview] = useState<GalleryPreview | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  const previewFeed = useFetchState(
+    () => (previewId ? api.getGalleryPreview(previewId) : Promise.resolve(null)),
+    [previewId],
+  );
+  const preview: GalleryPreview | null = previewFeed.data;
+  const previewState: QuickPreviewState =
+    previewFeed.state === 'loading' ? 'loading' : previewFeed.state === 'error' ? 'error' : preview ? 'ready' : 'loading';
 
-  useEffect(() => {
-    // Independent feed — a failing trending endpoint never blanks the main grid (DR-1 pattern).
-    api.getGalleryTrending().then(setTrending).catch(() => setTrending([]));
-  }, []);
+  const [appended, setAppended] = useState<{ key: string; items: GalleryIllustrationCard[]; page: number } | null>(null);
+  const [collAppended, setCollAppended] = useState<{ key: string; items: CollectionCard[]; page: number } | null>(null);
 
-  useEffect(() => {
-    if (collectionsMode) return; // the collections effect owns this view
-    let cancelled = false;
-    setGridState('loading');
-    api
-      .getGallery(new URLSearchParams(facetKey))
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setSummary(res.summary);
-        setPage(res.page);
-        setTotalPages(res.totalPages);
-        setGridState(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setGridState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facetKey, retryKey, collectionsMode]);
+  // The two views are mutually exclusive: the inactive one resolves to null instead of firing a
+  // request, so only one hook is ever in a retry loop.
+  const gallery = useFetchState(
+    () => (collectionsMode ? Promise.resolve(null) : api.getGallery(new URLSearchParams(facetKey))),
+    [facetKey, collectionsMode],
+  );
+  const collectionsFeed = useFetchState(
+    () => (collectionsMode ? api.getCollectionsList(collectionsQuery(1)) : Promise.resolve(null)),
+    [facetKey, collectionsMode],
+  );
 
-  useEffect(() => {
-    if (!collectionsMode) return;
-    let cancelled = false;
-    setCollState('loading');
-    api
-      .getCollectionsList(collectionsQuery(1))
-      .then((res) => {
-        if (cancelled) return;
-        setCollections(res.items);
-        setCollPage(res.page);
-        setCollTotalPages(res.totalPages);
-        setCollState(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setCollState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facetKey, retryKey, collectionsMode]);
+  // Pages appended by "Afficher plus de résultats" / the sentinel, keyed on the facet so a filter
+  // change drops them at render time.
+  const extra = appended?.key === facetKey ? appended : null;
+  const collExtra = collAppended?.key === facetKey ? collAppended : null;
+
+  const items: GalleryIllustrationCard[] = gallery.data ? [...gallery.data.items, ...(extra?.items ?? [])] : [];
+  const summary: GallerySummary = gallery.data?.summary ?? EMPTY_SUMMARY;
+  const page = extra?.page ?? gallery.data?.page ?? 1;
+  const totalPages = gallery.data?.totalPages ?? 1;
+  const gridState: GalleryGridState =
+    gallery.state === 'loading' ? 'loading' : gallery.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
+
+  const collections: CollectionCard[] = collectionsFeed.data ? [...collectionsFeed.data.items, ...(collExtra?.items ?? [])] : [];
+  const collPage = collExtra?.page ?? collectionsFeed.data?.page ?? 1;
+  const collTotalPages = collectionsFeed.data?.totalPages ?? 1;
+  const collState: GalleryGridState =
+    collectionsFeed.state === 'loading' ? 'loading' : collectionsFeed.state === 'error' ? 'error' : collections.length === 0 ? 'empty' : 'ready';
 
   const navigate = useCallback(
     (next: GalerieFilters) => {
@@ -186,17 +165,21 @@ export default function GalerieClient() {
     const query = new URLSearchParams(facetKey);
     query.set('page', String(page + 1));
     const res = await api.getGallery(query);
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page);
-    setTotalPages(res.totalPages);
+    setAppended((prev) => ({
+      key: facetKey,
+      items: [...(prev?.key === facetKey ? prev.items : []), ...res.items],
+      page: res.page,
+    }));
   }, [facetKey, page]);
 
   const collLoadMore = useCallback(async () => {
     const res = await api.getCollectionsList(collectionsQuery(collPage + 1));
-    setCollections((prev) => [...prev, ...res.items]);
-    setCollPage(res.page);
-    setCollTotalPages(res.totalPages);
-  }, [collectionsQuery, collPage]);
+    setCollAppended((prev) => ({
+      key: facetKey,
+      items: [...(prev?.key === facetKey ? prev.items : []), ...res.items],
+      page: res.page,
+    }));
+  }, [collectionsQuery, collPage, facetKey]);
 
   // Auto-load: one sentinel drives whichever view is active (illustrations grid or Collections view).
   const hasMore = collectionsMode
@@ -207,15 +190,6 @@ export default function GalerieClient() {
   const openQuickPreview = useCallback((id: string) => {
     triggerRef.current = document.activeElement as HTMLElement | null;
     setPreviewId(id);
-    setPreviewState('loading');
-    setPreview(null);
-    api
-      .getGalleryPreview(id)
-      .then((res) => {
-        setPreview(res);
-        setPreviewState('ready');
-      })
-      .catch(() => setPreviewState('error'));
   }, []);
 
   const closeQuickPreview = useCallback(() => {
@@ -263,14 +237,14 @@ export default function GalerieClient() {
       </div>
 
       {collectionsMode ? (
-        <CollectionCardsGrid state={collState} items={collections} onRetry={() => setRetryKey((k) => k + 1)} />
+        <CollectionCardsGrid state={collState} items={collections} onRetry={collectionsFeed.retry} />
       ) : (
         <GalleryGrid
           state={gridState}
           items={items}
           category={filters.category}
           onReset={() => navigate(EMPTY_GALLERY_FILTERS)}
-          onRetry={() => setRetryKey((k) => k + 1)}
+          onRetry={gallery.retry}
           onQuickPreview={openQuickPreview}
         />
       )}

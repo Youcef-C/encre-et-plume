@@ -404,8 +404,9 @@ describe('MaListeClient (DR-8)', () => {
     );
   });
 
-  it('shows an error state with a working "Réessayer" retry', async () => {
-    vi.mocked(api.getMyList).mockRejectedValueOnce(new Error('boom'));
+  // DR-14: the red block is the TERMINAL path only; a transient failure keeps the tab's skeleton.
+  it('shows an error state with a working "Réessayer" retry on a terminal failure', async () => {
+    vi.mocked(api.getMyList).mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     vi.mocked(api.getMyLikes).mockResolvedValue([]);
     const user = userEvent.setup();
     renderClient();
@@ -414,5 +415,19 @@ describe('MaListeClient (DR-8)', () => {
     vi.mocked(api.getMyList).mockResolvedValueOnce(listItems);
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; the red block never appears.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getMyList)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur', error: 'INTERNAL' })
+      .mockResolvedValue(listItems);
+    vi.mocked(api.getMyLikes).mockResolvedValue([]);
+    renderClient();
+
+    await waitFor(() => expect(api.getMyList).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

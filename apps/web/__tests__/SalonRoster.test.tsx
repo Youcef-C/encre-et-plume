@@ -240,12 +240,24 @@ describe('SalonRoster — states', () => {
     expect(screen.getByText("Personne d'autre pour le moment")).toBeInTheDocument();
   });
 
-  it('shows an error with a working "Réessayer" retry', async () => {
-    vi.mocked(api.getSalonPresence).mockRejectedValueOnce(new Error('boom'));
+  // DR-14: the red block is the TERMINAL path only.
+  it('shows an error with a working "Réessayer" retry on a terminal failure', async () => {
+    vi.mocked(api.getSalonPresence).mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     renderRoster();
     const retry = await screen.findByRole('button', { name: 'Réessayer' });
     vi.mocked(api.getSalonPresence).mockResolvedValue({ count: 2, items: [self(), other()] });
     await userEvent.click(retry);
+    expect(await screen.findByText('Léa B.')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a transport failure keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getSalonPresence)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue({ count: 2, items: [self(), other()] });
+    renderRoster();
+    await waitFor(() => expect(api.getSalonPresence).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByText('Léa B.')).toBeInTheDocument();
   });
 });

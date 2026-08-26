@@ -14,9 +14,14 @@
 export interface ToastProps {
   /** The message to show; `null` renders nothing. */
   message: string | null;
+  /**
+   * DR-14: an optional inline action ("Réessayer maintenant"). Colour comes from the shared
+   * `.ep-btn-compact--ghost` intent class — never inline; only layout (tap target) is inline.
+   */
+  action?: { label: string; onClick: () => void };
 }
 
-export default function Toast({ message }: ToastProps) {
+export default function Toast({ message, action }: ToastProps) {
   if (!message) return null;
   return (
     <div
@@ -38,9 +43,23 @@ export default function Toast({ message }: ToastProps) {
         textAlign: 'center',
         maxWidth: 'calc(100vw - 32px)',
         boxShadow: '4px 4px 0 var(--shadow)',
+        // Only when there IS an action — a message-only toast renders exactly as before.
+        ...(action
+          ? { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' as const }
+          : null),
       }}
     >
       {message}
+      {action ? (
+        <button
+          type="button"
+          className="ep-btn-compact ep-btn-compact--ghost"
+          onClick={action.onClick}
+          style={{ minHeight: 44, minWidth: 44 }}
+        >
+          {action.label}
+        </button>
+      ) : null}
     </div>
   );
 }

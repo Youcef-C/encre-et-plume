@@ -114,13 +114,25 @@ describe('SuggestionsAside', () => {
     expect(await screen.findByText('Aucune suggestion pour le moment.')).toBeInTheDocument();
   });
 
-  it('shows an error alert with a working "Réessayer" retry', async () => {
+  // DR-14: the red block is the TERMINAL path only.
+  it('shows an error alert with a working "Réessayer" retry on a terminal failure', async () => {
     getMatchSuggestions
-      .mockRejectedValueOnce(new Error('boom'))
+      .mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' })
       .mockResolvedValue(res([suggestion()]));
     render(<SuggestionsAside onProposer={vi.fn()} />);
     await screen.findByRole('alert');
     await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('Léa B.')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a transport failure keeps the loading state and retries; no red block.
+  it('never shows the error alert on a transient failure', async () => {
+    getMatchSuggestions
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(res([suggestion()]));
+    render(<SuggestionsAside onProposer={vi.fn()} />);
+    await waitFor(() => expect(getMatchSuggestions).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByText('Léa B.')).toBeInTheDocument();
   });
 });

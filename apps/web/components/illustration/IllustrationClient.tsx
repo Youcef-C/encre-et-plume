@@ -3,11 +3,13 @@
 // DR-6 FE-T1 — illustration detail "/illustration/{id}" orchestrator. Mirrors OeuvreClient's
 // state machine (loading/notfound/error/ready); getIllustrationMore fetches independently so a
 // failure there never blanks the rest of the page (DR-1 pattern).
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ApiError, IllustrationDetail, GalleryIllustrationCard } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { apiErrorMessage } from '../../lib/apiError';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { useSession } from '../../lib/session';
 import { useAgeCleared } from '../../lib/ageGate';
 import AgeGate from '../age/AgeGate';
@@ -24,38 +26,28 @@ export default function IllustrationClient({ id }: { id: string }) {
   const { account } = useSession();
   const router = useRouter();
   const cleared = useAgeCleared(account);
-  const [state, setState] = useState<State>('loading');
-  const [detail, setDetail] = useState<IllustrationDetail | null>(null);
-  const [more, setMore] = useState<GalleryIllustrationCard[]>([]);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  // DR-14: the shared hook owns the loop — a transient failure keeps the skeleton and retries, so
+  // only a terminal 4xx reaches 'notfound' / 'age-refused' / 'error'.
+  const feed = useFetchState(() => api.getIllustration(id), [id]);
+  const moreFeed = useFetchState(() => api.getIllustrationMore(id), [id]);
+  const more: GalleryIllustrationCard[] = moreFeed.data ?? [];
+  const error = feed.error as ApiError | null;
+  // Local edits (FE-13 save, FE-5 collection membership) layered over the fetched detail; a refetch
+  // or an id change drops them.
+  const [detail, setDetail] = useOverride<IllustrationDetail | null>(feed.data);
+  const state: State =
+    feed.state === 'loading'
+      ? 'loading'
+      : feed.state === 'ready'
+        ? 'ready'
+        : error?.error === 'AGE_RESTRICTED'
+          ? 'age-refused'
+          : error?.statusCode === 404
+            ? 'notfound'
+            : 'error';
   // FE-13: owner-only edit of the illustration itself (distinct from the FE-5 collection-membership
   // "Modifier"). Saving commits the returned detail so title/byline/description/hashtags/Détails re-render.
   const [editOpen, setEditOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setState('loading');
-    api
-      .getIllustration(id)
-      .then((data) => {
-        if (cancelled) return;
-        setDetail(data);
-        setState('ready');
-      })
-      .catch((err: ApiError) => {
-        if (cancelled) return;
-        setError(err);
-        setState(err.error === 'AGE_RESTRICTED' ? 'age-refused' : err.statusCode === 404 ? 'notfound' : 'error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, retryKey]);
-
-  useEffect(() => {
-    api.getIllustrationMore(id).then(setMore).catch(() => setMore([]));
-  }, [id]);
 
   if (state === 'loading') {
     return (
@@ -88,11 +80,11 @@ export default function IllustrationClient({ id }: { id: string }) {
     return (
       <div role="alert" style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
         <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>
-          {error?.message ?? 'Impossible de charger cette illustration.'}
+          {apiErrorMessage(error, 'Impossible de charger cette illustration.')}
         </p>
         <button
           type="button"
-          onClick={() => setRetryKey((k) => k + 1)}
+          onClick={feed.retry}
           className="ep-btn-primary"
           style={{
             fontSize: 13,
@@ -113,7 +105,7 @@ export default function IllustrationClient({ id }: { id: string }) {
     return (
       <div role="alert" style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
         <p style={{ fontWeight: 700, marginBottom: 12 }}>
-          {error?.message ?? 'Ce contenu est réservé aux adultes.'}
+          {apiErrorMessage(error, 'Ce contenu est réservé aux adultes.')}
         </p>
         <Link href="/galerie" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
           ‹ Galerie

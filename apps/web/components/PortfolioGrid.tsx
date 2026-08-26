@@ -1,25 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import type { PortfolioItemResponse } from '@encre-et-plume/shared';
 import { getProfilePortfolio } from '../lib/api';
+import { useFetchState } from '../lib/useFetchState';
 
 type Props = { slug: string };
 
 // F-5 — 3-column portfolio image grid with loading / empty / error states.
 export default function PortfolioGrid({ slug }: Props) {
-  const [items, setItems] = useState<PortfolioItemResponse[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(false);
-    getProfilePortfolio(slug)
-      .then(setItems)
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [slug]);
+  const feed = useFetchState(() => getProfilePortfolio(slug), [slug]);
+  const items = feed.data;
+  const loading = feed.state === 'loading';
+  const error = feed.state === 'error';
 
   if (loading) {
     return (
@@ -39,7 +31,6 @@ export default function PortfolioGrid({ slug }: Props) {
               border: '3px solid var(--tone)',
               background: 'var(--tone)',
               opacity: 0.5,
-              animation: 'pulse 1.4s ease-in-out infinite',
             }}
           />
         ))}
@@ -47,10 +38,21 @@ export default function PortfolioGrid({ slug }: Props) {
     );
   }
 
+  // F16: this block used to offer no way to retry, unlike every sibling error block.
   if (error) {
     return (
-      <div role="alert" style={{ color: 'var(--accent)', fontSize: 14, padding: '16px 0' }}>
-        Impossible de charger le portfolio. Veuillez réessayer.
+      <div role="alert" style={{ textAlign: 'center', padding: '16px 0' }}>
+        <p style={{ color: 'var(--accent)', fontSize: 14, marginBottom: 12 }}>
+          Impossible de charger le portfolio. Veuillez réessayer.
+        </p>
+        <button
+          type="button"
+          onClick={feed.retry}
+          className="ep-btn-primary"
+          style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
+        >
+          Réessayer
+        </button>
       </div>
     );
   }

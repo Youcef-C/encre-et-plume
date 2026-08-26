@@ -18,10 +18,12 @@ import {
   type PartnerAvailability,
   type PartnerCard as PartnerCardData,
   type CallPreview,
+  type PartnersResponse,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import PartnerCard from './PartnerCard';
@@ -110,15 +112,7 @@ export default function TrouverClient() {
   const [locations, setLocations] = useState<string[]>([]);
   const [availability, setAvailability] = useState<PartnerAvailability | ''>('');
 
-  const [items, setItems] = useState<PartnerCardData[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<Status>('loading');
-  const [retryKey, setRetryKey] = useState(0);
-
-  const [calls, setCalls] = useState<CallPreview[]>([]);
-
-  const filterKey = JSON.stringify({ role, genres, locations, availability, retryKey });
+  const filterKey = JSON.stringify({ role, genres, locations, availability });
 
   // Round 2 (feedback §1): "Je suis" no longer biases results — no viewerRole. No region default
   // either; genres/locations are multi-value facets sent as repeated query keys.
@@ -132,40 +126,25 @@ export default function TrouverClient() {
     return q;
   }
 
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setStatus('loading');
-    setPage(1);
-    api
-      .getPartners(buildQuery())
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total);
-        setPage(res.page);
-        setStatus(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, filterKey]);
+  // DR-14: the shared hook owns the load; appended pages layer on top and are dropped by a refetch.
+  const feed = useFetchState(
+    () => (account ? api.getPartners(buildQuery()) : Promise.resolve(null)),
+    [account, filterKey],
+  );
+  const [directory, setDirectory] = useOverride<PartnersResponse | null>(feed.data);
+  const items: PartnerCardData[] = directory?.items ?? [];
+  const total = directory?.total ?? 0;
+  const page = directory?.page ?? 1;
+  const status: Status =
+    feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
 
-  useEffect(() => {
-    if (!account) return;
-    // Independent feed — a failing calls endpoint never blanks the directory (DR-1 pattern).
-    api.getCalls(2).then((res) => setCalls(res.items)).catch(() => setCalls([]));
-  }, [account]);
+  // Independent feed — a failing calls endpoint never blanks the directory (DR-1 pattern).
+  const callsFeed = useFetchState(() => (account ? api.getCalls(2) : Promise.resolve(null)), [account]);
+  const calls: CallPreview[] = callsFeed.data?.items ?? [];
 
   async function loadMore() {
     const res = await api.getPartners(buildQuery(page + 1));
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page);
-    setTotal(res.total);
+    setDirectory((prev) => (prev ? { ...res, items: [...prev.items, ...res.items] } : res));
   }
 
   const hasMore = status === 'ready' && items.length < total;
@@ -298,7 +277,7 @@ export default function TrouverClient() {
               </p>
               <button
                 type="button"
-                onClick={() => setRetryKey((k) => k + 1)}
+                onClick={feed.retry}
                 className="ep-btn-primary"
                 style={{
                   fontSize: 13,

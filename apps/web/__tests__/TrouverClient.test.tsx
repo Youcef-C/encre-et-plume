@@ -170,13 +170,25 @@ describe('TrouverClient', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows an error state with a working retry', async () => {
+  // DR-14: the red block is the TERMINAL path only.
+  it('shows an error state with a working retry on a terminal failure', async () => {
     (api.getPartners as ReturnType<typeof vi.fn>)
-      .mockRejectedValueOnce(new Error('boom'))
+      .mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' })
       .mockResolvedValue(ok([partner()]));
     renderClient();
     await screen.findByRole('alert');
     await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('Théo M.')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a transport failure keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    (api.getPartners as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValue(ok([partner()]));
+    renderClient();
+    await waitFor(() => expect(api.getPartners).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByText('Théo M.')).toBeInTheDocument();
   });
 
@@ -276,9 +288,11 @@ describe('TrouverClient', () => {
     expect(api.getMatchSuggestions).toHaveBeenCalledTimes(1);
   });
 
+  // DR-14: the aside's own red block is now its terminal path (a transient failure retries behind
+  // the toast instead) — the point of the test is that the grid survives either way.
   it('keeps the partner grid intact when the suggestions endpoint fails', async () => {
     (api.getPartners as ReturnType<typeof vi.fn>).mockResolvedValue(ok([partner()]));
-    (api.getMatchSuggestions as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('boom'));
+    (api.getMatchSuggestions as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     renderClient();
     expect(await screen.findByText('Théo M.')).toBeInTheDocument();
     expect(await screen.findByText('Impossible de charger les suggestions.')).toBeInTheDocument();

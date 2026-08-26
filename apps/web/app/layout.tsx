@@ -8,6 +8,7 @@ import SalonDock from '../components/salon/SalonDock';
 import RoleBanner from '../components/RoleBanner';
 import LegalFooter from '../components/LegalFooter';
 import CookieBanner from '../components/CookieBanner';
+import ToastHost from '../components/ToastHost';
 import CguReconsentModal from '../components/CguReconsentModal';
 
 const anton = Anton({
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <main>{children}</main>
                     <LegalFooter />
                     <CookieBanner />
+                    <ToastHost />
                     <CguReconsentModal />
                     <MessagingWidget />
                     <SalonDock />

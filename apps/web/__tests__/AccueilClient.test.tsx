@@ -80,8 +80,9 @@ describe('AccueilClient — success', () => {
 });
 
 describe('AccueilClient — one feed fails independently', () => {
-  it('shows an error for the failed section but still renders the others', async () => {
-    vi.mocked(api.getTrending).mockRejectedValue(new Error('boom'));
+  // DR-14: only a TERMINAL failure still swaps a section for its red block.
+  it('shows an error for the terminally failed section but still renders the others', async () => {
+    vi.mocked(api.getTrending).mockRejectedValue({ statusCode: 404, message: 'Introuvable', error: 'NOT_FOUND' });
     renderClient();
 
     await screen.findByText('À LA UNE');
@@ -89,5 +90,18 @@ describe('AccueilClient — one feed fails independently', () => {
     // Sibling sections still render
     expect(screen.getByText('Sorties programmées')).toBeInTheDocument();
     expect(screen.getByText('Populaire')).toBeInTheDocument();
+  });
+
+  // DR-14 F1/F13: a transient failure keeps that section's skeleton and retries; no red block.
+  it('keeps the skeleton of a transiently failed section and recovers on the retry', async () => {
+    vi.mocked(api.getTrending)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur', error: 'INTERNAL' })
+      .mockResolvedValue(trending);
+    renderClient();
+
+    await screen.findByText('À LA UNE');
+    expect(screen.queryByText(/section indisponible/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(api.getTrending).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/section indisponible/i)).not.toBeInTheDocument();
   });
 });

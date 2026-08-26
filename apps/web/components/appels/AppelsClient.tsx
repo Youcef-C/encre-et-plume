@@ -6,13 +6,14 @@
 // frame: the "Je suis :" self-role toggle becomes a "Je cherche :" direction filter (owner rule
 // §1/§12, same as /trouver), and "Genre ▾" becomes an OnBrandMultiSelect with removable chips.
 // Filters auto-apply (no "Appliquer"). Posting an appeal prepends the returned card without refetch.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { GENRES, type CreatorRole, type CallCard } from '@encre-et-plume/shared';
+import { GENRES, type CreatorRole, type CallCard, type CallsBoardResponse } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import OnBrandMultiSelect from '../form/OnBrandMultiSelect';
 import CallBoardCard from './CallBoardCard';
 import PostCallModal from './PostCallModal';
@@ -82,39 +83,31 @@ export default function AppelsClient() {
   const [role, setRole] = useState<CreatorRole | null>(null);
   const [genres, setGenres] = useState<string[]>([]);
 
-  const [items, setItems] = useState<CallCard[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<Status>('loading');
-  const [retryKey, setRetryKey] = useState(0);
   const [posting, setPosting] = useState(false);
   const [applyTarget, setApplyTarget] = useState<CallCard | null>(null);
   const [detailCallId, setDetailCallId] = useState<string | null>(null);
 
-  const filterKey = JSON.stringify({ role, genres, retryKey });
+  const filterKey = JSON.stringify({ role, genres });
 
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setStatus('loading');
-    setPage(1);
-    api
-      .getCallsBoard({ status: 'all', page: 1, ...(role ? { role } : {}), ...(genres.length ? { genre: genres } : {}) })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total);
-        setPage(res.page);
-        setStatus(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, filterKey]);
+  // DR-14: the shared hook owns the load; appended pages and the local card edits (post / apply /
+  // withdraw) layer on top and are dropped by a refetch.
+  const feed = useFetchState(
+    () =>
+      account
+        ? api.getCallsBoard({ status: 'all', page: 1, ...(role ? { role } : {}), ...(genres.length ? { genre: genres } : {}) })
+        : Promise.resolve(null),
+    [account, filterKey],
+  );
+  const [board, setBoard] = useOverride<CallsBoardResponse | null>(feed.data);
+  // useMemo keeps a stable identity for the deep-link effect's dep list (lint: exhaustive-deps).
+  const items: CallCard[] = useMemo(() => board?.items ?? [], [board]);
+  const total = board?.total ?? 0;
+  const page = board?.page ?? 1;
+  const status: Status =
+    feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
+
+  const setItems = (update: (prev: CallCard[]) => CallCard[]) =>
+    setBoard((prev) => (prev ? { ...prev, items: update(prev.items) } : prev));
 
   async function loadMore() {
     const res = await api.getCallsBoard({
@@ -123,9 +116,7 @@ export default function AppelsClient() {
       ...(role ? { role } : {}),
       ...(genres.length ? { genre: genres } : {}),
     });
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page);
-    setTotal(res.total);
+    setBoard((prev) => (prev ? { ...res, items: [...prev.items, ...res.items] } : res));
   }
 
   const hasMore = status === 'ready' && items.length < total;
@@ -137,9 +128,11 @@ export default function AppelsClient() {
   }
 
   function handleCreated(card: CallCard) {
-    setItems((prev) => [card, ...prev]);
-    setTotal((t) => t + 1);
-    setStatus('ready');
+    setBoard((prev) =>
+      prev
+        ? { ...prev, items: [card, ...prev.items], total: prev.total + 1 }
+        : { items: [card], total: 1, page: 1, pageSize: 1, totalPages: 1 },
+    );
   }
 
   // MC-5: after a successful application, flip that card locally (no refetch) — mark applied and
@@ -286,7 +279,7 @@ export default function AppelsClient() {
           </p>
           <button
             type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={feed.retry}
             className="ep-btn-primary"
             style={{
               fontSize: 13,
@@ -349,10 +342,10 @@ export default function AppelsClient() {
             setApplyTarget(c);
           }}
           // Round 3: owner edit/delete on the board's own detail modal — refetch the board list.
-          onChanged={() => setRetryKey((k) => k + 1)}
+          onChanged={feed.retry}
           onDeleted={() => {
             setDetailCallId(null);
-            setRetryKey((k) => k + 1);
+            feed.retry();
           }}
         />
       )}

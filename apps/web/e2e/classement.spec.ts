@@ -45,7 +45,9 @@ async function mockRanking(page: Page) {
     const category = url.searchParams.get('category');
     if (category === 'createurs') return route.fulfill({ json: createurs });
     if (category === 'illustrations') return route.fulfill({ json: illustrations });
-    if (category === 'romans') return route.fulfill({ status: 500, json: { statusCode: 500, message: 'boom' } });
+    // DR-14: a 500 is TRANSIENT now (skeleton + silent retry), so the fixture that must reach the
+    // red block is a terminal 4xx. The transient path has its own test below.
+    if (category === 'romans') return route.fulfill({ status: 403, json: { statusCode: 403, message: 'boom', error: 'FORBIDDEN' } });
     return route.fulfill({ json: mangas });
   });
 }
@@ -110,13 +112,31 @@ test.describe('Classement all-time ranking', () => {
     await expect(page.getByText("Aucune entrée dans ce classement pour l'instant.")).toBeVisible();
   });
 
-  test('a failed fetch shows the error state, and "Réessayer" retries', async ({ page }) => {
+  test('a terminal failed fetch shows the error state, and "Réessayer" retries', async ({ page }) => {
     await page.goto('/classement?category=romans');
     await expect(page.getByText(/impossible de charger le classement/i)).toBeVisible();
 
     await page.route(`${API}/ranking**`, (route) => route.fulfill({ json: mangas }));
     await page.getByRole('button', { name: 'Réessayer' }).click();
     await expect(page.getByText('Néon Sutra')).toBeVisible();
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries behind the toast; the red block never appears.
+  test('a transient failed fetch keeps the skeleton and retries behind the toast', async ({ page }) => {
+    let failing = true;
+    await page.route(`${API}/ranking**`, (route) =>
+      failing
+        ? route.fulfill({ status: 503, json: { statusCode: 503, message: 'boom', error: 'UNAVAILABLE' } })
+        : route.fulfill({ json: mangas }),
+    );
+    await page.goto('/classement');
+
+    await expect(page.getByText(/impossible de charger le classement/i)).toHaveCount(0);
+    await expect(page.getByText('Connexion instable — nouvelle tentative…')).toBeVisible({ timeout: 15_000 });
+
+    failing = false;
+    await expect(page.getByText('Néon Sutra')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText(/impossible de charger le classement/i)).toHaveCount(0);
   });
 
   for (const width of [375, 768, 1280]) {

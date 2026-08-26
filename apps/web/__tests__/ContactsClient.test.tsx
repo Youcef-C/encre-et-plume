@@ -388,7 +388,9 @@ describe('ContactsClient — states (FE-6)', () => {
   it('shows an error with a Réessayer retry that refetches the tab', async () => {
     vi.mocked(api.getConnectionRequests).mockResolvedValue({ items: [] });
     vi.mocked(api.getConnectionSuggestions).mockResolvedValue({ items: [], incompleteProfile: false });
-    vi.mocked(api.getContacts).mockRejectedValueOnce({ message: 'boom' }).mockResolvedValue({ items: [contact()] });
+    vi.mocked(api.getContacts)
+      .mockRejectedValueOnce({ statusCode: 403, message: 'boom', error: 'FORBIDDEN' })
+      .mockResolvedValue({ items: [contact()] });
     const user = userEvent.setup();
     renderClient();
 
@@ -400,7 +402,7 @@ describe('ContactsClient — states (FE-6)', () => {
     vi.mocked(api.getContacts).mockResolvedValue({ items: [] });
     vi.mocked(api.getConnectionSuggestions).mockResolvedValue({ items: [], incompleteProfile: false });
     vi.mocked(api.getConnectionRequests)
-      .mockRejectedValueOnce({ message: 'boom' })
+      .mockRejectedValueOnce({ statusCode: 403, message: 'boom', error: 'FORBIDDEN' })
       .mockResolvedValue({ items: [request()] });
     const user = userEvent.setup();
     renderClient();
@@ -416,7 +418,7 @@ describe('ContactsClient — states (FE-6)', () => {
     vi.mocked(api.getContacts).mockResolvedValue({ items: [] });
     vi.mocked(api.getConnectionRequests).mockResolvedValue({ items: [] });
     vi.mocked(api.getConnectionSuggestions)
-      .mockRejectedValueOnce({ message: 'boom' })
+      .mockRejectedValueOnce({ statusCode: 403, message: 'boom', error: 'FORBIDDEN' })
       .mockResolvedValue({ items: [suggestion()], incompleteProfile: false });
     const user = userEvent.setup();
     renderClient();
@@ -426,6 +428,20 @@ describe('ContactsClient — states (FE-6)', () => {
 
     await user.click(screen.getByRole('button', { name: /réessayer/i }));
     expect(await screen.findByText('Mika T.')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a transient failure keeps the panel's skeleton and retries; no red block.
+  it('keeps the Contacts skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getConnectionRequests).mockResolvedValue({ items: [] });
+    vi.mocked(api.getConnectionSuggestions).mockResolvedValue({ items: [], incompleteProfile: false });
+    vi.mocked(api.getContacts)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'boom', error: 'INTERNAL' })
+      .mockResolvedValue({ items: [contact()] });
+    renderClient();
+
+    await waitFor(() => expect(api.getContacts).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Impossible de charger vos contacts.')).not.toBeInTheDocument();
+    expect(await screen.findByText('Léa B.')).toBeInTheDocument();
   });
 });
 

@@ -5,13 +5,14 @@
 // Romans, Illustrations, Dessinateurs & Scénaristes each rank a different entity type via the
 // unified GET /ranking?category= endpoint. URL is the source of truth (?category=, "mangas" is
 // the default and needs no param); tabs are toggle buttons (single active), auto-apply on click.
-import { useEffect, useState } from 'react';
+
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { RankingCategory, RankingEntry } from '@encre-et-plume/shared';
 import { isRankingCategory } from '@encre-et-plume/shared';
 import { CrownIcon } from '../icons';
 import * as api from '../../lib/api';
+import { useFetchState } from '../../lib/useFetchState';
 import RankingList from './RankingList';
 
 const DEFAULT_CATEGORY: RankingCategory = 'mangas';
@@ -91,27 +92,10 @@ export default function ClassementClient() {
   const categoryParam = searchParams.get('category');
   const active = isRankingCategory(categoryParam) ? categoryParam : DEFAULT_CATEGORY;
 
-  const [items, setItems] = useState<RankingEntry[]>([]);
-  const [state, setState] = useState<ListState>('loading');
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setState('loading');
-    api
-      .getRankingByCategory(active)
-      .then((rows) => {
-        if (cancelled) return;
-        setItems(rows);
-        setState(rows.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [active, retryKey]);
+  const ranking = useFetchState(() => api.getRankingByCategory(active), [active]);
+  const items: RankingEntry[] = ranking.data ?? [];
+  const state: ListState =
+    ranking.state === 'loading' ? 'loading' : ranking.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
 
   function selectCategory(category: RankingCategory) {
     router.push(category === DEFAULT_CATEGORY ? '/classement' : `/classement?category=${category}`);
@@ -146,7 +130,7 @@ export default function ClassementClient() {
             </p>
             <button
               type="button"
-              onClick={() => setRetryKey((k) => k + 1)}
+              onClick={ranking.retry}
               className="ep-btn-primary"
               style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', padding: '8px 16px', cursor: 'pointer' }}
             >

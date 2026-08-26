@@ -25,6 +25,7 @@ import {
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
+import { useFetchState } from '../../lib/useFetchState';
 import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
@@ -72,8 +73,15 @@ export default function EditorClient({ pageId, slug, assetId }: EditorClientProp
   const { account, loading: sessionLoading } = useSession();
   const router = useRouter();
 
-  const [doc, setDoc] = useState<EditorDocumentResponse | null>(null);
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  // DR-14: the shared hook owns the load — a transient failure keeps the skeleton and retries, so
+  // "Éditeur indisponible" is reached only on a terminal 4xx (no page / no access).
+  const canLoad = !sessionLoading && !!account;
+  const feed = useFetchState(
+    () => (canLoad ? api.getEditorDocument(pageId, assetId ?? undefined) : Promise.resolve(null)),
+    [pageId, assetId, account?.id, canLoad],
+  );
+  const doc: EditorDocumentResponse | null = feed.data;
+  const loadState = feed.state;
 
   // Remember the last card opened in the editor for this project, so the kanban header "Éditeur"
   // button can reopen it (ProjectWorkspace reads this key; falls back to the first board card).
@@ -86,21 +94,9 @@ export default function EditorClient({ pageId, slug, assetId }: EditorClientProp
   }, [slug, pageId]);
 
   useEffect(() => {
-    if (sessionLoading) return;
-    if (!account) {
-      const next = `/projet/${slug}/editeur/${pageId}${assetId ? `?asset=${assetId}` : ''}`;
-      router.replace(`/connexion?next=${encodeURIComponent(next)}`);
-      return;
-    }
-    let alive = true;
-    setLoadState('loading');
-    api
-      .getEditorDocument(pageId, assetId ?? undefined)
-      .then((d) => alive && (setDoc(d), setLoadState('ready')))
-      .catch(() => alive && setLoadState('error'));
-    return () => {
-      alive = false;
-    };
+    if (sessionLoading || account) return;
+    const next = `/projet/${slug}/editeur/${pageId}${assetId ? `?asset=${assetId}` : ''}`;
+    router.replace(`/connexion?next=${encodeURIComponent(next)}`);
   }, [pageId, slug, assetId, account, sessionLoading, router]);
 
   if (sessionLoading || loadState === 'loading' || !account) {

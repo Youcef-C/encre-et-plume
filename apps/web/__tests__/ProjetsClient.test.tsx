@@ -487,8 +487,8 @@ describe('ProjetsClient (CS-12)', () => {
     });
     expect(await screen.findByText('Aucun projet — créez-en un')).toBeInTheDocument();
 
-    // Error + retry
-    getMine().mockRejectedValueOnce({ statusCode: 500, message: 'boom', error: 'X' });
+    // Error + retry — DR-14: only a TERMINAL failure reaches the red block (a 500 is retried).
+    getMine().mockRejectedValueOnce({ statusCode: 403, message: 'boom', error: 'FORBIDDEN' });
     rerender(
       <SessionContext.Provider value={{ account, loading: false, refresh: vi.fn(), logout: vi.fn() }}>
         <ProjetsClient key="retry" />
@@ -498,6 +498,17 @@ describe('ProjetsClient (CS-12)', () => {
     getMine().mockResolvedValue(response([project()]));
     fireEvent.click(retry);
     await screen.findByText('Lames de Brume');
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    getMine()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'boom', error: 'X' })
+      .mockResolvedValue(response([project()]));
+    renderClient();
+    await waitFor(() => expect(getMine()).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(await screen.findByText('Lames de Brume')).toBeInTheDocument();
   });
 
   it('navigates to the /creer wizard from "＋ Nouveau projet" (CS-1)', async () => {

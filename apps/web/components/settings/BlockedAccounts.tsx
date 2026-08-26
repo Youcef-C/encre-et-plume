@@ -4,10 +4,11 @@
 // account (name → profile), a kind badge (Bloqué / Masqué), the date it was added, and an unblock
 // action ("Débloquer" for block, "Ne plus masquer" for mute). States: loading / empty / load-error
 // (retry) / per-row unblock spinner + error. Rows wrap so name/date/action stack cleanly at 375px.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import type { BlockItem } from '@encre-et-plume/shared';
 import { getMyBlocks, deleteBlock } from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 
 type State = 'loading' | 'ready' | 'error';
 
@@ -95,25 +96,13 @@ function Row({ item, onUnblocked }: { item: BlockItem; onUnblocked: (userId: str
   );
 }
 
-export default function BlockedAccounts() {
-  const [state, setState] = useState<State>('loading');
-  const [items, setItems] = useState<BlockItem[]>([]);
-  const [retry, setRetry] = useState(0);
+const NO_BLOCKS: BlockItem[] = [];
 
-  useEffect(() => {
-    let cancelled = false;
-    setState('loading');
-    getMyBlocks()
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setState('ready');
-      })
-      .catch(() => !cancelled && setState('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [retry]);
+export default function BlockedAccounts() {
+  // DR-14: the shared hook owns the load; the local unblock edit layers on top.
+  const feed = useFetchState(getMyBlocks, []);
+  const state: State = feed.state;
+  const [items, setItems] = useOverride<BlockItem[]>(feed.data?.items ?? NO_BLOCKS);
 
   if (state === 'loading') {
     return (
@@ -133,7 +122,7 @@ export default function BlockedAccounts() {
         </p>
         <button
           type="button"
-          onClick={() => setRetry((k) => k + 1)}
+          onClick={feed.retry}
           className="ep-btn-primary"
           style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontFamily: 'inherit' }}
         >

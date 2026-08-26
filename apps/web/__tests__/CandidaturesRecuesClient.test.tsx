@@ -419,13 +419,27 @@ describe('CandidaturesRecuesClient (MC-7)', () => {
     expect(screen.getByRole('link', { name: 'Appels à projets' })).toHaveAttribute('href', '/appels');
   });
 
-  it('renders an error state and retries', async () => {
-    getList().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(response([group()]));
+  // DR-14: the red block is the TERMINAL path only; a transient failure keeps the skeleton.
+  it('renders an error state and retries on a terminal failure', async () => {
+    getList()
+      .mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' })
+      .mockResolvedValueOnce(response([group()]));
     const user = userEvent.setup();
     renderClient();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Impossible de charger les candidatures reçues.');
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('« Polar nocturne »')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    getList()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur', error: 'INTERNAL' })
+      .mockResolvedValue(response([group()]));
+    renderClient();
+    await waitFor(() => expect(api.getReceivedApplications).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByText('« Polar nocturne »')).toBeInTheDocument();
   });
 

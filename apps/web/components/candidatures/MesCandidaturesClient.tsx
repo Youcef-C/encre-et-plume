@@ -4,7 +4,7 @@
 // (.dc.html lines 2152–2179): back link + title + tagline, a status-chip filter row, and full-width
 // application rows (thumb · title/meta/date · status badge · "Voir l'appel"). Owner extension: a
 // "Retirer" action on pending rows with an inline on-brand confirm (no browser confirm()).
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   GENRES,
@@ -13,11 +13,13 @@ import {
   type CallDirection,
   type CreatorRole,
   type MyApplicationRow,
+  type MyApplicationsResponse,
   type MyApplicationsStatusFilter,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import StatusBadge from './StatusBadge';
 import ApplicationDetailModal from './ApplicationDetailModal';
@@ -313,43 +315,22 @@ export default function MesCandidaturesClient() {
   const { account, loading: sessionLoading } = useSession();
 
   const [filter, setFilter] = useState<MyApplicationsStatusFilter>('all');
-  const [items, setItems] = useState<MyApplicationRow[]>([]);
-  const [totalAll, setTotalAll] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setScreen('loading');
-    setPage(1);
-    api
-      .getMyApplications({ status: filter, page: 1 })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total);
-        setTotalAll(res.totalAll);
-        setPage(res.page);
-        setScreen(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setScreen('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, filter, retryKey]);
+  // DR-14: the shared hook owns the load; appended pages and the local withdraw edit layer on top.
+  const feed = useFetchState(
+    () => (account ? api.getMyApplications({ status: filter, page: 1 }) : Promise.resolve(null)),
+    [account, filter],
+  );
+  const [data, setData] = useOverride<MyApplicationsResponse | null>(feed.data);
+  const items: MyApplicationRow[] = data?.items ?? [];
+  const totalAll = data?.totalAll ?? 0;
+  const total = data?.total ?? 0;
+  const page = data?.page ?? 1;
+  const screen: Screen =
+    feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
 
   async function loadMore() {
     const res = await api.getMyApplications({ status: filter, page: page + 1 });
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page);
-    setTotal(res.total);
-    setTotalAll(res.totalAll);
+    setData((prev) => (prev ? { ...res, items: [...prev.items, ...res.items] } : res));
   }
 
   const hasMore = screen === 'ready' && total > items.length;
@@ -357,13 +338,16 @@ export default function MesCandidaturesClient() {
 
   // Owner extension: after a successful withdraw, drop the row and adjust the counts locally.
   function handleWithdrawn(id: string) {
-    setItems((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      if (next.length === 0) setScreen('empty');
-      return next;
-    });
-    setTotal((t) => Math.max(0, t - 1));
-    setTotalAll((t) => Math.max(0, t - 1));
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: prev.items.filter((a) => a.id !== id),
+            total: Math.max(0, prev.total - 1),
+            totalAll: Math.max(0, prev.totalAll - 1),
+          }
+        : prev,
+    );
   }
 
   const backLink = useMemo(
@@ -451,7 +435,7 @@ export default function MesCandidaturesClient() {
           </p>
           <button
             type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={feed.retry}
             className="ep-btn-primary"
             style={{
               fontSize: 13,
@@ -482,7 +466,7 @@ export default function MesCandidaturesClient() {
                 key={app.id}
                 app={app}
                 onWithdrawn={handleWithdrawn}
-                onEdited={() => setRetryKey((k) => k + 1)}
+                onEdited={feed.retry}
               />
             ))}
           </ul>

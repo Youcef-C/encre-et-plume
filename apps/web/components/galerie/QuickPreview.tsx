@@ -104,10 +104,14 @@ export default function QuickPreview({
         </button>
 
         <div style={{ padding: 18, overflowY: 'auto' }}>
+          {/* DR-14 F16: was a bare "Chargement…" line; now the same tone-block skeleton the sibling
+              grids draw, so a transient failure that keeps waiting still looks like a loading card. */}
           {state === 'loading' && (
-            <p role="status" aria-label="Chargement de l'aperçu…" style={{ padding: '20px 0', textAlign: 'center', color: 'var(--ink2)' }}>
-              Chargement…
-            </p>
+            <div role="status" aria-label="Chargement de l'aperçu…" className="ep-skeleton-delayed">
+              <div style={{ height: 320, border: '3px solid var(--tone)', background: 'var(--tone)', borderRadius: 10, opacity: 0.5 }} />
+              <div style={{ height: 22, width: '60%', background: 'var(--tone)', borderRadius: 6, opacity: 0.5, marginTop: 14 }} />
+              <div style={{ height: 14, width: '40%', background: 'var(--tone)', borderRadius: 6, opacity: 0.5, marginTop: 8 }} />
+            </div>
           )}
 
           {state === 'error' && (

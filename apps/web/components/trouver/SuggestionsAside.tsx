@@ -6,10 +6,11 @@
 // Story-required additions the prototype card doesn't draw: a "Profil" link (F-3) + "Proposer" stub
 // (MC-3) — same pair/order as MC-1's PartnerCard. Self-fetching independent feed (fetch once on
 // mount) so a failure here never blanks the directory grid and filter changes never refetch it.
-import { useEffect, useState } from 'react';
+
 import Link from 'next/link';
 import { type CreatorRole, type MatchSuggestion, type MatchSuggestionsResponse } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { useFetchState } from '../../lib/useFetchState';
 
 const ROLE_LABEL: Record<CreatorRole, string> = {
   dessinateur: 'Dessinateur·rice',
@@ -116,27 +117,10 @@ export default function SuggestionsAside({
 }: {
   onProposer: (item: MatchSuggestion) => void;
 }) {
-  const [data, setData] = useState<MatchSuggestionsResponse | null>(null);
-  const [status, setStatus] = useState<Status>('loading');
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setStatus('loading');
-    api
-      .getMatchSuggestions()
-      .then((res) => {
-        if (cancelled) return;
-        setData(res);
-        setStatus(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [retryKey]);
+  const feed = useFetchState(api.getMatchSuggestions, []);
+  const data: MatchSuggestionsResponse | null = feed.data;
+  const status: Status =
+    feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : (data?.items.length ?? 0) === 0 ? 'empty' : 'ready';
 
   return (
     <aside
@@ -178,7 +162,7 @@ export default function SuggestionsAside({
           </p>
           <button
             type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={feed.retry}
             className="ep-btn-primary"
             style={{
               fontSize: 12,

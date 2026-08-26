@@ -22,6 +22,7 @@ import {
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import * as api from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { relativeTime } from '../../lib/notifications';
 import CountBadge from '../CountBadge';
 import BlockConfirmModal from '../blocks/BlockConfirmModal';
@@ -516,27 +517,34 @@ function SearchResultRow({
 
 const ulReset: React.CSSProperties = { listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 16 };
 
+// Stable empty arrays so `useOverride`'s base identity doesn't change every render.
+const NO_CONTACTS: ContactItem[] = [];
+const NO_REQUESTS: ConnectionRequestItem[] = [];
+const NO_SUGGESTIONS: MatchSuggestion[] = [];
+
 export default function ContactsClient() {
   const { account, loading: sessionLoading } = useSession();
 
   const [tab, setTab] = useState<TabKey>('contacts');
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const [contacts, setContacts] = useState<ContactItem[]>([]);
-  const [requests, setRequests] = useState<ConnectionRequestItem[]>([]);
-  const [sentRequests, setSentRequests] = useState<ConnectionRequestItem[]>([]);
-  const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
-  const [incompleteProfile, setIncompleteProfile] = useState(false);
+  // DR-14: four independent feeds through the shared hook — a transient failure keeps that panel's
+  // skeleton and retries; the optimistic accept/refuse/remove edits layer on top of each.
+  const contactsFeed = useFetchState(() => (account ? api.getContacts() : Promise.resolve(null)), [account]);
+  const requestsFeed = useFetchState(() => (account ? api.getConnectionRequests() : Promise.resolve(null)), [account]);
+  const sentFeed = useFetchState(() => (account ? api.getConnectionRequests('outgoing') : Promise.resolve(null)), [account]);
+  const suggestionsFeed = useFetchState(() => (account ? api.getConnectionSuggestions() : Promise.resolve(null)), [account]);
 
-  const [contactsState, setContactsState] = useState<PanelState>('loading');
-  const [requestsState, setRequestsState] = useState<PanelState>('loading');
-  const [sentState, setSentState] = useState<PanelState>('loading');
-  const [suggestionsState, setSuggestionsState] = useState<PanelState>('loading');
+  const [contacts, setContacts] = useOverride<ContactItem[]>(contactsFeed.data?.items ?? NO_CONTACTS);
+  const [requests, setRequests] = useOverride<ConnectionRequestItem[]>(requestsFeed.data?.items ?? NO_REQUESTS);
+  const [sentRequests, setSentRequests] = useOverride<ConnectionRequestItem[]>(sentFeed.data?.items ?? NO_REQUESTS);
+  const [suggestions, setSuggestions] = useOverride<MatchSuggestion[]>(suggestionsFeed.data?.items ?? NO_SUGGESTIONS);
+  const incompleteProfile = suggestionsFeed.data?.incompleteProfile ?? false;
 
-  const [contactsRetry, setContactsRetry] = useState(0);
-  const [requestsRetry, setRequestsRetry] = useState(0);
-  const [sentRetry, setSentRetry] = useState(0);
-  const [suggestionsRetry, setSuggestionsRetry] = useState(0);
+  const contactsState: PanelState = contactsFeed.state;
+  const requestsState: PanelState = requestsFeed.state;
+  const sentState: PanelState = sentFeed.state;
+  const suggestionsState: PanelState = suggestionsFeed.state;
 
   const [actionError, setActionError] = useState('');
   const [announce, setAnnounce] = useState('');
@@ -550,75 +558,6 @@ export default function ContactsClient() {
   const [results, setResults] = useState<PeopleSearchItem[]>([]);
   const [searchState, setSearchState] = useState<PanelState>('ready');
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setContactsState('loading');
-    api
-      .getContacts()
-      .then((res) => {
-        if (cancelled) return;
-        setContacts(res.items);
-        setContactsState('ready');
-      })
-      .catch(() => !cancelled && setContactsState('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [account, contactsRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setRequestsState('loading');
-    api
-      .getConnectionRequests()
-      .then((res) => {
-        if (cancelled) return;
-        setRequests(res.items);
-        setRequestsState('ready');
-      })
-      .catch(() => !cancelled && setRequestsState('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [account, requestsRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setSentState('loading');
-    api
-      .getConnectionRequests('outgoing')
-      .then((res) => {
-        if (cancelled) return;
-        setSentRequests(res.items);
-        setSentState('ready');
-      })
-      .catch(() => !cancelled && setSentState('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [account, sentRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setSuggestionsState('loading');
-    api
-      .getConnectionSuggestions()
-      .then((res) => {
-        if (cancelled) return;
-        setSuggestions(res.items);
-        setIncompleteProfile(res.incompleteProfile);
-        setSuggestionsState('ready');
-      })
-      .catch(() => !cancelled && setSuggestionsState('error'));
-    return () => {
-      cancelled = true;
-    };
-  }, [account, suggestionsRetry]);
 
   // Debounce the search query.
   useEffect(() => {
@@ -937,7 +876,7 @@ export default function ContactsClient() {
               (contactsState === 'loading' ? (
                 <LoadingList label="Chargement de vos contacts…" />
               ) : contactsState === 'error' ? (
-                <ErrorPanel message="Impossible de charger vos contacts." onRetry={() => setContactsRetry((k) => k + 1)} />
+                <ErrorPanel message="Impossible de charger vos contacts." onRetry={contactsFeed.retry} />
               ) : contacts.length === 0 ? (
                 <EmptyPanel title="Aucun contact" hint="Ajoutez des personnes depuis la recherche ou les suggestions." />
               ) : (
@@ -954,7 +893,7 @@ export default function ContactsClient() {
               (requestsState === 'loading' ? (
                 <LoadingList label="Chargement des demandes…" />
               ) : requestsState === 'error' ? (
-                <ErrorPanel message="Impossible de charger les demandes." onRetry={() => setRequestsRetry((k) => k + 1)} />
+                <ErrorPanel message="Impossible de charger les demandes." onRetry={requestsFeed.retry} />
               ) : requests.length === 0 ? (
                 <EmptyPanel title="Aucune demande" hint="Les demandes de connexion reçues apparaîtront ici." />
               ) : (
@@ -971,7 +910,7 @@ export default function ContactsClient() {
               (sentState === 'loading' ? (
                 <LoadingList label="Chargement des demandes envoyées…" />
               ) : sentState === 'error' ? (
-                <ErrorPanel message="Impossible de charger les demandes envoyées." onRetry={() => setSentRetry((k) => k + 1)} />
+                <ErrorPanel message="Impossible de charger les demandes envoyées." onRetry={sentFeed.retry} />
               ) : sentRequests.length === 0 ? (
                 <EmptyPanel title="Aucune demande envoyée" hint="Les demandes de connexion que vous envoyez apparaîtront ici en attendant une réponse." />
               ) : (
@@ -988,7 +927,7 @@ export default function ContactsClient() {
               (suggestionsState === 'loading' ? (
                 <LoadingList label="Chargement des suggestions…" />
               ) : suggestionsState === 'error' ? (
-                <ErrorPanel message="Impossible de charger les suggestions." onRetry={() => setSuggestionsRetry((k) => k + 1)} />
+                <ErrorPanel message="Impossible de charger les suggestions." onRetry={suggestionsFeed.retry} />
               ) : suggestions.length === 0 ? (
                 <EmptyPanel
                   title="Aucune suggestion"

@@ -257,11 +257,13 @@ test.describe('MC-8 Contacts & connexions — signed in as the fixture account (
     ).toBeVisible({ timeout: 10_000 });
   });
 
-  test('MC8-E6: error state per tab + "Réessayer" retries and succeeds (FE-6)', async ({ page }) => {
+  // DR-14: a 500 is TRANSIENT now (skeleton + silent retry behind the toast), so the fixture that
+  // must reach the red block is a terminal 4xx.
+  test('MC8-E6: error state per tab on a terminal failure + "Réessayer" retries and succeeds (FE-6)', async ({ page }) => {
     let calls = 0;
     await page.route(`${API}/contacts`, (route) => {
       calls += 1;
-      if (calls === 1) return route.fulfill({ status: 500, json: { message: 'boom' } });
+      if (calls === 1) return route.fulfill({ status: 403, json: { statusCode: 403, message: 'boom', error: 'FORBIDDEN' } });
       return route.continue();
     });
 

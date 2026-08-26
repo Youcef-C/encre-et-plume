@@ -24,6 +24,7 @@ import {
   type WsSalonMemberLeft,
 } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { useSession } from '../../lib/session';
 import { useMessaging } from '../../lib/messaging';
 import OverflowMenu, { MenuItem } from '../OverflowMenu';
@@ -47,6 +48,8 @@ function avatarDisc(url: string | null, size = 30): React.CSSProperties {
   };
 }
 
+const NO_MEMBERS: SalonRosterItem[] = [];
+
 export default function SalonRoster({
   blockedIds,
   onBlocked,
@@ -64,10 +67,16 @@ export default function SalonRoster({
   const myId = account?.id ?? null;
 
   const [open, setOpen] = useState(false);
-  const [count, setCount] = useState(0);
-  const [items, setItems] = useState<SalonRosterItem[]>([]);
-  const [state, setState] = useState<RosterState>('loading');
   const [blocking, setBlocking] = useState<SalonRosterItem | null>(null);
+
+  // DR-14: the shared hook owns the load (a transient failure keeps the skeleton and retries); the
+  // live join/leave socket edits layer on top and are dropped by a refetch.
+  // `membershipVersion` bumps re-fetch so the self "· vous" row + count stay authoritative.
+  const feed = useFetchState(api.getSalonPresence, [membershipVersion]);
+  const state: RosterState = feed.state;
+  const [items, setItems] = useOverride<SalonRosterItem[]>(feed.data?.items ?? NO_MEMBERS);
+  // Server value — count === items.length (self INCLUDED, blocked excluded).
+  const [count, setCount] = useOverride<number>(feed.data?.count ?? 0);
 
   // Read inside stable socket handlers without re-subscribing.
   const myIdRef = useRef(myId);
@@ -82,23 +91,6 @@ export default function SalonRoster({
     if (typeof window !== 'undefined' && sessionStorage.getItem(STORAGE_KEY) === '1') setOpen(true);
   }, []);
 
-  const load = useCallback(() => {
-    setState('loading');
-    api
-      .getSalonPresence()
-      .then((res) => {
-        setCount(res.count); // server value — count === items.length (self INCLUDED, blocked excluded)
-        setItems(res.items);
-        setState('ready');
-      })
-      .catch(() => setState('error'));
-  }, []);
-
-  // Populate the count (badge) + list on mount, and re-fetch whenever the user's OWN membership
-  // changes (membershipVersion bump) so the self "· vous" row + count are authoritative.
-  useEffect(() => {
-    load();
-  }, [load, membershipVersion]);
 
   // Live roster: append joins / drop leaves symmetrically, keeping count === visible rows. No reload,
   // no polling. Skip the echo of my OWN id (I already count myself) and any blocked user; only mutate
@@ -124,7 +116,7 @@ export default function SalonRoster({
       socket.off(WS_EVENTS.salonMemberJoined, onJoin);
       socket.off(WS_EVENTS.salonMemberLeft, onLeave);
     };
-  }, [socket]);
+  }, [socket, setItems, setCount]);
 
   const toggle = useCallback(() => {
     setOpen((prev) => {
@@ -146,7 +138,7 @@ export default function SalonRoster({
       onBlocked(userId);
       setBlocking(null);
     },
-    [onBlocked],
+    [onBlocked, setItems, setCount],
   );
 
   // Defensive client-side filter: a user blocked while the roster is open never renders (a live join
@@ -222,7 +214,7 @@ export default function SalonRoster({
                 </p>
                 <button
                   type="button"
-                  onClick={load}
+                  onClick={feed.retry}
                   style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', background: 'var(--card)', border: '2px solid var(--accent)', borderRadius: 6, padding: '8px 16px', minHeight: 44, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Réessayer

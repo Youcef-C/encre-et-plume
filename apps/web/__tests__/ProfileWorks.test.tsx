@@ -49,9 +49,21 @@ describe('ProfileWorks (DR-12 V6)', () => {
     expect(await screen.findByText("Aucune œuvre publiée pour l'instant.")).toBeInTheDocument();
   });
 
-  it('shows a retry affordance when the fetch fails', async () => {
-    (api.getProfileCollections as ReturnType<typeof vi.fn>).mockRejectedValue({ message: 'boom' });
+  // DR-14: only a terminal failure shows the block; a `{message}` with no statusCode is transport.
+  it('shows a retry affordance when the fetch fails terminally', async () => {
+    (api.getProfileCollections as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' });
     render(<ProfileWorks slug="yuki-moreau" />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument());
+  });
+
+  // DR-14 F17 — a transport TypeError must never leak "Failed to fetch" into the role="alert";
+  // it is transient, so the skeleton stays and the loop retries instead.
+  it('keeps the skeleton on a transport failure and never renders the browser message', async () => {
+    (api.getProfileCollections as ReturnType<typeof vi.fn>).mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<ProfileWorks slug="yuki-moreau" />);
+    await waitFor(() => expect(api.getProfileCollections).toHaveBeenCalled());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Chargement des œuvres…')).toBeInTheDocument();
   });
 });

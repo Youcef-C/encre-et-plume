@@ -129,11 +129,25 @@ describe('AppelsClient (MC-4 board)', () => {
     expect(await screen.findByText('Aucun appel pour ces filtres.')).toBeInTheDocument();
   });
 
-  it('renders an error state and retries', async () => {
-    getBoard().mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(board([call()]));
+  // DR-14: the red block is the TERMINAL path only; a transient failure keeps the skeleton.
+  it('renders an error state and retries on a terminal failure', async () => {
+    getBoard()
+      .mockRejectedValueOnce({ statusCode: 403, message: 'Interdit', error: 'FORBIDDEN' })
+      .mockResolvedValueOnce(board([call()]));
     const user = userEvent.setup();
     renderClient();
     await user.click(await screen.findByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByText('« Lames de Brume »')).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    getBoard()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur', error: 'INTERNAL' })
+      .mockResolvedValue(board([call()]));
+    renderClient();
+    await waitFor(() => expect(api.getCallsBoard).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByText('« Lames de Brume »')).toBeInTheDocument();
   });
 

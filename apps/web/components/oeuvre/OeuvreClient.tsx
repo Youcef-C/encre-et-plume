@@ -3,11 +3,13 @@
 // DR-3 FE-1 — Work page "Œuvre" composition/shell. Replica of prototype ŒUVRE lines 851-973.
 // getWork drives the page state (loading/ready/notfound/error); chapters/planches are fetched
 // independently — one failing never blanks the rest of the page (DR-1 pattern).
-import { useEffect, useState } from 'react';
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isWork18Plus, WORK_FORMAT_ILLUSTRATIONS, type ApiError, type WorkDetail, type WorkChaptersResponse, type PlancheDto } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
+import { apiErrorMessage } from '../../lib/apiError';
+import { useFetchState } from '../../lib/useFetchState';
 import { useSession } from '../../lib/session';
 import { useAgeCleared } from '../../lib/ageGate';
 import AgeGate from '../age/AgeGate';
@@ -26,40 +28,35 @@ export default function OeuvreClient({ slug }: { slug: string }) {
   const { account } = useSession();
   const router = useRouter();
   const cleared = useAgeCleared(account);
-  const [state, setState] = useState<State>('loading');
-  const [work, setWork] = useState<WorkDetail | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [chapters, setChapters] = useState<WorkChaptersResponse | null>(null);
-  const [planches, setPlanches] = useState<PlancheDto[]>([]);
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setState('loading');
-    api
-      .getWork(slug)
-      .then((data) => {
-        if (cancelled) return;
-        setWork(data);
-        setState('ready');
-      })
-      .catch((err: ApiError) => {
-        if (cancelled) return;
-        setError(err);
-        setState(err.error === 'AGE_RESTRICTED' ? 'age-refused' : err.statusCode === 404 ? 'notfound' : 'error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, retryKey]);
+  // DR-14: the shared hook owns the loop — a transient failure keeps the skeleton above and retries,
+  // so only a terminal 4xx still reaches 'notfound' / 'age-refused' / 'error' (DR-3, DR-10 intact).
+  const workFeed = useFetchState(() => api.getWork(slug), [slug]);
+  const work: WorkDetail | null = workFeed.data;
+  const error = workFeed.error as ApiError | null;
+  const state: State =
+    workFeed.state === 'loading'
+      ? 'loading'
+      : workFeed.state === 'ready'
+        ? 'ready'
+        : error?.error === 'AGE_RESTRICTED'
+          ? 'age-refused'
+          : error?.statusCode === 404
+            ? 'notfound'
+            : 'error';
 
   // DR-12: a collection (format 'Illustration(s)') has no chapters/planches — skip those fetches once
   // the format is known. `work` is null on the first render (guard returns), so nothing fires early.
-  useEffect(() => {
-    if (!work || work.format === WORK_FORMAT_ILLUSTRATIONS) return;
-    api.getWorkChapters(slug, 1).then(setChapters).catch(() => setChapters(null));
-    api.getWorkPlanches(slug).then(setPlanches).catch(() => setPlanches([]));
-  }, [slug, work]);
+  const skipSubFeeds = !work || work.format === WORK_FORMAT_ILLUSTRATIONS;
+  const chaptersFeed = useFetchState(
+    () => (skipSubFeeds ? Promise.resolve(null) : api.getWorkChapters(slug, 1)),
+    [slug, skipSubFeeds],
+  );
+  const planchesFeed = useFetchState(
+    () => (skipSubFeeds ? Promise.resolve(null) : api.getWorkPlanches(slug)),
+    [slug, skipSubFeeds],
+  );
+  const chapters: WorkChaptersResponse | null = chaptersFeed.data;
+  const planches: PlancheDto[] = planchesFeed.data ?? [];
 
   if (state === 'loading') {
     return (
@@ -98,11 +95,11 @@ export default function OeuvreClient({ slug }: { slug: string }) {
     return (
       <div role="alert" style={{ maxWidth: 1100, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
         <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>
-          {error?.message ?? 'Impossible de charger cette œuvre.'}
+          {apiErrorMessage(error, 'Impossible de charger cette œuvre.')}
         </p>
         <button
           type="button"
-          onClick={() => setRetryKey((k) => k + 1)}
+          onClick={workFeed.retry}
           className="ep-btn-primary"
           style={{
             fontSize: 13,
@@ -123,7 +120,7 @@ export default function OeuvreClient({ slug }: { slug: string }) {
     return (
       <div role="alert" style={{ maxWidth: 1100, margin: '0 auto', padding: '60px 28px', textAlign: 'center' }}>
         <p style={{ fontWeight: 700, marginBottom: 12 }}>
-          {error?.message ?? 'Ce contenu est réservé aux adultes.'}
+          {apiErrorMessage(error, 'Ce contenu est réservé aux adultes.')}
         </p>
         <Link href="/decouvrir" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>
           ‹ Catalogue

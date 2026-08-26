@@ -6,29 +6,30 @@
 // prototype draws no pager, this is an *Inferred* minimal on-brand control (see plan §5 FE-8).
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { CatalogWorkCard, TrendingWork, ActiveContest, EditorPickItem, CatalogQuery } from '@encre-et-plume/shared';
+import type { CatalogWorkCard, CatalogQuery } from '@encre-et-plume/shared';
 import * as api from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { parseFilters, filtersToQuery, EMPTY_FILTERS } from '../../lib/catalog';
 import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
+import { useFetchState } from '../../lib/useFetchState';
 import FilterSidebar from './FilterSidebar';
 import ActiveFilters from './ActiveFilters';
 import CatalogGrid, { type CatalogGridState } from './CatalogGrid';
 import CatalogRail from './CatalogRail';
 
 function useCatalogRail() {
-  const [trending, setTrending] = useState<TrendingWork[]>([]);
-  const [contest, setContest] = useState<ActiveContest | null>(null);
-  const [editorPicks, setEditorPicks] = useState<EditorPickItem[]>([]);
+  // Each rail feed is independent — one failing never blanks the others (DR-1 pattern). DR-14 F16:
+  // the old `.catch(() => setTrending([]))` swallowed a failure into an empty rail, indistinguishable
+  // from "aucune tendance"; the hook now retries a transient failure behind the toast instead.
+  const trending = useFetchState(api.getCatalogTrending, []);
+  const contest = useFetchState(api.getActiveContest, []);
+  const editorPicks = useFetchState(api.getCatalogEditorPick, []);
 
-  useEffect(() => {
-    // Each rail feed is independent — one failing never blanks the others (DR-1 pattern).
-    api.getCatalogTrending().then(setTrending).catch(() => setTrending([]));
-    api.getActiveContest().then(setContest).catch(() => setContest(null));
-    api.getCatalogEditorPick().then(setEditorPicks).catch(() => setEditorPicks([]));
-  }, []);
-
-  return { trending, contest, editorPicks };
+  return {
+    trending: trending.data ?? [],
+    contest: contest.data ?? null,
+    editorPicks: editorPicks.data ?? [],
+  };
 }
 
 export default function DecouvrirClient() {
@@ -37,12 +38,18 @@ export default function DecouvrirClient() {
   const filters = parseFilters(new URLSearchParams(searchParams.toString()));
   const facetKey = filtersToQuery({ ...filters, page: 1 }).toString();
 
-  const [items, setItems] = useState<CatalogWorkCard[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [gridState, setGridState] = useState<CatalogGridState>('loading');
-  const [retryKey, setRetryKey] = useState(0);
+  const catalog = useFetchState(() => api.getCatalog(new URLSearchParams(facetKey)), [facetKey]);
+  // Pages appended by "Afficher plus de résultats" / the infinite-scroll sentinel. Keyed on the facet
+  // so a filter change drops them at render time — no second effect to keep in sync.
+  const [appended, setAppended] = useState<{ key: string; items: CatalogWorkCard[]; page: number } | null>(null);
+  const extra = appended?.key === facetKey ? appended : null;
+
+  const items = catalog.data ? [...catalog.data.items, ...(extra?.items ?? [])] : [];
+  const total = catalog.data?.total ?? 0;
+  const page = extra?.page ?? catalog.data?.page ?? 1;
+  const totalPages = catalog.data?.totalPages ?? 1;
+  const gridState: CatalogGridState =
+    catalog.state === 'loading' ? 'loading' : catalog.state === 'error' ? 'error' : items.length === 0 ? 'empty' : 'ready';
 
   const rail = useCatalogRail();
 
@@ -67,28 +74,6 @@ export default function DecouvrirClient() {
     };
   }, [account?.slug]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setGridState('loading');
-    api
-      .getCatalog(new URLSearchParams(facetKey))
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total);
-        setPage(res.page);
-        setTotalPages(res.totalPages);
-        setGridState(res.items.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setGridState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facetKey, retryKey]);
-
   const navigate = useCallback(
     (next: CatalogQuery) => {
       const query = filtersToQuery(next).toString();
@@ -101,9 +86,11 @@ export default function DecouvrirClient() {
     const query = new URLSearchParams(facetKey);
     query.set('page', String(page + 1));
     const res = await api.getCatalog(query);
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page);
-    setTotalPages(res.totalPages);
+    setAppended((prev) => ({
+      key: facetKey,
+      items: [...(prev?.key === facetKey ? prev.items : []), ...res.items],
+      page: res.page,
+    }));
   }, [facetKey, page]);
 
   const hasMore = gridState === 'ready' && page < totalPages;
@@ -147,7 +134,7 @@ export default function DecouvrirClient() {
           state={gridState}
           items={items}
           onReset={() => navigate(EMPTY_FILTERS)}
-          onRetry={() => setRetryKey((k) => k + 1)}
+          onRetry={catalog.retry}
         />
 
         {hasMore && (

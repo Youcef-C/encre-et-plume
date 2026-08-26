@@ -98,8 +98,9 @@ describe('OeuvreClient (DR-3 FE-1)', () => {
     expect(screen.getByRole('link', { name: /Catalogue/i })).toHaveAttribute('href', '/decouvrir');
   });
 
-  it('shows an error state with a working retry', async () => {
-    vi.mocked(api.getWork).mockRejectedValueOnce({ statusCode: 500, message: 'Erreur serveur' });
+  // DR-14: a 500 is transient now — only a terminal 4xx still reaches the red block.
+  it('shows an error state with a working retry on a terminal failure', async () => {
+    vi.mocked(api.getWork).mockRejectedValueOnce({ statusCode: 403, message: 'Accès refusé', error: 'FORBIDDEN' });
     vi.mocked(api.getWorkChapters).mockResolvedValue(chapters);
     vi.mocked(api.getWorkPlanches).mockResolvedValue(planches);
     const user = userEvent.setup();
@@ -109,6 +110,30 @@ describe('OeuvreClient (DR-3 FE-1)', () => {
     vi.mocked(api.getWork).mockResolvedValueOnce(work);
     await user.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeInTheDocument());
+  });
+
+  // DR-14 F1 — a 500 keeps the œuvre skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getWork)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Erreur serveur', error: 'INTERNAL' })
+      .mockResolvedValue(work);
+    vi.mocked(api.getWorkChapters).mockResolvedValue(chapters);
+    vi.mocked(api.getWorkPlanches).mockResolvedValue(planches);
+    render(<OeuvreClient slug="lames-de-brume" />);
+
+    await waitFor(() => expect(api.getWork).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Chargement de l'œuvre…")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Lames de Brume' })).toBeInTheDocument());
+  });
+
+  // DR-14 F2 / DR-3 — the 404 "introuvable" view is terminal: shown immediately, never retried.
+  it('does not retry a 404 — the "introuvable" view is immediate', async () => {
+    vi.mocked(api.getWork).mockRejectedValue({ statusCode: 404, message: 'Introuvable', error: 'NOT_FOUND' });
+    render(<OeuvreClient slug="inconnu-xyz" />);
+    await waitFor(() => expect(screen.getByText('Œuvre introuvable')).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 700));
+    expect(api.getWork).toHaveBeenCalledTimes(1);
   });
 
   // ── DR-10: 18+ age gate ───────────────────────────────────────────────────────

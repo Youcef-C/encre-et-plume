@@ -69,11 +69,23 @@ describe('BlockedAccounts', () => {
     expect(screen.getByRole('link', { name: 'Théo M.' })).toBeInTheDocument();
   });
 
-  it('offers a retry on a load failure', async () => {
-    vi.mocked(api.getMyBlocks).mockRejectedValueOnce({ statusCode: 500, message: 'x', error: 'ERR' });
+  // DR-14: the red block is the TERMINAL path only.
+  it('offers a retry on a terminal load failure', async () => {
+    vi.mocked(api.getMyBlocks).mockRejectedValueOnce({ statusCode: 403, message: 'x', error: 'FORBIDDEN' });
     vi.mocked(api.getMyBlocks).mockResolvedValueOnce({ items: [blocked] });
     render(<BlockedAccounts />);
     await userEvent.click(await screen.findByRole('button', { name: 'Réessayer' }));
+    expect(await screen.findByRole('link', { name: 'Théo M.' })).toBeInTheDocument();
+  });
+
+  // DR-14 F1 — a 5xx keeps the skeleton and retries; no red block.
+  it('keeps the skeleton and retries on a transient failure', async () => {
+    vi.mocked(api.getMyBlocks)
+      .mockRejectedValueOnce({ statusCode: 500, message: 'x', error: 'ERR' })
+      .mockResolvedValue({ items: [blocked] });
+    render(<BlockedAccounts />);
+    await waitFor(() => expect(api.getMyBlocks).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Théo M.' })).toBeInTheDocument();
   });
 });

@@ -16,12 +16,14 @@ import {
   type CollectionItemDto,
   type CreatorRole,
   type MyProjectItem,
+  type MyProjectsResponse,
   type MyProjectsSummary,
   type ProjectStatusFilter,
   type ProjectTypeFilter,
 } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import { getMyProjects, getCollection } from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { BrushIcon, CaretDownIcon, ImageIcon, LayersIcon, PenNibIcon, SearchIcon } from '../icons';
 
 type Screen = 'loading' | 'ready' | 'error';
@@ -516,12 +518,6 @@ export default function ProjetsClient() {
   const [q, setQ] = useState(() => searchParams.get('q') ?? '');
   const [searchText, setSearchText] = useState(q);
 
-  const [items, setItems] = useState<MyProjectItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [summary, setSummary] = useState<MyProjectsSummary | undefined>(undefined);
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [retryKey, setRetryKey] = useState(0);
 
   // Reflect the active filters/search into the URL (deep-link + back/forward) without a fetch.
   const syncUrl = useCallback(
@@ -565,32 +561,24 @@ export default function ProjetsClient() {
     [q, filter, syncUrl],
   );
 
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setScreen('loading');
-    getMyProjects({ scope: 'all', q: q || undefined, status: filter, type: typeFilter, page: 1 })
-      .then((res) => {
-        if (cancelled) return;
-        setItems(res.items);
-        setTotal(res.total ?? res.items.length);
-        setPage(res.page ?? 1);
-        setSummary(res.summary);
-        setScreen('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setScreen('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, q, filter, typeFilter, retryKey]);
+  // DR-14: the shared hook owns the load; appended pages layer on top and are dropped by a refetch.
+  const feed = useFetchState(
+    () =>
+      account
+        ? getMyProjects({ scope: 'all', q: q || undefined, status: filter, type: typeFilter, page: 1 })
+        : Promise.resolve(null),
+    [account, q, filter, typeFilter],
+  );
+  const [board, setBoard] = useOverride<MyProjectsResponse | null>(feed.data);
+  const items: MyProjectItem[] = board?.items ?? [];
+  const total = board?.total ?? items.length;
+  const page = board?.page ?? 1;
+  const summary: MyProjectsSummary | undefined = board?.summary;
+  const screen: Screen = feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : 'ready';
 
   async function loadMore() {
     const res = await getMyProjects({ scope: 'all', q: q || undefined, status: filter, type: typeFilter, page: page + 1 });
-    setItems((prev) => [...prev, ...res.items]);
-    setPage(res.page ?? page + 1);
-    setTotal(res.total ?? total);
+    setBoard((prev) => (prev ? { ...res, items: [...prev.items, ...res.items] } : res));
   }
 
   if (sessionLoading) {
@@ -693,7 +681,7 @@ export default function ProjetsClient() {
           <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>Impossible de charger vos projets.</p>
           <button
             type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={feed.retry}
             className="ep-btn-primary"
             style={{
               fontSize: 13,

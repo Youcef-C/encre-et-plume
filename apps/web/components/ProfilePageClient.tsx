@@ -18,6 +18,8 @@ const COUNTRY_OPTIONS = [...COUNTRY_CODES]
   .map((code) => ({ code, label: countryLabelFr(code) }))
   .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
 import { getProfile, updateMyProfile, setAvatar, buildSrcSet, deleteAvatar } from '../lib/api';
+import { apiErrorMessage } from '../lib/apiError';
+import { useFetchState, useOverride } from '../lib/useFetchState';
 import { useSession } from '../lib/session';
 import ProfileTags from './ProfileTags';
 import ProfileTabs from './ProfileTabs';
@@ -199,9 +201,14 @@ function AvatarLightbox({
 export default function ProfilePageClient({ slug }: Props) {
   const session = useSession();
   const { account } = session;
-  const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<ApiError | null>(null);
+  // DR-14: the shared hook owns the load; a transient failure keeps the skeleton and retries, so
+  // only a terminal 4xx reaches the "Profil introuvable" / "Erreur" view below.
+  const feed = useFetchState(() => getProfile(slug), [slug]);
+  const fetchError = feed.error as ApiError | null;
+  const loading = feed.state === 'loading';
+  // Local edits (avatar upload/delete, profile save) layered over the fetched profile; a refetch or
+  // a slug change drops them.
+  const [profile, setProfile] = useOverride<ProfileResponse | null>(feed.data);
 
   // Edit-mode state (F-6)
   const [isEditing, setIsEditing] = useState(false);
@@ -220,18 +227,11 @@ export default function ProfilePageClient({ slug }: Props) {
   const [uploadKey, setUploadKey] = useState(0);
   // MC-10 (F9): block state lifted here so the "Bloqué" pill sits by the name; ProfileActions
   // owns the block/unblock actions and reports changes back via onBlockedChange.
-  const [hasBlocked, setHasBlocked] = useState(false);
+  const [blockedOverride, setBlockedOverride] = useState<boolean | null>(null);
 
   const isOwner = !!account && account.slug === slug;
 
-  useEffect(() => {
-    setLoading(true);
-    setFetchError(null);
-    getProfile(slug)
-      .then((data) => { setProfile(data); setHasBlocked(Boolean(data.viewerHasBlocked)); })
-      .catch((err: ApiError) => { setFetchError(err); })
-      .finally(() => setLoading(false));
-  }, [slug]);
+  const hasBlocked = blockedOverride ?? Boolean(feed.data?.viewerHasBlocked);
 
   if (loading) {
     return (
@@ -287,8 +287,19 @@ export default function ProfilePageClient({ slug }: Props) {
         <p style={{ color: 'var(--ink2)', fontSize: 15 }}>
           {is404
             ? "Ce profil n'existe pas ou a été supprimé."
-            : fetchError.message}
+            : apiErrorMessage(fetchError, 'Impossible de charger ce profil.')}
         </p>
+        {/* F16: this block used to offer no way to retry, unlike every sibling error block. */}
+        {!is404 && (
+          <button
+            type="button"
+            onClick={feed.retry}
+            className="ep-btn-primary"
+            style={{ marginTop: 16, fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
+          >
+            Réessayer
+          </button>
+        )}
       </div>
     );
   }
@@ -599,7 +610,7 @@ export default function ProfilePageClient({ slug }: Props) {
                 profile={profile}
                 account={account}
                 hasBlocked={hasBlocked}
-                onBlockedChange={setHasBlocked}
+                onBlockedChange={setBlockedOverride}
               />
             )}
           </div>

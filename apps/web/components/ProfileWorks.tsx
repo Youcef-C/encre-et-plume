@@ -3,11 +3,12 @@
 // DR-12 FE-6 — profile "Œuvres publiées" grouping. The creator's collections surface as a grouped
 // section of cards (→ the collection Œuvre); their standalone (uncollected) illustrations stay
 // ungrouped below (→ the illustration detail). Manga/roman works listing stays out of scope (F-3).
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ApiError, CollectionSummary, GalleryIllustrationCard } from '@encre-et-plume/shared';
 import { collectionMetaLine } from '@encre-et-plume/shared';
 import { getProfileCollections } from '../lib/api';
+import { apiErrorMessage } from '../lib/apiError';
+import { useFetchState } from '../lib/useFetchState';
 import { coverStyle } from '../lib/cover';
 import { formatLikeCount } from '../lib/home';
 import { HeartIcon } from './icons';
@@ -22,31 +23,11 @@ const sectionTitle: React.CSSProperties = {
 };
 
 export default function ProfileWorks({ slug }: { slug: string }) {
-  const [state, setState] = useState<State>('loading');
-  const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [illustrations, setIllustrations] = useState<GalleryIllustrationCard[]>([]);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setState('loading');
-    getProfileCollections(slug)
-      .then((res) => {
-        if (cancelled) return;
-        setCollections(res.collections);
-        setIllustrations(res.illustrations);
-        setState('ready');
-      })
-      .catch((err: ApiError) => {
-        if (cancelled) return;
-        setError(err);
-        setState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, retryKey]);
+  const feed = useFetchState(() => getProfileCollections(slug), [slug]);
+  const state: State = feed.state;
+  const error = feed.error as ApiError | null;
+  const collections: CollectionSummary[] = feed.data?.collections ?? [];
+  const illustrations: GalleryIllustrationCard[] = feed.data?.illustrations ?? [];
 
   if (state === 'loading') {
     return (
@@ -59,10 +40,10 @@ export default function ProfileWorks({ slug }: { slug: string }) {
   if (state === 'error') {
     return (
       <div role="alert" style={{ textAlign: 'center', padding: '20px 0' }}>
-        <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>{error?.message ?? 'Impossible de charger les œuvres.'}</p>
+        <p style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 12 }}>{apiErrorMessage(error, 'Impossible de charger les œuvres.')}</p>
         <button
           type="button"
-          onClick={() => setRetryKey((k) => k + 1)}
+          onClick={feed.retry}
           className="ep-btn-primary"
           style={{ fontSize: 13, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}
         >

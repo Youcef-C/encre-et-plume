@@ -10,6 +10,7 @@ import type { ListItemDto, LikedWorkDto, LikedIllustrationDto } from '@encre-et-
 import { WORK_FORMAT_ILLUSTRATIONS } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
+import { useFetchState } from '../../lib/useFetchState';
 import ListCard from './ListCard';
 import LikeCard from './LikeCard';
 import IllustrationListCard from './IllustrationListCard';
@@ -29,20 +30,22 @@ const UNDO_WINDOW_MS = 5000;
 // UndoCell in that slot), and either restores it (undo, no API call) or fires the DELETE and
 // drops it from state once the window lapses. `// ponytail:` plain timeout-ref map, no server
 // "undo" endpoint exists, so undo is purely client-side until the window lapses.
-function createOptimisticRemover<T>(opts: {
+//
+// DR-14: the rows themselves are now owned by `useFetchState`, so a lapsed removal records the id in
+// a `removed` map the render filters on instead of splicing a local array.
+function createOptimisticRemover(opts: {
   setPending: React.Dispatch<React.SetStateAction<Record<string, true>>>;
   timers: React.MutableRefObject<Record<string, ReturnType<typeof setTimeout>>>;
-  setItems: React.Dispatch<React.SetStateAction<T[]>>;
-  getId: (item: T) => string;
+  setRemoved: React.Dispatch<React.SetStateAction<Record<string, true>>>;
   remove: (id: string) => Promise<unknown>;
 }) {
-  const { setPending, timers, setItems, getId, remove } = opts;
+  const { setPending, timers, setRemoved, remove } = opts;
 
   function request(id: string) {
     setPending((p) => ({ ...p, [id]: true }));
     timers.current[id] = setTimeout(() => {
       remove(id).catch(() => {});
-      setItems((rows) => rows.filter((r) => getId(r) !== id));
+      setRemoved((r) => ({ ...r, [id]: true }));
       setPending((p) => {
         const next = { ...p };
         delete next[id];
@@ -186,24 +189,39 @@ export default function MaListeClient() {
   const [tab, setTab] = useState<TabKey>('liste');
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const [list, setList] = useState<ListItemDto[]>([]);
-  const [listState, setListState] = useState<PanelState>('loading');
-  const [listRetry, setListRetry] = useState(0);
-
-  const [likes, setLikes] = useState<LikedWorkDto[]>([]);
-  const [likesState, setLikesState] = useState<PanelState>('loading');
-  const [likesRetry, setLikesRetry] = useState(0);
-
+  // DR-14: one shared hook per feed — a transient failure keeps the tab's skeleton and retries.
+  const listFeed = useFetchState(() => (account ? api.getMyList() : Promise.resolve(null)), [account]);
+  const likesFeed = useFetchState(() => (account ? api.getMyLikes() : Promise.resolve(null)), [account]);
   // Illustrations sub-section (DR-8/DR-9 addendum): saved illustrations join the "Ma liste" tab,
   // liked illustrations join "Coups de cœur" — separate fetch/state, combined readiness/count
   // with the matching work list so loading/error/empty stay a single per-tab experience.
-  const [savedIllustrations, setSavedIllustrations] = useState<LikedIllustrationDto[]>([]);
-  const [savedIllustrationsState, setSavedIllustrationsState] = useState<PanelState>('loading');
-  const [savedIllustrationsRetry, setSavedIllustrationsRetry] = useState(0);
+  const savedIllustrationsFeed = useFetchState(
+    () => (account ? api.getSavedIllustrations() : Promise.resolve(null)),
+    [account],
+  );
+  const likedIllustrationsFeed = useFetchState(
+    () => (account ? api.getLikedIllustrations() : Promise.resolve(null)),
+    [account],
+  );
 
-  const [likedIllustrations, setLikedIllustrations] = useState<LikedIllustrationDto[]>([]);
-  const [likedIllustrationsState, setLikedIllustrationsState] = useState<PanelState>('loading');
-  const [likedIllustrationsRetry, setLikedIllustrationsRetry] = useState(0);
+  const listState: PanelState = listFeed.state;
+  const likesState: PanelState = likesFeed.state;
+  const savedIllustrationsState: PanelState = savedIllustrationsFeed.state;
+  const likedIllustrationsState: PanelState = likedIllustrationsFeed.state;
+
+  const [listRemoved, setListRemoved] = useState<Record<string, true>>({});
+  const [likesRemoved, setLikesRemoved] = useState<Record<string, true>>({});
+  const [savedIllustrationsRemoved, setSavedIllustrationsRemoved] = useState<Record<string, true>>({});
+  const [likedIllustrationsRemoved, setLikedIllustrationsRemoved] = useState<Record<string, true>>({});
+
+  const list: ListItemDto[] = (listFeed.data ?? []).filter((r) => !listRemoved[r.slug]);
+  const likes: LikedWorkDto[] = (likesFeed.data ?? []).filter((r) => !likesRemoved[r.slug]);
+  const savedIllustrations: LikedIllustrationDto[] = (savedIllustrationsFeed.data ?? []).filter(
+    (r) => !savedIllustrationsRemoved[r.id],
+  );
+  const likedIllustrations: LikedIllustrationDto[] = (likedIllustrationsFeed.data ?? []).filter(
+    (r) => !likedIllustrationsRemoved[r.id],
+  );
 
   const [pending, setPending] = useState<Record<string, true>>({});
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -213,82 +231,6 @@ export default function MaListeClient() {
   const savedIllustrationsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [likedIllustrationsPending, setLikedIllustrationsPending] = useState<Record<string, true>>({});
   const likedIllustrationsTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setListState('loading');
-    api
-      .getMyList()
-      .then((rows) => {
-        if (cancelled) return;
-        setList(rows);
-        setListState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setListState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, listRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setLikesState('loading');
-    api
-      .getMyLikes()
-      .then((rows) => {
-        if (cancelled) return;
-        setLikes(rows);
-        setLikesState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setLikesState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, likesRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setSavedIllustrationsState('loading');
-    api
-      .getSavedIllustrations()
-      .then((rows) => {
-        if (cancelled) return;
-        setSavedIllustrations(rows);
-        setSavedIllustrationsState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setSavedIllustrationsState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, savedIllustrationsRetry]);
-
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setLikedIllustrationsState('loading');
-    api
-      .getLikedIllustrations()
-      .then((rows) => {
-        if (cancelled) return;
-        setLikedIllustrations(rows);
-        setLikedIllustrationsState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setLikedIllustrationsState('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, likedIllustrationsRetry]);
 
   useEffect(
     () => () => {
@@ -304,32 +246,28 @@ export default function MaListeClient() {
   // `DELETE /reactions/save` (B5) — the single unsave implementation. The two illustration
   // removers (coordinator follow-up) reuse the exact same optimistic-remove/undo logic instead
   // of duplicating it, just parameterized on id shape + which reaction endpoint to call.
-  const listRemover = createOptimisticRemover<ListItemDto>({
+  const listRemover = createOptimisticRemover({
     setPending,
     timers,
-    setItems: setList,
-    getId: (r) => r.slug,
+    setRemoved: setListRemoved,
     remove: (slug) => api.unsaveReaction({ targetType: 'work', targetId: slug }),
   });
-  const likesRemover = createOptimisticRemover<LikedWorkDto>({
+  const likesRemover = createOptimisticRemover({
     setPending: setLikesPending,
     timers: likeTimers,
-    setItems: setLikes,
-    getId: (r) => r.slug,
+    setRemoved: setLikesRemoved,
     remove: (slug) => api.unlikeReaction({ targetType: 'work', targetId: slug }),
   });
-  const savedIllustrationsRemover = createOptimisticRemover<LikedIllustrationDto>({
+  const savedIllustrationsRemover = createOptimisticRemover({
     setPending: setSavedIllustrationsPending,
     timers: savedIllustrationsTimers,
-    setItems: setSavedIllustrations,
-    getId: (r) => r.id,
+    setRemoved: setSavedIllustrationsRemoved,
     remove: (id) => api.unsaveReaction({ targetType: 'illustration', targetId: id }),
   });
-  const likedIllustrationsRemover = createOptimisticRemover<LikedIllustrationDto>({
+  const likedIllustrationsRemover = createOptimisticRemover({
     setPending: setLikedIllustrationsPending,
     timers: likedIllustrationsTimers,
-    setItems: setLikedIllustrations,
-    getId: (r) => r.id,
+    setRemoved: setLikedIllustrationsRemoved,
     remove: (id) => api.unlikeReaction({ targetType: 'illustration', targetId: id }),
   });
 
@@ -399,13 +337,13 @@ export default function MaListeClient() {
   const likesPanelReady = likesState === 'ready' && likedIllustrationsState === 'ready';
 
   function retryList() {
-    setListRetry((k) => k + 1);
-    setSavedIllustrationsRetry((k) => k + 1);
+    listFeed.retry();
+    savedIllustrationsFeed.retry();
   }
 
   function retryLikes() {
-    setLikesRetry((k) => k + 1);
-    setLikedIllustrationsRetry((k) => k + 1);
+    likesFeed.retry();
+    likedIllustrationsFeed.retry();
   }
 
   return (

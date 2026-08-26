@@ -7,11 +7,12 @@
 // green Accepter / red Refuser). "Voir l'appel" opens the shared CallDetailModal in-page (no navigation).
 // Recorded deviations from the frame live in plan §4.D (h1 rename, no affinité %/city/Message, PDF rows,
 // 44px tap targets, resolved-row states).
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { ApplicationDto, CreatorRole, ReceivedCallGroup } from '@encre-et-plume/shared';
 import { useSession } from '../../lib/session';
 import * as api from '../../lib/api';
+import { useFetchState, useOverride } from '../../lib/useFetchState';
 import { formatBytes } from '../../lib/format';
 import OnBrandSelect from '../form/OnBrandSelect';
 import CallDetailModal from '../appels/CallDetailModal';
@@ -277,43 +278,26 @@ function SkeletonRow() {
   );
 }
 
+const NO_GROUPS: ReceivedCallGroup[] = [];
+
 export default function CandidaturesRecuesClient() {
   const { account, loading: sessionLoading } = useSession();
 
-  const [groups, setGroups] = useState<ReceivedCallGroup[]>([]);
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [retryKey, setRetryKey] = useState(0);
+  // DR-14: the shared hook owns the load; the optimistic decide/remove edits layer on top and are
+  // dropped by a refetch.
+  const feed = useFetchState(() => (account ? api.getReceivedApplications() : Promise.resolve(null)), [account]);
+  const [groups, setGroups] = useOverride<ReceivedCallGroup[]>(feed.data?.groups ?? NO_GROUPS);
+  const screen: Screen =
+    feed.state === 'loading' ? 'loading' : feed.state === 'error' ? 'error' : groups.length === 0 ? 'empty' : 'ready';
   const [announce, setAnnounce] = useState('');
   const [selectedCallId, setSelectedCallId] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   // MC-7 amendment: the applicant id whose optimistic remove failed (rolled back) — surfaces the alert.
   const [removeErrorId, setRemoveErrorId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!account) return;
-    let cancelled = false;
-    setScreen('loading');
-    api
-      .getReceivedApplications()
-      .then((res) => {
-        if (cancelled) return;
-        setGroups(res.groups);
-        // Preserve the active selection across a refetch (e.g. after an owner edit while the modal is
-        // open); only fall back to the newest call when the selected one is gone (e.g. after a delete).
-        setSelectedCallId((cur) =>
-          res.groups.some((g) => g.callId === cur) ? cur : res.groups[0]?.callId ?? '',
-        );
-        setScreen(res.groups.length === 0 ? 'empty' : 'ready');
-      })
-      .catch(() => {
-        if (!cancelled) setScreen('error');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account, retryKey]);
-
-  // Selected group — falls back to the first when the id hasn't been set / no longer exists.
+  // Selected group — falls back to the first when the id hasn't been set / no longer exists. This
+  // also preserves the active selection across a refetch (e.g. after an owner edit while the modal
+  // is open) and falls back to the newest call when the selected one is gone (e.g. after a delete).
   const selected = useMemo(
     () => groups.find((g) => g.callId === selectedCallId) ?? groups[0],
     [groups, selectedCallId],
@@ -414,7 +398,7 @@ export default function CandidaturesRecuesClient() {
           </p>
           <button
             type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={feed.retry}
             className="ep-btn-primary"
             style={{
               fontSize: 13,
@@ -496,10 +480,10 @@ export default function CandidaturesRecuesClient() {
               onCandidater={() => {}}
               // Round 3: after an owner edit refetch (updated title/badge); after a delete close + refetch
               // (the removed call drops from the selector, selection falls back / lands on the empty state).
-              onChanged={() => setRetryKey((k) => k + 1)}
+              onChanged={feed.retry}
               onDeleted={() => {
                 setDetailOpen(false);
-                setRetryKey((k) => k + 1);
+                feed.retry();
               }}
             />
           )}

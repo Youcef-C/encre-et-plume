@@ -8,6 +8,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from '../lib/api';
+import { useFetchState, useOverride } from '../lib/useFetchState';
 import { useUnreadCounts } from '../lib/unread';
 import { NOTIF_ICON, notificationHref, notificationLabel, relativeTime } from '../lib/notifications';
 import { MailIcon } from './icons';
@@ -162,8 +163,11 @@ function NotifItem({
 // ─── Main inbox component ────────────────────────────────────────────────────
 export default function NotificationsInbox() {
   const { counts, refresh } = useUnreadCounts();
-  const [items, setItems] = useState<NotificationItem[] | null>(null);
-  const [error, setError] = useState(false);
+  // DR-14: the shared hook owns the load — a transient failure keeps the skeleton and retries; the
+  // local mark-read edits layer on top.
+  const feed = useFetchState(getNotifications, []);
+  const [items, setItems] = useOverride<NotificationItem[] | null>(feed.data);
+  const error = feed.state === 'error';
   const [markingAll, setMarkingAll] = useState(false);
   const [bucket, setBucket] = useState<NotifBucket>('all');
 
@@ -172,16 +176,6 @@ export default function NotificationsInbox() {
     [items, bucket],
   );
 
-  const load = useCallback(() => {
-    setError(false);
-    getNotifications()
-      .then(setItems)
-      .catch(() => setError(true));
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const unreadCount = items?.filter((n) => n.readAt === null).length ?? 0;
 
