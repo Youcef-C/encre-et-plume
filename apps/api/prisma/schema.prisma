@@ -260,6 +260,7 @@ model EmailVerificationToken {
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
+  @@index([expiresAt]) // F-25: nightly expired-token sweep
 }
 
 // ── F-12: Password reset token (mirrors F-11 EmailVerificationToken; TTL 1h) ──
@@ -274,6 +275,7 @@ model PasswordResetToken {
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
+  @@index([expiresAt]) // F-25: nightly expired-token sweep
 }
 
 model Notification {
@@ -294,6 +296,7 @@ model Notification {
   // all make Postgres look up child rows when a parent is deleted — unindexed that is a
   // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
   @@index([sourceUserId])
+  @@index([createdAt]) // F-25: nightly read-notification retention sweep
 }
 
 // ── MC-3: Collaboration invitations + CS-1 project seam ───────────────────────
@@ -534,6 +537,7 @@ model EmailChangeToken {
   createdAt  DateTime  @default(now())
 
   @@index([accountId])
+  @@index([expiresAt]) // F-25: nightly expired-token sweep
 }
 
 // ── DR-1: home showroom (Work/Chapter/Announcement) ───────────────────────────
@@ -1229,6 +1233,7 @@ model ScenarioUpdate {
   createdAt  DateTime         @default(now())
 
   @@index([documentId, createdAt])
+  @@index([createdAt]) // F-25: nightly superseded-update sweep
 }
 
 // Per-case comments (right sidebar), keyed by document + case number.

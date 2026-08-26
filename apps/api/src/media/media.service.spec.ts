@@ -10,6 +10,7 @@ import { S3StorageService } from './s3-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
+import { SWEEP_PAGE } from '../maintenance/sweep';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -816,6 +817,35 @@ describe('MediaService', () => {
       // best-effort deleteObject per stale record
       expect(s3.deleteObject).toHaveBeenCalledTimes(2);
       expect(prisma.media.deleteMany).toHaveBeenCalled();
+    });
+
+    // F-25 B11 — the sweep used to be an unbounded findMany + a serial S3 loop; the first real
+    // backlog would load every orphan into memory and hold the worker for as long as S3 took.
+    it('B11 · issues a bounded, cursor-paged query and returns the number of rows deleted', async () => {
+      prisma.media.findMany
+        .mockResolvedValueOnce(Array.from({ length: SWEEP_PAGE }, (_, i) => makeMedia({ id: `m${i}` })))
+        .mockResolvedValueOnce([makeMedia({ id: 'last' })]);
+      prisma.media.deleteMany.mockResolvedValue({ count: 1 });
+
+      const swept = await service.cleanupOrphans();
+
+      expect(prisma.media.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: SWEEP_PAGE, orderBy: { id: 'asc' } }),
+      );
+      expect(prisma.media.findMany.mock.calls[1][0].where.id).toEqual({ gt: `m${SWEEP_PAGE - 1}` });
+      expect(prisma.media.findMany).toHaveBeenCalledTimes(2);
+      expect(swept).toBe(2);
+    });
+
+    it('B12 · deletes the S3 object before the row', async () => {
+      prisma.media.findMany.mockResolvedValueOnce([makeMedia({ id: 'm1' })]);
+      prisma.media.deleteMany.mockResolvedValue({ count: 1 });
+
+      await service.cleanupOrphans();
+
+      expect(s3.deleteObject.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.media.deleteMany.mock.invocationCallOrder[0],
+      );
     });
   });
 });

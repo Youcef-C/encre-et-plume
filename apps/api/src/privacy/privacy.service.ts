@@ -12,6 +12,7 @@ import { MediaService } from '../media/media.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../email/email.service';
 import { REMEMBER_ME_MAX_AGE_S } from '../auth/session-epoch.constants';
+import { SWEEP_PAGE, afterCursor, sweepPaged } from '../maintenance/sweep';
 
 const SESSION_EPOCH_TTL_S = REMEMBER_ME_MAX_AGE_S; // M7: >= max JWT lifetime (rememberMe = 30d)
 
@@ -176,25 +177,35 @@ export class PrivacyService {
   }
 
   /**
-   * Cron sweep: purge expired archives.
-   * Correctness does not depend on this — GET lazy-expires on read.
-   * ponytail: not wired to a live cron yet; mirroring MediaService.cleanupOrphans pattern.
+   * Cron sweep (F-25, `maintenance` queue): purge expired archives.
+   * Correctness does not depend on this — GET lazy-expires on read (`getExport`), and BOTH paths
+   * run this same delete order, so the 7-day promise cannot hold on one path only.
+   * Bounded: cursor-paged, capped per run (F-25 B10).
+   * @returns how many exports were purged this run.
    */
-  async purgeExpiredExports(): Promise<void> {
-    const stale = await this.prisma.dataExport.findMany({
-      where: { status: 'ready', expiresAt: { lt: new Date() } },
-    });
-
-    for (const row of stale) {
-      const r = row as unknown as { id: string; mediaId: string | null };
-      if (r.mediaId) {
-        await this.media.deleteMediaById(r.mediaId).catch(() => {});
-      }
-      await this.prisma.dataExport.update({
-        where: { id: r.id },
-        data: { status: 'expired', mediaId: null },
-      });
-    }
+  async purgeExpiredExports(): Promise<number> {
+    return sweepPaged<{ id: string; mediaId: string | null }>(
+      (cursor) =>
+        this.prisma.dataExport.findMany({
+          where: { status: 'ready', expiresAt: { lt: new Date() }, ...afterCursor(cursor) },
+          take: SWEEP_PAGE,
+          orderBy: { id: 'asc' },
+        }) as unknown as Promise<{ id: string; mediaId: string | null }[]>,
+      async (rows) => {
+        for (const r of rows) {
+          // B12: the S3 object first, the row second — an orphaned row is recoverable,
+          // an orphaned object is not visible to anything that could clean it up.
+          if (r.mediaId) {
+            await this.media.deleteMediaById(r.mediaId).catch(() => {});
+          }
+          await this.prisma.dataExport.update({
+            where: { id: r.id },
+            data: { status: 'expired', mediaId: null },
+          });
+        }
+        return rows.length;
+      },
+    );
   }
 
   // ── Called by DataExportProcessor ─────────────────────────────────────────

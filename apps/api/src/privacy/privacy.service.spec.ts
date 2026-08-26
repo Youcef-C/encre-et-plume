@@ -5,6 +5,7 @@
 
 import { UnauthorizedException } from '@nestjs/common';
 import { PrivacyService } from './privacy.service';
+import { SWEEP_PAGE } from '../maintenance/sweep';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ function makePrisma() {
   return {
     dataExport: {
       findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
@@ -298,6 +300,44 @@ describe('PrivacyService', () => {
   describe('purgeExpiredExports', () => {
     it('is exported as a callable method (cron seam)', () => {
       expect(typeof service.purgeExpiredExports).toBe('function');
+    });
+
+    // F-25 — the sweep the nightly `maintenance` job calls. It is the SAME purge the lazy-expire
+    // path in getExport() runs, so the 7-day promise cannot be kept on one path only.
+    it('B5 · deletes the archive object before flipping the row, and returns the count purged', async () => {
+      prisma.dataExport.findMany.mockResolvedValueOnce([{ id: EXPORT_ID, mediaId: MEDIA_ID }]);
+
+      const purged = await service.purgeExpiredExports();
+
+      expect(media.deleteMediaById).toHaveBeenCalledWith(MEDIA_ID);
+      // B12: object first, row second — an orphaned row is recoverable, an orphaned object is not.
+      expect(media.deleteMediaById.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.dataExport.update.mock.invocationCallOrder[0],
+      );
+      expect(prisma.dataExport.update).toHaveBeenCalledWith({
+        where: { id: EXPORT_ID },
+        data: { status: 'expired', mediaId: null },
+      });
+      expect(purged).toBe(1);
+    });
+
+    it('B10 · is bounded: cursor-paged on id, stops on a short page', async () => {
+      prisma.dataExport.findMany
+        .mockResolvedValueOnce(Array.from({ length: SWEEP_PAGE }, (_, i) => ({ id: `e${i}`, mediaId: null })))
+        .mockResolvedValueOnce([{ id: 'last', mediaId: null }]);
+
+      const purged = await service.purgeExpiredExports();
+
+      expect(prisma.dataExport.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'ready', expiresAt: { lt: expect.any(Date) } }),
+          take: SWEEP_PAGE,
+          orderBy: { id: 'asc' },
+        }),
+      );
+      expect(prisma.dataExport.findMany.mock.calls[1][0].where.id).toEqual({ gt: `e${SWEEP_PAGE - 1}` });
+      expect(prisma.dataExport.findMany).toHaveBeenCalledTimes(2);
+      expect(purged).toBe(SWEEP_PAGE + 1);
     });
   });
 });

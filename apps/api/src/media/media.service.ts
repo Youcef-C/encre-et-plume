@@ -36,6 +36,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { S3StorageService } from './s3-storage.service';
 import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
+import { SWEEP_PAGE, afterCursor, sweepPaged } from '../maintenance/sweep';
 
 // ponytail: per-user upload rate-limit key, 30 req/hour is generous for real use.
 const RATE_LIMIT_MAX = 30;
@@ -725,21 +726,31 @@ export class MediaService {
     });
   }
 
-  /** Scheduled hourly: delete un-finalized pending media older than 1 hour + best-effort S3 cleanup. */
-  async cleanupOrphans(): Promise<void> {
+  /**
+   * Scheduled hourly (image-processing) and nightly (F-25 maintenance): delete un-finalized pending
+   * media older than 1 hour + best-effort S3 cleanup. Bounded since F-25 — the unbounded findMany
+   * loaded every orphan into memory and held the worker for as long as S3 took.
+   * @returns how many rows were deleted this run.
+   */
+  async cleanupOrphans(): Promise<number> {
     const cutoff = new Date(Date.now() - 60 * 60 * 1000);
-    const stale = await this.prisma.media.findMany({
-      where: { status: 'pending', createdAt: { lt: cutoff } },
-    });
-
-    for (const m of stale) {
-      await this.s3.deleteObject((m as unknown as Record<string, unknown>)['bucketKey'] as string).catch(() => {});
-    }
-
-    if (stale.length > 0) {
-      await this.prisma.media.deleteMany({
-        where: { id: { in: stale.map((m) => (m as unknown as Record<string, unknown>)['id'] as string) } },
-      });
-    }
+    return sweepPaged<{ id: string; bucketKey: string }>(
+      (cursor) =>
+        this.prisma.media.findMany({
+          where: { status: 'pending', createdAt: { lt: cutoff }, ...afterCursor(cursor) },
+          take: SWEEP_PAGE,
+          orderBy: { id: 'asc' },
+        }) as unknown as Promise<{ id: string; bucketKey: string }[]>,
+      async (rows) => {
+        // B12: object first, row second.
+        for (const m of rows) {
+          await this.s3.deleteObject(m.bucketKey).catch(() => {});
+        }
+        const { count } = await this.prisma.media.deleteMany({
+          where: { id: { in: rows.map((m) => m.id) } },
+        });
+        return count;
+      },
+    );
   }
 }

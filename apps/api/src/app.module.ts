@@ -33,6 +33,7 @@ import { SalonModule } from './salon/salon.module';
 import { BlocksModule } from './blocks/blocks.module';
 import { CollectionsModule } from './collections/collections.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 
 @Module({
   // ObservabilityModule first: makes MetricsService/AppLoggerService globally available
@@ -65,6 +66,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
   // BlocksModule (MC-10): self-service /me/blocks; exports BlocksService for enforcement consumers.
   // CollectionsModule (DR-12): /collections* — illustration collections "Collection"; exports CollectionsService to GalleryModule.
   // AnalyticsModule (DR-13): no routes — owns the nightly `analytics` cron that recomputes the trending columns.
-  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule, CollectionsModule, AnalyticsModule],
+  // MaintenanceModule (F-25): no routes — owns the nightly `maintenance` cron that runs the retention sweeps.
+  imports: [ObservabilityModule, PreferencesModule, EmailModule, LegalModule, AuthModule, AccountsModule, ProfilesModule, NotificationsModule, SearchModule, QueueModule, PrivacyModule, OnboardingModule, SecurityModule, HomeModule, RankingModule, CatalogModule, WorksModule, ReaderModule, ReadingHistoryModule, GalleryModule, ListModule, ReactionsModule, SupportModule, PartnersModule, CallsModule, MatchesModule, ProjectsModule, InvitationsModule, ConnectionsModule, MessagingModule, SalonModule, BlocksModule, CollectionsModule, AnalyticsModule, MaintenanceModule],
 })
 export class AppModule {}

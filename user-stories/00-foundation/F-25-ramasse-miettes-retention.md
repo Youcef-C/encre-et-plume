@@ -28,7 +28,13 @@ else that expires is either swept only when an account is erased, or never:
   `apps/api/src`, in the erasure processor. Every notification ever fanned out is still there.
 - **`ScenarioUpdate`** is compacted by each autosave (`scenario-documents.service.ts:186`), so it is
   bounded *while a document is being worked on*. An abandoned editing session leaves its update log
-  behind, superseded by `ScenarioDocument.ydocState` and never read again.
+  behind, and nothing ever collects it.
+  **Do not gate this sweep on the document's `updatedAt`** (round 1 shipped that and it deleted nothing —
+  see the sweep table): `scenario-documents.service.ts:182` is the *only* write that advances
+  `ScenarioDocument.updatedAt`, and it sits in the same `$transaction` as the `deleteMany` that empties
+  the log. So every row that survives was written *after* the last save, and a
+  "document newer than update" test is false for all of them — it protects exactly the garbage this
+  sweep exists to collect.
 - **`cleanupOrphans` itself is unbounded**: `findMany` with no `take`, then one `deleteObject` per row
   in a serial loop. It works today because the backlog is small; the first real backlog loads every
   orphan into memory and holds the worker for as long as S3 takes.
@@ -57,13 +63,18 @@ The blast radius is storage cost and RGPD exposure, not correctness — which is
 | `auth-tokens` | `EmailVerificationToken`, `PasswordResetToken`, `EmailChangeToken` | `expiresAt < now()` |
 | `data-exports` | `DataExport` **and its S3 object** | `expiresAt < now()` |
 | `notifications` | `Notification` where `readAt` is not null | `createdAt < now() - 90d` |
-| `scenario-updates` | `ScenarioUpdate` whose document's `updatedAt` is newer than the update | `createdAt < now() - 30d` |
+| `scenario-updates` | `ScenarioUpdate`, unconditionally | `createdAt < now() - 30d` |
 
 - **`data-exports` is a wiring task, not a new sweep** — `PrivacyService.purgeExpiredExports()` already
   exists and already deletes the archive via `deleteMediaById`. Call it; delete its "not wired to a live
   cron yet" `ponytail:` comment; add the batching below. Do **not** write a second purge — two purges that
   must agree is how the 7-day promise gets broken on one path only.
 - **Unread notifications are never swept.** A 91-day-old unread badge is a product decision, not garbage.
+- **The `scenario-updates` sweep is safe precisely because the model is write-only.** `ScenarioUpdate` is
+  created at `editor.gateway.ts:196` and deleted at `scenario-documents.service.ts:186`; nothing in
+  `apps/api` ever reads the bytes back. A row older than 30 days therefore belongs to an editing session
+  that ended without a save, and no code path can surface it to any user. If a "recover unsaved changes"
+  feature is ever built, *that* is when this cutoff needs revisiting — not before.
 
 ### Batching — the rule for every sweep
 Every sweep is bounded: `take: 1000` per pass, loop until a pass returns fewer, hard cap per run so a
