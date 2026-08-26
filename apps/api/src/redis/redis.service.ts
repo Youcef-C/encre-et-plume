@@ -7,7 +7,17 @@ export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
   constructor() {
-    this.client = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379');
+    this.client = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', {
+      // B-2: without these three, a Redis outage makes commands QUEUE awaiting reconnection
+      // (ioredis defaults `enableOfflineQueue: true`) instead of rejecting — so every fail-open
+      // `.catch()` below is dead code exactly when it is needed, and the request hangs.
+      // Rejecting promptly is what makes fail-open real. This client issues no blocking command
+      // (no BLPOP/BRPOP/subscribe), so a command timeout is safe; BullMQ and the WebSocket
+      // adapter each own a separate connection and are deliberately left untouched.
+      commandTimeout: 200,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
     // Suppress unhandled error events; methods fail-open via try-catch
     this.client.on('error', (err: Error) => {
       if (process.env['NODE_ENV'] !== 'test') this.logger.warn(`Redis: ${err.message}`);
@@ -20,6 +30,31 @@ export class RedisService implements OnModuleDestroy {
 
   async set(key: string, value: string, mode: 'EX', ttl: number): Promise<void> {
     await this.client.set(key, value, mode, ttl).catch(() => {}); // fail-open
+  }
+
+  /**
+   * F-23: `SET key value EX ttl NX` — true when THIS caller created the key. The daily analytics
+   * salt is created exactly once per day across N instances by whoever wins this. Fail-open →
+   * false, and the caller re-reads (a null salt means an anonymous event, never a fixed salt).
+   */
+  async setNx(key: string, value: string, ttl: number): Promise<boolean> {
+    const res = await this.client.set(key, value, 'EX', ttl, 'NX').catch(() => null);
+    return res === 'OK';
+  }
+
+  /** F-23: append to a list, returning its new length. Fail-open → 0 (the event is dropped). */
+  async rpush(key: string, value: string): Promise<number> {
+    return this.client.rpush(key, value).catch(() => 0);
+  }
+
+  /** F-23: pop up to `count` entries off the head. Fail-open → [] (the flush is a no-op). */
+  async lpopCount(key: string, count: number): Promise<string[]> {
+    return this.client.lpop(key, count).catch(() => null).then((v) => v ?? []);
+  }
+
+  /** F-23: bound a list to a window (negative indexes count from the tail). Fail-open. */
+  async ltrim(key: string, start: number, stop: number): Promise<void> {
+    await this.client.ltrim(key, start, stop).catch(() => {});
   }
 
   async incr(key: string): Promise<number> {
@@ -94,6 +129,8 @@ export class RedisService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.quit().catch(() => {});
+    // B-2: with the offline queue disabled, QUIT itself rejects while Redis is down — without the
+    // fallback the socket and its reconnect timer outlive shutdown and hold the process open.
+    await this.client.quit().catch(() => this.client.disconnect());
   }
 }

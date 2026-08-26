@@ -51,6 +51,7 @@ function makePrisma() {
     notification: { findMany: jest.fn().mockResolvedValue([]) },
     media: { findMany: jest.fn().mockResolvedValue([]) },
     supportTicket: { findMany: jest.fn().mockResolvedValue([{ id: 'tkt-1', category: 'general' }]) }, // F-21
+    event: { findMany: jest.fn().mockResolvedValue([{ id: 'ev-1', kind: 'visit', at: new Date('2026-08-25'), path: '/' }]) }, // F-23
   };
 }
 
@@ -120,6 +121,7 @@ describe('DataExportProcessor', () => {
     expect(files).toContain('notifications.json');
     expect(files).toContain('media-manifest.json');
     expect(files).toContain('support-tickets.json'); // F-21
+    expect(files).toContain('events.json'); // F-23 B15
     expect(files).toContain('README.txt');
 
     const tickets = JSON.parse(await zip.files['support-tickets.json']!.async('string')) as unknown[];
@@ -194,5 +196,28 @@ describe('DataExportProcessor', () => {
       where: { id: EXPORT_ID },
       data: { status: 'failed' },
     });
+  });
+
+  // ── F-23 B15 · audience events are personal data once accountId is set ──────
+
+  it('B15 · exports only the caller\'s own Event rows', async () => {
+    await processor.process({ accountId: ACCOUNT_ID, exportId: EXPORT_ID }, {} as never);
+
+    expect(prisma.event.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { accountId: ACCOUNT_ID } }),
+    );
+  });
+
+  it('B15 · events.json lands in the archive and the README lists it', async () => {
+    await processor.process({ accountId: ACCOUNT_ID, exportId: EXPORT_ID }, {} as never);
+
+    const [, buffer] = media.createPrivateArchive.mock.calls[0] as [string, Buffer, string];
+    const zip = await JSZip.loadAsync(buffer);
+
+    const events = JSON.parse(await zip.files['events.json']!.async('string')) as unknown[];
+    expect(events).toHaveLength(1);
+
+    const readme = await zip.files['README.txt']!.async('string');
+    expect(readme).toContain('events.json');
   });
 });

@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { EmailModule } from '../email/email.module';
 import { LegalModule } from '../legal/legal.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { LegalModule } from '../legal/legal.module';
     }),
     EmailModule,
     LegalModule,
+    AnalyticsModule, // F-23: exports AnalyticsService — signup emits its `signup` event through it
   ],
   controllers: [AuthController],
   providers: [

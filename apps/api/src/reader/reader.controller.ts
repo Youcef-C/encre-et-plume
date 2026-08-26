@@ -29,6 +29,11 @@ export class ReaderController {
       const hc = await this.blocks.hiddenContent(req.accountId);
       if (hc?.workSlugs.has(slug)) throw new NotFoundException('Chapitre introuvable');
     }
-    return this.readerService.getPages(slug, Number.parseInt(n, 10), req.accountId);
+    // F-23 B10: ip + user-agent go no further than the visitor-id hash — neither is ever stored.
+    return this.readerService.getPages(slug, Number.parseInt(n, 10), req.accountId, {
+      ip: req.ip,
+      userAgent: req.headers?.['user-agent'],
+      identityDegraded: req.identityDegraded,
+    });
   }
 }

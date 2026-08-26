@@ -35,11 +35,18 @@ export class OptionalSessionGuard implements CanActivate {
     // M3: strict reads — on a Redis outage we cannot confirm the token isn't revoked/pre-reset,
     // so fail closed by treating the request as an anonymous visitor (never throws: this guard
     // must never block a public read, it only decides whether to trust the token as authenticated).
+    //
+    // B-5: "could not resolve" is NOT the same as "is a visitor". A real visitor is unauthenticated
+    // and DR-10 gates them with the client interstitial; a signed-in minor dropped here would be
+    // handed that same clickable interstitial instead of the server-side refusal they are owed.
+    // Mark the request so AgeGateService can refuse rather than assume, and leave the genuine
+    // visitor path (no cookie, bad token) untouched — those really are visitors.
     if (payload.jti) {
       let denied: string | null;
       try {
         denied = await this.redis.getOrThrow(`denylist:${payload.jti}`);
       } catch {
+        req.identityDegraded = true;
         return true;
       }
       if (denied) return true; // revoked session — treat as visitor
@@ -49,6 +56,7 @@ export class OptionalSessionGuard implements CanActivate {
     try {
       epochStr = await this.redis.getOrThrow(`session-epoch-ms:${payload.sub}`);
     } catch {
+      req.identityDegraded = true;
       return true;
     }
     if (epochStr !== null) {

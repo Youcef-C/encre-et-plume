@@ -8,6 +8,8 @@ import { SlugService } from '../slug/slug.service';
 import { EmailVerificationService } from './email-verification.service';
 import { LegalService } from '../legal/legal.service';
 import { RedisService } from '../redis/redis.service';
+import { MetricsService } from '../observability/metrics.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 const MOCK_ACCOUNT = {
   id: 'cuid-1',
@@ -36,6 +38,8 @@ describe('AuthService', () => {
   let emailVerificationService: { issueToken: jest.Mock };
   let legalService: { currentVersion: jest.Mock; needsCguReconsent: jest.Mock };
   let redisService: { set: jest.Mock };
+  let metrics: { incSignup: jest.Mock };
+  let analytics: { track: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -56,6 +60,8 @@ describe('AuthService', () => {
       needsCguReconsent: jest.fn().mockResolvedValue(false),
     };
     redisService = { set: jest.fn().mockResolvedValue(undefined) }; // F-18: rotateOtherSessions
+    metrics = { incSignup: jest.fn() }; // F-9 counter, F-23 B12
+    analytics = { track: jest.fn().mockResolvedValue(undefined) }; // F-23 B11
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,10 +72,60 @@ describe('AuthService', () => {
         { provide: EmailVerificationService, useValue: emailVerificationService },
         { provide: LegalService, useValue: legalService },
         { provide: RedisService, useValue: redisService },
+        { provide: MetricsService, useValue: metrics },
+        { provide: AnalyticsService, useValue: analytics },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
+  });
+
+  describe('signup — F-23 audience events (B11, B12)', () => {
+    const DTO = {
+      displayName: 'Yuki Moreau',
+      email: 'yuki@test.com',
+      password: 'password123',
+      birthdate: '1990-01-01',
+      acceptCgu: true,
+    };
+
+    it('emits ONE signup event attributed to the new account', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+
+      await service.signup(DTO);
+
+      expect(analytics.track).toHaveBeenCalledTimes(1);
+      expect(analytics.track).toHaveBeenCalledWith({ kind: 'signup', accountId: 'cuid-1' });
+    });
+
+    it('increments signups_total exactly once', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+
+      await service.signup(DTO);
+
+      expect(metrics.incSignup).toHaveBeenCalledTimes(1);
+    });
+
+    it('a rejected signup does neither', async () => {
+      prisma.account.findUnique.mockResolvedValue(MOCK_ACCOUNT); // e-mail already taken
+
+      await expect(service.signup(DTO)).rejects.toBeInstanceOf(ConflictException);
+
+      expect(analytics.track).not.toHaveBeenCalled();
+      expect(metrics.incSignup).not.toHaveBeenCalled();
+    });
+
+    it('a failing analytics push does not break the signup', async () => {
+      prisma.account.findUnique.mockResolvedValue(null);
+      prisma.account.create.mockResolvedValue(MOCK_ACCOUNT);
+      analytics.track.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      await expect(service.signup(DTO)).resolves.toMatchObject({
+        account: expect.objectContaining({ id: 'cuid-1' }),
+      });
+    });
   });
 
   describe('signup', () => {

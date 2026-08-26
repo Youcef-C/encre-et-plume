@@ -13,6 +13,7 @@ import { SessionGuard } from '../auth/guards/session.guard';
 import { OptionalSessionGuard } from '../auth/guards/optional-session.guard';
 import { AgeGateService } from '../age-gate/age-gate.service';
 import { BlocksModule } from '../blocks/blocks.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 /** DR-4 reader "Lecteur": public chapter pages route + authenticated /me/favorites, /me/reading-progress. */
 @Module({
@@ -22,6 +23,7 @@ import { BlocksModule } from '../blocks/blocks.module';
       signOptions: { expiresIn: '7d' },
     }),
     BlocksModule, // MC-10: hiddenContent for blocked-pair chapter hiding
+    AnalyticsModule, // F-23: exports AnalyticsService — the reader emits `read` through it
   ],
   controllers: [ReaderController, FavoritesController, ReadingProgressController],
   providers: [

@@ -32,7 +32,7 @@ Règlement (UE) 2016/679 (RGPD) et loi n° 78-17 du 6 janvier 1978 modifiée.
 | 11 | **Assistance et réclamations** | Exécution du contrat et intérêt légitime (art. 6.1.f) : traiter les demandes | Objet, contenu du message, coordonnées, échanges | [DUREE_CONSERVATION_SUPPORT] |
 | 12 | **Preuve de l'acceptation des conditions** | Obligation légale (art. 6.1.c) et intérêt légitime | Version acceptée, date, identifiant du compte | [DUREE_PREUVE_ACCEPTATION] |
 | 13 | **Export et suppression des données à la demande** | Obligation légale (art. 6.1.c — art. 15, 17 et 20 RGPD) | Archive générée, date, statut, lien de téléchargement | Archive supprimée après [DUREE_ARCHIVE_EXPORT] |
-| 14 | **Mesure d'audience** | [À CHOISIR : intérêt légitime si la mesure est strictement limitée au sens de la recommandation CNIL, à défaut consentement (art. 6.1.a)] | Pages consultées, données agrégées, identifiant technique | [DUREE_MESURE_AUDIENCE], maximum 25 mois |
+| 14 | **Mesure d'audience** | Intérêt légitime (art. 6.1.f) : mesure d'audience strictement limitée au sens de la recommandation CNIL — voir l'article 9 bis | Pages consultées (chemin seul, jamais les paramètres d'URL), domaine du site référent, identifiant technique quotidien non persistant, données agrégées | Évènements bruts : 90 jours ; statistiques agrégées : 25 mois |
 
 > **À vérifier avant publication.** Chaque durée ci-dessus est une décision de l'exploitant, pas une valeur légale. Une politique qui indique « durée nécessaire » sans chiffre est le manquement le plus fréquemment relevé par la CNIL.
 
@@ -100,9 +100,44 @@ L'effacement peut être refusé ou différé lorsque la conservation est nécess
 
 ## Article 9 — Cookies et traceurs
 
-Voir la [Politique cookies](./politique-cookies.md).
+Voir la [Politique cookies](./politique-cookies.md). **La mesure d'audience du Service ne dépose aucun traceur** et n'est donc pas soumise au consentement : voir l'article 9 bis.
 
 > **À produire séparément** si le Service dépose des traceurs non strictement nécessaires. Points obligatoires : consentement préalable, bouton « Tout refuser » au même niveau que « Tout accepter », durée de vie des traceurs limitée à 13 mois, conservation des données de mesure limitée à 25 mois, tableau listant chaque traceur (nom, finalité, émetteur, durée).
+
+## Article 9 bis — Mesure d'audience sans cookie
+
+La mesure d'audience du Service **n'utilise aucun cookie, aucun stockage local et aucun outil tiers**.
+Aucune information n'est lue ni écrite dans le terminal de l'Utilisateur à cette fin : l'article 82 de la
+loi n° 78-17 n'est donc pas applicable et aucun consentement n'est requis à ce titre. Le traitement repose
+sur l'intérêt légitime de l'Éditeur (article 6.1.f du RGPD) à connaître la fréquentation de son service, et
+il est **strictement limité** au sens de la recommandation de la CNIL relative à la mesure d'audience.
+
+**Identifiant technique quotidien.** Pour distinguer deux visites sans suivre une personne, le Service
+calcule un identifiant à partir d'une empreinte cryptographique (SHA-256) combinant l'adresse IP, l'agent
+utilisateur et un **sel aléatoire renouvelé chaque jour**. **L'adresse IP n'est jamais conservée** : seule
+l'empreinte l'est. Le sel n'est stocké nulle part de façon durable et expire au bout de 24 heures ; à
+minuit, l'identifiant de la veille devient définitivement irréconstituable. Il en résulte que :
+
+- les visiteurs uniques ne sont comptés **que par jour**, jamais sur plusieurs jours ;
+- le **taux de conversion** affiché est un rapport entre deux totaux quotidiens (inscriptions ÷ visiteurs
+  uniques du jour), **et non le suivi d'une personne** de sa visite à son inscription ;
+- aucun profil comportemental individuel n'est constitué.
+
+**Données traitées.** Type d'évènement (visite, lecture, inscription, publication), horodatage, chemin de
+la page (jamais la chaîne de requête), **domaine** du site référent (jamais l'URL complète), identifiant
+technique du jour et, lorsque l'Utilisateur est connecté, l'identifiant de son Compte.
+
+**Conservation.** Les évènements bruts sont supprimés automatiquement au bout de **90 jours**. Seules les
+statistiques agrégées quotidiennes sont conservées, au maximum **25 mois**.
+
+**Droits.** Les évènements associés à un Compte figurent dans l'export prévu à l'article 7. En cas
+d'effacement du Compte, ils sont **anonymisés** (l'identifiant de Compte est effacé) et non supprimés, afin
+que les statistiques agrégées déjà publiées restent exactes ; l'Utilisateur n'y est alors plus
+identifiable.
+
+**Aucune publicité.** Ces données ne sont ni partagées, ni revendues, ni utilisées à des fins
+publicitaires, ce qui est également imposé par l'article 28 du règlement (UE) 2022/2065 s'agissant des
+mineurs, le Service étant accessible à partir de 15 ans.
 
 ## Article 10 — Modification
 

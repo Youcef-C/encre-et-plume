@@ -164,6 +164,7 @@ model Account {
   assetVersions              AssetVersion[]            @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
   scenarioComments           ScenarioComment[]         @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
   corrections                Correction[]              @relation("CorrectionAuthor") // CS-5: review corrections this account filed
+  events                     Event[] // F-23: audience events attributed to this account (anonymised on erasure)
 
   // Seed-coherence pass: catalog search-by-author-name matches WorkCreator -> Account.displayName.
   @@index([displayName])
@@ -1307,4 +1308,41 @@ model Correction {
   // all make Postgres look up child rows when a parent is deleted — unindexed that is a
   // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
   @@index([authorId])
+}
+
+// ── F-23 Audience measurement (cookieless, consent-exempt) ────────────────────
+
+/// Append-only behavioural event, pruned past 90 days (F-25 sweep `events`).
+/// Deliberately NOT merged with AD-10's ActionLog: the audit log is per-actor, identified and
+/// long-retained; folding audience data into that retention would break the CNIL exemption.
+model Event {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  at         DateTime @default(now()) // stamped by the SERVER at ingest, never by the client (D-5)
+  kind       String // 'visit' | 'read' | 'signup' | 'publish'
+  visitorId  String?  @db.Uuid // rotating daily hash of (salt‖ip‖ua) — NEVER the IP itself
+  accountId  String?  @db.Uuid // set only when signed in → F-14 export + erasure anonymises it
+  account    Account? @relation(fields: [accountId], references: [id])
+  targetType String? // 'work' | 'chapter' | 'illustration' | …
+  targetId   String?  @db.Uuid
+  path       String? // pathname ONLY — never the query string
+  ref        String? // referrer HOST only
+
+  // ponytail: no `props Json` column. A JSON grab-bag is how event tables become unqueryable;
+  // add a fixed column the day a question needs one.
+  @@index([at])
+  @@index([kind, at])
+  @@index([targetType, targetId, at])
+  @@index([accountId]) // every FK gets its own index — erasure's updateMany hits exactly this
+}
+
+/// Nightly rollup kept 25 months (the privacy policy's cap). `dim = ''` is the platform total;
+/// otherwise a workId, genre or referrer host. Rates are NEVER stored — AD-7 / PE-5 divide two
+/// series at read time, so a stored rate can never go stale against its own numerator.
+model DailyStat {
+  day    DateTime @db.Date
+  metric String
+  dim    String   @default("")
+  value  Int
+
+  @@id([day, metric, dim])
 }

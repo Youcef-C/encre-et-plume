@@ -42,3 +42,4 @@ export * from './connections.js';
 export * from './messaging.js';
 export * from './salon.js';
 export * from './blocks.js';
+export * from './analytics.js';

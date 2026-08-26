@@ -64,6 +64,7 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
     // ✓ PasswordResetToken (accountId) — deleteMany
     // ✓ NotificationPreference (accountId, required) — deleteMany (F-15)
     // ✓ SupportTicket (accountId, nullable) — deleteMany (F-21)
+    // ✓ Event (accountId, nullable) — updateMany accountId=null (anonymize) (F-23)
     // ✓ ConsentRecord (accountId) — KEPT (legal proof)
     // ✓ Account — TOMBSTONE (keep row so ConsentRecord FK is valid; free email+slug for re-signup)
 
@@ -95,6 +96,11 @@ export class AccountErasureProcessor implements JobProcessor<AccountErasureJob> 
 
       // 6b. SupportTicket (F-21) — delete outright; no staff inbox yet to lose history from
       await p.supportTicket.deleteMany({ where: { accountId } });
+
+      // 6c. Event (F-23 B16) — ANONYMISE, never delete. The rows are aggregate audience data;
+      // deleting them would silently rewrite past visit/read/signup totals, and the person is
+      // already unidentifiable once accountId is null (the daily salt killed the visitorId link).
+      await p.event.updateMany({ where: { accountId }, data: { accountId: null } });
 
       // 7. Tokens
       await p.emailVerificationToken.deleteMany({ where: { accountId } });

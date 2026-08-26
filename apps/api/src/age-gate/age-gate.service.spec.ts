@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { AgeGateService } from './age-gate.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -63,5 +63,22 @@ describe('AgeGateService.assertMayView18Plus (DR-10 BE-5 — authz matrix)', () 
     prisma.account.findUnique.mockResolvedValue({ birthdate: minorBirthdate, role: 'editor' });
 
     await expect(service.assertMayView18Plus('acc-1')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  // B-5 — a Redis blip used to downgrade a signed-in minor to a visitor, and visitors are gated
+  // only by DR-10's clickable client interstitial. "Could not resolve" must refuse, not assume.
+  describe('degraded identity (B-5)', () => {
+    it('refuses with 503 when identity could not be resolved, even with no accountId', async () => {
+      await expect(service.assertMayView18Plus(undefined, true)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      // and it must not have needed the DB to decide that
+      expect(prisma.account.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('still lets a genuine visitor through — the flag is the only difference', async () => {
+      await expect(service.assertMayView18Plus(undefined, false)).resolves.toBeUndefined();
+      await expect(service.assertMayView18Plus(undefined)).resolves.toBeUndefined();
+    });
   });
 });

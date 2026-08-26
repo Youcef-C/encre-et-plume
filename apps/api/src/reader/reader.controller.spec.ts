@@ -54,7 +54,8 @@ describe('ReaderController', () => {
   it('GET /works/:slug/chapters/:n/pages delegates with a parsed chapter number and req.accountId', async () => {
     const req = { accountId: 'acc-1' } as AuthRequest;
     const result = await controller.getPages('lames-de-brume', '4', req);
-    expect(service.getPages).toHaveBeenCalledWith('lames-de-brume', 4, 'acc-1');
+    // F-23: the client hint (ip + user-agent) rides along for the visitor-id hash; neither is stored.
+    expect(service.getPages).toHaveBeenCalledWith('lames-de-brume', 4, 'acc-1', expect.any(Object));
     expect(result).toEqual({
       workSlug: 'lames-de-brume',
       chapterNumber: 1,
@@ -68,7 +69,7 @@ describe('ReaderController', () => {
   it('passes undefined accountId for a visitor', async () => {
     const req = {} as AuthRequest;
     await controller.getPages('lames-de-brume', '1', req);
-    expect(service.getPages).toHaveBeenCalledWith('lames-de-brume', 1, undefined);
+    expect(service.getPages).toHaveBeenCalledWith('lames-de-brume', 1, undefined, expect.any(Object));
   });
 
   it('propagates errors thrown by the service (e.g. 404 unknown chapter)', async () => {

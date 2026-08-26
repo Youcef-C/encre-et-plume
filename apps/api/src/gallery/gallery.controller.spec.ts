@@ -130,7 +130,7 @@ describe('GalleryController', () => {
 
       await controller.preview('i1', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1', undefined);
     });
 
     it('calls the age gate with undefined accountId for a visitor', async () => {
@@ -139,7 +139,7 @@ describe('GalleryController', () => {
 
       await controller.preview('i1', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined);
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined, undefined);
     });
 
     it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {
@@ -191,7 +191,7 @@ describe('GalleryController', () => {
 
       await controller.illustration('i1', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1', undefined);
     });
 
     it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {

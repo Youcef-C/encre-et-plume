@@ -28,7 +28,7 @@ export class WorksController {
     if (!work) throw new NotFoundException('Œuvre introuvable');
     // Gate check runs AFTER the (Redis-cached, viewer-agnostic) read — per-viewer state is never cached.
     if (isWork18Plus(work.audienceRating)) {
-      await this.ageGate.assertMayView18Plus(req.accountId);
+      await this.ageGate.assertMayView18Plus(req.accountId, req.identityDegraded);
     }
     // MC-10: per-viewer mute/block filtering of the review list — same "never cache per-viewer state"
     // pattern as the age gate. Spread-copy so the shared cached object is never mutated. Rating
@@ -75,7 +75,7 @@ export class WorksController {
     if (!result) throw new NotFoundException('Œuvre introuvable');
     const audienceRating = await this.worksService.getAudienceRating(slug);
     if (audienceRating && isWork18Plus(audienceRating)) {
-      await this.ageGate.assertMayView18Plus(req.accountId);
+      await this.ageGate.assertMayView18Plus(req.accountId, req.identityDegraded);
     }
     return result;
   }

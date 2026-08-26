@@ -236,7 +236,7 @@ test('FE-3: "Tout refuser" hides banner and persists across page reload', async 
   ).not.toBeVisible({ timeout: 4_000 });
 });
 
-test('FE-3: "Personnaliser" reveals three category toggles; "Enregistrer mes choix" closes banner', async ({
+test('FE-3: "Personnaliser" reveals the consent-gated toggles; "Enregistrer mes choix" closes banner', async ({
   page,
 }) => {
   await clearConsentOnce(page);
@@ -247,11 +247,12 @@ test('FE-3: "Personnaliser" reveals three category toggles; "Enregistrer mes cho
 
   await page.getByRole('button', { name: /personnaliser/i }).click();
 
-  // Essentiels always-on (disabled checkbox), audience + tiers toggleable
+  // Essentiels always-on (disabled checkbox), tiers toggleable. F-23 (B-3): no audience
+  // checkbox — cookieless measurement is exempt from consent, so a toggle would control nothing.
   await expect(page.getByLabel(/essentiels/i)).toBeDisabled();
   await expect(page.getByLabel(/essentiels/i)).toBeChecked();
-  await expect(page.getByLabel(/mesure d'audience/i)).toBeVisible();
   await expect(page.getByLabel(/contenus tiers/i)).toBeVisible();
+  await expect(page.getByLabel(/mesure d'audience/i)).toHaveCount(0);
 
   await page.getByRole('button', { name: /enregistrer mes choix/i }).click();
   await expect(

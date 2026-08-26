@@ -44,7 +44,15 @@ export class QueueService implements OnModuleDestroy {
     const url = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
     this.prefix = process.env['BULLMQ_PREFIX'] ?? '{bull}';
     this.bullmqOpts = parseBullmqOpts(url);
-    this.redis = new Redis(url);
+    // B-4: the idempotency client is NOT BullMQ's connection (that one is built from
+    // `parseBullmqOpts` above and MUST keep `maxRetriesPerRequest: null`). Left unconfigured, this
+    // one queued commands during an outage instead of rejecting — which is how a Redis outage
+    // crashed the worker via `isProcessed()` and hung signup via the verification-email enqueue.
+    this.redis = new Redis(url, {
+      commandTimeout: 200,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
     this.redis.on('error', () => {}); // fail-open; suppress unhandled error event
   }
 
@@ -69,13 +77,20 @@ export class QueueService implements OnModuleDestroy {
 
   // ── Redis-backed idempotency (no DB — Postgres ProcessedEvent table is the MR seam) ─────────
 
+  /**
+   * B-4: fail SAFE, not open-ended. An unreachable Redis means "we cannot prove this job already
+   * ran", and the safe answer is to run it — BullMQ's own retry semantics and each processor's
+   * idempotent writes absorb a duplicate. Letting this reject instead took the whole worker process
+   * down, which is strictly worse than one job running twice.
+   */
   async isProcessed(key: string): Promise<boolean> {
-    const val = await this.redis.get(`idempotency:${key}`);
+    const val = await this.redis.get(`idempotency:${key}`).catch(() => null);
     return val !== null;
   }
 
+  /** Same reasoning: a lost mark costs a possible re-run, an unhandled rejection costs the worker. */
   async markProcessed(key: string): Promise<void> {
-    await this.redis.set(`idempotency:${key}`, '1', 'EX', IDEMPOTENCY_TTL_S);
+    await this.redis.set(`idempotency:${key}`, '1', 'EX', IDEMPOTENCY_TTL_S).catch(() => {});
   }
 
   // ── Queue introspection (health endpoint + integration tests) ───────────────
@@ -102,6 +117,8 @@ export class QueueService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await Promise.all([...this.queues.values()].map((q) => q.close()));
-    await this.redis.quit().catch(() => {});
+    // B-4: same as RedisService — with the offline queue disabled QUIT rejects while Redis is down,
+    // and without the disconnect() fallback the socket + reconnect timer hold the process open.
+    await this.redis.quit().catch(() => this.redis.disconnect());
   }
 }

@@ -55,13 +55,21 @@ describe('CookieBanner', () => {
     expect(acceptBtn.className).toBe(refuseBtn.className);
   });
 
-  it('"Personnaliser" reveals three category toggles', async () => {
+  it('"Personnaliser" reveals the two consent-gated categories', async () => {
     const user = userEvent.setup();
     renderBanner();
     await user.click(screen.getByRole('button', { name: /personnaliser/i }));
     expect(screen.getByLabelText(/essentiels/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/mesure d'audience/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/contenus tiers/i)).toBeInTheDocument();
+  });
+
+  // F-23 · B-3: audience measurement is cookieless and exempt from consent — a checkbox for it
+  // controlled nothing and implied the opposite.
+  it('offers no "Mesure d\'audience" checkbox', async () => {
+    const user = userEvent.setup();
+    renderBanner();
+    await user.click(screen.getByRole('button', { name: /personnaliser/i }));
+    expect(screen.queryByLabelText(/mesure d'audience/i)).not.toBeInTheDocument();
   });
 
   it('essentiels toggle is disabled and always checked', async () => {
@@ -77,11 +85,11 @@ describe('CookieBanner', () => {
     const user = userEvent.setup();
     renderBanner();
     await user.click(screen.getByRole('button', { name: /personnaliser/i }));
-    // Toggle mesure d'audience on (starts off)
-    await user.click(screen.getByLabelText(/mesure d'audience/i));
+    // Toggle contenus tiers on (starts off)
+    await user.click(screen.getByLabelText(/contenus tiers/i));
     await user.click(screen.getByRole('button', { name: /enregistrer mes choix/i }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(stored).toMatchObject({ version: 1, audience: true, thirdParty: false });
+    expect(stored).toMatchObject({ version: 1, thirdParty: true });
   });
 });

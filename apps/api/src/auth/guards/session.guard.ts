@@ -19,6 +19,13 @@ export type AuthRequest = Request & {
   accountId: string;
   jti?: string;
   tokenExp?: number;
+  /**
+   * B-5: set by OptionalSessionGuard when it could NOT resolve the caller's identity because Redis
+   * was unavailable — as opposed to the caller genuinely being a visitor. The two are indistinguishable
+   * downstream (`accountId` is undefined either way), and AgeGateService lets visitors through by
+   * design, so without this flag a Redis blip silently downgrades a signed-in minor to a visitor.
+   */
+  identityDegraded?: boolean;
 };
 
 // Module-scoped, NOT an instance field: several feature modules re-provide SessionGuard

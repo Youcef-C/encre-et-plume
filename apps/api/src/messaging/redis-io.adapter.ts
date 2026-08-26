@@ -16,7 +16,13 @@ export class RedisIoAdapter extends IoAdapter {
 
   async connectToRedis(): Promise<void> {
     const url = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
-    this.pubClient = new Redis(url);
+    // B-4: bound the offline queue so an outage cannot accumulate pub/sub commands in memory.
+    // NO `commandTimeout` here, deliberately: `subscribe` is a long-lived blocking command and a
+    // command timeout would tear down an idle subscriber socket. Unlike RedisService and the queue
+    // client, nothing in a request path awaits these — socket.io emits are fire-and-forget — so the
+    // failure mode to guard is unbounded buffering, not a hung request.
+    const opts = { enableOfflineQueue: false, maxRetriesPerRequest: null } as const;
+    this.pubClient = new Redis(url, opts);
     this.subClient = this.pubClient.duplicate();
     // Fail-open on transient Redis errors — surfaced by the F-9 readiness probe, not by crashing here.
     this.pubClient.on('error', () => {});
@@ -32,7 +38,7 @@ export class RedisIoAdapter extends IoAdapter {
 
   /** Quit both Redis clients so Jest/e2e teardown stays clean (no dangling connections). */
   async close(): Promise<void> {
-    await this.pubClient?.quit().catch(() => {});
-    await this.subClient?.quit().catch(() => {});
+    await this.pubClient?.quit().catch(() => this.pubClient?.disconnect());
+    await this.subClient?.quit().catch(() => this.subClient?.disconnect());
   }
 }

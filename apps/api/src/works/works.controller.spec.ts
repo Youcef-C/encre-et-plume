@@ -82,7 +82,7 @@ describe('WorksController', () => {
 
       await controller.getWork('x', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1', undefined);
     });
 
     it('calls the age gate with undefined accountId for a visitor on an 18+ work', async () => {
@@ -91,7 +91,19 @@ describe('WorksController', () => {
 
       await controller.getWork('x', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined);
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined, undefined);
+    });
+
+    // B-5: the guard marks a request whose identity Redis could not resolve. If the controller
+    // dropped that flag, the age gate would see a plain visitor and wave an unverifiable caller
+    // through — the exact bypass this wiring exists to close.
+    it('forwards identityDegraded so the gate can refuse an unresolvable caller', async () => {
+      service.getWork.mockResolvedValue({ id: 'w1', slug: 'x', audienceRating: '18+' });
+      const req = { identityDegraded: true } as AuthRequest;
+
+      await controller.getWork('x', req);
+
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined, true);
     });
 
     it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {
@@ -254,7 +266,7 @@ describe('WorksController', () => {
 
       await controller.getPlanches('x', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1');
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith('acc-1', undefined);
     });
 
     it('calls the age gate with undefined accountId for a visitor on an 18+ work', async () => {
@@ -264,7 +276,7 @@ describe('WorksController', () => {
 
       await controller.getPlanches('x', req);
 
-      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined);
+      expect(ageGate.assertMayView18Plus).toHaveBeenCalledWith(undefined, undefined);
     });
 
     it('propagates the 403 thrown by the age gate (logged-in minor)', async () => {

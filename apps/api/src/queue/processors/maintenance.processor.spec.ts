@@ -19,6 +19,7 @@ function makePrisma() {
     emailChangeToken: tokenModel(),
     notification: tokenModel(),
     scenarioUpdate: tokenModel(),
+    event: tokenModel(), // F-23 B14
   };
 }
 
@@ -161,5 +162,45 @@ describe('MaintenanceProcessor (F-25)', () => {
 
   it('B3 · every sweep succeeding resolves', async () => {
     await expect(processor.process({}, {} as Job)).resolves.toBeUndefined();
+  });
+
+  // ── F-23 B14 · events (90-day rolling window) ───────────────────────────────
+
+  it('B14 · deletes Event rows past 90 days on the `at` index', async () => {
+    prisma.event.findMany.mockResolvedValueOnce(rows(3));
+    prisma.event.deleteMany.mockResolvedValueOnce({ count: 3 });
+
+    await processor.process({}, {} as Job);
+
+    const arg = prisma.event.findMany.mock.calls[0][0] as {
+      where: { at: { lt: Date } };
+      take: number;
+      orderBy: { id: string };
+    };
+    expect(arg.take).toBe(SWEEP_PAGE);
+    expect(arg.orderBy).toEqual({ id: 'asc' });
+    const cutoff = arg.where.at.lt;
+    expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(90 * DAY - 5000);
+    expect(Date.now() - cutoff.getTime()).toBeLessThanOrEqual(90 * DAY + 5000);
+    expect(prisma.event.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['id-0', 'id-1', 'id-2'] } },
+    });
+  });
+
+  it('B14 · keeps an 89-day-old row', async () => {
+    await processor.process({}, {} as Job);
+
+    const cutoff = (prisma.event.findMany.mock.calls[0][0] as { where: { at: { lt: Date } } }).where.at.lt;
+    const eightyNineDaysOld = new Date(Date.now() - 89 * DAY);
+    expect(eightyNineDaysOld.getTime()).toBeGreaterThan(cutoff.getTime());
+  });
+
+  it('B14 · the events sweep is bounded by SWEEP_RUN_CAP like every other sweep', async () => {
+    prisma.event.findMany.mockImplementation(async () => rows(SWEEP_PAGE));
+    prisma.event.deleteMany.mockResolvedValue({ count: SWEEP_PAGE });
+
+    await processor.process({}, {} as Job);
+
+    expect(prisma.event.findMany.mock.calls.length).toBe(SWEEP_RUN_CAP / SWEEP_PAGE);
   });
 });

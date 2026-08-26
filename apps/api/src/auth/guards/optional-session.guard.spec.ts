@@ -79,6 +79,7 @@ describe('OptionalSessionGuard (DR-10 BE-4)', () => {
 
       expect(result).toBe(true); // never blocks a public read
       expect(req['accountId']).toBeUndefined(); // but must not trust an unverifiable token
+      expect(req['identityDegraded']).toBe(true); // B-5: unresolvable, NOT a visitor
     });
 
     it('never authenticates (leaves accountId unset) when the session-epoch check errors', async () => {
@@ -92,6 +93,24 @@ describe('OptionalSessionGuard (DR-10 BE-4)', () => {
 
       expect(result).toBe(true);
       expect(req['accountId']).toBeUndefined();
+      expect(req['identityDegraded']).toBe(true); // B-5
+    });
+
+    // B-5: the flag must mark ONLY the unresolvable case. If a genuine visitor were marked, every
+    // anonymous read of 18+ content would 503 and DR-10's interstitial path would be dead.
+    it('does NOT mark a genuine visitor as degraded (no cookie)', async () => {
+      const { context, req } = makeContext();
+      await guard.canActivate(context);
+      expect(req['identityDegraded']).toBeUndefined();
+    });
+
+    it('does NOT mark a bad token as degraded — that caller really is a visitor', async () => {
+      jwtService.verify.mockImplementation(() => {
+        throw new Error('invalid signature');
+      });
+      const { context, req } = makeContext('bad-jwt');
+      await guard.canActivate(context);
+      expect(req['identityDegraded']).toBeUndefined();
     });
   });
 });

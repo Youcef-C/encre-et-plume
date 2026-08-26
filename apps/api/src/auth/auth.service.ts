@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SlugService } from '../slug/slug.service';
 import { MetricsService } from '../observability/metrics.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailService } from '../email/email.service';
 import { LegalService } from '../legal/legal.service';
@@ -81,6 +82,7 @@ export class AuthService {
     private readonly legal: LegalService,
     private readonly redisService: RedisService,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly analytics?: AnalyticsService,
     @Optional() private readonly emailService?: EmailService,
   ) {}
 
@@ -138,7 +140,15 @@ export class AuthService {
       }
     }
 
-    this.metrics?.incSignup(); // F-9: business counter
+    this.metrics?.incSignup(); // F-9 + F-23 B12: business counter
+
+    // F-23 B11: the `signup` half of AD-7's conversion. A rate, NOT a cohort — the visitor who
+    // browsed is never followed to this row (the daily salt makes that impossible by design), so
+    // whatever displays it must label it `signups ÷ daily uniques`.
+    // Best-effort: a measurement must never cost a signup.
+    await this.analytics
+      ?.track({ kind: 'signup', accountId: account.id })
+      .catch((err: unknown) => this.logger.warn(`signup event failed: ${(err as Error).message}`));
 
     // F-11: issue verification token — best-effort; failure must not break signup
     await this.emailVerification

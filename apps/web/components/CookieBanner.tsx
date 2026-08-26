@@ -12,14 +12,15 @@ import OnBrandCheckbox from './form/OnBrandCheckbox';
 export default function CookieBanner() {
   const { isOpen, save } = useCookieConsent();
   const [showPanel, setShowPanel] = useState(false);
-  const [audience, setAudience] = useState(false);
   const [thirdParty, setThirdParty] = useState(false);
 
   if (!isOpen) return null;
 
+  // F-23 (B-3): audience measurement is cookieless and exempt from consent — it gets no checkbox
+  // here. `consent.audience` is still written so the seam survives for a future real tracker.
   const acceptAll = () => save({ audience: true, thirdParty: true });
   const refuseAll = () => save({ audience: false, thirdParty: false });
-  const saveCustom = () => save({ audience, thirdParty });
+  const saveCustom = () => save({ audience: false, thirdParty });
 
   return (
     <div
@@ -85,13 +86,6 @@ export default function CookieBanner() {
                   </span>
                 </>
               }
-            />
-
-            {/* Mesure d'audience */}
-            <OnBrandCheckbox
-              checked={audience}
-              onChange={(e) => setAudience(e.target.checked)}
-              label="Mesure d'audience"
             />
 
             {/* Contenus tiers */}

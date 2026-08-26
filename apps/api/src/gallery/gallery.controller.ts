@@ -74,7 +74,7 @@ export class GalleryController {
     await this.assertNotBlocked(id, req.accountId); // B13: uniform neutral 404 for a blocked pair
     const preview = await this.galleryService.getPreview(id);
     if (preview.is18plus) {
-      await this.ageGate.assertMayView18Plus(req.accountId);
+      await this.ageGate.assertMayView18Plus(req.accountId, req.identityDegraded);
     }
     return preview;
   }
@@ -91,7 +91,7 @@ export class GalleryController {
     const detail = await this.galleryService.getIllustration(id, req.accountId);
     if (!detail) throw new NotFoundException('Illustration introuvable');
     if (detail.is18plus) {
-      await this.ageGate.assertMayView18Plus(req.accountId);
+      await this.ageGate.assertMayView18Plus(req.accountId, req.identityDegraded);
     }
     return detail;
   }

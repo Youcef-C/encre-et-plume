@@ -51,6 +51,7 @@ function makePrisma() {
     emailVerificationToken: makeTxModel('emailVerificationToken'),
     passwordResetToken: makeTxModel('passwordResetToken'),
     account: makeTxModel('account'),
+    event: makeTxModel('event'), // F-23
   };
 
   return {
@@ -269,5 +270,28 @@ describe('AccountErasureProcessor', () => {
     const profIdx = prisma._txCalls.findIndex((c) => c.model === 'profile' && c.op === 'deleteMany');
 
     expect(piIdx).toBeLessThan(profIdx);
+  });
+
+  // ── F-23 B16 · audience events are ANONYMISED, never deleted ────────────────
+
+  it('CHECKLIST: Event.accountId nulled (anonymize) — aggregates must stay correct', async () => {
+    await processor.process({ accountId: ACCOUNT_ID }, {} as never);
+
+    expect(prisma._tx.event.updateMany).toHaveBeenCalledWith({
+      where: { accountId: ACCOUNT_ID },
+      data: { accountId: null },
+    });
+  });
+
+  it('B16 · never deletes the erased account\'s events', async () => {
+    await processor.process({ accountId: ACCOUNT_ID }, {} as never);
+
+    expect(prisma._tx.event.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('B16 · the anonymisation runs INSIDE the erasure transaction', async () => {
+    await processor.process({ accountId: ACCOUNT_ID }, {} as never);
+
+    expect(prisma._txCalls.some((c) => c.model === 'event' && c.op === 'updateMany')).toBe(true);
   });
 });

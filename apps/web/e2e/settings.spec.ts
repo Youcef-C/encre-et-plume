@@ -182,9 +182,15 @@ test('F19-E2E-3: Cookies section shows consent summary and "Gérer les cookies" 
   // Essentiels always-on copy
   await expect(cookiesSection.getByText(/toujours actifs/i)).toBeVisible();
 
-  // Summary reflects the saved choice (audience: false, thirdParty: false → both "Désactivés")
+  // F-23 (B-3): audience measurement is cookieless and always on — a statement, not a toggle state
   const audienceRow = cookiesSection.getByText(/mesure d'audience/i).locator('..');
-  await expect(audienceRow).toContainText(/désactivés/i);
+  await expect(audienceRow).toContainText(/sans cookie, toujours active/i);
+  await expect(audienceRow).not.toContainText(/désactivés/i);
+  await expect(
+    cookiesSection.getByRole('link', { name: /article 9 bis/i }),
+  ).toHaveAttribute('href', '/confidentialite');
+
+  // Summary reflects the saved choice (thirdParty: false → "Désactivés")
   const thirdPartyRow = cookiesSection.getByText(/contenus tiers/i).locator('..');
   await expect(thirdPartyRow).toContainText(/désactivés/i);
 
@@ -197,11 +203,12 @@ test('F19-E2E-3: Cookies section shows consent summary and "Gérer les cookies" 
   await expect(banner).toBeVisible({ timeout: 5_000 });
   await expect(banner.getByRole('button', { name: /tout accepter/i })).toBeVisible();
 
-  // Accept all → banner closes, summary now reflects "Activés" for both categories
+  // Accept all → banner closes, the consent-gated category flips to "Activés"; the audience row
+  // is unaffected because it is a fact, not a preference.
   await banner.getByRole('button', { name: /tout accepter/i }).click();
   await expect(banner).not.toBeVisible({ timeout: 5_000 });
-  await expect(audienceRow).toContainText(/activés/i, { timeout: 5_000 });
-  await expect(thirdPartyRow).toContainText(/activés/i);
+  await expect(thirdPartyRow).toContainText(/activés/i, { timeout: 5_000 });
+  await expect(audienceRow).toContainText(/sans cookie, toujours active/i);
 });
 
 // ── F19-E2E-4: Nav anchors scroll to the matching section ──────────────────────

@@ -4,6 +4,7 @@ import type { JobProcessor } from '../job-processor';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PrivacyService } from '../../privacy/privacy.service';
 import { MediaService } from '../../media/media.service';
+import { EVENT_RETENTION_DAYS } from '@encre-et-plume/shared';
 import { SWEEP_PAGE, afterCursor, sweepPaged } from '../../maintenance/sweep';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -12,6 +13,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // without a deploy, that is when they move to config — not before.
 const NOTIF_RETENTION_D = 90;
 const SCENARIO_RETENTION_D = 30;
+// F-23: the Event table's rolling window. Shared with the privacy policy — changing one without
+// the other makes the policy a lie.
+const EVENT_RETENTION_D = EVENT_RETENTION_DAYS;
 
 /** One sweep = a name and something that deletes garbage and says how much. Not a framework. */
 type Sweep = { name: string; run: () => Promise<number> };
@@ -40,6 +44,7 @@ export class MaintenanceProcessor implements JobProcessor<Record<string, never>>
       { name: 'media-orphans', run: () => this.media.cleanupOrphans() },
       { name: 'notifications', run: () => this.sweepNotifications() },
       { name: 'scenario-updates', run: () => this.sweepScenarioUpdates() },
+      { name: 'events', run: () => this.sweepEvents() }, // F-23
     ];
 
     const failed: string[] = [];
@@ -100,6 +105,29 @@ export class MaintenanceProcessor implements JobProcessor<Record<string, never>>
         }),
       async (rows) =>
         (await this.prisma.notification.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } })).count,
+    );
+  }
+
+  /**
+   * F-23 B14 — the 90-day rolling window on `Event`. Append-only and never read per-row after the
+   * nightly rollup has folded a day into `DailyStat`, so past the cutoff a row is pure garbage.
+   *
+   * ponytail: if this prune ever slows, move `Event` to monthly partitions and drop a partition
+   * instead of deleting rows — do NOT pre-partition. The `at` index this scans is the same one the
+   * rollup uses, so the cost is shared until the table is genuinely large.
+   */
+  private async sweepEvents(): Promise<number> {
+    const cutoff = new Date(Date.now() - EVENT_RETENTION_D * DAY_MS);
+    return sweepPaged<{ id: string }>(
+      (cursor) =>
+        this.prisma.event.findMany({
+          where: { at: { lt: cutoff }, ...afterCursor(cursor) },
+          take: SWEEP_PAGE,
+          orderBy: { id: 'asc' },
+          select: { id: true },
+        }),
+      async (rows) =>
+        (await this.prisma.event.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } })).count,
     );
   }
 
