@@ -53,6 +53,10 @@ const CORRECTION = (o: Record<string, unknown> = {}) => ({
   assigneeId: null,
   filedAgainstVersion: 2,
   resolvedInVersion: null,
+  // CS-24 — who pressed « Corrigé » and when the filer acknowledged it.
+  resolvedById: null,
+  resolvedBy: null,
+  verifiedAt: null,
   createdAt: new Date('2026-07-15T10:00:00Z'),
   author: { displayName: 'Moi' },
   asset: { id: 'asset-dessin', currentVersion: 3 },
@@ -197,6 +201,35 @@ describe('CorrectionsService', () => {
       expect(gateway.emitComment).not.toHaveBeenCalled();
     });
 
+    // CS-22 — the scenario correction's backing comment carries the durable relative anchor too, so a
+    // correction highlight survives a reload exactly like a plain comment (AC5). No Correction schema change.
+    it('persists the relative anchor pair on the backing comment and fans it out', async () => {
+      const relFrom = Buffer.from([9, 9, 9]).toString('base64');
+      const relTo = Buffer.from([7, 7, 7]).toString('base64');
+      const dto = { type: 'scenario', anchor: { documentId: 'doc-1', from: 3, to: 10, quote: 'texte', relFrom, relTo }, description: 'Reformuler' } as any;
+      await service.create('acc-me', 'page-1', dto);
+      const data = prisma.scenarioComment.create.mock.calls[0][0].data;
+      expect(data.anchorRelFrom).toBeInstanceOf(Uint8Array);
+      expect(Buffer.from(data.anchorRelFrom).toString('base64')).toBe(relFrom);
+      expect(Buffer.from(data.anchorRelTo).toString('base64')).toBe(relTo);
+      expect(gateway.emitComment).toHaveBeenCalledWith('asset-scenario', expect.objectContaining({ anchorRelFrom: relFrom, anchorRelTo: relTo }));
+    });
+
+    it('a correction without a relative anchor stores nulls (pre-CS-22 client)', async () => {
+      const dto = { type: 'scenario', anchor: { documentId: 'doc-1', from: 3, to: 10, quote: 'texte' }, description: 'Reformuler' } as any;
+      await service.create('acc-me', 'page-1', dto);
+      const data = prisma.scenarioComment.create.mock.calls[0][0].data;
+      expect(data.anchorRelFrom).toBeNull();
+      expect(data.anchorRelTo).toBeNull();
+      expect(gateway.emitComment).toHaveBeenCalledWith('asset-scenario', expect.objectContaining({ anchorRelFrom: null, anchorRelTo: null }));
+    });
+
+    it('400s an over-long relative anchor on a correction (never decoded)', async () => {
+      const dto = { type: 'scenario', anchor: { documentId: 'doc-1', from: 3, to: 10, quote: 'texte', relFrom: Buffer.alloc(513).toString('base64') }, description: 'Reformuler' } as any;
+      await expect(service.create('acc-me', 'page-1', dto)).rejects.toThrow(BadRequestException);
+      expect(prisma.scenarioComment.create).not.toHaveBeenCalled();
+    });
+
     // B12 (Fb-8, BLOCKING) — the server stamps authorId from the authenticated session ONLY. A client
     // that injects an authorId into the body cannot attribute the comment/correction to another account.
     it('B12: ignores a client-supplied authorId — stamps the acting session account on both rows', async () => {
@@ -244,6 +277,57 @@ describe('CorrectionsService', () => {
     it('a non-member is rejected (loadMemberPage throws)', async () => {
       pages.loadMemberPage.mockRejectedValue(new ForbiddenException());
       await expect(service.updateStatus('stranger', 'corr-1', { status: 'corrige' })).rejects.toThrow(ForbiddenException);
+    });
+
+    // ── CS-24 — the verification loop ────────────────────────────────────────
+    it('CS-24: marking corrige stamps resolvedById = the acting account (neither authorId nor assigneeId records it)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await service.updateStatus('acc-yuki', 'corr-1', { status: 'corrige' });
+      expect(prisma.correction.update.mock.calls[0][0].data).toMatchObject({ status: 'corrige', resolvedInVersion: 3, resolvedById: 'acc-yuki' });
+    });
+
+    it('CS-24: reopening to a_corriger clears resolvedInVersion, resolvedById AND verifiedAt', async () => {
+      prisma.correction.findUnique.mockResolvedValue(
+        CORRECTION({ authorId: 'acc-me', status: 'corrige', resolvedInVersion: 3, resolvedById: 'acc-yuki', verifiedAt: new Date('2026-07-16T10:00:00Z') }),
+      );
+      await service.updateStatus('acc-me', 'corr-1', { status: 'a_corriger' });
+      expect(prisma.correction.update.mock.calls[0][0].data).toMatchObject({
+        status: 'a_corriger',
+        resolvedInVersion: null,
+        resolvedById: null,
+        verifiedAt: null,
+      });
+    });
+
+    it('CS-24: the filer is notified with the dedicated copy and refId = the correction id', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await service.updateStatus('acc-yuki', 'corr-1', { status: 'corrige' });
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientId: 'acc-me',
+          type: 'project_activity',
+          refId: 'corr-1',
+          message: 'Votre correction a été marquée corrigée',
+        }),
+      );
+    });
+
+    it('CS-24: self-resolution notifies nobody', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await service.updateStatus('acc-me', 'corr-1', { status: 'corrige' });
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('CS-24: the other transitions keep the generic fan-out (no refId hijack)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await service.updateStatus('acc-yuki', 'corr-1', { status: 'en_cours' });
+      expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ recipientId: 'acc-me', refId: 'proj-1' }));
+    });
+
+    it('CS-24: a failing notification never fails the status change', async () => {
+      notifications.create.mockRejectedValue(new Error('down'));
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await expect(service.updateStatus('acc-yuki', 'corr-1', { status: 'corrige' })).resolves.toMatchObject({ status: 'corrige' });
     });
 
     it('404 on unknown correction', async () => {
@@ -302,6 +386,17 @@ describe('CorrectionsService', () => {
     it('transitions corrections → propre when all corrige', async () => {
       prisma.correction.count.mockResolvedValue(0);
       const res = await service.validate('acc-me', 'page-1');
+      expect(prisma.page.update).toHaveBeenCalledWith({ where: { id: 'page-1' }, data: { stage: 'propre' } });
+      expect(res.stage).toBe('propre');
+    });
+
+    // CS-24 A7 — verification is ADVISORY: a resolved-but-unverified correction must not block the
+    // PROPRE transition. Asserted explicitly so making it blocking is a deliberate change.
+    it('CS-24: still validates with resolved-but-unverified corrections (advisory, not blocking)', async () => {
+      prisma.correction.count.mockResolvedValue(0); // zero UNRESOLVED — verifiedAt plays no part
+      prisma.correction.findMany.mockResolvedValue([CORRECTION({ status: 'corrige', resolvedById: 'acc-yuki', verifiedAt: null })]);
+      const res = await service.validate('acc-me', 'page-1');
+      expect(prisma.correction.count).toHaveBeenCalledWith({ where: { pageId: 'page-1', status: { not: 'corrige' } } });
       expect(prisma.page.update).toHaveBeenCalledWith({ where: { id: 'page-1' }, data: { stage: 'propre' } });
       expect(res.stage).toBe('propre');
     });
@@ -371,6 +466,97 @@ describe('CorrectionsService', () => {
     });
   });
 
+  // ── verify (CS-24) ───────────────────────────────────────────────────────────
+  describe('verify', () => {
+    const resolved = (o: Record<string, unknown> = {}) =>
+      CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki', status: 'corrige', resolvedInVersion: 3, resolvedById: 'acc-yuki', ...o });
+
+    it('the filer sets verifiedAt without touching the status', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved());
+      const res = await service.verify('acc-me', 'corr-1');
+      const data = prisma.correction.update.mock.calls[0][0].data;
+      expect(data.verifiedAt).toBeInstanceOf(Date);
+      expect(data.status).toBeUndefined(); // the status is NOT touched by a verification
+      expect(res.verifiedAt).not.toBeNull();
+    });
+
+    it('is idempotent when already verified (no second write)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved({ verifiedAt: new Date('2026-07-16T10:00:00Z') }));
+      const res = await service.verify('acc-me', 'corr-1');
+      expect(prisma.correction.update).not.toHaveBeenCalled();
+      expect(res.verifiedAt).toBe('2026-07-16T10:00:00.000Z');
+    });
+
+    it('403s anyone but the filer — including the assignee who resolved it', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved());
+      await expect(service.verify('acc-yuki', 'corr-1')).rejects.toThrow(
+        new ForbiddenException("Seul·e l'auteur·rice de la demande peut vérifier"),
+      );
+    });
+
+    it('409s when the correction is not marked corrigé', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved({ status: 'en_cours', resolvedById: null }));
+      await expect(service.verify('acc-me', 'corr-1')).rejects.toThrow(
+        new ConflictException('La correction n\'est pas marquée corrigée'),
+      );
+    });
+
+    it('404s an unknown correction', async () => {
+      prisma.correction.findUnique.mockResolvedValue(null);
+      await expect(service.verify('acc-me', 'nope')).rejects.toThrow(NotFoundException);
+    });
+
+    it('a non-member is rejected (loadMemberPage throws)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved());
+      pages.loadMemberPage.mockRejectedValue(new ForbiddenException());
+      await expect(service.verify('stranger', 'corr-1')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('403s without the « Corrections » permission', async () => {
+      prisma.correction.findUnique.mockResolvedValue(resolved({ authorId: 'acc-yuki' }));
+      pages.loadMemberPage.mockResolvedValue(PAGE({ project: PROJECT_NO_CORRECTIONS() }));
+      await expect(service.verify('acc-yuki', 'corr-1')).rejects.toThrow(
+        new ForbiddenException("Vous n'avez pas la permission « Corrections » sur ce projet."),
+      );
+    });
+  });
+
+  // ── location (CS-24 deep-link resolver) ──────────────────────────────────────
+  describe('location', () => {
+    it('resolves a correction id to its project slug + page id', async () => {
+      prisma.correction.findUnique.mockResolvedValue({ pageId: 'page-1', type: 'dessin', assetId: 'asset-9' });
+      await expect(service.location('acc-me', 'corr-1')).resolves.toEqual({
+        projectSlug: 'lames-de-brume',
+        pageId: 'page-1',
+        type: 'dessin',
+        assetId: null, // a dessin correction is read in the review list; no asset to open
+      });
+    });
+
+    // CS-24 follow-up — the caller needs the SURFACE. A scenario correction is a tagged CS-4 comment
+    // and is read in the editor; the review list is dessin-only (CS-5 r4) and could never show it.
+    it('reports the scenario surface and the asset to open', async () => {
+      prisma.correction.findUnique.mockResolvedValue({ pageId: 'page-1', type: 'scenario', assetId: 'asset-9' });
+      await expect(service.location('acc-me', 'corr-1')).resolves.toEqual({
+        projectSlug: 'lames-de-brume',
+        pageId: 'page-1',
+        type: 'scenario',
+        assetId: 'asset-9',
+      });
+    });
+
+    it('404s an id that is not a correction (a project id from another producer)', async () => {
+      prisma.correction.findUnique.mockResolvedValue(null);
+      await expect(service.location('acc-me', 'proj-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects a non-member (loadMemberPage throws — no existence leak)', async () => {
+      prisma.correction.findUnique.mockResolvedValue({ pageId: 'page-1' });
+      pages.loadMemberPage.mockRejectedValue(new ForbiddenException());
+      await expect(service.location('stranger', 'corr-1')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
   // ── getReview ────────────────────────────────────────────────────────────────
   describe('getReview', () => {
     // B10 (Fb-4): default compare = vN-1 ↔ vN (previous ↔ head), independent of any correction's
@@ -435,6 +621,23 @@ describe('CorrectionsService', () => {
         expect(html).not.toContain('alert(1)');
       }
       expect(from).toContain('<strong>ok</strong>'); // safe formatting survives
+    });
+
+    // CS-24 (D-4) — the before/after crops need the URL of EVERY listed version, not just the selected
+    // pair. Signed from rows already loaded: no extra DB query, no new derivative.
+    it('CS-24: fills versions[].url on the dessin surface without an extra query', async () => {
+      const res = await service.getReview('acc-me', 'page-1', { from: 2, to: 3 });
+      expect(res.selected?.versions.map((v) => v.url)).toEqual(['https://img/signed', 'https://img/signed']);
+      expect(prisma.assetVersion.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('CS-24: leaves versions[].url null on the scenario surface', async () => {
+      prisma.assetPageLink.findMany.mockResolvedValue([
+        { asset: { id: 'asset-scenario', filename: 'scenario.html', type: 'scenario', currentVersion: 3 } },
+      ]);
+      prisma.media.findUnique.mockResolvedValue({ id: 'm', bucketKey: 'k', contentType: 'text/html' });
+      const res = await service.getReview('acc-me', 'page-1', { from: 2, to: 3 });
+      expect(res.selected?.versions.every((v) => v.url === null)).toBe(true);
     });
 
     it('returns selected = null when no reviewable file is linked', async () => {

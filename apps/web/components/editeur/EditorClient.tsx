@@ -30,7 +30,7 @@ import { uploadAssetFile, validateAssetFile } from '../../lib/assetUpload';
 import { EditorCollabProvider, type CollabStatus } from '../../lib/editor-collab';
 import { buildRichTextExtensions } from '../editor/richtext/core';
 import { plancheExtensions, blankPlancheDoc, casePlaceholder } from '../editor/richtext/planche-schema';
-import { commentRangesFrom, commentColor, resolveCommentTexts, quoteChanged } from '../editor/richtext/comment-highlight';
+import { commentRangesFrom, commentColor, resolveCommentTexts, resolveCommentRange, quoteChanged, encodeCommentAnchor } from '../editor/richtext/comment-highlight';
 import RichTextToolbar from '../editor/richtext/RichTextToolbar';
 import PageSwitcher from './PageSwitcher';
 import VersionSheet from './VersionSheet';
@@ -38,7 +38,7 @@ import CompareVersionsModal from './CompareVersionsModal';
 import ConfirmDialog from '../projet/ConfirmDialog';
 import OnBrandSelect from '../form/OnBrandSelect';
 import { NEXT_STATUS } from '../revision/shared';
-import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, SaveIcon, CompareIcon, CheckIcon } from '../icons';
+import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, CompareIcon, CheckIcon } from '../icons';
 
 // CS-5 Fb-2 — a comment row's «Correction» tag colours: accent for open, green for resolved.
 const CORRECTION_TAG_GREEN = '#1f8a5b';
@@ -49,9 +49,10 @@ const colorForId = (id: string): string => {
   return COLLAB_COLORS[h % COLLAB_COLORS.length];
 };
 
-// FR9 (r3) — explicit save model: 'dirty' = there are unsaved edits (no more autosave timer). Save is
-// an explicit action (« Enregistrer » button + Ctrl/Cmd-S); it persists content, never a new version.
-type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+// CS-21 — the idle window before the client compacts. ~5s: long enough that a normal typing burst is
+// one request, short enough that a crashed tab leaves only seconds of update log behind (and the F-8
+// `scenario-compaction` job sweeps up whatever it still leaves).
+const COMPACT_IDLE_MS = 5000;
 
 interface Peer {
   id: string;
@@ -153,7 +154,10 @@ function EditorLoaded({
     const t = Number(searchParams.get('to'));
     return Number.isInteger(f) && Number.isInteger(t) && t > f ? { from: f, to: t } : null;
   }, [searchParams]);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
+  // CS-21 — persistence is background compaction, not a user action: the only UI state left is
+  // "a request is in flight". No `dirty`: in a collaborative editor the edits are already shared and
+  // already durable before any button could be pressed, so "unsaved" was a lie.
+  const [compacting, setCompacting] = useState(false);
   const [status, setStatus] = useState<CollabStatus>('connecting');
   const [synced, setSynced] = useState(false);
   // CS-10 — the group « Écriture » permission, shipped on the sync payload. Undefined (an older
@@ -188,9 +192,11 @@ function EditorLoaded({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const seededRef = useRef(false);
-  // FR9 — counts editor `update`s (local + remote). save() records the count before its await and only
-  // resolves to «Enregistré ✓» if no further edit landed meanwhile (else back to dirty). No save timer.
-  const editCountRef = useRef(0);
+  // CS-21 — the idle-compaction debounce, the live `compact` callback (so the unmount/hide flush never
+  // fires a stale closure), and the consecutive-failure counter behind the toast.
+  const compactTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const compactRef = useRef<() => Promise<void>>(async () => {});
+  const failuresRef = useRef(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -419,11 +425,12 @@ function EditorLoaded({
     [pushToast],
   );
 
-  // ── FR9 — explicit content save (« Enregistrer » / Ctrl+S). Persists the CURRENT page content via the
-  // existing document-persist endpoint; it does NOT create a new AssetVersion («Enregistrer une nouvelle
-  // version» stays the only version-creating action). No debounce, no timer — the user saves explicitly.
-  const save = useCallback(async () => {
-    if (!editor) return;
+  // ── CS-21 — compaction. Same endpoint, same payload as the old « Enregistrer »; only the trigger
+  // changed (idle tick / hide / unmount instead of a button). It folds the live CRDT update log into
+  // ScenarioDocument.ydocState; it does NOT create an AssetVersion — « Enregistrer une nouvelle
+  // version » stays the only version-creating action, and now carries all the ceremony.
+  const compact = useCallback(async () => {
+    if (!editor || editor.isDestroyed) return;
     // CS-10 — no « Écriture » permission: the server 403s this route, so don't even ask (the button
     // is disabled too; this also covers the Ctrl/Cmd-S path). UX only — the gate is server-side.
     if (!canWrite) return;
@@ -432,12 +439,8 @@ function EditorLoaded({
     // materialize an EMPTY v1 (the reported v1=empty / v1==v2 shift), and an on-mount/early Ctrl+S could
     // race the imported content before it seeds. Mirror the server's isBlankHtml and no-op silently (the
     // server guards this too, but suppressing the request means the empty save never even tries).
-    if (isBlankHtml(html)) {
-      setSaveState('idle');
-      return;
-    }
-    const countAtStart = editCountRef.current;
-    setSaveState('saving');
+    if (isBlankHtml(html)) return;
+    setCompacting(true);
     try {
       const res = await api.autosaveEditorDocument(
         pageId,
@@ -457,56 +460,71 @@ function EditorLoaded({
         // FR7 — capture the freshly materialized document id so "Demander une correction" works now.
         setDocumentId((d) => d ?? res.materialized!.documentId);
       }
-      // An edit that landed DURING the save leaves the draft dirty again (the just-saved bytes are stale).
-      setSaveState(editCountRef.current === countAtStart ? 'saved' : 'dirty');
+      failuresRef.current = 0;
     } catch {
-      setSaveState('error');
+      // F5 — a failed compaction loses nothing: the updates are still in Postgres and the next tick
+      // retries. Stay silent on the first failure; only a SECOND consecutive one is worth a word.
+      failuresRef.current += 1;
+      if (failuresRef.current === 2) pushToast('L’enregistrement continu a échoué. Vos modifications restent partagées.');
+    } finally {
+      setCompacting(false);
     }
-  }, [editor, pageId, ydoc, asset, assetId, canWrite]);
+  }, [editor, pageId, ydoc, asset, assetId, canWrite, pushToast]);
 
-  // Typing awareness + dirty tracking. `update` fires on local AND remote edits; either legitimately
-  // marks THIS client's persisted draft stale. (ponytail: a peer's own save doesn't clear my dirty flag —
-  // there's no WS "saved" event; add one only if it ever matters.)
+  // The flush paths (hide, unmount) must call the CURRENT compact, not the one captured when the
+  // listener was attached — hence the ref rather than re-subscribing on every dependency change.
+  useEffect(() => {
+    compactRef.current = compact;
+  }, [compact]);
+
+  /** Restart the idle window. Called on every editor `update`, local or remote. */
+  const scheduleCompaction = useCallback(() => {
+    if (compactTimer.current) clearTimeout(compactTimer.current);
+    compactTimer.current = setTimeout(() => {
+      compactTimer.current = null;
+      void compactRef.current();
+    }, COMPACT_IDLE_MS);
+  }, []);
+
+  /** Compact NOW if a tick is pending — a closing tab compacts rather than leaving a long update log. */
+  const flushCompaction = useCallback(() => {
+    if (!compactTimer.current) return;
+    clearTimeout(compactTimer.current);
+    compactTimer.current = null;
+    void compactRef.current();
+  }, []);
+
+  // Typing awareness + the compaction tick. `update` fires on local AND remote edits; either leaves
+  // pending ScenarioUpdate rows worth folding in, so both restart the idle window.
   useEffect(() => {
     if (!editor) return;
     const onUpdate = () => {
       provider?.setLocalUser('typing', true);
       if (typingTimer.current) clearTimeout(typingTimer.current);
       typingTimer.current = setTimeout(() => provider?.setLocalUser('typing', false), 1500);
-      editCountRef.current += 1;
-      setSaveState('dirty');
+      scheduleCompaction();
     };
     editor.on('update', onUpdate);
     return () => {
       editor.off('update', onUpdate);
     };
-  }, [editor, provider]);
+  }, [editor, provider, scheduleCompaction]);
 
   useEffect(() => () => { if (typingTimer.current) clearTimeout(typingTimer.current); }, []);
 
-  // Ctrl/Cmd-S saves (capture phase so it works with focus inside ProseMirror or the sidebar).
+  // CS-21 — flush on hide and on unmount. No `beforeunload` prompt: there is nothing to warn about,
+  // the edits are already shared and already in Postgres. `visibilitychange` is the reliable mobile
+  // signal (`beforeunload` never fires on iOS); the unmount cleanup covers an in-app route change.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        void save();
-      }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushCompaction();
     };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [save]);
-
-  // FR9 — a native unload confirm while there are unsaved edits (the data-loss net that replaces the
-  // deleted flush-on-hide). No custom modal — the browser prompt is enough.
-  useEffect(() => {
-    if (saveState !== 'dirty' && saveState !== 'saving') return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      flushCompaction();
     };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [saveState]);
+  }, [flushCompaction]);
 
   const onVersionSaved = (updated: AssetItem) => {
     // Fb-6 — the server no-ops an identical snapshot (returns the unchanged head). Detect that (the
@@ -560,10 +578,9 @@ function EditorLoaded({
   };
   const restoreIntoDraft = () => {
     if (viewHtml != null && editor) editor.commands.setContent(viewHtml);
-    // FR9 — restoring replaces the live draft: mark it dirty so the user saves explicitly (setContent
-    // fires `update` in the real editor; set it here too so the indicator is reliable across renders).
-    editCountRef.current += 1;
-    setSaveState('dirty');
+    // CS-21 — restoring replaces the live draft, so it earns a compaction tick (setContent fires
+    // `update` in the real editor; schedule it here too so the path is deterministic).
+    scheduleCompaction();
     backToLive();
     pushToast('Version restaurée dans le brouillon');
   };
@@ -602,9 +619,8 @@ function EditorLoaded({
               initial.chapter ? `Ch. ${initial.chapter.number} — ${initial.pageTitle}` : initial.pageTitle
             }
             pageId={pageId}
-            saveState={saveState}
-            onSave={save}
-            canWrite={canWrite}
+            compacting={compacting}
+            status={status}
             peers={peers}
             selfColor={myColor}
             selfAvatar={account.avatar ?? null}
@@ -717,9 +733,8 @@ function EditorHeader({
   projectTitle,
   switcherLabel,
   pageId,
-  saveState,
-  onSave,
-  canWrite,
+  compacting,
+  status,
   peers,
   selfColor,
   selfAvatar,
@@ -728,9 +743,8 @@ function EditorHeader({
   projectTitle: string;
   switcherLabel: string;
   pageId: string;
-  saveState: SaveState;
-  onSave: () => void;
-  canWrite: boolean;
+  compacting: boolean;
+  status: CollabStatus;
   peers: Peer[];
   selfColor: string;
   selfAvatar: string | null;
@@ -741,20 +755,9 @@ function EditorHeader({
       <Link href={`/projet/${slug}`} style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)' }}>‹ Projet</Link>
       <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, textTransform: 'uppercase', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{projectTitle}</span>
       <PageSwitcher slug={slug} currentPageId={pageId} label={switcherLabel} />
-      {/* Item 2 (iter 5) — icon-only Save, co-located with the chapter/page switcher. Accent when there
-          are unsaved edits; persists content only (no new version). Ctrl/Cmd-S does the same (see save()). */}
-      <SaveButton saveState={saveState} onSave={onSave} canWrite={canWrite} />
-      <span role="status" aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: saveState === 'error' || saveState === 'dirty' ? 'var(--accent)' : 'var(--ink2)', fontWeight: saveState === 'error' || saveState === 'dirty' ? 700 : 500 }}>
-        {saveState === 'saving'
-          ? 'Enregistrement…'
-          : saveState === 'saved'
-            ? <>Enregistré<CheckIcon size={13} /></>
-            : saveState === 'dirty'
-              ? 'Modifications non enregistrées'
-              : saveState === 'error'
-                ? 'Échec de l’enregistrement'
-                : ''}
-      </span>
+      {/* CS-21 — the prototype's passive « Enregistré » slot, in the same place, reporting instead of
+          asking. Never a button: there is nothing left to press. */}
+      <PersistenceStatus compacting={compacting} status={status} />
       <div style={{ flex: 1 }} />
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <AvatarDot color={selfColor} avatar={selfAvatar} />
@@ -768,41 +771,41 @@ function EditorHeader({
   );
 }
 
-// Item 2 (iter 5) — icon-only Save button, sitting next to the chapter/page switcher in the header.
-// State-reactive: accent fill when there are unsaved edits (dirty), "wait" cursor while saving. Keeps
-// the r3 behaviour (persists content only, no new version); Ctrl/Cmd-S triggers the same save().
-function SaveButton({ saveState, onSave, canWrite }: { saveState: SaveState; onSave: () => void; canWrite: boolean }) {
-  const dirty = (saveState === 'dirty' || saveState === 'error') && canWrite;
-  const saving = saveState === 'saving';
-  // CS-10 (F16-R3) — without « Écriture » the route 403s, so the affordance is disabled rather than
-  // dead-ending on an error toast.
-  const blocked = saving || !canWrite;
+/**
+ * CS-21 — the one persistence indicator in the header. Connection state and persistence state are one
+ * story to the user, so the collab status wins over everything: offline means the edits are queued
+ * locally and will replay, which matters more than whether a compaction is mid-flight.
+ *
+ * Reports, never asks. It is a `role="status"` span; it has no `onClick`, no button role, no tick
+ * glyph (check marks are pictograms in this codebase, and here the word alone says it).
+ * F6 — it truncates rather than wrapping the header: `min-width:0` + ellipsis, full text on `title`.
+ */
+function PersistenceStatus({ compacting, status }: { compacting: boolean; status: CollabStatus }) {
+  const offline = status !== 'connected';
+  const label = offline
+    ? 'Hors ligne — les modifications reprendront à la reconnexion'
+    : compacting
+      ? 'Enregistrement…'
+      : 'Enregistré';
   return (
-    <button
-      type="button"
-      onClick={onSave}
-      disabled={blocked}
-      aria-label="Enregistrer"
-      aria-keyshortcuts="Meta+S Control+S"
-      title={canWrite ? 'Enregistrer (⌘S / Ctrl+S)' : "Enregistrer — lecture seule (permission « Écriture » requise)"}
+    <span
+      role="status"
+      aria-live="polite"
+      title={label}
       style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 36,
-        height: 36,
-        flex: 'none',
-        border: '2px solid var(--ink)',
-        borderRadius: 6,
-        background: dirty ? 'var(--accent)' : 'var(--card)',
-        color: dirty ? '#fff' : 'var(--ink)',
-        cursor: saving ? 'wait' : canWrite ? 'pointer' : 'not-allowed',
-        boxShadow: dirty ? '2px 2px 0 var(--shadow)' : 'none',
-        padding: 0,
+        fontSize: 12,
+        color: offline ? 'var(--accent)' : 'var(--ink2)',
+        fontWeight: offline ? 700 : 500,
+        flex: '0 1 auto',
+        minWidth: 0,
+        maxWidth: 'min(300px, 100%)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
       }}
     >
-      <SaveIcon size={17} />
-    </button>
+      {label}
+    </span>
   );
 }
 
@@ -1259,7 +1262,10 @@ function Sidebar({
   // Item 5 — the highlighted text range the next comment will anchor to. Captured whenever the editor
   // holds a non-empty selection; cleared when the selection collapses to a caret. Persists while the
   // user types in the textarea (ProseMirror keeps its selection in state even when the DOM blurs).
-  const [range, setRange] = useState<{ from: number; to: number; quote: string } | null>(null);
+  // CS-22 — the range also carries the DURABLE anchor (base64 Yjs relative positions), encoded at
+  // capture time: that is the one moment the absolute pair is provably correct. Encoding later, at
+  // submit, would re-derive it from numbers a peer's edit may already have invalidated.
+  const [range, setRange] = useState<{ from: number; to: number; quote: string; relFrom?: string; relTo?: string } | null>(null);
 
   // Track the caret so "case N" reflects the block the comment will anchor to, and capture a selected
   // text range for range-anchored comments (item 5).
@@ -1272,7 +1278,8 @@ function Sidebar({
         setRange(null);
       } else {
         const quote = editor.state.doc.textBetween(from, to, ' ').trim();
-        setRange(quote ? { from, to, quote } : null);
+        const rel = encodeCommentAnchor(editor.state, from, to); // null until the Yjs binding is ready
+        setRange(quote ? { from, to, quote, ...(rel ?? {}) } : null);
       }
     };
     editor.on('selectionUpdate', onSel);
@@ -1297,7 +1304,17 @@ function Sidebar({
         pageId,
         currentCaseNo,
         // Item 5 — attach the range anchor when a selection is active; otherwise a case-level comment.
-        range ? { text: trimmed, anchorFrom: range.from, anchorTo: range.to, quote: range.quote } : { text: trimmed },
+        range
+          ? {
+              text: trimmed,
+              anchorFrom: range.from,
+              anchorTo: range.to,
+              quote: range.quote,
+              // CS-22 — the durable pair rides along; omitted when the binding wasn't ready (server
+              // then keeps today's absolute-only row and the client falls back to it on load).
+              ...(range.relFrom && range.relTo ? { anchorRelFrom: range.relFrom, anchorRelTo: range.relTo } : {}),
+            }
+          : { text: trimmed },
         assetId,
       );
       onCommentAdded(created);
@@ -1329,7 +1346,9 @@ function Sidebar({
       // sidebar row (with a «Correction» tag) exactly like a normal comment — no parallel control.
       await api.createCorrection(pageId, {
         type: 'scenario',
-        anchor: { documentId, from: range.from, to: range.to, quote: range.quote },
+        // CS-22 — same durable pair: the server writes it onto the correction's backing comment, so the
+        // correction highlight survives a reload too (its block clamp is applied on render, unchanged).
+        anchor: { documentId, from: range.from, to: range.to, quote: range.quote, ...(range.relFrom && range.relTo ? { relFrom: range.relFrom, relTo: range.relTo } : {}) },
         description: trimmed,
         caseNo: currentCaseNo,
         caseRef: `case ${currentCaseNo}`,
@@ -1347,6 +1366,16 @@ function Sidebar({
   // PM's .scrollIntoView() here — that routes through the typing caret-band handler keyed on the
   // selection HEAD (the range END), which parks the end at ~78% and pushes the highlighted run up out
   // of view. Instead place the range START just below the sticky header so the whole highlight reads.
+  // CS-22 follow-up — jump through the DURABLE anchor when the editor has one for this comment, and
+  // only fall back to the stored (drifted) absolute pair when it doesn't: a legacy row, or a binding
+  // that isn't ready. Otherwise « voir dans le texte » selects different words than the highlight paints.
+  const revealComment = (c: CaseCommentDto) => {
+    if (!editor) return;
+    const live = resolveCommentRange(editor.state, c.id);
+    if (live) return revealRange(live.from, live.to);
+    if (c.anchorFrom != null && c.anchorTo != null) revealRange(c.anchorFrom, c.anchorTo);
+  };
+
   const revealRange = (from: number, to: number) => {
     if (!editor) return;
     const size = editor.state.doc.content.size;
@@ -1456,7 +1485,7 @@ function Sidebar({
                 {c.anchorFrom != null && c.anchorTo != null && (
                   <button
                     type="button"
-                    onClick={() => revealRange(c.anchorFrom!, c.anchorTo!)}
+                    onClick={() => revealComment(c)}
                     style={{ marginTop: 3, background: 'none', border: 'none', padding: 0, fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
                   >
                     voir dans le texte

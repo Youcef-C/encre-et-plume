@@ -105,6 +105,20 @@ Project creation, workspace, files, collaborative editor, nemu, arrangement, pub
 - [CS-10](03-creation-studio/CS-10-coauthor-permissions-revenue.md) — Co-author permissions & revenue split *(inferred)*
 - [CS-11](03-creation-studio/CS-11-collaboration-rights-licensing.md) — Collaboration rights & licensing agreement *(inferred)*
 - [CS-12](03-creation-studio/CS-12-projects-dashboard.md) — Projects dashboard "Mes projets" *(mixed)*
+- [CS-13](03-creation-studio/CS-13-modify-illustration.md) — Modify an illustration "Modifier une illustration" *(inferred)*
+- [CS-14](03-creation-studio/CS-14-oeuvre-completion-status.md) — Œuvre completion status "En cours / Terminé" *(inferred)*
+- [CS-15](03-creation-studio/CS-15-comment-change-tracking-and-delete.md) — Comment change-tracking & delete *(inferred)*
+- [CS-16](03-creation-studio/CS-16-delete-project.md) — Delete a project "Supprimer le projet" *(inferred)*
+- [CS-17](03-creation-studio/CS-17-editor-zoom.md) — Zoom in the editor "Zoom dans l'éditeur" *(inferred)*
+- [CS-18](03-creation-studio/CS-18-scenario-version-comparison.md) — Scenario version comparison "Comparer les versions" *(inferred)*
+- [CS-19](03-creation-studio/CS-19-version-merge-validation.md) — Version merge validation "Fusion des versions" *(inferred)*
+- [CS-20](03-creation-studio/CS-20-scenario-handoff-pin.md) — Scenario handoff pin "Passation du scénario" *(inferred)*
+- [CS-21](03-creation-studio/CS-21-background-compaction.md) — Background compaction "Enregistrement continu" *(inferred)*
+- [CS-22](03-creation-studio/CS-22-durable-comment-anchors.md) — Durable comment anchors "Ancres persistantes" *(inferred)*
+- [CS-23](03-creation-studio/CS-23-stable-case-references.md) — Stable case references "Références de case stables" *(inferred)*
+- [CS-24](03-creation-studio/CS-24-correction-verification-loop.md) — Correction verification loop "Vérification des corrections" *(inferred)*
+- [CS-25](03-creation-studio/CS-25-new-version-triage.md) — New-version triage "Passage en revue des corrections" *(inferred)*
+- [CS-26](03-creation-studio/CS-26-gate-valide-stage.md) — Gate the VALIDÉ stage "Verrou de la colonne VALIDÉ" *(inferred)*
 
 ### [04 · Publishing & Engagement](04-publishing-engagement/_epic.md) — `PUB`
 Publish chapters, comments, reviews, follow, share, report, contests, news.

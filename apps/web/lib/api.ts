@@ -607,6 +607,14 @@ export const updatePage = (id: string, body: UpdatePageRequest): Promise<Workspa
 export const deletePage = (id: string): Promise<void> =>
   request<void>(`/pages/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+// CS-20 — the scenario handoff pin. Both return the refreshed card, so the board clears the banner
+// without a second read. The pin is CREATED implicitly by `updatePageStage` (leaving Scénario).
+export const acknowledgeHandoff = (pageId: string): Promise<WorkspacePage> =>
+  request<WorkspacePage>(`/pages/${encodeURIComponent(pageId)}/handoff/acknowledge`, { method: 'POST' });
+
+export const deleteHandoff = (pageId: string): Promise<WorkspacePage> =>
+  request<WorkspacePage>(`/pages/${encodeURIComponent(pageId)}/handoff`, { method: 'DELETE' });
+
 export const updatePageStage = (id: string, stage: PageStage): Promise<WorkspacePage> =>
   request<WorkspacePage>(`/pages/${encodeURIComponent(id)}/stage`, {
     method: 'PATCH',
@@ -1128,6 +1136,7 @@ import type {
   UpdateCorrectionRequest,
   CorrectionListQuery,
   CorrectionListResponse,
+  CorrectionLocationResponse,
   ValidateReviewResponse,
 } from '@encre-et-plume/shared';
 
@@ -1167,6 +1176,16 @@ export const updateCorrection = (id: string, body: UpdateCorrectionRequest): Pro
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+
+// CS-24 — the filer acknowledges a fix someone else marked corrigé (403 for anyone else, 409 when
+// the correction is not corrigé, idempotent).
+export const verifyCorrection = (id: string): Promise<CorrectionDto> =>
+  request<CorrectionDto>(`/corrections/${encodeURIComponent(id)}/verify`, { method: 'POST' });
+
+// CS-24 — resolve a notification's bare uuid refId to the review screen that shows it (404 when the
+// id is not a correction, which is how the resolver route falls back to /projets).
+export const getCorrectionLocation = (id: string): Promise<CorrectionLocationResponse> =>
+  request<CorrectionLocationResponse>(`/corrections/${encodeURIComponent(id)}/location`);
 
 export const deleteCorrection = (id: string): Promise<void> =>
   request<void>(`/corrections/${encodeURIComponent(id)}`, { method: 'DELETE' });

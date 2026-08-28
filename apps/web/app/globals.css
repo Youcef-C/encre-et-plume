@@ -640,6 +640,22 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Dropdown menu items: accent-soft hover, matching prototype §dropdown */
+/* CS-20 — the scenario-handoff staleness marker: a TEXT affordance, never a CTA (it is information,
+   not a gate), so it carries no `.ep-btn-*` fill. Colour + hover live here because an inline `color`
+   would out-rank the class and kill the hover (the R7-3 lesson). */
+.ep-handoff-marker {
+  color: var(--ink2);
+  transition: color 0.08s;
+}
+.ep-handoff-marker:hover,
+.ep-handoff-marker:focus-visible {
+  color: var(--accent);
+}
+.ep-handoff-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .ep-menu-item {
   transition: background 0.08s;
   background: transparent;
@@ -1869,10 +1885,43 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-btn-compact--ghost:hover {
   background: var(--accent-soft);
 }
-/* Compact intents mirroring the full-size scheme (compact is only a size). */
+/* Compact intents mirroring the full-size scheme (compact is only a size). --secondary is the
+   compact .ep-btn-secondary (white/card outline, cancel/alternate): same paint as --ghost. */
+.ep-btn-compact--secondary {
+  background: var(--card);
+  color: var(--ink);
+}
+.ep-btn-compact--secondary:hover {
+  background: var(--accent-soft);
+}
 .ep-btn-compact--dark { background: var(--ink); color: var(--paper); }
 .ep-btn-compact--success { background: #1f8a5b; color: #fff; }
 .ep-btn-compact--danger { background: var(--danger); color: #fff; }
+
+/* CS-24 — before/after crops of a correction's region, side by side. The crop is CSS over the two
+   signed URLs already in the review payload (background-size/position on the normalized region):
+   no derivative, no image job. F7: the pair stacks vertically under 768px.
+   ponytail: the box takes the region's own w/h ratio, which reads true on a square-ish planche and
+   stretches slightly on a tall one — read the image's naturalWidth/Height if that ever matters. */
+.ep-crop-pair {
+  display: flex;
+  gap: 8px;
+  margin: 0 14px 10px 18px;
+}
+.ep-crop-pair > figure {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.ep-crop {
+  width: 100%;
+  background-repeat: no-repeat;
+  background-color: var(--tone);
+}
+@media (max-width: 768px) {
+  .ep-crop-pair { flex-direction: column; }
+  /* Column mode: size on content, never on a 0 flex-basis (which collapses the panes to nothing). */
+  .ep-crop-pair > figure { flex: 0 0 auto; }
+}
 
 /* Green "Valider les modifications" CTA — legacy compact-green used in the editor/revision
    surfaces. Equivalent intent to .ep-btn-success (the canonical green); kept at its tuned
@@ -2038,6 +2087,24 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 /* QA F4 — clear the fixed "Le Comptoir" chat widget so it can't obscure the composer/list on tablet. */
 @media (max-width: 768px) {
   .ep-review-page { padding-bottom: 120px !important; }
+}
+
+/* CS-25 — new-version triage. Desktop keeps the walkthrough actions inline; under 768px (where the two
+   panes are already stacked by the rule above, and the onion-skin becomes the primary comparison) the
+   action row sticks to the bottom of the viewport with full-width ≥44px targets. */
+@media (max-width: 768px) {
+  .ep-walk-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    background: var(--card);
+    border-top: 3px solid var(--ink);
+    padding-top: 10px;
+    margin-top: 12px;
+  }
+  .ep-walk-actions > button { flex: 1 1 45%; justify-content: center; }
+  .ep-onion-skin { width: 100%; margin-left: 0 !important; }
+  .ep-onion-skin input[type='range'] { flex: 1; width: auto !important; }
 }
 
 /* ── CS-10 · Groupe & permissions ──────────────────────────────────────────────

@@ -28,6 +28,13 @@ The Creation Studio is where Creators, Writers, and Illustrators turn an idea in
 - [[CS-17]] — Zoom in the editor "Zoom dans l'éditeur"
 - [[CS-18]] — Scenario version comparison "Comparer les versions"
 - [[CS-19]] — Version merge validation "Fusion des versions" (build before [[CS-18]])
+- [[CS-20]] — Scenario handoff pin "Passation du scénario"
+- [[CS-21]] — Background compaction "Enregistrement continu"
+- [[CS-22]] — Durable comment anchors "Ancres persistantes"
+- [[CS-23]] — Stable case references "Références de case stables"
+- [[CS-24]] — Correction verification loop "Vérification des corrections"
+- [[CS-25]] — New-version triage "Passage en revue des corrections"
+- [[CS-26]] — Gate the VALIDÉ stage "Verrou de la colonne VALIDÉ"
 
 ## Cross-epic dependencies
 - [[F-1]] Account, [[F-2]] Roles, [[F-3]] Profile, [[F-5]] Notifications

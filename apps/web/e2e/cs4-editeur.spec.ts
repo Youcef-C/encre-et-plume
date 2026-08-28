@@ -118,11 +118,14 @@ async function typeIntoCase(page: Page, no: number, text: string) {
   await page.keyboard.type(text, { delay: 20 });
 }
 
-// FR9 (r3) — the editor no longer autosaves; persist the current content explicitly via the toolbar
-// « Enregistrer » button (Ctrl/Cmd-S does the same). Waits for the «Enregistré» confirmation.
+// CS-21 — persistence is background compaction: no « Enregistrer » button, no Ctrl+S. The client
+// compacts ~5s after the last edit (and on hide/unmount), so wait for that PATCH to land, then for
+// the header to settle back on « Enregistré ». Nothing is pressed and nothing steals editor focus.
 async function saveDoc(page: Page) {
-  await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await page.waitForResponse(
+    (r) => r.request().method() === 'PATCH' && /\/pages\/[^/]+\/document/.test(r.url()) && r.ok(),
+    { timeout: 20_000 },
+  );
   await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -194,10 +197,10 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await expect(kanbanCard(page, 'Page 1').getByLabel('Version 1')).toBeVisible();
   });
 
-  // A (r3) — autosave is REMOVED: typing alone, even past the old 2s debounce window, must never
-  // fire the persist endpoint on its own; only the explicit Save (button / Ctrl+S) does, and it never
-  // creates a version.
-  test('CS4-E2b (A): typing alone never autosaves; only explicit Save persists, and it creates NO version', async ({ page }) => {
+  // CS-21 (A2) — background compaction: typing then going idle ~5s persists on its own, exactly once,
+  // with nobody pressing anything, and it still never creates a version. The header carries a passive
+  // status, never a button.
+  test('CS4-E2b (A): typing then idling ~5 s compacts once by itself, and creates NO version', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}`);
     await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
@@ -214,17 +217,18 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
       if (req.method() === 'POST' && url.includes('/document/versions')) versionPosts.push(url);
     });
 
-    await typeIntoCase(page, 1, ' Une phrase de plus pour tester le non-autosave.');
-    await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 5_000 });
-    await page.waitForTimeout(3_500); // past the OLD 2s debounce window — must still be dirty, no request sent
-    await expect(page.getByText('Modifications non enregistrées')).toBeVisible();
-    expect(autosavePosts.length).toBe(0);
-    // Screenshot evidence: the "Enregistrer" toolbar button + the dirty indicator, for the qa-report.
-    await page.screenshot({ path: 'e2e/screenshots/cs4-save-dirty-indicator.png' });
+    // A1 — the affordance is gone: no « Enregistrer » button, and Ctrl+S does not persist.
+    await expect(page.getByRole('button', { name: 'Enregistrer', exact: true })).toHaveCount(0);
 
-    // Now save explicitly — exactly one persist call, and it does NOT create a version.
-    await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
-    await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await typeIntoCase(page, 1, ' Une phrase de plus pour tester la compaction de fond.');
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(1_500); // inside the idle window — Ctrl+S must not have persisted anything
+    expect(autosavePosts.length).toBe(0);
+
+    // Now just wait: the idle tick compacts on its own.
+    await saveDoc(page);
+    // Screenshot evidence: the passive header status, for the qa-report.
+    await page.screenshot({ path: 'e2e/screenshots/cs4-save-dirty-indicator.png' });
     expect(autosavePosts.length).toBe(1);
     expect(versionPosts.length).toBe(0);
   });
@@ -439,21 +443,33 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     await expect(reopened).toHaveCount(0);
   });
 
-  // Item 2 (r5) — the Save button is now ICON-ONLY next to the chapter/page switcher: no visible
-  // "Enregistrer" text node, only the accessible name (aria-label) — `saveDoc()` throughout this file
-  // already resolves it by accessible name (role-based), proving real users relying on a screen reader
-  // or the accessible-name tooltip reach it the same way a sighted mouse user does.
-  test('CS4-E11 (r5 Item 2): the Save button is icon-only (no visible "Enregistrer" text) but keeps its accessible name', async ({ page }) => {
+  // CS-21 (F1/F2/F6) — the save affordance is gone; the same header slot carries a passive status
+  // that reports and is never a button, and truncates rather than wrapping the header at any width.
+  test('CS4-E11 (CS-21): no « Enregistrer » button; the header slot is a passive status that truncates at 375/768/1280', async ({ page }) => {
     await login(page, OWNER_EMAIL);
     await page.goto(`/projet/${slug}`);
     await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
 
-    const saveBtn = page.getByRole('button', { name: 'Enregistrer', exact: true });
-    await expect(saveBtn).toBeVisible();
-    // No visible text content — icon-only (the accessible name comes from aria-label, not text).
-    expect((await saveBtn.textContent())?.trim()).toBe('');
-    await expect(saveBtn).toHaveAttribute('title', /⌘S|Ctrl\+S/);
+    await expect(page.getByRole('button', { name: 'Enregistrer', exact: true })).toHaveCount(0);
+    const status = page.getByText('Enregistré', { exact: true });
+    await expect(status).toBeVisible({ timeout: 15_000 });
+    await expect(status).toHaveRole('status');
+    // It reports; it is not an affordance.
+    expect(await status.evaluate((el) => el.closest('button') !== null)).toBe(false);
+
+    const header = page.locator('.ep-editor-header');
+    for (const [w, h] of [[375, 800], [768, 900], [1280, 900]] as const) {
+      await page.setViewportSize({ width: w, height: h });
+      await expect(status).toBeVisible();
+      // F6 — one line, truncated, and never wider than the header (no horizontal overflow).
+      const box = (await status.boundingBox())!;
+      const headerBox = (await header.boundingBox())!;
+      expect(box.height).toBeLessThan(26); // a single 12px line, never wrapped to two
+      expect(box.x + box.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await page.screenshot({ path: `e2e/screenshots/cs21-status-${w}.png` });
+    }
   });
 });
 
@@ -493,17 +509,16 @@ test.describe('CS-4 Éditeur — bug fix: scenario version off-by-one (real cont
     await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
     await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
 
-    // 1) A stray Save on a genuinely blank document (nothing typed yet) must be a silent no-op: no
-    // network POST to the autosave endpoint, no "v1" ever appears, no materialization at all. The doc
-    // starts un-dirty (nothing typed), so there is nothing to click — assert the pre-conditions the
-    // no-op protects instead: no version chip, comments still gated on "save first".
+    // 1) A blank document (nothing typed yet) must never be persisted: no PATCH, no "v1", no
+    // materialization at all. Nothing has been typed, so no compaction tick is even scheduled —
+    // assert the pre-conditions the no-op protects: no version chip, comments still gated.
     await expect(toolbarVersion(page)).toHaveCount(0);
     await expect(page.getByText('Enregistrez d’abord le scénario pour commenter.')).toBeVisible();
-    // A real Ctrl+S keypress on the blank doc (the exact "reflexive stray save" the bug report
-    // described) must not materialize anything either — watch the network: no autosave request fires.
+    // CS-21 A1 — a real Ctrl+S keypress must persist nothing (the binding is gone; it may fall
+    // through to the browser). Watch the real persist endpoint: `PATCH /pages/:id/document`.
     let strayRequestFired = false;
     const onReq = (req: import('@playwright/test').Request) => {
-      if (req.url().includes('/document/autosave') && req.method() === 'POST') strayRequestFired = true;
+      if (req.method() === 'PATCH' && /\/pages\/[^/]+\/document(\?|$)/.test(req.url())) strayRequestFired = true;
     };
     page.on('request', onReq);
     await page.keyboard.press('Control+s');
@@ -668,10 +683,9 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
     await saveDoc(page);
     await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 }); // materialized → comments enabled
 
-    // saveDoc() clicks the toolbar "Enregistrer" button, which steals DOM focus away from the
-    // ProseMirror editor (pre-r3 autosave never required a click, so focus always stayed put — bug
-    // found in this PRE-EXISTING test, fixed here, test-only). Click back into the editor content
-    // before selecting, or Home/Shift+End apply to whatever currently has focus (the button).
+    // CS-21 — saveDoc() no longer clicks anything, so editor focus is never stolen; the explicit
+    // click back into the content is kept as a cheap guarantee that Home/Shift+End apply to the
+    // paragraph rather than to whatever the previous step touched.
     await caseBlock(page, 1).locator('[data-case-description] p').first().click();
     // Select the whole line the cursor is already on (typeIntoCase left the caret at its end).
     await page.keyboard.press('Home');
@@ -711,6 +725,47 @@ test.describe('CS-4 Éditeur — highlight-anchored comments (item 5)', () => {
     const posted2 = commentItem(page, 'Commentaire de case, pas de sélection.');
     await expect(posted2).toBeVisible({ timeout: 10_000 });
     await expect(posted2.getByText('«', { exact: false })).toHaveCount(0); // no quote block for a case-level comment
+  });
+
+  // CS-22 — the anchor is persisted (Yjs relative positions), so it survives a RELOAD. Before CS-22 the
+  // comment stored only absolute ProseMirror positions: text typed above it shifted the highlight onto
+  // the wrong words as soon as the page was reopened.
+  test('CS4-E25 (CS-22): an anchored comment still highlights the SAME words after text is inserted above it and the page is reloaded', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const slug = await createProject(page, `E2E CS22 Anchor ${Date.now()}`);
+    await addCard(page);
+    await kanbanCard(page, 'Page 1').getByRole('link', { name: 'Éditer le scénario' }).click();
+    await expect(page).toHaveURL(new RegExp(`/projet/${slug}/editeur/`), { timeout: 10_000 });
+
+    await typeIntoCase(page, 1, 'Rin observe la ville depuis le toit.');
+    await saveDoc(page);
+    await expect(page.getByText('v1')).toBeVisible({ timeout: 10_000 });
+
+    // Anchor a comment on the words « Rin observe » (a run inside the line, the ordinary case).
+    const ANCHORED = 'Rin observe';
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click();
+    await page.keyboard.press('Home');
+    for (let i = 0; i < ANCHORED.length; i++) await page.keyboard.press('Shift+ArrowRight');
+    await expect(page.locator('aside').getByText(`« ${ANCHORED} »`)).toBeVisible({ timeout: 5_000 });
+    await page.getByLabel('Commenter la sélection').fill('Quel toit exactement ?');
+    await page.getByRole('button', { name: '＋ Commentaire' }).click();
+    await expect(commentItem(page, 'Quel toit exactement ?')).toBeVisible({ timeout: 10_000 });
+    await expect(caseBlock(page, 1).locator('.ep-comment-highlight')).toHaveText(ANCHORED, { timeout: 5_000 });
+
+    // Insert text immediately ABOVE / before the anchored run: every absolute position after it shifts
+    // by 24 characters, so the stored anchorFrom/anchorTo alone can no longer find the right words.
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click();
+    await page.keyboard.press('Home');
+    await page.keyboard.type('Le port au petit matin. ', { delay: 20 });
+    await saveDoc(page);
+
+    // Reload: the anchor is rebuilt from what was persisted.
+    await page.reload();
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 15_000 });
+    await expect(commentItem(page, 'Quel toit exactement ?')).toBeVisible({ timeout: 10_000 });
+    await expect(caseBlock(page, 1).locator('.ep-comment-highlight')).toHaveText(ANCHORED, { timeout: 10_000 });
+    // The quoted snippet is unchanged, so no « · modifié » marker on the sidebar row.
+    await expect(commentItem(page, 'Quel toit exactement ?').getByText('· modifié')).toHaveCount(0);
   });
 });
 
@@ -1064,9 +1119,13 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     await expect(a.getByText('3 en ligne')).toHaveCount(0);
     await expect(b.getByText('3 en ligne')).toHaveCount(0);
 
-    // A saves explicitly (FR9 — no autosave) → materializes the scenario (v1); B's toolbar picks up the
-    // version chip too. B's own edit left A's draft dirty (shared doc changed), so the Save button is armed.
-    await a.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+    // CS-21 (A4) — nobody saves: A's idle tick compacts on its own and materializes the scenario (v1);
+    // B's toolbar picks up the version chip too. B's edit reached A over the CRDT, so A's compaction
+    // carries it.
+    await a.waitForResponse(
+      (r) => r.request().method() === 'PATCH' && /\/pages\/[^/]+\/document/.test(r.url()) && r.ok(),
+      { timeout: 25_000 },
+    );
     await expect(a.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(a.getByText('v1')).toBeVisible({ timeout: 10_000 });
 

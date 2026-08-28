@@ -164,6 +164,7 @@ model Account {
   assetVersions              AssetVersion[]            @relation("AssetVersionAuthor") // CS-3: asset versions this account uploaded
   scenarioComments           ScenarioComment[]         @relation("ScenarioCommentAuthor") // CS-4: per-case comments this account authored
   corrections                Correction[]              @relation("CorrectionAuthor") // CS-5: review corrections this account filed
+  correctionsResolved        Correction[]              @relation("CorrectionResolver") // CS-24: corrections this account marked corrigé
   events                     Event[] // F-23: audience events attributed to this account (anonymised on erasure)
 
   // Seed-coherence pass: catalog search-by-author-name matches WorkCreator -> Account.displayName.
@@ -1065,10 +1066,17 @@ model Page {
   comments       PageComment[] // CS-2 card-modal: comments
   assetLinks     AssetPageLink[] // CS-3 assets linked to this card (2026-07-14 many-to-many join)
   corrections    Correction[] // CS-5 review corrections filed against this card
+  // CS-20 — the scenario version this card was handed off against. Nullable: pre-CS-20 cards have no
+  // pin and must not be back-filled with a guess. SetNull so deleting the asset drops the pin cleanly.
+  drawnAgainstAssetId String? @db.Uuid
+  drawnAgainstAsset   Asset?  @relation("PageHandoffPin", fields: [drawnAgainstAssetId], references: [id], onDelete: SetNull)
+  drawnAgainstVersion Int?
 
   @@index([projectId, chapterId, stage])
   @@index([createdById])
   @@index([chapterId, position])
+  // DB rule: every FK carries its own index (SetNull scans the child table on a parent delete).
+  @@index([drawnAgainstAssetId])
 }
 
 // ── CS-2 card-modal extension: labels, checklist, comments, assignees ──────────
@@ -1165,6 +1173,7 @@ model Asset {
   pageLinks      AssetPageLink[] // CS-3 cards this asset is linked to (2026-07-14; scenario/texte/ref = many, dessin/page = one)
   scenarioDoc    ScenarioDocument? // CS-4: the editor working draft backed by this scenario asset (1:1)
   corrections    Correction[] // CS-5 review corrections filed against this file
+  handoffPinnedPages Page[] @relation("PageHandoffPin") // CS-20 back-relation
 
   @@unique([projectId, filename]) // D10 re-import rule
   @@index([projectId, type])
@@ -1220,6 +1229,11 @@ model ScenarioDocument {
   // Persisted in place by autosave (no version bump) so reopening restores the writer's choice.
   template    String            @default("manga")
   updatedAt   DateTime          @updatedAt
+  // Follow-up 7 (CS-20 D-10) — the instant this document's content was last cut into an AssetVersion
+  // (snapshot, or the v1 the materialize path creates). `updatedAt > versionedAt` is the exact
+  // "draft has unsaved edits" test. NULL on rows written before the column existed: those keep the
+  // old updatedAt-vs-version-createdAt comparison (grace window included) — see hasUnsavedScenario.
+  versionedAt DateTime?
   updates     ScenarioUpdate[]
   comments    ScenarioComment[]
 }
@@ -1251,6 +1265,11 @@ model ScenarioComment {
   anchorFrom Int?
   anchorTo   Int?
   quote      String?
+  // CS-22 — durable Yjs relative anchors (Y.encodeRelativePosition output). Additive: anchorFrom/To
+  // stay as the pre-CS-22 fallback + debugging surface, and no back-fill is possible server-side (the
+  // API has no Y.Doc). Opaque bytes, never queried on, so no index.
+  anchorRelFrom Bytes?
+  anchorRelTo   Bytes?
   // CS-5 Fb-7 — the asset version the comment was filed against (null for pre-CS-5-r2 rows).
   version    Int?
   // CS-5 Fb-2 — 1:1 back-relation when this comment IS a tagged scenario correction request.
@@ -1296,6 +1315,11 @@ model Correction {
   assigneeId          String?          @db.Uuid
   filedAgainstVersion Int // AssetVersion.version reviewed (head at creation)
   resolvedInVersion   Int? // stamped when marked corrige
+  // CS-24 — who actually pressed « Corrigé » (neither authorId, the filer, nor assigneeId records it),
+  // and when the filer acknowledged it. Both nullable: pre-CS-24 rows are simply unverified.
+  resolvedById        String?          @db.Uuid
+  resolvedBy          Account?         @relation("CorrectionResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  verifiedAt          DateTime?
   // CS-5 Fb-2 — a scenario correction IS a tagged CS-4 comment. 1:1 link; deleting the comment (editor
   // path) cascades this correction. Legacy scenario corrections keep commentId = null (no comment).
   commentId           String?          @unique @db.Uuid
@@ -1308,6 +1332,7 @@ model Correction {
   // all make Postgres look up child rows when a parent is deleted — unindexed that is a
   // sequential scan, and F-14 account erasure / CS-16 project delete hit exactly these.
   @@index([authorId])
+  @@index([resolvedById])
 }
 
 // ── F-23 Audience measurement (cookieless, consent-exempt) ────────────────────

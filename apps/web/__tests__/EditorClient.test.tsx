@@ -49,9 +49,12 @@ const getProvider = () => providerHolder.current;
 // CS-15 — liveTexts feed for the sidebar "· modifié" indicator. resolveCommentTexts reads the live
 // editor/Yjs state (unavailable under the static mock), so we mock it and control the id→text map here.
 const liveTextsHolder = vi.hoisted(() => ({ map: new Map<string, string>() }));
+// CS-22 — encoding a real anchor needs a live Yjs binding (absent under the static editor mock), so the
+// encoder is stubbed here; its own round-trip is covered in commentHighlight.test.ts.
+const encodeAnchor = vi.hoisted(() => vi.fn(() => ({ relFrom: 'AQID', relTo: 'BAUG' }) as { relFrom: string; relTo: string } | null));
 vi.mock('../components/editor/richtext/comment-highlight', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/editor/richtext/comment-highlight')>();
-  return { ...actual, resolveCommentTexts: () => liveTextsHolder.map };
+  return { ...actual, resolveCommentTexts: () => liveTextsHolder.map, encodeCommentAnchor: encodeAnchor };
 });
 
 // ── Mock TipTap: a static fake editor + a placeholder EditorContent. ──
@@ -76,7 +79,7 @@ const fakeEditor = {
   chain: () => ({ insertContentAt: () => ({ focus: () => ({ run: () => {} }) }) }),
   isActive: () => false,
   state: {
-    doc: { childCount: 1, content: { size: 4 }, descendants: () => {} },
+    doc: { childCount: 1, content: { size: 40 }, descendants: () => {}, textBetween: () => 'sous la pluie' },
     selection: { from: 1, $from: { depth: 2, node: (d: number) => (d === 1 ? { type: { name: 'caseBlock' }, attrs: { no: 1 } } : { type: { name: 'caseDescription' } }) } },
   },
 };
@@ -215,31 +218,28 @@ describe('EditorClient (Éditeur shell)', () => {
   // CS-10 round 3 (F16-R3) — the server now 403s the write routes for a member without « Écriture »
   // (B11-R3). The UI must not dead-end against that: the two write affordances go disabled and their
   // handlers no-op. Client-side only — the gate itself is server-side.
-  it('F16-R3: canWrite:false disables Enregistrer + Enregistrer une nouvelle version and calls neither api', async () => {
+  it('F16-R3: canWrite:false disables « Enregistrer une nouvelle version » and never compacts', async () => {
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
     act(() => getProvider().handlers.onStatus!('connected'));
     act(() => getProvider().handlers.onSync!({ canWrite: false } as never));
 
-    const save = await screen.findByRole('button', { name: 'Enregistrer' });
-    const snapshot = screen.getByRole('button', { name: 'Enregistrer une nouvelle version' });
-    await waitFor(() => expect(save).toBeDisabled());
-    expect(snapshot).toBeDisabled();
+    const snapshot = await screen.findByRole('button', { name: 'Enregistrer une nouvelle version' });
+    await waitFor(() => expect(snapshot).toBeDisabled());
 
-    // Even bypassing the disabled attribute (keyboard shortcut) must not reach the API.
-    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await act(async () => { await Promise.resolve(); });
+    // CS-21 — the idle compaction tick must not reach the API either (the route 403s).
+    act(() => editorHandlers['update']?.());
+    await act(async () => { await new Promise((r) => setTimeout(r, 5200)); });
     expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
     expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
-  });
+  }, 10000);
 
-  it('F16-R3: canWrite:true keeps both write affordances enabled and calling through', async () => {
+  it('F16-R3: canWrite:true keeps « Enregistrer une nouvelle version » enabled and calling through', async () => {
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
     act(() => getProvider().handlers.onStatus!('connected'));
     act(() => getProvider().handlers.onSync!({ canWrite: true } as never));
 
-    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
     await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
   });
@@ -312,59 +312,186 @@ describe('EditorClient (Éditeur shell)', () => {
     await waitFor(() => expect(screen.getByText('2 en ligne')).toBeInTheDocument());
   });
 
-  // ── FR9 (r3) — explicit save model: NO autosave; typing marks dirty; Save button + Ctrl/Cmd-S persist. ──
+  // ── CS-21 — background compaction: no « Enregistrer », no Ctrl+S, no dirty state. The client
+  //    compacts on idle (~5s), on visibilitychange→hidden and on unmount; the header carries a passive
+  //    status that reports and is never a button. ──
 
-  it('FR9: typing does NOT autosave — it marks the draft dirty and no timer ever persists', async () => {
-    vi.useFakeTimers();
-    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+  it('CS-21 F1/A1: the header has no « Enregistrer » button and Ctrl+S saves nothing', async () => {
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
-    render(<EditorClient slug="lames" pageId="pg1" />);
-    await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
-    act(() => editorHandlers['update']?.());
-    // The dirty indicator shows immediately; NO "Enregistrement…" auto-kicks in.
-    expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
-    expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument();
-    vi.useRealTimers();
-  });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
 
-  it('FR9: Ctrl+S persists the current content (no new version) and flips to "Enregistré"', async () => {
-    (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
-    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
-    render(<EditorClient slug="lames" pageId="pg1" />);
-    await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Enregistrer' })).not.toBeInTheDocument();
+    // « Enregistrer une nouvelle version » keeps all the ceremony (F4).
+    expect(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' })).toBeInTheDocument();
+
     act(() => editorHandlers['update']?.());
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
-    // Save persists content, it does NOT create a version.
-    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByText('Enregistré')).toBeInTheDocument());
+    await act(async () => { await Promise.resolve(); });
+    expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
   });
 
-  it('FR9: the toolbar « Enregistrer » button persists the current content', async () => {
-    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
-    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
-    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
-    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+  it('CS-21 F2: the status is a text report, never a button', async () => {
+    await renderEditor(makeDoc());
+    act(() => getProvider().handlers.onStatus!('connected'));
+    const status = await screen.findByText('Enregistré');
+    expect(status.tagName).toBe('SPAN');
+    expect(status.closest('button')).toBeNull();
+    expect(status.getAttribute('role')).toBe('status');
   });
 
-  // Item 2 (iter 5) — Save relocated next to the chapter switcher as an icon-only button. It carries an
-  // aria-label so it stays operable/named, and it goes accent when there are unsaved edits (dirty).
-  it('Item2: the icon-only Save button sits by the switcher and turns accent when dirty', async () => {
-    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
-    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
-    const save = screen.getByRole('button', { name: 'Enregistrer' });
-    // Icon-only: no visible "Enregistrer" text label, but a title tooltip is present.
-    expect(save).toHaveAttribute('title', expect.stringContaining('Enregistrer'));
-    // Not dirty yet → card background (not accent).
-    expect(save.style.background).not.toContain('accent');
+  it('CS-21 F3/A2: typing then going idle ~5 s compacts once, with the unchanged payload', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }),
+      );
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      act(() => editorHandlers['update']?.());
+      expect(api.autosaveEditorDocument).not.toHaveBeenCalled(); // not before the idle window
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+
+      expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+      // Payload unchanged from the explicit-save era: (pageId, body, loaded assetId).
+      expect(api.autosaveEditorDocument).toHaveBeenCalledWith(
+        'pg1',
+        expect.objectContaining({ ydocState: expect.any(String), contentJson: expect.any(Object), html: expect.any(String) }),
+        'a1',
+      );
+      expect(api.snapshotEditorVersion).not.toHaveBeenCalled(); // compaction never versions
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CS-21 F3: a keystroke inside the window restarts the debounce (one compaction, not two)', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      act(() => editorHandlers['update']?.());
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      act(() => editorHandlers['update']?.());
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CS-21 F3/A3: visibilitychange → hidden flushes the pending compaction immediately', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      act(() => editorHandlers['update']?.());
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve(); });
+      expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+
+      // The flush consumed the pending tick: the timer must not fire a second request.
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CS-21 F3/A3: unmounting with a pending edit flushes the compaction', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+      const view = render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      act(() => editorHandlers['update']?.());
+      await act(async () => { view.unmount(); await Promise.resolve(); });
+      expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CS-21 F5: the status reports « Enregistrement… » in flight, then « Enregistré »', async () => {
+    let release!: (v: unknown) => void;
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockReturnValue(new Promise((r) => { release = r; }));
+    await renderEditor(makeDoc());
+    act(() => getProvider().handlers.onStatus!('connected'));
+
     act(() => editorHandlers['update']?.());
-    await waitFor(() => expect(screen.getByText('Modifications non enregistrées')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Enregistrer' }).style.background).toContain('accent');
+    await waitFor(() => expect(screen.getByText('Enregistrement…')).toBeInTheDocument(), { timeout: 6000 });
+    await act(async () => { release({ savedAt: 'now', materialized: null }); await Promise.resolve(); });
+    await waitFor(() => expect(screen.getByText('Enregistré')).toBeInTheDocument());
+  }, 12000);
+
+  it('CS-21 F5: disconnected wins over everything — the offline copy is shown', async () => {
+    await renderEditor(makeDoc());
+    act(() => getProvider().handlers.onStatus!('connected'));
+    expect(screen.getByText('Enregistré')).toBeInTheDocument();
+    act(() => getProvider().handlers.onStatus!('reconnecting'));
+    expect(
+      screen.getByText('Hors ligne — les modifications reprendront à la reconnexion'),
+    ).toBeInTheDocument();
+  });
+
+  it('CS-21 F5: one failed compaction is silent; the SECOND consecutive one toasts once', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+      (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('500'));
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      act(() => editorHandlers['update']?.());
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(
+        screen.queryByText('L’enregistrement continu a échoué. Vos modifications restent partagées.'),
+      ).not.toBeInTheDocument();
+
+      act(() => editorHandlers['update']?.());
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      expect(
+        screen.getAllByText('L’enregistrement continu a échoué. Vos modifications restent partagées.'),
+      ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CS-21 F5: a success between two failures resets the counter (no toast)', async () => {
+    vi.useFakeTimers();
+    try {
+      (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
+      const autosave = api.autosaveEditorDocument as ReturnType<typeof vi.fn>;
+      autosave
+        .mockRejectedValueOnce(new Error('500'))
+        .mockResolvedValueOnce({ savedAt: 'now', materialized: null })
+        .mockRejectedValueOnce(new Error('500'));
+      render(<EditorClient slug="lames" pageId="pg1" />);
+      await vi.waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+
+      for (let i = 0; i < 3; i += 1) {
+        act(() => editorHandlers['update']?.());
+        await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+      }
+      expect(
+        screen.queryByText('L’enregistrement continu a échoué. Vos modifications restent partagées.'),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // Item 1 (iter 5) — compare two scenario versions side by side in a modal (A4 sheets), sourced from
@@ -387,7 +514,7 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(api.getReview).toHaveBeenCalledWith('pg1', { file: 'a1', from: 1, to: 2 });
   });
 
-  it('FR9: restoring an older version into the draft marks it dirty (unsaved)', async () => {
+  it('CS-21: restoring an older version into the draft schedules a compaction (no dirty state)', async () => {
     (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
       { version: 1, mediaId: 'm1', size: 10, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-10', thumbnailUrl: null, active: false },
       { version: 2, mediaId: 'm2', size: 12, note: null, authorId: 'me', authorName: 'Moi', createdAt: '2026-07-11', thumbnailUrl: null, active: true },
@@ -396,9 +523,13 @@ describe('EditorClient (Éditeur shell)', () => {
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 2 } }));
     await userEvent.click(screen.getByRole('combobox', { name: 'Version affichée' }));
     await userEvent.click(screen.getByRole('option', { name: 'v1' }));
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
     await userEvent.click(await screen.findByRole('button', { name: 'Restaurer dans le brouillon' }));
-    expect(await screen.findByText('Modifications non enregistrées')).toBeInTheDocument();
-  });
+    expect(await screen.findByText('Version restaurée dans le brouillon')).toBeInTheDocument();
+    // CS-21 — no « Modifications non enregistrées »: the restore compacts itself on the idle tick.
+    expect(screen.queryByText('Modifications non enregistrées')).not.toBeInTheDocument();
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1), { timeout: 8000 });
+  }, 12000);
 
   it('F-I1: StrictMode double-mount leaves a live provider (fresh one not destroyed)', async () => {
     (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc());
@@ -457,6 +588,8 @@ describe('EditorClient (Éditeur shell)', () => {
     anchorFrom: 4,
     anchorTo: 12,
     quote: 'bonjour le monde',
+    anchorRelFrom: null, // CS-22 — a pre-migration row: the client falls back to the absolute pair
+    anchorRelTo: null,
     version: null,
     correction: null,
     ...over,
@@ -710,7 +843,7 @@ describe('EditorClient (Éditeur shell)', () => {
   // ── Bug (scenario version off-by-one, FE half): never fire a Save with blank html, and target the
   //    opened/loaded asset in place so an import isn't materialized as a duplicate / empty v1. ──
 
-  it('version off-by-one: a blank editor Save is a silent no-op (no autosave request)', async () => {
+  it('version off-by-one: a blank editor compaction is a silent no-op (no autosave request)', async () => {
     const originalGetHTML = fakeEditor.getHTML;
     // Mirror the server's isBlankHtml: '', whitespace, <p></p>, <p><br></p>, <p>&nbsp;</p> all count blank.
     fakeEditor.getHTML = () => '<div data-case-block><p></p></div>';
@@ -719,24 +852,23 @@ describe('EditorClient (Éditeur shell)', () => {
       (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
       render(<EditorClient slug="lames" pageId="pg1" />);
       await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
+      // CS-21 — the idle tick, not a button, is what would fire the request.
       act(() => editorHandlers['update']?.());
-      fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-      // Give any pending microtasks a beat, then assert the endpoint was never hit.
-      await act(async () => { await Promise.resolve(); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 5200)); });
       expect(api.autosaveEditorDocument).not.toHaveBeenCalled();
     } finally {
       fakeEditor.getHTML = originalGetHTML;
     }
-  });
+  }, 12000);
 
-  it('version off-by-one: Save targets the loaded asset id (edits in place, no duplicate)', async () => {
+  it('version off-by-one: compaction targets the loaded asset id (edits in place, no duplicate)', async () => {
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, documentId: 'doc-1' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
-    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    act(() => editorHandlers['update']?.());
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1), { timeout: 8000 });
     // The third arg (assetId) must be the loaded asset so resolveEditorAsset edits it in place.
     expect(api.autosaveEditorDocument).toHaveBeenCalledWith('pg1', expect.any(Object), 'a1');
-  });
+  }, 12000);
 
   it('version off-by-one: "Enregistrer une nouvelle version" POST carries the loaded asset id', async () => {
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
@@ -748,7 +880,7 @@ describe('EditorClient (Éditeur shell)', () => {
 
   // FR7 / QA F1 — after a same-session materialization, "Demander une correction" is no longer blocked
   // on a missing documentId (its disabled reason shifts from "Enregistrez d'abord" to "Sélectionnez…").
-  it('FR7: captures the materialized documentId (via explicit save) so "Demander une correction" works without reload', async () => {
+  it('FR7: captures the materialized documentId (via the compaction tick) so "Demander une correction" works without reload', async () => {
     (api.getEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue(makeDoc({ asset: null, documentId: null }));
     (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({
       savedAt: 'now',
@@ -758,12 +890,61 @@ describe('EditorClient (Éditeur shell)', () => {
     await waitFor(() => expect(screen.getByText('Lames de Brume')).toBeInTheDocument());
     // Blank card: no composer yet.
     expect(screen.queryByRole('button', { name: 'Demander une correction' })).not.toBeInTheDocument();
-    // FR9 — an explicit save materializes the document (no autosave tick).
+    // CS-21 — the idle compaction tick materializes the document (no button, no Ctrl+S).
     act(() => editorHandlers['update']?.());
-    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
-    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1), { timeout: 8000 });
     const btn = await screen.findByRole('button', { name: 'Demander une correction' });
     // documentId is now set → the disabled reason is the missing selection, not the missing document.
     expect(btn).toHaveAttribute('title', 'Sélectionnez un passage à corriger');
+  }, 12000);
+
+  // ── CS-22 — the composer ships the durable relative anchors alongside the absolute pair ──
+  describe('CS-22 durable anchors on create', () => {
+    const selectRange = () =>
+      act(() => {
+        Object.assign(fakeEditor.state.selection, { from: 4, to: 12, empty: false });
+        editorHandlers['selectionUpdate']?.();
+      });
+
+    it('sends anchorRelFrom/anchorRelTo with an anchored comment', async () => {
+      await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, documentId: 'doc-1' }));
+      selectRange();
+      expect(encodeAnchor).toHaveBeenCalledWith(fakeEditor.state, 4, 12);
+      await userEvent.type(screen.getByLabelText('Commenter la sélection'), 'À revoir');
+      (api.addCaseComment as ReturnType<typeof vi.fn>).mockResolvedValue(mkComment());
+      await userEvent.click(screen.getByRole('button', { name: '＋ Commentaire' }));
+      expect(api.addCaseComment).toHaveBeenCalledWith(
+        'pg1',
+        1,
+        { text: 'À revoir', anchorFrom: 4, anchorTo: 12, quote: 'sous la pluie', anchorRelFrom: 'AQID', anchorRelTo: 'BAUG' },
+        undefined,
+      );
+    });
+
+    it('omits them when the Yjs binding is not ready (absolute pair only, as before)', async () => {
+      encodeAnchor.mockReturnValueOnce(null);
+      await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, documentId: 'doc-1' }));
+      selectRange();
+      await userEvent.type(screen.getByLabelText('Commenter la sélection'), 'À revoir');
+      (api.addCaseComment as ReturnType<typeof vi.fn>).mockResolvedValue(mkComment());
+      await userEvent.click(screen.getByRole('button', { name: '＋ Commentaire' }));
+      expect(api.addCaseComment).toHaveBeenCalledWith('pg1', 1, { text: 'À revoir', anchorFrom: 4, anchorTo: 12, quote: 'sous la pluie' }, undefined);
+    });
+
+    it('a scenario correction carries them on its anchor (AC5 — it inherits the durable anchor)', async () => {
+      await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, documentId: 'doc-1' }));
+      selectRange();
+      await userEvent.type(screen.getByLabelText('Commenter la sélection'), 'Reformuler');
+      (api.createCorrection as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'corr-1' });
+      await userEvent.click(screen.getByRole('button', { name: 'Demander une correction' }));
+      expect(api.createCorrection).toHaveBeenCalledWith(
+        'pg1',
+        expect.objectContaining({
+          type: 'scenario',
+          anchor: { documentId: 'doc-1', from: 4, to: 12, quote: 'sous la pluie', relFrom: 'AQID', relTo: 'BAUG' },
+        }),
+      );
+    });
   });
+
 });

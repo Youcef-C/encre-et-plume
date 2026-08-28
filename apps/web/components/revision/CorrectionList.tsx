@@ -9,9 +9,11 @@ import {
   CORRECTION_STATUS_LABELS,
   type CorrectionDto,
   type CorrectionStatus,
+  type DessinRegion,
+  type ReviewVersionItem,
 } from '@encre-et-plume/shared';
 import OnBrandSelect from '../form/OnBrandSelect';
-import { TrashIcon, CheckIcon } from '../icons';
+import { TrashIcon, CheckIcon, WarningIcon } from '../icons';
 import { NEXT_STATUS, statusColor } from './shared';
 
 type StatusFilter = '' | CorrectionStatus;
@@ -25,6 +27,11 @@ export interface CorrectionListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onStatusChange: (c: CorrectionDto, status: CorrectionStatus) => void;
+  // CS-24 — the filer acknowledges a fix someone else marked corrigé.
+  onVerify: (c: CorrectionDto) => void;
+  // CS-24 — the reviewed file's versions, each with its signed URL: the before/after crops address a
+  // correction's OWN pair (filedAgainstVersion ↔ resolvedInVersion), not the compared pair.
+  versions: ReviewVersionItem[];
   onDelete: (c: CorrectionDto) => void;
   busyId: string | null;
   rowError: { id: string; message: string } | null;
@@ -42,6 +49,29 @@ function anchorRef(c: CorrectionDto): string {
   return 'texte';
 }
 
+/** CS-24 — one CSS-cropped pane: the region blown up to fill the box from an existing image URL. */
+function CropPane({ label, version, url, region }: { label: string; version: number; url: string; region: DessinRegion }) {
+  const pct = (v: number, span: number) => (span >= 1 ? 0 : (v / (1 - span)) * 100);
+  return (
+    <figure style={{ margin: 0, border: '2px solid var(--ink)', borderRadius: 6, overflow: 'hidden', background: 'var(--card)' }}>
+      <figcaption style={{ padding: '3px 7px', borderBottom: '2px solid var(--ink)', background: 'var(--paper)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+        {`${label} · v${version}`}
+      </figcaption>
+      <div
+        className="ep-crop"
+        role="img"
+        aria-label={`${label} — version ${version}`}
+        style={{
+          aspectRatio: `${region.w} / ${region.h}`,
+          backgroundImage: `url("${url}")`,
+          backgroundSize: `${100 / region.w}% ${100 / region.h}%`,
+          backgroundPosition: `${pct(region.x, region.w)}% ${pct(region.y, region.h)}%`,
+        }}
+      />
+    </figure>
+  );
+}
+
 export default function CorrectionList({
   items,
   numberOf,
@@ -51,6 +81,8 @@ export default function CorrectionList({
   selectedId,
   onSelect,
   onStatusChange,
+  onVerify,
+  versions,
   onDelete,
   busyId,
   rowError,
@@ -100,13 +132,20 @@ export default function CorrectionList({
           const selected = selectedId === c.id;
           const canStatus = c.authorId === meId || c.assigneeId === meId;
           const isAuthor = c.authorId === meId;
+          // CS-24 — `authorId` IS the filer. A correction someone ELSE closed and the filer has not
+          // acknowledged yet is « en attente de vérification »; self-resolution shows nothing.
+          const resolved = c.status === 'corrige' && c.resolvedInVersion != null;
+          const awaitingCheck = isAuthor && resolved && !!c.resolvedById && c.resolvedById !== c.authorId && !c.verifiedAt;
+          const beforeUrl = versions.find((v) => v.version === c.filedAgainstVersion)?.url ?? null;
+          const afterUrl = versions.find((v) => v.version === c.resolvedInVersion)?.url ?? null;
+          const quote = c.type === 'scenario' && 'quote' in c.anchor ? c.anchor.quote : null;
           const color = statusColor(c.status);
           return (
             <li key={c.id} style={{ listStyle: 'none' }}>
               {/* iter 6 — restyled onto the app card idiom (.ep-correction-card): 3px ink border, hard
                   offset shadow, translate hover; accent chrome when selected (data-selected). A left
                   status stripe + a filled status pill + a display-font number carry the status colour. */}
-              <div className="ep-correction-card" data-status={c.status} data-selected={selected ? 'true' : undefined}>
+              <div className="ep-correction-card" data-correction-id={c.id} data-status={c.status} data-selected={selected ? 'true' : undefined}>
                 {/* A4 — left status stripe (green corrigé / accent à-corriger·en-cours). */}
                 <span
                   className="ep-correction-stripe"
@@ -176,20 +215,75 @@ export default function CorrectionList({
                   <span style={{ display: 'block', fontSize: 13, color: 'var(--ink)', lineHeight: 1.4 }}>{c.description}</span>
                 </button>
 
+                {/* CS-24 — what changed, in place: the two crops of this correction's own region
+                    (dessin), or the text it was filed against (scenario, D-5 — the resolving text is
+                    not re-anchorable server-side). Omitted when a version's URL is gone: never a
+                    broken image. */}
+                {resolved && c.type === 'dessin' && 'region' in c.anchor && beforeUrl && afterUrl && (
+                  <div className="ep-crop-pair">
+                    <CropPane label="Avant" version={c.filedAgainstVersion} url={beforeUrl} region={c.anchor.region} />
+                    <CropPane label="Après" version={c.resolvedInVersion as number} url={afterUrl} region={c.anchor.region} />
+                  </div>
+                )}
+                {resolved && c.type === 'scenario' && quote && (
+                  <div style={{ margin: '0 14px 10px 18px', border: '2px solid var(--ink)', borderRadius: 6, background: 'var(--card)', overflow: 'hidden' }}>
+                    <div style={{ padding: '3px 7px', borderBottom: '2px solid var(--ink)', background: 'var(--paper)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                      Texte signalé
+                    </div>
+                    <blockquote style={{ margin: 0, padding: '7px 9px', fontSize: 12, lineHeight: 1.5, color: 'var(--ink)' }}>
+                      {`« ${quote} »`}
+                    </blockquote>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 12px 18px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', fontFamily: 'var(--font-mono, monospace)' }}>
                     {`v${c.filedAgainstVersion}`}
                     {c.resolvedInVersion != null ? ` → v${c.resolvedInVersion}` : ''}
                   </span>
-                  {canStatus && (
+                  {awaitingCheck && (
+                    <span
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--ink2)' }}
+                    >
+                      <WarningIcon size={11} />
+                      en attente de vérification
+                    </span>
+                  )}
+                  {/* The filer's one-click reopen replaces the generic stepper on a resolved row —
+                      same route (PATCH status a_corriger), the label the story asks for, no confirm
+                      (reopening is not destructive). */}
+                  {isAuthor && c.status === 'corrige' ? (
                     <button
                       type="button"
-                      onClick={() => onStatusChange(c, NEXT_STATUS[c.status])}
+                      onClick={() => onStatusChange(c, 'a_corriger')}
                       disabled={busyId === c.id}
-                      aria-label={`Statut de la correction ${n} : ${label} — passer à « ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.status]]} »`}
-                      className="ep-btn-compact ep-btn-compact--ghost"
+                      aria-label={`Rouvrir la correction ${n}`}
+                      className="ep-btn-compact ep-btn-compact--secondary"
                     >
-                      {busyId === c.id ? '…' : `→ ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.status]]}`}
+                      {busyId === c.id ? '…' : 'Rouvrir'}
+                    </button>
+                  ) : (
+                    canStatus && (
+                      <button
+                        type="button"
+                        onClick={() => onStatusChange(c, NEXT_STATUS[c.status])}
+                        disabled={busyId === c.id}
+                        aria-label={`Statut de la correction ${n} : ${label} — passer à « ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.status]]} »`}
+                        className="ep-btn-compact ep-btn-compact--ghost"
+                      >
+                        {busyId === c.id ? '…' : `→ ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.status]]}`}
+                      </button>
+                    )
+                  )}
+                  {awaitingCheck && (
+                    <button
+                      type="button"
+                      onClick={() => onVerify(c)}
+                      disabled={busyId === c.id}
+                      aria-label={`Vu — vérifier la correction ${n}`}
+                      className="ep-btn-compact ep-btn-compact--secondary"
+                    >
+                      Vu
                     </button>
                   )}
                   {isAuthor && (

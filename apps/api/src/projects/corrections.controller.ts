@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req
 import type {
   CorrectionDto,
   CorrectionListResponse,
+  CorrectionLocationResponse,
   CorrectionStatus,
   CorrectionType,
   ReviewPayload,
@@ -76,6 +77,20 @@ export class CorrectionsController {
   @Patch(':id')
   updateStatus(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateCorrectionDto): Promise<CorrectionDto> {
     return this.corrections.updateStatus(req.accountId, id, dto);
+  }
+
+  /** CS-24 — the filer acknowledges the fix: stamps verifiedAt, leaves the status alone.
+   *  403 for anyone but the filer, 409 when the correction is not marked corrigé, idempotent. */
+  @Post(':id/verify')
+  verify(@Req() req: AuthRequest, @Param('id') id: string): Promise<CorrectionDto> {
+    return this.corrections.verify(req.accountId, id);
+  }
+
+  /** CS-24 — resolve a notification's correction refId to the review screen showing it
+   *  (member-gated; 404 when the id is not a correction, so the caller can fall back). */
+  @Get(':id/location')
+  location(@Req() req: AuthRequest, @Param('id') id: string): Promise<CorrectionLocationResponse> {
+    return this.corrections.location(req.accountId, id);
   }
 
   /** Delete a review note (author only). */

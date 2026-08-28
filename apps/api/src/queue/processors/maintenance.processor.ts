@@ -6,6 +6,7 @@ import { PrivacyService } from '../../privacy/privacy.service';
 import { MediaService } from '../../media/media.service';
 import { EVENT_RETENTION_DAYS } from '@encre-et-plume/shared';
 import { SWEEP_PAGE, afterCursor, sweepPaged } from '../../maintenance/sweep';
+import { COMPACTION_IDLE_MS, compactDocument } from '../../projects/scenario-compaction';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -16,6 +17,9 @@ const SCENARIO_RETENTION_D = 30;
 // F-23: the Event table's rolling window. Shared with the privacy policy — changing one without
 // the other makes the policy a lie.
 const EVENT_RETENTION_D = EVENT_RETENTION_DAYS;
+
+/** CS-21 — the second job name on this queue (see `process`). */
+export const COMPACTION_JOB = 'scenario-compaction';
 
 /** One sweep = a name and something that deletes garbage and says how much. Not a framework. */
 type Sweep = { name: string; run: () => Promise<number> };
@@ -36,7 +40,12 @@ export class MaintenanceProcessor implements JobProcessor<Record<string, never>>
     private readonly media: MediaService,
   ) {}
 
-  async process(_data: Record<string, never>, _job: Job): Promise<void> {
+  async process(_data: Record<string, never>, job: Job): Promise<void> {
+    // D-3 — two jobs, one queue: the nightly `gc` sweep and CS-21's 10-minute `scenario-compaction`.
+    // ponytail: a name branch beats a second queue + processor + registration. If the nightly GC ever
+    // delays compaction noticeably, this graduates to its own queue.
+    if (job?.name === COMPACTION_JOB) return this.compactAbandonedScenarios();
+
     const sweeps: Sweep[] = [
       { name: 'auth-tokens', run: () => this.sweepAuthTokens() },
       // Both of these already existed; F-25 wires them to the cron and bounds them.
@@ -60,6 +69,47 @@ export class MaintenanceProcessor implements JobProcessor<Record<string, never>>
     }
 
     if (failed.length > 0) throw new Error(`gc sweeps failed: ${failed.join(', ')}`);
+  }
+
+  /**
+   * CS-21 B2 — the safety net: compaction must not depend on a browser being open. A tab that crashed
+   * mid-session leaves an append-only `ScenarioUpdate` log nobody will ever fold in. Pick the documents
+   * whose oldest pending row is older than COMPACTION_IDLE_MS and compact each one.
+   *
+   * D-4: `contentJson` is left alone — there is no server-side ydoc→projection materializer, and the
+   * projection is a read model the next client autosave refreshes. Bounding the log is this job's work.
+   *   The blast radius of that skew, named so the next reader does not have to find it: `contentJson`
+   *   feeds `deriveCases()` → `EditorDocumentResponse.cases[]` (`scenario-documents.service.ts`), the
+   *   story-shaped artifact. After a job-only compaction `ydocState` is current and `cases[]` can be one
+   *   editing session behind, until any client autosaves. Harmless while `cases[]` is only ever read
+   *   ALONGSIDE the ydoc the editor hydrates from — it becomes a real bug the day something consumes
+   *   `cases[]` on its own (a PUB-1 export, a server-side render). Fix then is a projection built here.
+   * D-6: age only, no count threshold — the age rule catches a hot document ten minutes later anyway,
+   * and it rides the `createdAt` index F-25 already added.
+   */
+  private async compactAbandonedScenarios(): Promise<void> {
+    const cutoff = new Date(Date.now() - COMPACTION_IDLE_MS);
+    const stale = await this.prisma.scenarioUpdate.findMany({
+      where: { createdAt: { lt: cutoff } },
+      distinct: ['documentId'],
+      select: { documentId: true },
+      take: SWEEP_PAGE,
+      orderBy: { id: 'asc' },
+    });
+
+    const failed: string[] = [];
+    let compacted = 0;
+    for (const { documentId } of stale) {
+      try {
+        compacted += (await compactDocument(this.prisma, documentId)).compacted;
+      } catch (err: unknown) {
+        failed.push(documentId);
+        this.logger.error(`scenario-compaction ${documentId} failed: ${(err as Error).message}`);
+      }
+    }
+    this.logger.log(`scenario-compaction: documents=${stale.length} compacted=${compacted}`);
+
+    if (failed.length > 0) throw new Error(`scenario-compaction failed: ${failed.join(', ')}`);
   }
 
   /** B4 — expired tokens, consumed or not: past `expiresAt` they are equally garbage. */
@@ -133,7 +183,7 @@ export class MaintenanceProcessor implements JobProcessor<Record<string, never>>
 
   /**
    * B7 — every update past retention, unconditionally. Safe because `ScenarioUpdate` is write-only:
-   * it is created by the editor gateway and emptied wholesale by autosave, and **no code path reads
+   * it is created by the editor gateway and folded into `ydocState` by CS-21 compaction, and **no code path reads
    * a row back**, so a row this old belongs to a session that ended without a save and its bytes
    * cannot surface to any user.
    */

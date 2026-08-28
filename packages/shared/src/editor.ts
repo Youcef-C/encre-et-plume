@@ -34,6 +34,12 @@ export interface CaseCommentDto {
   anchorFrom: number | null;
   anchorTo: number | null;
   quote: string | null;
+  // CS-22 — the DURABLE anchor: Yjs relative positions (`Y.encodeRelativePosition` output) as base64.
+  // Bound to CRDT items, so they resolve to the right words after any peer's edit AND across a reload —
+  // the client prefers these and falls back to `anchorFrom`/`anchorTo` when absent (pre-CS-22 rows) or
+  // structurally unusable. Opaque to the API: relayed, never decoded (like every other CRDT payload).
+  anchorRelFrom: string | null;
+  anchorRelTo: string | null;
   // CS-5 Fb-7 — the asset version this comment was filed against (null for pre-CS-5-r2 rows: no chip).
   version: number | null;
   // CS-5 Fb-2 — set when this comment IS a scenario correction request (a tagged CS-4 comment). The
@@ -87,6 +93,10 @@ export interface CreateCaseCommentRequest {
   anchorFrom?: number;
   anchorTo?: number;
   quote?: string;
+  // CS-22 — base64 `Y.encodeRelativePosition` output for the same range (≤ 512 decoded bytes each).
+  // Optional: a client without a ready Yjs binding just omits them and keeps today's absolute-only row.
+  anchorRelFrom?: string;
+  anchorRelTo?: string;
 }
 export interface SharePageResponse {
   url: string;

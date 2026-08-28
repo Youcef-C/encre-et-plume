@@ -271,7 +271,8 @@ describe('EditorGateway broadcasts', () => {
   it('emitComment broadcasts to the asset room', () => {
     const { gateway } = build();
     const { emit, to } = serverOf(gateway);
-    const comment = { id: 'c1', caseNo: 1, authorId: 'a', authorName: 'A', text: 'x', createdAt: 'x', anchorFrom: null, anchorTo: null, quote: null, version: null, correction: null };
+    // CS-22 — the relative anchors ride this same broadcast verbatim (the gateway relays the DTO whole).
+    const comment = { id: 'c1', caseNo: 1, authorId: 'a', authorName: 'A', text: 'x', createdAt: 'x', anchorFrom: 3, anchorTo: 9, quote: 'q', anchorRelFrom: 'AQID', anchorRelTo: 'BAUG', version: null, correction: null };
     gateway.emitComment('asset-1', comment);
     expect(to).toHaveBeenCalledWith('editor:asset:asset-1');
     expect(emit).toHaveBeenCalledWith('editor:comment', { comment });
@@ -290,7 +291,7 @@ describe('EditorGateway broadcasts', () => {
     const { gateway } = build();
     (gateway as unknown as { server: unknown }).server = undefined;
     expect(() => gateway.emitMaterialized('p', 'a')).not.toThrow();
-    expect(() => gateway.emitComment('a', { id: 'c', caseNo: 1, authorId: 'a', authorName: 'A', text: 'x', createdAt: 'x', anchorFrom: null, anchorTo: null, quote: null, version: null, correction: null })).not.toThrow();
+    expect(() => gateway.emitComment('a', { id: 'c', caseNo: 1, authorId: 'a', authorName: 'A', text: 'x', createdAt: 'x', anchorFrom: null, anchorTo: null, quote: null, anchorRelFrom: null, anchorRelTo: null, version: null, correction: null })).not.toThrow();
     expect(() => gateway.emitCommentDeleted('a', 'c')).not.toThrow();
   });
 });

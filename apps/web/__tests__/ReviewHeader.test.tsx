@@ -14,8 +14,9 @@ const files: ReviewFileItem[] = [
   { assetId: 'a1', filename: 'nemu-planche4.png', type: 'dessin', surface: 'dessin', currentVersion: 3 },
 ];
 const versions: ReviewVersionItem[] = [
-  { version: 3, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null },
-  { version: 2, authorName: 'Camille', createdAt: '2026-07-13T10:00:00.000Z', note: null },
+  // CS-24 — ReviewVersionItem now carries the version's signed URL (dessin surface only).
+  { version: 3, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null, url: null },
+  { version: 2, authorName: 'Camille', createdAt: '2026-07-13T10:00:00.000Z', note: null, url: null },
 ];
 
 const base = {

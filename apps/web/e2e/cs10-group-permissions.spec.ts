@@ -161,10 +161,12 @@ test.describe('CS-10 Gérer le groupe — e2e-cs10-groupe (A owner/leader, B inv
     await login(bPage, B_EMAIL);
     await bPage.goto(`/projet/${SLUG}/editeur/${pageId}`);
     await expect(bPage.getByText('Lecture seule')).toBeVisible({ timeout: 10_000 });
-    // Round 3 (F16-R3) — the banner alone let a bypass survive two QA rounds (see CS10-E17): the
-    // write affordance must also be disabled so the UI doesn't dead-end on the server's 403. (The
-    // "nouvelle version" split button only renders once an asset exists — asserted in CS10-E17.)
-    await expect(bPage.getByRole('button', { name: 'Enregistrer', exact: true })).toBeDisabled();
+    // CS-21 — the « Enregistrer » button is gone for everyone; the client-side write affordance that
+    // remains is « Enregistrer une nouvelle version » (only rendered once an asset exists — its
+    // disabled state is asserted in CS10-E17). What must hold here is that nothing invites a write:
+    // no save button, and the compaction tick never fires (the direct-API probe in CS10-E17 proves
+    // the server side).
+    await expect(bPage.getByRole('button', { name: 'Enregistrer', exact: true })).toHaveCount(0);
     await bCtx.close();
   });
 

@@ -10,6 +10,13 @@ describe('MaintenanceModule (F-25)', () => {
     expect(queue.schedule).toHaveBeenCalledWith('maintenance', 'gc', {}, { pattern: '0 4 * * *' });
   });
 
+  it('CS-21 B2 · registers the 10-minute scenario-compaction safety net on the same queue', async () => {
+    const queue = { schedule: jest.fn().mockResolvedValue(undefined) };
+    await new MaintenanceModule(queue as unknown as QueueService).onModuleInit();
+
+    expect(queue.schedule).toHaveBeenCalledWith('maintenance', 'scenario-compaction', {}, { pattern: '*/10 * * * *' });
+  });
+
   it('B2 · a Redis outage at boot is not fatal', async () => {
     const queue = { schedule: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) };
     await expect(

@@ -776,6 +776,34 @@ describe('ProjectsService workspace (CS-2)', () => {
       build(null);
       await expect(service.getWorkspace('acc-me', 'nope')).rejects.toThrow(NotFoundException);
     });
+
+    // CS-20 A7 — the handoff pin's `stale` is derived from the ONE workspace read. The prisma stub
+    // exposes no `asset` / `assetVersion` model at all, so a per-card version lookup would throw
+    // here rather than quietly ship an N+1 to production.
+    it('derives every card\'s handoff pin from the single workspace read (no per-card version lookup)', async () => {
+      build(
+        WORKSPACE({
+          pages: [
+            { id: 'page-1', chapterId: 'ch-0', title: 'Page 1', stage: 'nemu', fileTags: [], linkedFileIds: [], drawnAgainstVersion: 2, drawnAgainstAsset: { id: 'as-1', currentVersion: 5 } },
+            { id: 'page-2', chapterId: 'ch-0', title: 'Page 2', stage: 'nemu', fileTags: [], linkedFileIds: [], drawnAgainstVersion: 5, drawnAgainstAsset: { id: 'as-1', currentVersion: 5 } },
+            { id: 'page-3', chapterId: 'ch-0', title: 'Page 3', stage: 'scenario', fileTags: [], linkedFileIds: [] },
+          ],
+        }),
+      );
+      const res = await service.getWorkspace('acc-me', 'lames-de-brume');
+      expect(res.pages.map((p) => p.handoff)).toEqual([
+        { assetId: 'as-1', version: 2, headVersion: 5, stale: true },
+        { assetId: 'as-1', version: 5, headVersion: 5, stale: false },
+        null,
+      ]);
+      expect(prisma.project.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.asset).toBeUndefined();
+      expect(prisma.assetVersion).toBeUndefined();
+      // …and the pinned head rides along as a nested select on the same read.
+      expect(prisma.project.findUnique.mock.calls[0][0].include.pages.include.drawnAgainstAsset).toEqual({
+        select: { id: true, currentVersion: true },
+      });
+    });
   });
 
   // ── updateInfo ─────────────────────────────────────────────────────────────

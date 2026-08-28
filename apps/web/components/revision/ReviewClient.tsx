@@ -6,7 +6,7 @@
 // Read-only fallback for non-members is the server's 403/404 → the access screen (payload never leaks).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   AssetItem,
   AssetType,
@@ -22,6 +22,7 @@ import AssetVersionsModal from '../projet/AssetVersionsModal';
 import ReviewHeader from './ReviewHeader';
 import DessinSurface from './DessinSurface';
 import CorrectionList from './CorrectionList';
+import Walkthrough from './Walkthrough';
 import Composer from './Composer';
 import { buildNumbering } from './shared';
 
@@ -35,6 +36,8 @@ export interface ReviewClientProps {
 export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
   const { account, loading: sessionLoading } = useSession();
   const router = useRouter();
+  // CS-24 — the notification deep link lands here as ?correction=<id> (resolved by /revision/c/[id]).
+  const deepLinkId = useSearchParams()?.get('correction') ?? null;
 
   const [payload, setPayload] = useState<ReviewPayload | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -59,6 +62,17 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [confirmDel, setConfirmDel] = useState<CorrectionDto | null>(null);
+
+  // CS-25 — new-version triage. The walkthrough is a CLIENT MODE: `ids` freezes the queue at entry
+  // (statuses stay live off `all`), and every decision is the existing status write.
+  //   The freeze is deliberate, not an oversight: deciding a correction removes it from the live triage
+  // set, so a queue derived on every render would re-sort and renumber UNDER the reviewer mid-pass —
+  // « 3 / 6 » would jump, and the item after the one just decided would be skipped. Freeze the ids,
+  // read the statuses live. Do not "fix" this by deriving `walkItems` from the filtered list.
+  const [walk, setWalk] = useState<{ ids: string[]; index: number } | null>(null);
+  const [walkSummary, setWalkSummary] = useState<string | null>(null);
+  const reviewedRef = useRef(0);
+  const entryRef = useRef<HTMLButtonElement>(null);
 
   const [validating, setValidating] = useState(false);
   const [validateError, setValidateError] = useState<string | null>(null);
@@ -92,12 +106,19 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
     };
   }, [pageId, params, account, sessionLoading, reloadKey]);
 
-  // Scroll the selected anchor into view (two-way row ↔ anchor selection).
-  const surfaceRef = useRef<HTMLDivElement>(null);
+  // CS-24 (A2) — select the deep-linked correction as soon as the list carries it.
   useEffect(() => {
-    if (!selectedId || !surfaceRef.current) return;
-    const el = surfaceRef.current.querySelector(`[data-correction-id="${selectedId}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (deepLinkId && all.some((c) => c.id === deepLinkId)) setSelectedId(deepLinkId);
+  }, [deepLinkId, all]);
+
+  // Scroll the selected anchor into view (two-way row ↔ anchor selection) — the box on the surface
+  // AND (CS-24) the row in the aside, so a deep link lands on a correction you can actually see.
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!selectedId) return;
+    surfaceRef.current?.querySelector(`[data-correction-id="${selectedId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    asideRef.current?.querySelector(`[data-correction-id="${selectedId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [selectedId]);
 
   // r4 — dessin-only revision page. Numbering derives from the dessin subset so box numbers stay
@@ -114,14 +135,50 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
   const selectedAssetId = payload?.selected?.assetId ?? null;
   const dessinCorrections = all.filter((c) => c.type === 'dessin' && c.assetId === selectedAssetId);
 
+  // CS-25 (F1/A1) — triage queue: still-open corrections filed against a version OLDER than the file's
+  // head. The head is already in the payload (`files[].currentVersion`) — no extra call, no new field.
+  const headVersion = payload?.files.find((f) => f.assetId === selectedAssetId)?.currentVersion ?? 0;
+  const triage = dessinCorrections.filter((c) => c.status !== 'corrige' && c.filedAgainstVersion < headVersion);
+
+  // The queue is frozen at entry (ids), but each row's status is read live off `all`, so a decision
+  // written mid-walk is the one you see on re-entry.
+  const walkItems = useMemo(
+    () => (walk ? (walk.ids.map((id) => all.find((c) => c.id === id)).filter(Boolean) as CorrectionDto[]) : []),
+    [walk, all],
+  );
+  const walkIndex = walk ? Math.min(walk.index, Math.max(0, walkItems.length - 1)) : 0;
+  const walkCurrent = walkItems[walkIndex] ?? null;
+
   const flashToast = (msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast((t) => (t === msg ? null : t)), 3200);
   };
 
+  // ── CS-25 · walkthrough ──────────────────────────────────────────────────────
+  const enterWalkthrough = () => {
+    reviewedRef.current = 0;
+    setWalkSummary(null);
+    setWalk({ ids: triage.map((c) => c.id), index: 0 });
+  };
+  const exitWalkthrough = () => {
+    const n = reviewedRef.current;
+    reviewedRef.current = 0;
+    setWalk(null);
+    setWalkSummary(n > 0 ? `${n} correction${n > 1 ? 's' : ''} pass${n > 1 ? 'ées' : 'ée'} en revue` : null);
+    entryRef.current?.focus(); // F7 — focus returns to the entry button
+  };
+  // Every decision is the EXISTING status write — identical to a list decision, server-side.
+  const decideInWalk = async (c: CorrectionDto, status: CorrectionStatus) => {
+    const ok = await changeStatus(c, status);
+    if (ok) reviewedRef.current += 1;
+    return ok;
+  };
+
   // ── header handlers ──────────────────────────────────────────────────────────
   const onSelectFile = (assetId: string) => {
     setSelectedId(null);
+    setWalk(null); // CS-25 — the queue belongs to the file that was on screen
+    setWalkSummary(null);
     setParams({ file: assetId });
   };
   const onFrom = (v: number) => setParams((p) => ({ ...p, file: selectedAssetId ?? p.file, from: v }));
@@ -145,7 +202,7 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
   };
 
   // ── correction mutations ─────────────────────────────────────────────────────
-  const createDessin = async (description: string) => {
+  const createDessin = async (description: string, assigneeId: string | null) => {
     if (!selectedAssetId || !draftRegion) return;
     setComposerBusy(true);
     setComposerError(null);
@@ -155,6 +212,8 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
         assetId: selectedAssetId,
         anchor: { region: draftRegion },
         description,
+        // Follow-up 6 — omit the key entirely when « Non assignée » (the API treats absent as null).
+        ...(assigneeId ? { assigneeId } : {}),
       });
       setAll((list) => [...list, created]);
       setDraftRegion(null);
@@ -166,7 +225,7 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
     }
   };
 
-  const changeStatus = async (c: CorrectionDto, status: CorrectionStatus) => {
+  const changeStatus = async (c: CorrectionDto, status: CorrectionStatus): Promise<boolean> => {
     setBusyId(c.id);
     setRowError(null);
     const prev = all;
@@ -174,9 +233,26 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
     try {
       const updated = await api.updateCorrection(c.id, { status });
       setAll((list) => list.map((x) => (x.id === c.id ? updated : x)));
+      return true;
     } catch (err) {
       setAll(prev); // rollback
       setRowError({ id: c.id, message: (err as { message?: string }).message ?? 'Changement de statut refusé.' });
+      return false; // CS-25 — the walkthrough stays on a refused decision (e.g. 403 « Corrections »)
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // CS-24 — « Vu »: the filer acknowledges a fix someone else marked corrigé. The status is NOT
+  // touched; only the « en attente de vérification » marker clears.
+  const verify = async (c: CorrectionDto) => {
+    setBusyId(c.id);
+    setRowError(null);
+    try {
+      const updated = await api.verifyCorrection(c.id);
+      setAll((list) => list.map((x) => (x.id === c.id ? updated : x)));
+    } catch (err) {
+      setRowError({ id: c.id, message: (err as { message?: string }).message ?? 'Vérification refusée.' });
     } finally {
       setBusyId(null);
     }
@@ -282,6 +358,9 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
             onValidate={onValidate}
             validating={validating}
             validateError={validateError}
+            triageCount={triage.length}
+            onEnterWalkthrough={enterWalkthrough}
+            entryRef={entryRef}
           />
         </div>
 
@@ -320,6 +399,23 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
                     </button>
                   </div>
                 )}
+                {walkSummary && !walk && (
+                  <p role="status" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink2)', margin: '0 0 12px' }}>
+                    {walkSummary}
+                  </p>
+                )}
+                {walk && walkCurrent && (
+                  <Walkthrough
+                    items={walkItems}
+                    index={walkIndex}
+                    numberOf={numberOf}
+                    onIndex={(i) => setWalk((w) => (w ? { ...w, index: i } : w))}
+                    onDecide={decideInWalk}
+                    onExit={exitWalkthrough}
+                    busy={busyId != null}
+                    error={rowError?.id === walkCurrent.id ? rowError.message : null}
+                  />
+                )}
                 <DessinSurface
                   fromImageUrl={dessinSel.fromImageUrl}
                   toImageUrl={dessinSel.toImageUrl}
@@ -331,6 +427,8 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
                   onSelect={setSelectedId}
                   draftRegion={draftRegion}
                   onDrawRegion={setDraftRegion}
+                  activeId={walkCurrent?.id ?? null}
+                  interactive={!walk}
                 />
               </>
             )}
@@ -338,6 +436,7 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
 
           {/* Aside: unified list + (dessin) composer — styled like the editor sidebar */}
           <aside
+            ref={asideRef}
             className="ep-editor-sidebar ep-review-aside"
             aria-label="Corrections"
             style={{ width: 320, flex: 'none', borderLeft: '3px solid var(--ink)', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}
@@ -351,15 +450,21 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
               selectedId={selectedId}
               onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
               onStatusChange={changeStatus}
+              onVerify={verify}
+              versions={sel?.versions ?? []}
               onDelete={setConfirmDel}
               busyId={busyId}
-              rowError={rowError}
+              // CS-25 follow-up — one `role="alert"` at a time. While walking, the Walkthrough already
+              // announces the refusal for the correction it is showing; the list rendering the SAME
+              // message for the same row made screen readers say it twice.
+              rowError={walk && rowError?.id === walkCurrent?.id ? null : rowError}
               hasMore={payload.corrections.totalPages > morePage}
               onLoadMore={loadMore}
               loadingMore={loadingMore}
             />
             {dessinSel?.fromImageUrl && (
               <Composer
+                members={payload.members}
                 draftRegion={draftRegion}
                 onClearRegion={() => setDraftRegion(null)}
                 onSubmit={createDessin}

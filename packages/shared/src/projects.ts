@@ -231,9 +231,27 @@ export interface WorkspacePage {
   checklistDone: number;
   checklistTotal: number;
   commentCount: number;
+  /** CS-26 — open corrections filed against the CURRENT version of their asset: the exact number that
+   *  blocks entry into VALIDÉ. Superseded-version corrections are excluded, so 0 means "move allowed". */
+  openCorrectionCount: number;
   /** CS-10 D-1: the account that created the card. `null` on cards predating the column (and after
    *  the author's account is deleted) → only leadership may delete them. The FE mirrors that rule. */
   createdById: string | null;
+  /** CS-20 — the scenario version this card was handed off against. `null` = no pin (older cards,
+   *  no linked scenario asset, or the pinned asset was deleted). */
+  handoff: PageHandoff | null;
+  /** CS-20 D-5 — the linked scenario doc has edits newer than its head version, so moving the card
+   *  out of Scénario would pin a version that does not contain them (drives the handoff offer). */
+  scenarioUnsaved: boolean;
+}
+
+/** CS-20 — the scenario handoff pin carried by a board card. `stale` is derived SERVER-side (one
+ *  batched read of the pinned asset's head), never recomputed per card by the board. */
+export interface PageHandoff {
+  assetId: string;
+  version: number; // the pinned scenario version
+  headVersion: number; // the asset's currentVersion right now
+  stale: boolean; // version < headVersion
 }
 
 export interface WorkspaceMember {

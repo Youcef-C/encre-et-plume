@@ -25,6 +25,9 @@ vi.mock('../lib/api', async (importOriginal) => {
     addPageComment: vi.fn(),
     updatePageComment: vi.fn(),
     deletePageComment: vi.fn(),
+    getReview: vi.fn(),
+    acknowledgeHandoff: vi.fn(),
+    deleteHandoff: vi.fn(),
   };
 });
 
@@ -54,7 +57,10 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
     checklistDone: 0,
     checklistTotal: 0,
     commentCount: 0,
+    openCorrectionCount: 0,
     createdById: null,
+    handoff: null,
+    scenarioUnsaved: false,
     description: 'Un synopsis',
     checklist: [],
     comments: [],
@@ -288,6 +294,7 @@ describe('CardModal', () => {
         { id: 'cm1', authorId: 'me', authorName: 'Yuki Moreau', authorAvatar: null, body: 'Salut', createdAt: '2026-07-11T10:00:00.000Z', editedAt: null },
       ],
       commentCount: 1,
+      openCorrectionCount: 0,
     });
     await screen.findByLabelText('TITRE');
     await userEvent.click(screen.getByRole('button', { name: 'Modifier' }));
@@ -305,6 +312,7 @@ describe('CardModal', () => {
         { id: 'cm2', authorId: 'u2', authorName: 'Léo Dupont', authorAvatar: null, body: 'Hello', createdAt: '2026-07-11T10:00:00.000Z', editedAt: null },
       ],
       commentCount: 1,
+      openCorrectionCount: 0,
     };
     const { unmount } = renderWith(others, { isOwner: false });
     await screen.findByLabelText('TITRE');
@@ -618,6 +626,48 @@ describe('CardModal', () => {
     mount({}, { canDelete: true });
     await screen.findByLabelText('TITRE');
     expect(screen.getByRole('button', { name: 'Supprimer la carte' })).toBeInTheDocument();
+  });
+
+  // ── CS-20 — the handoff pin on the FICHIERS scenario row ───────────────────
+  describe('CS-20 — handoff pin', () => {
+    const scenarioAsset = asset({ id: 'as-1', filename: 'scenario.txt', currentVersion: 5 });
+
+    it('states the pin even when it is current (« dessiné d’après v5 »)', async () => {
+      mount({ handoff: { assetId: 'as-1', version: 5, headVersion: 5, stale: false } }, {}, [scenarioAsset]);
+      expect(await screen.findByText('dessiné d’après v5')).toBeInTheDocument();
+      expect(screen.queryByText('Le scénario a changé depuis la passation')).not.toBeInTheDocument();
+    });
+
+    it('shows the staleness marker with the version pair when the script moved on', async () => {
+      mount({ handoff: { assetId: 'as-1', version: 2, headVersion: 5, stale: true } }, {}, [scenarioAsset]);
+      expect(await screen.findByText('Le scénario a changé depuis la passation')).toBeInTheDocument();
+      expect(screen.getByText('v2 → v5')).toBeInTheDocument();
+    });
+
+    it('renders nothing at all when the card has no pin', async () => {
+      mount({}, {}, [scenarioAsset]);
+      await screen.findByText('scenario.txt');
+      expect(screen.queryByText(/dessiné d’après/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retirer la passation' })).not.toBeInTheDocument();
+    });
+
+    it('drops the pin behind a confirmation (never a bare one-click destroy)', async () => {
+      const { onPageChange } = mount({ handoff: { assetId: 'as-1', version: 2, headVersion: 5, stale: true } }, {}, [scenarioAsset]);
+      (api.deleteHandoff as ReturnType<typeof vi.fn>).mockResolvedValue({ ...detail(), handoff: null });
+      await userEvent.click(await screen.findByRole('button', { name: 'Retirer la passation' }));
+      expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+      expect(api.deleteHandoff).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: 'Retirer' }));
+      await waitFor(() => expect(api.deleteHandoff).toHaveBeenCalledWith('pg7'));
+      await waitFor(() => expect(screen.queryByText('Le scénario a changé depuis la passation')).not.toBeInTheDocument());
+      expect(onPageChange).toHaveBeenCalled();
+    });
+
+    it('offers no drop-the-pin control to a read-only viewer', async () => {
+      mount({ handoff: { assetId: 'as-1', version: 2, headVersion: 5, stale: true } }, { readOnly: true }, [scenarioAsset]);
+      expect(await screen.findByText('Le scénario a changé depuis la passation')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retirer la passation' })).not.toBeInTheDocument();
+    });
   });
 });
 

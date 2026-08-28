@@ -33,11 +33,13 @@ import {
   ChecklistIcon,
   ChatIcon,
   CheckIcon,
+  WarningIcon,
   XIcon,
 } from '../icons';
 import { createPage, deletePage, updatePage, updatePageStage, createProjectLabel, deleteProjectLabel, createChapter } from '../../lib/api';
 import CardModal from './CardModal';
 import ConfirmDialog from './ConfirmDialog';
+import HandoffBanner from './HandoffBanner';
 
 /** A card at the last stage counts as done — same terminal stage the API's derivation uses. */
 const TERMINAL_STAGE = PAGE_STAGES[PAGE_STAGES.length - 1];
@@ -162,8 +164,13 @@ export default function KanbanBoard({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropStage, setDropStage] = useState<PageStage | null>(null);
   // R5-2: the banner now covers two kinds of move, so it carries its own message.
-  const [error, setError] = useState<string | null>(null);
+  // CS-26 — the board's one failure surface now carries either a message or the VALIDÉ block
+  // (count + the card to go review). `setError(null)` still clears both.
+  const [error, setError] = useState<string | BlockedMove | null>(null);
   const [chapterError, setChapterError] = useState(false);
+  // CS-20 F1 — a move out of Scénario whose scenario draft is ahead of its head version pauses here
+  // for the handoff offer. `null` = no pending move; the card has NOT moved yet.
+  const [handoffOffer, setHandoffOffer] = useState<{ id: string; stage: PageStage } | null>(null);
 
   // R2-1/R2-1d: every card belongs to a chapter (DB-enforced), so there is no orphan bucket to
   // select and card creation is only offered while a real chapter is selected.
@@ -199,7 +206,23 @@ export default function KanbanBoard({
   const canDeleteCard = (card: WorkspacePage) =>
     canManage || (viewerId !== null && card.createdById === viewerId);
 
-  async function moveCard(id: string, stage: PageStage) {
+  /**
+   * CS-20 F1 — leaving Scénario stamps the handoff pin server-side, so a card whose editor draft is
+   * ahead of its head version would be pinned to a version that does NOT contain those edits. Offer
+   * the snapshot first (in the editor, which owns that action) rather than pinning a stale head.
+   * Everything else moves exactly as before, and dismissing the offer moves nothing.
+   */
+  function moveCard(id: string, stage: PageStage) {
+    const current = pages.find((p) => p.id === id);
+    if (current && current.stage === 'scenario' && stage !== 'scenario' && current.scenarioUnsaved) {
+      setError(null);
+      setHandoffOffer({ id, stage });
+      return;
+    }
+    void applyMove(id, stage);
+  }
+
+  async function applyMove(id: string, stage: PageStage) {
     const prev = pages;
     const current = pages.find((p) => p.id === id);
     if (!current || current.stage === stage) return;
@@ -210,9 +233,11 @@ export default function KanbanBoard({
       const updated = await updatePageStage(id, stage);
       setPages((ps) => ps.map((p) => (p.id === id ? updated : p)));
       onWorkspaceStale?.();
-    } catch {
+    } catch (err) {
       setPages(prev);
-      setError('Le changement d’étape a échoué. Réessayez.');
+      // CS-26 — the VALIDÉ gate answers the PROPRE-shaped 409; anything else stays generic.
+      const unresolved = (err as { unresolved?: number })?.unresolved;
+      setError(typeof unresolved === 'number' ? { count: unresolved, cardId: id } : 'Le changement d’étape a échoué. Réessayez.');
     }
   }
 
@@ -274,6 +299,13 @@ export default function KanbanBoard({
     } catch {
       setChapterError(true);
     }
+  }
+
+  // CS-20 — the acknowledge (and the card modal's drop-the-pin) return the refreshed card; merge it
+  // so the marker clears without a board reload, then ring the R4-1 staleness seam.
+  function handoffChanged(page: WorkspacePage) {
+    setPages((ps) => ps.map((p) => (p.id === page.id ? { ...p, ...page } : p)));
+    onWorkspaceStale?.();
   }
 
   async function removeCard(id: string) {
@@ -641,9 +673,51 @@ export default function KanbanBoard({
         />
       )}
 
+      {/* CS-20 F1 — three real choices, so dismissing (Escape / backdrop) is the harmless one. */}
+      {handoffOffer && (
+        <ConfirmDialog
+          title="Scénario non enregistré"
+          message="Cette carte serait rattachée à la dernière version enregistrée, sans les modifications en cours dans l’éditeur."
+          confirmLabel={`Créer une version puis passer en ${STAGE_META[handoffOffer.stage].label}`}
+          confirmIntent="success"
+          confirmHref={`/projet/${slug}/editeur/${handoffOffer.id}`}
+          secondaryLabel="Passer sans créer de version"
+          onSecondary={() => {
+            const offer = handoffOffer;
+            setHandoffOffer(null);
+            void applyMove(offer.id, offer.stage);
+          }}
+          onConfirm={() => setHandoffOffer(null)}
+          onCancel={() => setHandoffOffer(null)}
+        />
+      )}
+
       {error && (
-        <div role="alert" style={boardAlertStyle}>
-          {error}
+        <div role="alert" style={{ ...boardAlertStyle, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {typeof error === 'string' ? (
+            error
+          ) : (
+            <>
+              <WarningIcon size={14} />
+              <span>Corrections non résolues ({error.count})</span>
+              <Link
+                href={`/projet/${slug}/revision/${error.cardId}`}
+                style={{ color: 'var(--accent)', fontWeight: 700, textUnderlineOffset: 3, minHeight: 44, display: 'inline-flex', alignItems: 'center' }}
+              >
+                Voir les corrections
+              </Link>
+            </>
+          )}
+          {/* CS-26 D-6 — a close affordance inside the alert, not a CTA: no `.ep-btn-*` intent, no fill. */}
+          <button
+            type="button"
+            aria-label="Fermer"
+            title="Fermer"
+            onClick={() => setError(null)}
+            style={dismissAlertBtn}
+          >
+            <XIcon size={14} />
+          </button>
         </div>
       )}
 
@@ -687,12 +761,13 @@ export default function KanbanBoard({
               // The optimistic move unmounts the dragged node, so `dragend` may
               // never fire — clear the fade here where the drop actually lands.
               setDragId(null);
-              void moveCard(id, stage);
+              moveCard(id, stage);
             }}
             onAddCard={canAddCards ? () => void addCard(stage) : undefined}
-            onMoveCard={(id, to) => void moveCard(id, to)}
+            onMoveCard={(id, to) => moveCard(id, to)}
             onMoveCardToChapter={(id, chapterId) => void moveCardToChapter(id, chapterId)}
             onRemoveCard={(id) => void removeCard(id)}
+            onHandoffAcknowledged={handoffChanged}
             canDeleteCard={canDeleteCard}
             chapters={chapters}
           />
@@ -759,6 +834,7 @@ function Column({
   onMoveCard,
   onMoveCardToChapter,
   onRemoveCard,
+  onHandoffAcknowledged,
   canDeleteCard,
 }: {
   slug: string;
@@ -779,6 +855,7 @@ function Column({
   onMoveCard: (id: string, to: PageStage) => void;
   onMoveCardToChapter: (id: string, chapterId: string) => void;
   onRemoveCard: (id: string) => void;
+  onHandoffAcknowledged: (page: WorkspacePage) => void;
   canDeleteCard: (card: WorkspacePage) => boolean;
 }) {
   const headingId = useId();
@@ -847,6 +924,7 @@ function Column({
             onMove={(to) => onMoveCard(card.id, to)}
             onMoveChapter={(chapterId) => onMoveCardToChapter(card.id, chapterId)}
             onRemove={() => onRemoveCard(card.id)}
+            onHandoffAcknowledged={onHandoffAcknowledged}
             canDelete={canDeleteCard(card)}
             chapters={chapters}
           />
@@ -877,6 +955,9 @@ function Column({
   );
 }
 
+/** CS-26 — the VALIDÉ gate's 409, as the board renders it: how many corrections, and on which card. */
+type BlockedMove = { count: number; cardId: string };
+
 const boardAlertStyle: React.CSSProperties = {
   margin: '12px 18px 0',
   border: '2px solid var(--accent)',
@@ -886,6 +967,22 @@ const boardAlertStyle: React.CSSProperties = {
   padding: '9px 13px',
   fontSize: 13,
   fontWeight: 700,
+};
+
+// CS-26 D-6 — dismiss control for the board alert: an icon affordance, so it carries no intent class
+// and no fill; only the 44px tap target and the inherited ink colour.
+const dismissAlertBtn: React.CSSProperties = {
+  marginLeft: 'auto',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 44,
+  minHeight: 44,
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  color: 'inherit',
+  cursor: 'pointer',
 };
 
 const iconBtnStyle: React.CSSProperties = {
@@ -915,6 +1012,7 @@ function PageCard({
   onMove,
   onMoveChapter,
   onRemove,
+  onHandoffAcknowledged,
   canDelete,
   chapters,
 }: {
@@ -930,6 +1028,7 @@ function PageCard({
   onMove: (to: PageStage) => void;
   onMoveChapter: (chapterId: string) => void;
   onRemove: () => void;
+  onHandoffAcknowledged: (page: WorkspacePage) => void;
 }) {
   // Only the card's own z-index needs the menu state — the menu itself owns everything else.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1020,6 +1119,15 @@ function PageCard({
         )}
       </div>
 
+      {/* CS-20 D-1 — a row the prototype does not draw: the story requires the marker on the board
+          face. Under the title, wrapping, so it never widens the card. */}
+      <HandoffBanner
+        pageId={card.id}
+        handoff={card.handoff}
+        canWrite={!readOnly}
+        onAcknowledged={onHandoffAcknowledged}
+      />
+
       {(card.linkedFiles.length > 0 || visibleFileTags.length > 0) && (
         <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
           {/* Linked-file chips (type label + per-file version) first, then un-covered manual tags. */}
@@ -1054,8 +1162,8 @@ function PageCard({
         </div>
       )}
 
-      {/* Meta footer — due pill / checklist (x/x) / comment count / assignee stack */}
-      {(card.dueDate || card.checklistTotal > 0 || card.commentCount > 0 || card.assignees.length > 0) && (
+      {/* Meta footer — due pill / checklist (x/x) / comment count / open corrections / assignee stack */}
+      {(card.dueDate || card.checklistTotal > 0 || card.commentCount > 0 || card.openCorrectionCount > 0 || card.assignees.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap', fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>
           {card.dueDate && (
             <span
@@ -1084,6 +1192,13 @@ function PageCard({
             <span title="Commentaires" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               <ChatIcon size={12} />
               {card.commentCount}
+            </span>
+          )}
+          {/* CS-26 — the number that will refuse the VALIDÉ move, shown before the move is attempted. */}
+          {card.openCorrectionCount > 0 && (
+            <span title="Corrections ouvertes" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--accent)' }}>
+              <WarningIcon size={12} />
+              {card.openCorrectionCount}
             </span>
           )}
           {card.assignees.length > 0 && (

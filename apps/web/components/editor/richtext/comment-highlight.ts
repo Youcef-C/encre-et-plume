@@ -22,6 +22,10 @@ export interface CommentRange {
   /** CS-5 r4 (FR14) — this comment IS a scenario correction request → tag its highlight distinctly
    *  (`ep-correction-highlight`, colour-plus-shape, not colour-only). */
   correction?: boolean;
+  /** CS-22 — the PERSISTED Yjs relative positions (base64, as stored on the comment row). Preferred
+   *  over `from`/`to`, which have drifted by every edit made since the comment was filed. */
+  relFrom?: string | null;
+  relTo?: string | null;
 }
 
 // Item 5 (batch) — one distinct highlight colour per comment, assigned by MESSAGE ORDER (not a hash of
@@ -56,7 +60,14 @@ export function commentColor(n: number): string {
 /** Pure: keep only comments with a valid in-bounds range, clamped to the current doc size. Exported
  *  for testing (the plugin re-uses the same filter before building decorations). */
 export function commentRangesFrom(
-  comments: { id: string; anchorFrom: number | null; anchorTo: number | null }[],
+  comments: {
+    id: string;
+    anchorFrom: number | null;
+    anchorTo: number | null;
+    // CS-22 — carried through untouched; the plugin prefers them over the (drifted) absolute pair.
+    anchorRelFrom?: string | null;
+    anchorRelTo?: string | null;
+  }[],
   docSize: number,
 ): CommentRange[] {
   const out: CommentRange[] = [];
@@ -64,7 +75,13 @@ export function commentRangesFrom(
     if (c.anchorFrom == null || c.anchorTo == null) continue;
     const from = Math.max(0, Math.min(c.anchorFrom, docSize));
     const to = Math.max(0, Math.min(c.anchorTo, docSize));
-    if (to > from) out.push({ id: c.id, from, to });
+    const rel = c.anchorRelFrom && c.anchorRelTo ? { relFrom: c.anchorRelFrom, relTo: c.anchorRelTo } : null;
+    // CS-22 follow-up — a row carrying a DURABLE pair is admitted whatever the absolute pair says. The
+    // absolute numbers drift by every edit since the comment was filed, so after a large deletion they
+    // clamp to a degenerate range; dropping the row here discarded a relative anchor that still resolves
+    // to live words. The plugin prefers `rel` anyway, and `buildAbsolute`'s pre-binding paint still
+    // skips a degenerate range on its own.
+    if (to > from || rel) out.push({ id: c.id, from, to, ...(rel ?? {}) });
   }
   return out;
 }
@@ -200,6 +217,65 @@ export function absPosToRelPos(
   return Y.createRelativePositionFromTypeIndex(type, t._length, assoc);
 }
 
+// ── CS-22 — persisting the anchor ────────────────────────────────────────────────────────────────
+// CS-15 built the whole relative-position layer but serialized none of it, so an anchor survived the
+// session and died on reload. These three functions are the only new machinery: encode the SAME
+// relative positions the decorations already use (identical `assoc` biases — the persisted anchor must
+// not disagree with the live one), ship them as base64, and decode them back on load. `btoa`/`atob`
+// (not Buffer) — this runs in the browser.
+const toBase64 = (bytes: Uint8Array): string => {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+};
+
+/** Decode a stored anchor. Returns null for an absent (pre-CS-22 row) or structurally unusable payload
+ *  — the caller then falls back to the absolute pair, exactly as before CS-22. A position that decodes
+ *  fine but resolves to nothing is a DIFFERENT case (the text was deleted): that one must collapse the
+ *  highlight, not fall back, so it is deliberately not handled here. */
+function decodeRelPos(b64: string | null | undefined): Y.RelativePosition | null {
+  if (!b64) return null;
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return Y.decodeRelativePosition(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/** CS-22 follow-up — the absolute fallback, made total. Now that a row can be admitted on its relative
+ *  pair alone, `from`/`to` may be out of bounds when the fallback runs, and `absPosToRelPos` throws on a
+ *  document shape it cannot walk. A null here just means "this comment gets no highlight this pass". */
+function tryAbsPosToRelPos(pos: number, y: YSyncState, assoc: -1 | 0): Y.RelativePosition | null {
+  try {
+    return absPosToRelPos(pos, y.type, y.binding!.mapping, assoc);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CS-22 — encode a live selection into the durable pair sent to the API on create.
+ * `from` right-associated (assoc 0), `to` left-associated (assoc -1) — the same biases the plugin binds
+ * with, so the persisted anchor and the in-session one behave identically.
+ * Returns null when the y-sync binding isn't ready: the comment is then saved with the absolute pair
+ * only (today's behaviour) rather than with a bogus anchor.
+ */
+export function encodeCommentAnchor(state: EditorState, from: number, to: number): { relFrom: string; relTo: string } | null {
+  const y = ySync(state);
+  if (!y || to <= from) return null;
+  try {
+    return {
+      relFrom: toBase64(Y.encodeRelativePosition(absPosToRelPos(from, y.type, y.binding!.mapping, 0))),
+      relTo: toBase64(Y.encodeRelativePosition(absPosToRelPos(to, y.type, y.binding!.mapping, -1))),
+    };
+  } catch {
+    return null; // absPosToRelPos throws on an unexpected doc shape — save the absolute pair alone
+  }
+}
+
 // CS-15 — whitespace-tolerant so a reflow (extra spaces / trailing space) alone never flags "modifié".
 const normalizeQuote = (s: string) => s.trim().replace(/\s+/g, ' ');
 /** CS-15 — true when a comment's live anchored text differs from its stored `quote` (before vs after). */
@@ -305,8 +381,12 @@ export const CommentHighlight = Extension.create({
             let anchors = old.anchors;
             if (desired) {
               const byId = new Map(old.anchors.map((a) => [a.id, a]));
+              // CS-22 follow-up — a row with a durable pair is admitted regardless of its (drifted)
+              // absolute bounds; a row without one still needs bounds that make sense, because
+              // converting it is the only way to anchor it.
+              const inBounds = (r: CommentRange) => r.from >= 0 && r.to <= tr.doc.content.size && r.to > r.from;
               anchors = desired
-                .filter((r) => r.from >= 0 && r.to <= tr.doc.content.size && r.to > r.from)
+                .filter((r) => (r.relFrom != null && r.relTo != null) || inBounds(r))
                 .map((r) => {
                   const prev = byId.get(r.id);
                   const color = r.color ?? COMMENT_HIGHLIGHT_COLORS[0];
@@ -314,14 +394,13 @@ export const CommentHighlight = Extension.create({
                   if (prev) return { ...prev, color, correction }; // keep the anchor, refresh colour/tag
                   // CS-15 — `from` right-associated, `to` left-associated: typing inside the range grows
                   // the highlight; typing at either outer boundary stays outside (Docs-like).
-                  return {
-                    id: r.id,
-                    color,
-                    correction,
-                    from: absPosToRelPos(r.from, y.type, y.binding!.mapping, 0),
-                    to: absPosToRelPos(r.to, y.type, y.binding!.mapping, -1),
-                  };
-                });
+                  // CS-22 — prefer the PERSISTED relative pair (it hasn't drifted); only a missing or
+                  // unusable payload falls back to converting the stored absolute pair, as before.
+                  const from = decodeRelPos(r.relFrom) ?? tryAbsPosToRelPos(r.from, y, 0);
+                  const to = decodeRelPos(r.relTo) ?? tryAbsPosToRelPos(r.to, y, -1);
+                  return from && to ? { id: r.id, color, correction, from, to } : null;
+                })
+                .filter((a): a is Anchor => a !== null);
             } else if (!tr.docChanged && old.pending === null) {
               return old; // nothing changed and nothing pending — reuse the current set
             }
@@ -342,6 +421,25 @@ export const CommentHighlight = Extension.create({
  *  indicator. A collapsed / unresolvable range (its commented text was fully deleted) yields `''`.
  *  Case-level comments carry no anchor, so they never appear in the map (the sidebar shows them plain).
  *  Same resolution + guards as `buildDecos`, so it tracks local AND remote edits transaction-by-transaction. */
+/** CS-22 follow-up — the live absolute range of one comment's anchor, or null when it has no anchor in
+ *  this editor (unknown id, binding not ready) or the anchored text is gone. « voir dans le texte » used
+ *  the STORED absolute pair, which is the pair that has drifted by every edit since the comment was
+ *  filed — so on an old row the jump selected the wrong words while the highlight, resolved from the
+ *  durable anchor, sat correctly a few characters away. Same resolution as `buildDecos`, so the jump and
+ *  the paint can never disagree. A null tells the caller to fall back to the stored pair, as before. */
+export function resolveCommentRange(state: EditorState, id: string): { from: number; to: number } | null {
+  const hs = commentHighlightKey.getState(state);
+  const y = ySync(state);
+  if (!hs || !y) return null;
+  const a = hs.anchors.find((x) => x.id === id);
+  if (!a) return null;
+  const size = state.doc.content.size;
+  const from = relativePositionToAbsolutePosition(y.doc, y.type, a.from, y.binding!.mapping);
+  const to = relativePositionToAbsolutePosition(y.doc, y.type, a.to, y.binding!.mapping);
+  if (from == null || to == null || to <= from || from < 0 || to > size) return null;
+  return { from, to };
+}
+
 export function resolveCommentTexts(state: EditorState): Map<string, string> {
   const out = new Map<string, string>();
   const hs = commentHighlightKey.getState(state);

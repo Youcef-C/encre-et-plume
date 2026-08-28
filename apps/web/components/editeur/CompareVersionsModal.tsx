@@ -22,16 +22,31 @@ export interface CompareVersionsModalProps {
   versions: Pick<AssetVersionItem, 'version' | 'note'>[];
   headVersion: number;
   onClose: () => void;
+  /** CS-20 — seed the left pane with a specific version (the card's handoff pin). Default: head-1. */
+  initialFrom?: number;
+  /** CS-20 — « J'ai pris connaissance »: re-pin the card to head. Absent → the action is not offered
+   *  (the editor's own "Comparer les versions" has no pin to acknowledge). */
+  onAcknowledge?: () => Promise<void>;
 }
 
 type Pane = { html: string | null };
 
-export default function CompareVersionsModal({ pageId, assetId, versions, headVersion, onClose }: CompareVersionsModalProps) {
+export default function CompareVersionsModal({
+  pageId,
+  assetId,
+  versions,
+  headVersion,
+  onClose,
+  initialFrom,
+  onAcknowledge,
+}: CompareVersionsModalProps) {
   useScrollLock();
-  // Default compare: N-1 ↔ N (the two most recent versions).
-  const [from, setFrom] = useState(() => Math.max(1, headVersion - 1));
+  // Default compare: N-1 ↔ N (the two most recent versions); CS-20 opens on the pinned version.
+  const [from, setFrom] = useState(() => initialFrom ?? Math.max(1, headVersion - 1));
   const [to, setTo] = useState(headVersion);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [acknowledging, setAcknowledging] = useState(false);
+  const [ackError, setAckError] = useState(false);
   const [panes, setPanes] = useState<{ from: Pane; to: Pane } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   // Synchronised scrolling — both panes track the same scroll offset so lines line up. `syncing` guards
@@ -54,7 +69,7 @@ export default function CompareVersionsModal({ pageId, assetId, versions, headVe
     .map((v) => v.version)
     .sort((a, b) => b - a);
   // Fallback so the pickers always have at least the head + default pair even before versions load.
-  const versionList = opts.length > 0 ? opts : Array.from(new Set([headVersion, Math.max(1, headVersion - 1)])).sort((a, b) => b - a);
+  const versionList = opts.length > 0 ? opts : Array.from(new Set([headVersion, from])).sort((a, b) => b - a);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -150,6 +165,38 @@ export default function CompareVersionsModal({ pageId, assetId, versions, headVe
             </>
           )}
         </div>
+
+        {/* CS-20 — the ONE action the pin adds: acknowledge the change and re-pin to head. */}
+        {onAcknowledge && (
+          <div style={footer}>
+            {ackError && (
+              <span role="alert" style={{ marginRight: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>
+                L&apos;enregistrement a échoué. Réessayez.
+              </span>
+            )}
+            <button
+              type="button"
+              className="ep-btn-success"
+              disabled={acknowledging}
+              onClick={async () => {
+                setAcknowledging(true);
+                setAckError(false);
+                try {
+                  await onAcknowledge();
+                  onClose();
+                } catch {
+                  // Keep the modal open: the pin was NOT moved, so closing would claim otherwise.
+                  setAckError(true);
+                } finally {
+                  setAcknowledging(false);
+                }
+              }}
+              style={acknowledgeBtn}
+            >
+              J’ai pris connaissance
+            </button>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -252,6 +299,29 @@ const paneScroll: React.CSSProperties = {
   flex: '1 1 auto',
   overflow: 'auto',
   padding: 14,
+};
+
+const footer: React.CSSProperties = {
+  flex: 'none',
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  padding: '12px 18px',
+  borderTop: '3px solid var(--ink)',
+  background: 'var(--paper)',
+};
+
+// Layout only — the colour is the `.ep-btn-success` intent (shared button scheme).
+const acknowledgeBtn: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  border: '2px solid var(--ink)',
+  borderRadius: 7,
+  padding: '8px 16px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  minHeight: 44,
+  boxShadow: '2px 2px 0 var(--shadow)',
 };
 
 const closeBtn: React.CSSProperties = {

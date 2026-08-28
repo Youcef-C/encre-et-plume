@@ -119,4 +119,45 @@ describe('CompareVersionsModal', () => {
     render(<CompareVersionsModal {...base} onClose={vi.fn()} />);
     expect(await screen.findByText(/Aperçu indisponible/i)).toBeTruthy();
   });
+
+  // ── CS-20 — the handoff pin drives the default pairing, and adds ONE action ─────────────────
+  describe('CS-20 handoff', () => {
+    it('seeds `from` with initialFrom (the pinned version) instead of head-1', async () => {
+      render(<CompareVersionsModal {...base} initialFrom={1} onClose={vi.fn()} />);
+      await waitFor(() => expect(api.getReview).toHaveBeenCalledWith('p1', { file: 'a1', from: 1, to: 3 }));
+      expect(screen.getByRole('combobox', { name: /Version à gauche/i })).toHaveTextContent('v1');
+    });
+
+    it('renders « J\'ai pris connaissance » only when onAcknowledge is passed, and calls it', async () => {
+      const onAcknowledge = vi.fn().mockResolvedValue(undefined);
+      const { unmount } = render(<CompareVersionsModal {...base} onClose={vi.fn()} />);
+      expect(screen.queryByRole('button', { name: 'J’ai pris connaissance' })).toBeNull();
+      unmount();
+
+      render(<CompareVersionsModal {...base} initialFrom={2} onAcknowledge={onAcknowledge} onClose={vi.fn()} />);
+      const btn = screen.getByRole('button', { name: 'J’ai pris connaissance' });
+      expect(btn).toHaveClass('ep-btn-success');
+      await userEvent.click(btn);
+      await waitFor(() => expect(onAcknowledge).toHaveBeenCalledTimes(1));
+    });
+
+    it('keeps the modal open and says so when the acknowledge fails', async () => {
+      const onAcknowledge = vi.fn().mockRejectedValue(new Error('boom'));
+      render(<CompareVersionsModal {...base} onAcknowledge={onAcknowledge} onClose={vi.fn()} />);
+      await userEvent.click(screen.getByRole('button', { name: 'J’ai pris connaissance' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('L\'enregistrement a échoué. Réessayez.');
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('disables the action while the acknowledge is in flight', async () => {
+      let release!: () => void;
+      const onAcknowledge = vi.fn().mockImplementation(() => new Promise<void>((r) => (release = r)));
+      render(<CompareVersionsModal {...base} onAcknowledge={onAcknowledge} onClose={vi.fn()} />);
+      const btn = screen.getByRole('button', { name: 'J’ai pris connaissance' });
+      await userEvent.click(btn);
+      await waitFor(() => expect(btn).toBeDisabled());
+      release();
+      await waitFor(() => expect(btn).not.toBeDisabled());
+    });
+  });
 });

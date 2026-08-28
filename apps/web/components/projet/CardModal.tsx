@@ -37,6 +37,7 @@ import AssetPreviewOverlay from './AssetPreviewOverlay';
 import AssetVersionsModal from './AssetVersionsModal';
 import LinkAssetPicker from './LinkAssetPicker';
 import { FILE_TAG_COVERING_TYPES } from './KanbanBoard';
+import HandoffBanner from './HandoffBanner';
 import { relativeTime } from '../../lib/notifications';
 import {
   getPageDetail,
@@ -54,6 +55,7 @@ import {
   addPageComment,
   updatePageComment,
   deletePageComment,
+  deleteHandoff,
 } from '../../lib/api';
 
 const STAGE_LABELS: Record<PageStage, string> = {
@@ -151,6 +153,8 @@ export default function CardModal({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // CS-20 — dropping the handoff pin is destructive, so it goes behind a confirmation.
+  const [confirmDropPin, setConfirmDropPin] = useState(false);
 
   // FICHIERS block — independent load (its own skeleton/error; the rest of the modal doesn't wait).
   const [assets, setAssets] = useState<AssetItem[] | null>(null);
@@ -230,6 +234,17 @@ export default function CardModal({
   // workspace payload it is re-seeded from on remount is marked stale (R4-1).
   const persisted = useCallback(
     (page: WorkspacePage) => {
+      onPageChange(page);
+      onWorkspaceStale?.();
+    },
+    [onPageChange, onWorkspaceStale],
+  );
+
+  // CS-20 — acknowledge / drop-the-pin both answer with the refreshed card: merge it into the open
+  // detail AND bubble it, so the board's marker follows without a reload (A4).
+  const handoffChanged = useCallback(
+    (page: WorkspacePage) => {
+      setDetail((prev) => (prev ? withCounts({ ...prev, ...page }) : prev));
       onPageChange(page);
       onWorkspaceStale?.();
     },
@@ -727,6 +742,31 @@ export default function CardModal({
                             )}
                           </div>
 
+                          {/* CS-20 — the handoff pin lives with the SCÉNARIO files: legible when
+                              current (« dessiné d'après v5 »), the marker when the script moved on,
+                              and the drop-the-pin control. Nothing at all when there is no pin. */}
+                          {sec.canonical === 'scenario' && detail.handoff && (
+                            <div style={handoffRow}>
+                              <HandoffBanner
+                                pageId={pageId}
+                                handoff={detail.handoff}
+                                canWrite={memberOnly}
+                                onAcknowledged={handoffChanged}
+                                showCurrent
+                              />
+                              {memberOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDropPin(true)}
+                                  className="ep-btn-danger-outline"
+                                  style={dropPinBtn}
+                                >
+                                  Retirer la passation
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           {/* Body: file rows (expanded) or empty state */}
                           {!has ? (
                             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -801,7 +841,8 @@ export default function CardModal({
                                             type="button"
                                             onClick={() => void unlinkAsset(a)}
                                             aria-label={`Retirer ${a.filename} de la carte`}
-                                            style={dangerRowBtn}
+                                            className="ep-btn-compact ep-btn-compact--danger"
+                                            style={rowBtnLayout}
                                           >
                                             Retirer
                                           </button>
@@ -984,6 +1025,22 @@ export default function CardModal({
           confirmLabel="Supprimer"
           onConfirm={() => void onDelete()}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {/* CS-20 — a destroy is never one click: drop the pin behind a confirmation. */}
+      {confirmDropPin && (
+        <ConfirmDialog
+          title="Retirer la passation ?"
+          message="Cette carte ne sera plus rattachée à une version du scénario, et le rappel de changement disparaîtra."
+          confirmLabel="Retirer"
+          onConfirm={() => {
+            setConfirmDropPin(false);
+            // Reuses the header's one save-status line rather than inventing a second error surface.
+            void deleteHandoff(pageId)
+              .then(handoffChanged)
+              .catch(() => setSaveState('error'));
+          }}
+          onCancel={() => setConfirmDropPin(false)}
         />
       )}
       {previewTarget && (
@@ -1909,6 +1966,29 @@ const thumbBox: React.CSSProperties = {
 const filenameStyle: React.CSSProperties = { flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--ink)' };
 const versionBadge: React.CSSProperties = { ...chipStyle, flex: 'none', padding: '1px 7px', fontSize: 11, color: 'var(--ink)' };
 
+// CS-20 — the pin's row inside the SCÉNARIO card. Wraps at 375 so the control never squeezes the
+// marker onto one unreadable line.
+const handoffRow: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+  marginTop: 8,
+};
+
+// Layout only — the colour is the `.ep-btn-danger-outline` intent (a two-step destroy).
+const dropPinBtn: React.CSSProperties = {
+  marginLeft: 'auto',
+  fontSize: 11,
+  fontWeight: 700,
+  border: '1.5px solid var(--danger)',
+  borderRadius: 5,
+  padding: '4px 9px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  minHeight: 30,
+};
+
 const fileRow: React.CSSProperties = {
   display: 'flex',
   gap: 9,
@@ -1921,7 +2001,23 @@ const fileRow: React.CSSProperties = {
 };
 
 // Ghost DANGER — red text + red border (unlink is destructive-ish, distinct from the neutral ghosts).
-const dangerRowBtn: React.CSSProperties = { ...rowBtn, color: 'var(--accent)', borderColor: 'var(--accent)' };
+// Button-colour rule: a destructive action carries the shared `danger` intent CLASS, never inline
+// colours (the old `dangerRowBtn` hand-styled `color`/`borderColor` and predates the scheme). Only the
+// per-instance LAYOUT stays inline — the dense file row is tighter than the compact default.
+const rowBtnLayout: React.CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 3,
+  fontSize: 11,
+  padding: '4px 5px',
+  minHeight: 28,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+};
 
 const linkBtn: React.CSSProperties = {
   border: 'none',

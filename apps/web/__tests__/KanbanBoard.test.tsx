@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WorkspaceChapter, WorkspacePage, ProjectLabelItem } from '@encre-et-plume/shared';
 
@@ -17,6 +17,10 @@ vi.mock('../lib/api', async (importOriginal) => {
     deleteProjectLabel: vi.fn(),
     createChapter: vi.fn(),
     getProjectWorkspace: vi.fn(),
+    // CS-20 — the handoff pin: the banner's compare modal and the acknowledge write.
+    getAssetVersions: vi.fn(),
+    getReview: vi.fn(),
+    acknowledgeHandoff: vi.fn(),
   };
 });
 
@@ -46,7 +50,10 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     checklistDone: 0,
     checklistTotal: 0,
     commentCount: 0,
+    openCorrectionCount: 0,
     createdById: null,
+    handoff: null,
+    scenarioUnsaved: false,
     ...over,
   };
 }
@@ -343,6 +350,62 @@ describe('KanbanBoard', () => {
     await moveToColumn('Corrections');
     expect(await screen.findByRole('alert')).toHaveTextContent(/a échoué/);
     expect(screen.getByText('Page 7')).toBeInTheDocument();
+  });
+
+  // ── CS-26 — the terminal column is gated, and the block is pre-empted on the card face ─────
+  describe('CS-26 — VALIDÉ gate', () => {
+    const encrage = makePage({ id: 'pg7', chapterId: 'c1', title: 'Page 7', stage: 'encrage', openCorrectionCount: 2 });
+
+    it('a 409 « Corrections non résolues » reverts the move and names the count + a link to the corrections', async () => {
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 409, message: 'Corrections non résolues', unresolved: 2 });
+      renderBoard([encrage]);
+      await moveToColumn('VALIDÉ');
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Corrections non résolues (2)');
+      expect(within(alert).getByRole('link', { name: 'Voir les corrections' })).toHaveAttribute('href', '/projet/nuit-blanche/revision/pg7');
+      // reverted: the card is back under Encrage, not VALIDÉ
+      expect(within(screen.getByRole('group', { name: /Encrage/i })).getByText('Page 7')).toBeInTheDocument();
+      expect(within(screen.getByRole('group', { name: /VALIDÉ/i })).queryByText('Page 7')).not.toBeInTheDocument();
+    });
+
+    it('any other failure keeps the generic message (no unresolved count, no link)', async () => {
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 500, message: 'Erreur réseau' });
+      renderBoard([encrage]);
+      await moveToColumn('VALIDÉ');
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/a échoué/);
+      expect(within(alert).queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    // F5 — "reachable and dismissible at every width": both banner shapes carry the same close control.
+    it('the block banner is dismissible — « Fermer » removes it', async () => {
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 409, message: 'Corrections non résolues', unresolved: 2 });
+      renderBoard([encrage]);
+      await moveToColumn('VALIDÉ');
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Corrections non résolues (2)');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Fermer' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('the generic failure banner is dismissible too', async () => {
+      (api.updatePageStage as ReturnType<typeof vi.fn>).mockRejectedValue({ statusCode: 500, message: 'Erreur réseau' });
+      renderBoard([encrage]);
+      await moveToColumn('VALIDÉ');
+      const alert = await screen.findByRole('alert');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Fermer' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('shows the open-corrections count on the card face', () => {
+      renderBoard([encrage]);
+      expect(screen.getByTitle('Corrections ouvertes')).toHaveTextContent('2');
+    });
+
+    it('renders no count chip when there are no open corrections against the current version', () => {
+      renderBoard([makePage({ id: 'pg7', title: 'Page 7', stage: 'encrage', openCorrectionCount: 0 })]);
+      expect(screen.queryByTitle('Corrections ouvertes')).not.toBeInTheDocument();
+    });
   });
 
   it('shows "Aucune carte" for an empty column', () => {
@@ -758,6 +821,111 @@ describe('KanbanBoard', () => {
       await moveToColumn('Corrections');
       expect(await screen.findByRole('alert')).toHaveTextContent(/a échoué/);
       expect(onWorkspaceStale).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── CS-20 — the scenario handoff pin ───────────────────────────────────────
+  describe('CS-20 — handoff pin', () => {
+    const stale = makePage({
+      id: 'pg7',
+      chapterId: 'c1',
+      title: 'Page 7',
+      stage: 'nemu',
+      handoff: { assetId: 'as-1', version: 2, headVersion: 5, stale: true },
+    });
+
+    beforeEach(() => {
+      (api.getAssetVersions as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { version: 5, note: null },
+        { version: 2, note: null },
+      ]);
+      (api.getReview as ReturnType<typeof vi.fn>).mockResolvedValue({
+        selected: { fromHtml: '<p>v2</p>', toHtml: '<p>v5</p>' },
+      });
+    });
+
+    it('shows the quiet staleness marker with the version pair on the card face', () => {
+      renderBoard([stale]);
+      expect(screen.getByText('Le scénario a changé depuis la passation')).toBeInTheDocument();
+      expect(screen.getByText('v2 → v5')).toBeInTheDocument();
+    });
+
+    it('renders nothing when the pin is at head, and nothing when there is no pin', () => {
+      renderBoard([makePage({ id: 'pg7', title: 'Page 7', handoff: { assetId: 'as-1', version: 5, headVersion: 5, stale: false } })]);
+      expect(screen.queryByText('Le scénario a changé depuis la passation')).not.toBeInTheDocument();
+      cleanup();
+      renderBoard([makePage({ id: 'pg8', title: 'Page 8' })]);
+      expect(screen.queryByText('Le scénario a changé depuis la passation')).not.toBeInTheDocument();
+    });
+
+    it('clicking the marker opens the EXISTING compare modal on pinned ↔ head', async () => {
+      renderBoard([stale]);
+      await userEvent.click(screen.getByRole('button', { name: /Le scénario a changé depuis la passation/ }));
+      expect(await screen.findByRole('dialog', { name: /Comparer les versions/i })).toBeInTheDocument();
+      await waitFor(() => expect(api.getReview).toHaveBeenCalledWith('pg7', { file: 'as-1', from: 2, to: 5 }));
+      // …and it did NOT open the card modal underneath.
+      expect(api.getPageDetail).not.toHaveBeenCalled();
+    });
+
+    it('« J’ai pris connaissance » re-pins to head and clears the marker', async () => {
+      (api.acknowledgeHandoff as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...stale,
+        handoff: { assetId: 'as-1', version: 5, headVersion: 5, stale: false },
+      });
+      renderBoard([stale]);
+      await userEvent.click(screen.getByRole('button', { name: /Le scénario a changé depuis la passation/ }));
+      await screen.findByRole('dialog', { name: /Comparer les versions/i });
+      await userEvent.click(screen.getByRole('button', { name: 'J’ai pris connaissance' }));
+      await waitFor(() => expect(api.acknowledgeHandoff).toHaveBeenCalledWith('pg7'));
+      await waitFor(() => expect(screen.queryByText('Le scénario a changé depuis la passation')).not.toBeInTheDocument());
+    });
+
+    it('a read-only viewer still SEES the marker but is offered no acknowledge', async () => {
+      renderBoard([stale], true, [], { canManage: false, viewerId: null });
+      await userEvent.click(screen.getByRole('button', { name: /Le scénario a changé depuis la passation/ }));
+      await screen.findByRole('dialog', { name: /Comparer les versions/i });
+      expect(screen.queryByRole('button', { name: 'J’ai pris connaissance' })).not.toBeInTheDocument();
+    });
+
+    // F1 — the offer on leaving Scénario when the editor draft is ahead of the head version.
+    describe('the handoff offer (unsaved scenario)', () => {
+      const unsaved = makePage({ id: 'pg7', chapterId: 'c1', title: 'Page 7', stage: 'scenario', scenarioUnsaved: true });
+
+      it('offers to create a version first instead of moving straight away', async () => {
+        renderBoard([unsaved]);
+        await moveToColumn('Nemu');
+        expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Créer une version puis passer en Nemu' })).toHaveAttribute(
+          'href',
+          '/projet/nuit-blanche/editeur/pg7',
+        );
+        expect(api.updatePageStage).not.toHaveBeenCalled();
+      });
+
+      it('« Passer sans créer de version » moves the card as before', async () => {
+        (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...unsaved, stage: 'nemu' });
+        renderBoard([unsaved]);
+        await moveToColumn('Nemu');
+        await userEvent.click(await screen.findByRole('button', { name: 'Passer sans créer de version' }));
+        await waitFor(() => expect(api.updatePageStage).toHaveBeenCalledWith('pg7', 'nemu'));
+      });
+
+      it('« Annuler » leaves the card where it was', async () => {
+        renderBoard([unsaved]);
+        await moveToColumn('Nemu');
+        await userEvent.click(await screen.findByRole('button', { name: 'Annuler' }));
+        expect(api.updatePageStage).not.toHaveBeenCalled();
+        expect(within(screen.getByRole('group', { name: /Scénario/i })).getByText('Page 7')).toBeInTheDocument();
+      });
+
+      it('a saved scenario moves with no prompt at all', async () => {
+        const saved = makePage({ id: 'pg7', chapterId: 'c1', title: 'Page 7', stage: 'scenario' });
+        (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...saved, stage: 'nemu' });
+        renderBoard([saved]);
+        await moveToColumn('Nemu');
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+        await waitFor(() => expect(api.updatePageStage).toHaveBeenCalledWith('pg7', 'nemu'));
+      });
     });
   });
 });

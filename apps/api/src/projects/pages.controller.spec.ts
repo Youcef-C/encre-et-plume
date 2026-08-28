@@ -6,7 +6,14 @@ import { SessionGuard } from '../auth/guards/session.guard';
 
 describe('PagesController', () => {
   let controller: PagesController;
-  let pages: { updatePage: jest.Mock; deletePage: jest.Mock; updateStage: jest.Mock; getDetail: jest.Mock };
+  let pages: {
+    updatePage: jest.Mock;
+    deletePage: jest.Mock;
+    updateStage: jest.Mock;
+    getDetail: jest.Mock;
+    acknowledgeHandoff: jest.Mock;
+    deleteHandoff: jest.Mock;
+  };
 
   beforeEach(async () => {
     pages = {
@@ -14,6 +21,8 @@ describe('PagesController', () => {
       deletePage: jest.fn().mockResolvedValue(undefined),
       updateStage: jest.fn().mockResolvedValue({ id: 'page-1' }),
       getDetail: jest.fn().mockResolvedValue({ id: 'page-1' }),
+      acknowledgeHandoff: jest.fn().mockResolvedValue({ id: 'page-1' }),
+      deleteHandoff: jest.fn().mockResolvedValue({ id: 'page-1' }),
     };
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PagesController],
@@ -48,5 +57,16 @@ describe('PagesController', () => {
   it('GET :id → getDetail(accountId, id)', async () => {
     await controller.detail({ accountId: 'acc-me' } as never, 'page-1');
     expect(pages.getDetail).toHaveBeenCalledWith('acc-me', 'page-1');
+  });
+
+  // CS-20 — the handoff pin's update + delete halves.
+  it('POST :id/handoff/acknowledge → acknowledgeHandoff(accountId, id)', async () => {
+    await controller.acknowledgeHandoff({ accountId: 'acc-me' } as never, 'page-1');
+    expect(pages.acknowledgeHandoff).toHaveBeenCalledWith('acc-me', 'page-1');
+  });
+
+  it('DELETE :id/handoff → deleteHandoff(accountId, id)', async () => {
+    await controller.removeHandoff({ accountId: 'acc-me' } as never, 'page-1');
+    expect(pages.deleteHandoff).toHaveBeenCalledWith('acc-me', 'page-1');
   });
 });

@@ -8,7 +8,7 @@
 // cross-link. Verbatim French copy kept from round 1. (r4: the Scénario/Dessin toggle is gone — the
 // revision page is dessin-only; scenario corrections are managed in the editor as tagged comments.)
 import Link from 'next/link';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, Ref } from 'react';
 import type { ReviewFileItem, ReviewVersionItem } from '@encre-et-plume/shared';
 import OnBrandSelect from '../form/OnBrandSelect';
 import PageSwitcher from '../editeur/PageSwitcher';
@@ -32,6 +32,11 @@ export interface ReviewHeaderProps {
   onValidate: () => void;
   validating: boolean;
   validateError: string | null;
+  // CS-25 — number of open corrections filed against a version older than the file's head. 0 = no
+  // entry point at all (no empty mode, no dead button).
+  triageCount?: number;
+  onEnterWalkthrough?: () => void;
+  entryRef?: Ref<HTMLButtonElement>;
 }
 
 const srOnly: CSSProperties = {
@@ -64,6 +69,9 @@ export default function ReviewHeader({
   onValidate,
   validating,
   validateError,
+  triageCount = 0,
+  onEnterWalkthrough,
+  entryRef,
 }: ReviewHeaderProps) {
   const disabled = !allCorrige || validating;
   return (
@@ -108,6 +116,20 @@ export default function ReviewHeader({
               />
             ))}
           </span>
+        )}
+
+        {/* CS-25 (F1) — « Passer en revue (n) »: shown only when a newer version landed on at least
+            one still-open correction. Sits left of « Valider les modifications ». */}
+        {triageCount > 0 && onEnterWalkthrough && (
+          <button
+            type="button"
+            ref={entryRef}
+            className="ep-btn-primary"
+            style={{ fontSize: 13, fontWeight: 700, borderRadius: 6, padding: '7px 15px', minHeight: 40, cursor: 'pointer', fontFamily: 'inherit' }}
+            onClick={onEnterWalkthrough}
+          >
+            {`Passer en revue (${triageCount})`}
+          </button>
         )}
 
         {/* Valider les modifications — app button idiom (.ep-btn-validate); enabled only when every

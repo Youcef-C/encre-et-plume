@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type {
   AssetType,
   CreatePageRequest,
@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMemberOf } from './projects.service';
 import { GROUP_GATE_SELECT, assertCanWrite, canManageProject } from './members.service';
+import { OPEN_CORRECTION_STATUS, countOpenCorrections, tallyAgainstCurrent, type OpenCorrectionRow } from './open-corrections';
 
 const STAGES = new Set<string>(PAGE_STAGES);
 const FILE_TAGS = new Set<string>(PAGE_FILE_TAGS);
@@ -24,8 +25,29 @@ export const WORKSPACE_PAGE_INCLUDE = {
   checklistItems: { select: { done: true } },
   // CS-3 assets linked to this card → derived linkedFiles (badge/chips/sections). Via the 2026-07-14
   // AssetPageLink join (indexed on pageId); no N+1.
-  assetLinks: { include: { asset: { select: { id: true, type: true, filename: true, currentVersion: true } } } },
+  assetLinks: {
+    include: {
+      asset: {
+        select: {
+          id: true,
+          type: true,
+          filename: true,
+          currentVersion: true,
+          // CS-20 D-5 — the handoff OFFER's signal: an editor draft newer than the head version means
+          // moving the card out of Scénario would pin a version that does not contain those edits.
+          // Nested selects, so it rides the SAME batched relation read as linkedFiles (no per-card query).
+          scenarioDoc: { select: { updatedAt: true, versionedAt: true } },
+          versions: { orderBy: { version: 'desc' }, take: 1, select: { createdAt: true } },
+        },
+      },
+    },
+  },
+  // CS-20 — the pinned scenario asset's head, so `stale` is derived here and never per card.
+  drawnAgainstAsset: { select: { id: true, currentVersion: true } },
   _count: { select: { comments: true } },
+  // CS-26 — the open-correction count the card face shows and the VALIDÉ gate enforces. Filtered
+  // nested relation = one batched query with the board list, no N+1 and no second endpoint.
+  corrections: { where: OPEN_CORRECTION_STATUS, select: { filedAgainstVersion: true, asset: { select: { currentVersion: true } } } },
 } as const;
 
 type PageRow = {
@@ -42,9 +64,33 @@ type PageRow = {
   labels?: { label: { id: string; name: string; color: string } }[];
   assignees?: { user: { id: string; displayName: string; avatar: string | null } }[];
   checklistItems?: { done: boolean }[];
-  assetLinks?: { asset: { id: string; type: AssetType; filename: string; currentVersion: number } }[];
+  assetLinks?: {
+    asset: {
+      id: string;
+      type: AssetType;
+      filename: string;
+      currentVersion: number;
+      scenarioDoc?: { updatedAt: Date; versionedAt?: Date | null } | null;
+      versions?: { createdAt: Date }[];
+    };
+  }[];
   _count?: { comments: number };
+  corrections?: OpenCorrectionRow[];
+  drawnAgainstVersion?: number | null;
+  drawnAgainstAsset?: { id: string; currentVersion: number } | null;
 };
+
+/**
+ * CS-20 — the card's scenario asset for handoff purposes: the FIRST linked `scenario` asset by
+ * filename. A card may link several; the order has to be deterministic or the pin (stamped from the
+ * DB query) and the offer signal (derived from the include) could disagree about which one they mean.
+ */
+function pinnableScenarioAsset(p: PageRow) {
+  return (p.assetLinks ?? [])
+    .map((l) => l.asset)
+    .filter((a) => a.type === 'scenario')
+    .sort((a, b) => a.filename.localeCompare(b.filename))[0];
+}
 
 /** Serialize a date-only column as 'YYYY-MM-DD' (stored at UTC midnight). */
 function toDateOnly(d: Date | null | undefined): string | null {
@@ -68,9 +114,46 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     checklistDone: checklist.filter((c) => c.done).length,
     checklistTotal: checklist.length,
     commentCount: p._count?.comments ?? 0,
+    openCorrectionCount: tallyAgainstCurrent(p.corrections ?? []),
     // CS-10 D-1: the FE mirrors the delete rule from this (never as the only gate).
     createdById: p.createdById ?? null,
+    handoff: toHandoff(p),
+    scenarioUnsaved: hasUnsavedScenario(p),
   };
+}
+
+/** CS-20 — `stale` is computed HERE, from the pinned asset already included, so the board never
+ *  recomputes it per card. `drawnAgainstAsset` is null once the asset is deleted (FK SetNull) → no pin. */
+function toHandoff(p: PageRow): WorkspacePage['handoff'] {
+  const asset = p.drawnAgainstAsset;
+  const version = p.drawnAgainstVersion;
+  if (!asset || version == null) return null;
+  return { assetId: asset.id, version, headVersion: asset.currentVersion, stale: version < asset.currentVersion };
+}
+
+/**
+ * CS-20 D-5 — the pinnable scenario's editor draft has edits newer than its head version.
+ *
+ * `versionedAt` is stamped by the two paths that cut a version of this document (snapshot, and the
+ * v1 the materialize path creates), so the test is exact: any edit after that instant is unsaved,
+ * including one made in the same second as the version write.
+ *
+ * ponytail: legacy rows (written before the column existed) have `versionedAt` NULL — the migration
+ * back-fills nothing — so they keep the ORIGINAL comparison, grace window included. That window was
+ * needed because the first save writes AssetVersion v1 BEFORE inserting the ScenarioDocument row, so
+ * a freshly-versioned legacy draft is always a few ms "newer" than its own v1. Documented ceiling on
+ * legacy rows only: an edit made within 5s of a version write is not detected. Drop this branch once
+ * every ScenarioDocument has been versioned at least once since the migration.
+ */
+const VERSION_WRITE_GRACE_MS = 5_000;
+
+function hasUnsavedScenario(p: PageRow): boolean {
+  const asset = pinnableScenarioAsset(p);
+  const doc = asset?.scenarioDoc;
+  if (!doc?.updatedAt) return false;
+  if (doc.versionedAt) return doc.updatedAt.getTime() > doc.versionedAt.getTime();
+  const headAt = asset?.versions?.[0]?.createdAt; // legacy row
+  return !headAt || doc.updatedAt.getTime() > headAt.getTime() + VERSION_WRITE_GRACE_MS;
 }
 
 /**
@@ -220,7 +303,23 @@ export class PagesService {
           orderBy: { createdAt: 'asc' },
           include: { author: { select: { id: true, displayName: true, avatar: true } } },
         },
-        assetLinks: { include: { asset: { select: { id: true, type: true, filename: true, currentVersion: true } } } },
+        // CS-20: the same two nested selects the board include carries, so `handoff`/`scenarioUnsaved`
+        // are truthful here too — the modal's detail is merged into the board's card copy.
+        assetLinks: {
+          include: {
+            asset: {
+              select: {
+                id: true,
+                type: true,
+                filename: true,
+                currentVersion: true,
+                scenarioDoc: { select: { updatedAt: true, versionedAt: true } },
+                versions: { orderBy: { version: 'desc' }, take: 1, select: { createdAt: true } },
+              },
+            },
+          },
+        },
+        drawnAgainstAsset: { select: { id: true, currentVersion: true } },
         _count: { select: { comments: true } },
       },
     });
@@ -277,7 +376,30 @@ export class PagesService {
     const page = await this.loadWritablePage(accountId, pageId);
     const enteredCorrections = stage === 'corrections' && page.stage !== 'corrections';
 
-    const updated = await this.prisma.page.update({ where: { id: pageId }, data: { stage }, include: WORKSPACE_PAGE_INCLUDE });
+    // CS-26 — the terminal column means "finished", so it is gated the way Corrections → PROPRE
+    // already is: no corrections open against the CURRENT version of the files this card ships.
+    // Same 409 body as the PROPRE route; already-`valide` stays a no-op; 403 precedes it because
+    // `loadWritablePage` ran first. Every other transition is untouched.
+    if (stage === 'valide' && page.stage !== 'valide') {
+      const unresolved = await countOpenCorrections(this.prisma, pageId, { againstCurrentVersionOnly: true });
+      if (unresolved > 0) throw new ConflictException({ message: 'Corrections non résolues', unresolved });
+    }
+
+    // CS-20 — the handoff stamp. Deliberately AFTER `loadWritablePage` (403 first) and AFTER the
+    // CS-26 guard (a refused move pins nothing), and it NEVER overwrites an existing pin: re-pinning
+    // is the explicit acknowledge. A card with no linked scenario asset moves with no pin, no error.
+    const data: { stage: PageStage; drawnAgainstAssetId?: string; drawnAgainstVersion?: number } = { stage };
+    if (page.stage === 'scenario' && stage !== 'scenario' && page.drawnAgainstAssetId == null) {
+      // Deterministic pick (lowest filename) — a card may link several scenario assets, and the pin
+      // and the offer signal must never disagree about which one they mean.
+      const asset = [...(page.assetLinks ?? [])].sort((a, b) => a.asset.filename.localeCompare(b.asset.filename))[0]?.asset;
+      if (asset) {
+        data.drawnAgainstAssetId = asset.id;
+        data.drawnAgainstVersion = asset.currentVersion;
+      }
+    }
+
+    const updated = await this.prisma.page.update({ where: { id: pageId }, data, include: WORKSPACE_PAGE_INCLUDE });
 
     // F-5 side effect (best-effort — never fails the request): notify the OTHER members that a page
     // moved into Corrections. Full correction-note flow is CS-5; this is just the required notification.
@@ -303,6 +425,37 @@ export class PagesService {
     return toWorkspacePage(updated as PageRow);
   }
 
+  /**
+   * CS-20 — « J'ai pris connaissance »: re-pin the card to the scenario's CURRENT head. « Écriture »
+   * (the banner is readable by every member; acting on it is a write). Idempotent at head — the
+   * artist acknowledging twice is not an error. 409 when the card carries no pin: there is nothing
+   * to acknowledge, and silently creating one would claim a handoff that never happened.
+   */
+  async acknowledgeHandoff(accountId: string, pageId: string): Promise<WorkspacePage> {
+    const page = await this.loadWritablePage(accountId, pageId);
+    const asset = page.drawnAgainstAsset;
+    if (!asset) throw new ConflictException('Aucune passation enregistrée');
+    const updated = await this.prisma.page.update({
+      where: { id: pageId },
+      data: { drawnAgainstVersion: asset.currentVersion },
+      include: WORKSPACE_PAGE_INCLUDE,
+    });
+    return toWorkspacePage(updated as PageRow);
+  }
+
+  /** CS-20 — drop the pin: the card is no longer drawn against a fixed script. « Écriture »; 404
+   *  when there is no pin (deleting nothing is not a success). */
+  async deleteHandoff(accountId: string, pageId: string): Promise<WorkspacePage> {
+    const page = await this.loadWritablePage(accountId, pageId);
+    if (!page.drawnAgainstAssetId) throw new NotFoundException('Aucune passation enregistrée');
+    const updated = await this.prisma.page.update({
+      where: { id: pageId },
+      data: { drawnAgainstAssetId: null, drawnAgainstVersion: null },
+      include: WORKSPACE_PAGE_INCLUDE,
+    });
+    return toWorkspacePage(updated as PageRow);
+  }
+
   // ── helpers ────────────────────────────────────────────────────────────────
 
   /**
@@ -321,6 +474,13 @@ export class PagesService {
         // constant — the whole B-2/B-4 bug class started as a select that omitted these.
         project: { include: { work: { include: { creators: { select: GROUP_GATE_SELECT } } } } },
         assignees: { select: { userId: true } },
+        // CS-20: the card's scenario assets (for the handoff stamp) and the pinned asset's head (for
+        // the acknowledge) ride along on the resolver's ONE read. Deliberately not two extra queries
+        // on the stage path: `PATCH /pages/:id/stage` is answered optimistically by the board, and a
+        // third round-trip widened the window in which the card modal's detail fetch still saw the
+        // pre-move row (it made a pre-existing read-after-write race easy to hit in e2e).
+        assetLinks: { where: { asset: { type: 'scenario' } }, select: { asset: { select: { id: true, filename: true, currentVersion: true } } } },
+        drawnAgainstAsset: { select: { id: true, currentVersion: true } },
       },
     });
     if (!page) throw new NotFoundException('Carte introuvable');
@@ -330,6 +490,9 @@ export class PagesService {
       stage: PageStage;
       linkedFileIds: string[];
       createdById: string | null;
+      drawnAgainstAssetId: string | null;
+      drawnAgainstAsset: { id: string; currentVersion: number } | null;
+      assetLinks?: { asset: { id: string; filename: string; currentVersion: number } }[];
       assignees: { userId: string }[];
       project: { ownerId: string; workId: string; work: { creators: { accountId: string; groupRole: string; permissions: string[] }[] } };
     };

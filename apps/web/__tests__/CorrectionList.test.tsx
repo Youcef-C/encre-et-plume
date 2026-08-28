@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { CorrectionDto } from '@encre-et-plume/shared';
+import { fireEvent, render, screen } from '@testing-library/react';
+import type { CorrectionDto, ReviewVersionItem } from '@encre-et-plume/shared';
 import CorrectionList from '../components/revision/CorrectionList';
 
 const mk = (over: Partial<CorrectionDto> = {}): CorrectionDto => ({
@@ -17,9 +17,22 @@ const mk = (over: Partial<CorrectionDto> = {}): CorrectionDto => ({
   assigneeId: null,
   filedAgainstVersion: 2,
   resolvedInVersion: null,
+  resolvedById: null,
+  resolvedByName: null,
+  verifiedAt: null,
   createdAt: '2026-07-14T10:00:00.000Z',
   ...over,
 });
+
+// CS-24 — the review payload's version list, now carrying each version's signed image URL.
+const versions: ReviewVersionItem[] = [
+  { version: 3, authorName: 'Yuki', createdAt: '2026-07-15T10:00:00.000Z', note: null, url: 'https://img/v3' },
+  { version: 2, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null, url: 'https://img/v2' },
+];
+
+/** A correction someone else marked corrigé and the filer (me) has not acknowledged yet. */
+const resolvedByOther = (over: Partial<CorrectionDto> = {}) =>
+  mk({ status: 'corrige', resolvedInVersion: 3, resolvedById: 'yuki', resolvedByName: 'Yuki', ...over });
 
 const baseProps = {
   numberOf: (id: string) => (id === 'c1' ? 1 : 2),
@@ -29,7 +42,9 @@ const baseProps = {
   selectedId: null,
   onSelect: vi.fn(),
   onStatusChange: vi.fn(),
+  onVerify: vi.fn(),
   onDelete: vi.fn(),
+  versions,
   busyId: null,
   rowError: null,
   hasMore: false,
@@ -68,8 +83,9 @@ describe('CorrectionList', () => {
     const pill = screen.getByText('Corrigé');
     expect(pill).toBeTruthy();
     expect(pill.querySelector('svg')).toBeTruthy();
-    expect(screen.getByText(/v2/)).toBeTruthy();
-    expect(screen.getByText(/v3/)).toBeTruthy();
+    // CS-24 — the row now also shows « Avant · v2 » / « Après · v3 » on the crops, so assert the
+    // version chip itself rather than a loose /v2/ match.
+    expect(screen.getByText('v2 → v3')).toBeTruthy();
   });
 
   it('status filter auto-applies: no "Appliquer" button', () => {
@@ -118,5 +134,84 @@ describe('CorrectionList', () => {
     expect(screen.getByRole('button', { name: /Supprimer la demande/i })).toBeTruthy();
     rerender(<CorrectionList {...baseProps} items={[mk({ authorId: 'other' })]} />);
     expect(screen.queryByRole('button', { name: /Supprimer la demande/i })).toBeNull();
+  });
+
+  // ── CS-24 — the verification loop ────────────────────────────────────────────
+  describe('CS-24 verification', () => {
+    it('marks the filer\'s row « en attente de vérification » when someone else resolved it', () => {
+      render(<CorrectionList {...baseProps} items={[resolvedByOther()]} />);
+      const marker = screen.getByText('en attente de vérification');
+      expect(marker).toBeTruthy();
+      // Never colour-only: the marker carries a pictogram + the words.
+      expect(marker.closest('span')?.querySelector('svg')).toBeTruthy();
+    });
+
+    it('offers « Vu » and « Rouvrir » to the filer, and calls the handlers', () => {
+      const onVerify = vi.fn();
+      const onStatusChange = vi.fn();
+      const item = resolvedByOther();
+      render(<CorrectionList {...baseProps} onVerify={onVerify} onStatusChange={onStatusChange} items={[item]} />);
+      fireEvent.click(screen.getByRole('button', { name: /Vu/ }));
+      expect(onVerify).toHaveBeenCalledWith(item);
+      fireEvent.click(screen.getByRole('button', { name: /Rouvrir/ }));
+      expect(onStatusChange).toHaveBeenCalledWith(item, 'a_corriger');
+    });
+
+    it('drops the marker and « Vu » once the filer acknowledged, keeping the status and « Rouvrir »', () => {
+      render(<CorrectionList {...baseProps} items={[resolvedByOther({ verifiedAt: '2026-07-16T10:00:00.000Z' })]} />);
+      expect(screen.queryByText('en attente de vérification')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Vu/ })).toBeNull();
+      expect(screen.getByText('Corrigé')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Rouvrir/ })).toBeTruthy();
+    });
+
+    it('shows nothing extra when the filer resolved their own correction', () => {
+      render(<CorrectionList {...baseProps} items={[mk({ status: 'corrige', resolvedInVersion: 3, resolvedById: 'me', resolvedByName: 'Camille' })]} />);
+      expect(screen.queryByText('en attente de vérification')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Vu/ })).toBeNull();
+    });
+
+    it('shows no marker to a member who is not the filer', () => {
+      render(<CorrectionList {...baseProps} items={[resolvedByOther({ authorId: 'someone', assigneeId: 'me' })]} />);
+      expect(screen.queryByText('en attente de vérification')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Vu/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Rouvrir/ })).toBeNull();
+    });
+
+    it('crops the region of both versions from the URLs already in the payload (no new derivative)', () => {
+      const { container } = render(<CorrectionList {...baseProps} items={[resolvedByOther()]} />);
+      expect(screen.getByText(/Avant/)).toBeTruthy();
+      expect(screen.getByText(/Après/)).toBeTruthy();
+      const crops = container.querySelectorAll('.ep-crop');
+      expect(crops.length).toBe(2);
+      expect((crops[0] as HTMLElement).style.backgroundImage).toContain('https://img/v2');
+      expect((crops[1] as HTMLElement).style.backgroundImage).toContain('https://img/v3');
+      // The pair stacks under 768px through the shared class, not a fixed-width layout.
+      expect(container.querySelector('.ep-crop-pair')).toBeTruthy();
+    });
+
+    it('omits the crops when a version url is missing (never a broken image)', () => {
+      const { container } = render(
+        <CorrectionList {...baseProps} versions={[{ ...versions[0], url: null }, versions[1]]} items={[resolvedByOther()]} />,
+      );
+      expect(container.querySelector('.ep-crop')).toBeNull();
+      expect(screen.queryByText(/Avant/)).toBeNull();
+    });
+
+    it('shows the reported quote instead of crops for a scenario correction', () => {
+      const scenario = resolvedByOther({
+        type: 'scenario',
+        anchor: { documentId: 'doc-1', from: 3, to: 10, quote: 'abandonné, noyé d\'ombre' },
+      });
+      const { container } = render(<CorrectionList {...baseProps} items={[scenario]} />);
+      expect(screen.getByText('Texte signalé')).toBeTruthy();
+      expect(screen.getByText(/abandonné, noyé d’ombre|abandonné, noyé d'ombre/)).toBeTruthy();
+      expect(container.querySelector('.ep-crop')).toBeNull();
+    });
+
+    it('exposes each row for the deep-link scroll (data-correction-id)', () => {
+      const { container } = render(<CorrectionList {...baseProps} items={[mk()]} />);
+      expect(container.querySelector('[data-correction-id="c1"]')).toBeTruthy();
+    });
   });
 });

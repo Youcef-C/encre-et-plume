@@ -73,7 +73,12 @@ export const NOTIF_HREF: Record<NotifType, string> = {
   mention:          '/projets',
 };
 
-export function notificationHref(type: NotifType, _refId: string | null): string {
+export function notificationHref(type: NotifType, refId: string | null): string {
+  // CS-24 — `refId` is a bare uuid and cannot say which producer wrote it (CS-2's card fan-out stores
+  // the PROJECT id in the same column), so every project_activity notification that carries one goes
+  // through the resolver route. It asks the API what the id is and FAILS CLOSED to /projets — the
+  // exact destination those notifications have today — when it is not a correction.
+  if (type === 'project_activity' && refId) return `/revision/c/${refId}`;
   return NOTIF_HREF[type];
 }
 

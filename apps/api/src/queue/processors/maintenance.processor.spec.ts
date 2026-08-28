@@ -5,6 +5,7 @@
 import type { Job } from 'bullmq';
 import { MaintenanceProcessor } from './maintenance.processor';
 import { SWEEP_PAGE, SWEEP_RUN_CAP } from '../../maintenance/sweep';
+import * as Y from 'yjs';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -13,14 +14,17 @@ function tokenModel() {
 }
 
 function makePrisma() {
-  return {
+  const prisma: any = {
     emailVerificationToken: tokenModel(),
     passwordResetToken: tokenModel(),
     emailChangeToken: tokenModel(),
     notification: tokenModel(),
     scenarioUpdate: tokenModel(),
+    scenarioDocument: { findUnique: jest.fn().mockResolvedValue({ ydocState: null }), update: jest.fn().mockResolvedValue({}) },
     event: tokenModel(), // F-23 B14
+    $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
   };
+  return prisma;
 }
 
 function rows(n: number, from = 0) {
@@ -202,5 +206,74 @@ describe('MaintenanceProcessor (F-25)', () => {
     await processor.process({}, {} as Job);
 
     expect(prisma.event.findMany.mock.calls.length).toBe(SWEEP_RUN_CAP / SWEEP_PAGE);
+  });
+  // ── CS-21 · scenario-compaction (B2/A6) ─────────────────────────────────────
+
+  const compactionJob = { name: 'scenario-compaction' } as Job;
+
+  it('B2 · compacts documents whose oldest pending update is older than 10 minutes', async () => {
+    prisma.scenarioUpdate.findMany
+      .mockResolvedValueOnce([{ documentId: 'doc-1' }, { documentId: 'doc-2' }]) // the selector
+      .mockResolvedValue([{ id: 'u-1', update: Y.encodeStateAsUpdate(new Y.Doc()) }]); // per-document pending
+
+    await processor.process({}, compactionJob);
+
+    const selector = prisma.scenarioUpdate.findMany.mock.calls[0][0] as {
+      where: { createdAt: { lt: Date } };
+      distinct: string[];
+      take: number;
+    };
+    expect(selector.distinct).toEqual(['documentId']);
+    expect(selector.take).toBe(SWEEP_PAGE);
+    expect(Date.now() - selector.where.createdAt.lt.getTime()).toBeGreaterThanOrEqual(10 * 60_000 - 5000);
+    expect(prisma.scenarioDocument.update).toHaveBeenCalledTimes(2);
+    // A4 — scoped delete, never a blanket one.
+    expect(prisma.scenarioUpdate.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['u-1'] } } });
+    expect(prisma.scenarioUpdate.deleteMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ documentId: expect.anything() }) }),
+    );
+  });
+
+  it('B2 · the compaction job does NOT run the nightly sweeps', async () => {
+    prisma.scenarioUpdate.findMany.mockResolvedValue([]);
+
+    await processor.process({}, compactionJob);
+
+    expect(prisma.emailVerificationToken.findMany).not.toHaveBeenCalled();
+    expect(privacy.purgeExpiredExports).not.toHaveBeenCalled();
+    expect(media.cleanupOrphans).not.toHaveBeenCalled();
+    expect(prisma.event.findMany).not.toHaveBeenCalled();
+  });
+
+  it('B2 · the nightly gc does NOT compact (F-25 sweep and CS-21 compaction are different jobs)', async () => {
+    await processor.process({}, { name: 'gc' } as Job);
+
+    expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
+    expect(media.cleanupOrphans).toHaveBeenCalled();
+  });
+
+  // CS-21 (round 2, D-7) — the queue-side half of the merge guard: the job has no DTO in front of it,
+  // so one corrupt stored row must not take the whole 10-minute pass down with it.
+  it('B2 · one document with an unmergeable stored update is logged and the rest still compact', async () => {
+    prisma.scenarioUpdate.findMany
+      .mockResolvedValueOnce([{ documentId: 'doc-corrupt' }, { documentId: 'doc-ok' }])
+      .mockResolvedValueOnce([{ id: 'u-bad', update: new Uint8Array([158, 139, 91, 106, 199, 186]) }])
+      .mockResolvedValue([{ id: 'u-9', update: Y.encodeStateAsUpdate(new Y.Doc()) }]);
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ ydocState: Y.encodeStateAsUpdate(new Y.Doc()) });
+
+    await expect(processor.process({}, compactionJob)).rejects.toThrow(/doc-corrupt/);
+
+    expect(processor['logger'].error).toHaveBeenCalledWith(expect.stringContaining('Document invalide'));
+    expect(prisma.scenarioDocument.update).toHaveBeenCalledTimes(1); // doc-ok still went through
+  });
+
+  it('B2 · one document failing to compact still compacts the rest, then the job fails', async () => {
+    prisma.scenarioUpdate.findMany
+      .mockResolvedValueOnce([{ documentId: 'doc-bad' }, { documentId: 'doc-ok' }])
+      .mockRejectedValueOnce(new Error('deadlock'))
+      .mockResolvedValue([{ id: 'u-9', update: Y.encodeStateAsUpdate(new Y.Doc()) }]);
+
+    await expect(processor.process({}, compactionJob)).rejects.toThrow(/doc-bad/);
+    expect(prisma.scenarioDocument.update).toHaveBeenCalledTimes(1); // doc-ok still went through
   });
 });

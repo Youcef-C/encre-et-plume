@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type {
   CorrectionDto,
   CorrectionListQuery,
+  CorrectionLocationResponse,
   CorrectionListResponse,
   CorrectionStatus,
   CorrectionType,
@@ -23,6 +24,8 @@ import { PagesService } from './pages.service';
 import { EditorGateway } from './editor.gateway';
 import { isMemberOf } from './projects.service';
 import { hasGroupPermission } from './members.service';
+import { decodeAnchorBytes, toCommentDto, type CommentRow } from './comment-mapper';
+import { OPEN_CORRECTION_STATUS, countOpenCorrections } from './open-corrections';
 
 const STATUS_SET = new Set<string>(CORRECTION_STATUSES);
 const TEXT_CAP = 500 * 1024; // mirror the CS-3 preview cap for derived-text payloads
@@ -62,9 +65,19 @@ type CorrectionRow = {
   assigneeId: string | null;
   filedAgainstVersion: number;
   resolvedInVersion: number | null;
+  resolvedById: string | null;
+  verifiedAt: Date | null;
   createdAt: Date;
   author: { displayName: string };
+  resolvedBy?: { displayName: string } | null;
 };
+
+// CS-24 — every correction read carries the filer AND the resolver's display name (the row the
+// « en attente de vérification » marker names). One include constant so the two never drift.
+const CORRECTION_INCLUDE = {
+  author: { select: { displayName: true } },
+  resolvedBy: { select: { displayName: true } },
+} as const;
 
 /**
  * CS-5 review corrections — one unified entity with a polymorphic anchor (scenario text-range | dessin
@@ -111,7 +124,11 @@ export class CorrectionsService {
       if (!doc || doc.asset.projectId !== page.projectId) throw new NotFoundException('Document introuvable');
       assetId = doc.asset.id;
       filedAgainstVersion = doc.asset.currentVersion;
-      anchor = { documentId: a.documentId, from: a.from, to: a.to, quote };
+      // CS-22 — validate the optional relative anchors here (the DTO only shape-checks `anchor` as an
+      // object): same base64 + 512-byte trust boundary as the plain-comment path, never Yjs-decoded.
+      decodeAnchorBytes(a.relFrom);
+      decodeAnchorBytes(a.relTo);
+      anchor = { documentId: a.documentId, from: a.from, to: a.to, quote, ...(a.relFrom ? { relFrom: a.relFrom } : {}), ...(a.relTo ? { relTo: a.relTo } : {}) };
     } else {
       const region = (dto.anchor as DessinAnchor)?.region;
       if (
@@ -147,12 +164,18 @@ export class CorrectionsService {
       const caseNo = Number.isInteger(dto.caseNo) && (dto.caseNo as number) > 0 ? (dto.caseNo as number) : 1;
       const { correction, comment } = await this.prisma.$transaction(async (tx) => {
         const comment = await tx.scenarioComment.create({
-          data: { documentId: a.documentId, caseNo, authorId: accountId, text: description, anchorFrom: a.from, anchorTo: a.to, quote: a.quote, version: filedAgainstVersion },
+          data: {
+            documentId: a.documentId, caseNo, authorId: accountId, text: description,
+            anchorFrom: a.from, anchorTo: a.to, quote: a.quote, version: filedAgainstVersion,
+            // CS-22 — AC5: the correction's backing comment carries the durable anchor, so the
+            // correction highlight (block-clamped client-side) survives a reload like any comment.
+            anchorRelFrom: decodeAnchorBytes(a.relFrom), anchorRelTo: decodeAnchorBytes(a.relTo),
+          },
           include: { author: { select: { displayName: true } } },
         });
         const correction = (await tx.correction.create({
           data: { ...correctionData, commentId: comment.id },
-          include: { author: { select: { displayName: true } } },
+          include: CORRECTION_INCLUDE,
         })) as unknown as CorrectionRow;
         return { correction, comment };
       });
@@ -163,7 +186,7 @@ export class CorrectionsService {
 
     const created = (await this.prisma.correction.create({
       data: correctionData,
-      include: { author: { select: { displayName: true } } },
+      include: CORRECTION_INCLUDE,
     })) as unknown as CorrectionRow;
 
     await this.notifyMembers(page, accountId, `Nouvelle demande de correction sur « ${page.title} »`);
@@ -175,7 +198,7 @@ export class CorrectionsService {
     if (!STATUS_SET.has(dto.status)) throw new BadRequestException('Statut invalide');
     const correction = (await this.prisma.correction.findUnique({
       where: { id: correctionId },
-      include: { author: { select: { displayName: true } }, asset: { select: { currentVersion: true } } },
+      include: { ...CORRECTION_INCLUDE, asset: { select: { currentVersion: true } } },
     })) as unknown as (CorrectionRow & { asset: { currentVersion: number } }) | null;
     if (!correction) throw new NotFoundException('Demande introuvable');
     const page = (await this.pages.loadMemberPage(accountId, correction.pageId)) as unknown as LoadedPage;
@@ -185,18 +208,72 @@ export class CorrectionsService {
       throw new ForbiddenException("Réservé à l'auteur·rice ou à la personne assignée");
     }
 
-    // corrige stamps the resolving head; reopening (a_corriger/en_cours) clears it.
-    const resolvedInVersion = dto.status === 'corrige' ? correction.asset.currentVersion : null;
+    // corrige stamps the resolving head + WHO pressed it (CS-24); reopening (a_corriger/en_cours)
+    // clears the whole resolution, verification included — the loop starts over.
+    const resolving = dto.status === 'corrige';
+    const data = resolving
+      ? { status: dto.status, resolvedInVersion: correction.asset.currentVersion, resolvedById: accountId }
+      : { status: dto.status, resolvedInVersion: null, resolvedById: null, verifiedAt: null };
     const updated = (await this.prisma.correction.update({
       where: { id: correctionId },
-      data: { status: dto.status, resolvedInVersion },
-      include: { author: { select: { displayName: true } } },
+      data,
+      include: CORRECTION_INCLUDE,
     })) as unknown as CorrectionRow;
 
-    const recipients = new Set<string>([correction.authorId, ...(correction.assigneeId ? [correction.assigneeId] : [])]);
-    recipients.delete(accountId);
-    await this.notifyUsers([...recipients], accountId, page.projectId, `Correction « ${short(correction.description)} » : ${statusLabel(dto.status)}`);
+    if (resolving) {
+      // CS-24 — the filer is the one person who has to be told, with copy that says so and a refId
+      // the notification centre can resolve back to this row. Self-resolution notifies nobody.
+      if (correction.authorId !== accountId) {
+        await this.notifyUsers([correction.authorId], accountId, page.projectId, 'Votre correction a été marquée corrigée', correction.id);
+      }
+    } else {
+      const recipients = new Set<string>([correction.authorId, ...(correction.assigneeId ? [correction.assigneeId] : [])]);
+      recipients.delete(accountId);
+      await this.notifyUsers([...recipients], accountId, page.projectId, `Correction « ${short(correction.description)} » : ${statusLabel(dto.status)}`);
+    }
     return this.toDto(updated);
+  }
+
+  // ── verify (POST /corrections/:id/verify) — the filer acknowledges the fix ─
+  async verify(accountId: string, correctionId: string): Promise<CorrectionDto> {
+    const correction = (await this.prisma.correction.findUnique({
+      where: { id: correctionId },
+      include: CORRECTION_INCLUDE,
+    })) as unknown as CorrectionRow | null;
+    if (!correction) throw new NotFoundException('Demande introuvable');
+    const page = (await this.pages.loadMemberPage(accountId, correction.pageId)) as unknown as LoadedPage;
+    assertCanCorrect(page, accountId);
+    // Filer only — the whole point of the loop is that the resolver cannot close it alone.
+    if (correction.authorId !== accountId) throw new ForbiddenException("Seul·e l'auteur·rice de la demande peut vérifier");
+    if (correction.status !== 'corrige') throw new ConflictException("La correction n'est pas marquée corrigée");
+    if (correction.verifiedAt) return this.toDto(correction); // idempotent
+
+    const updated = (await this.prisma.correction.update({
+      where: { id: correctionId },
+      data: { verifiedAt: new Date() },
+      include: CORRECTION_INCLUDE,
+    })) as unknown as CorrectionRow;
+    return this.toDto(updated);
+  }
+
+  // ── location (GET /corrections/:id/location) — deep-link resolver ──────────
+  // F-5 notifications carry a bare uuid refId, so the web resolver route turns it into the review
+  // screen that shows this correction. Member-gated read; unknown id → 404 (the caller falls back).
+  async location(accountId: string, correctionId: string): Promise<CorrectionLocationResponse> {
+    const correction = await this.prisma.correction.findUnique({
+      where: { id: correctionId },
+      select: { pageId: true, type: true, assetId: true },
+    });
+    if (!correction) throw new NotFoundException('Demande introuvable');
+    const page = (await this.pages.loadMemberPage(accountId, correction.pageId)) as unknown as LoadedPage;
+    // CS-24 follow-up — the caller needs the surface, not just the page: a `scenario` correction is a
+    // tagged CS-4 comment and is read in the editor; the review list is dessin-only (CS-5 r4).
+    return {
+      projectSlug: page.project.slug,
+      pageId: page.id,
+      type: correction.type,
+      assetId: correction.type === 'scenario' ? correction.assetId : null,
+    };
   }
 
   // ── delete (DELETE /corrections/:id) — author-only ────────────────────────
@@ -233,7 +310,7 @@ export class CorrectionsService {
       orderBy: { createdAt: 'asc' },
       skip: (page - 1) * CORRECTIONS_PAGE_SIZE,
       take: CORRECTIONS_PAGE_SIZE,
-      include: { author: { select: { displayName: true } } },
+      include: CORRECTION_INCLUDE,
     })) as unknown as CorrectionRow[];
 
     return { items: rows.map((r) => this.toDto(r)), total, page, pageSize: CORRECTIONS_PAGE_SIZE, totalPages: Math.max(1, Math.ceil(total / CORRECTIONS_PAGE_SIZE)) };
@@ -246,7 +323,9 @@ export class CorrectionsService {
     if (page.stage === 'propre') return { stage: 'propre' }; // idempotent no-op
     if (page.stage !== 'corrections') throw new ConflictException("La carte n'est pas en Corrections");
 
-    const unresolved = await this.prisma.correction.count({ where: { pageId, status: { not: 'corrige' } } });
+    // CS-26 — the unresolved rule now lives in ONE place, shared with the VALIDÉ gate. This path
+    // stays unqualified by version (Corrections → PROPRE has always blocked on every open row).
+    const unresolved = await countOpenCorrections(this.prisma, pageId, { againstCurrentVersionOnly: false });
     if (unresolved > 0) throw new ConflictException({ message: 'Corrections non résolues', unresolved });
 
     await this.prisma.page.update({ where: { id: pageId }, data: { stage: 'propre' } });
@@ -315,7 +394,18 @@ export class CorrectionsService {
       surface: selectedFile.surface,
       fromVersion,
       toVersion,
-      versions: versionRows.map((v) => ({ version: v.version, authorName: v.author.displayName, createdAt: v.createdAt.toISOString(), note: v.note })),
+      // CS-24 — every listed version carries its signed URL on the dessin surface, so a correction's
+      // before/after crops can address ITS pair (filedAgainstVersion ↔ resolvedInVersion), which is
+      // usually not the selected one. Signed from rows already loaded: no extra query, no derivative.
+      versions: await Promise.all(
+        versionRows.map(async (v) => ({
+          version: v.version,
+          authorName: v.author.displayName,
+          createdAt: v.createdAt.toISOString(),
+          note: v.note,
+          url: selectedFile.surface === 'dessin' ? await this.versionImage(accountId, v.mediaId) : null,
+        })),
+      ),
       fromHtml: null,
       toHtml: null,
       fromImageUrl: null,
@@ -340,7 +430,7 @@ export class CorrectionsService {
     try {
       const asset = await this.prisma.asset.findUnique({ where: { id: assetId }, select: { filename: true, projectId: true } });
       if (!asset) return;
-      const open = (await this.prisma.correction.findMany({ where: { assetId, status: { not: 'corrige' } }, select: { authorId: true } })) as { authorId: string }[];
+      const open = (await this.prisma.correction.findMany({ where: { assetId, ...OPEN_CORRECTION_STATUS }, select: { authorId: true } })) as { authorId: string }[];
       const recipients = new Set(open.map((c) => c.authorId));
       recipients.delete(actorId);
       await this.notifyUsers([...recipients], actorId, asset.projectId, `Nouvelle version de ${asset.filename} — corrections en attente`);
@@ -379,10 +469,11 @@ export class CorrectionsService {
     await this.notifyUsers([...recipients], actorId, page.projectId, message);
   }
 
-  private async notifyUsers(recipientIds: string[], actorId: string, projectId: string, message: string): Promise<void> {
+  /** `refId` defaults to the project (the CS-2/CS-5 shape); CS-24 passes the correction id instead. */
+  private async notifyUsers(recipientIds: string[], actorId: string, projectId: string, message: string, refId?: string): Promise<void> {
     for (const recipientId of recipientIds) {
       try {
-        await this.notifications.create({ recipientId, type: 'project_activity', refId: projectId, sourceUserId: actorId, message });
+        await this.notifications.create({ recipientId, type: 'project_activity', refId: refId ?? projectId, sourceUserId: actorId, message });
       } catch (e) {
         this.logger.error(`CS-5 notify failed for ${recipientId}: ${(e as Error).message}`);
       }
@@ -390,23 +481,9 @@ export class CorrectionsService {
   }
 
   /** Build the CaseCommentDto for the WS fan-out of a freshly-tagged scenario correction (Fb-2). */
-  private commentDtoFor(
-    comment: { id: string; caseNo: number; authorId: string; text: string; createdAt: Date; author: { displayName: string }; anchorFrom: number | null; anchorTo: number | null; quote: string | null; version: number | null },
-    correction: CorrectionRow,
-  ): CaseCommentDto {
-    return {
-      id: comment.id,
-      caseNo: comment.caseNo,
-      authorId: comment.authorId,
-      authorName: comment.author.displayName,
-      text: comment.text,
-      createdAt: comment.createdAt.toISOString(),
-      anchorFrom: comment.anchorFrom,
-      anchorTo: comment.anchorTo,
-      quote: comment.quote,
-      version: comment.version,
-      correction: { id: correction.id, status: correction.status, assigneeId: correction.assigneeId },
-    };
+  private commentDtoFor(comment: CommentRow, correction: CorrectionRow): CaseCommentDto {
+    // Same mapper as the REST/`getReview` path (CS-22: so the relative anchors can't drift between them).
+    return { ...toCommentDto(comment), correction: { id: correction.id, status: correction.status, assigneeId: correction.assigneeId } };
   }
 
   private toDto(c: CorrectionRow): CorrectionDto {
@@ -424,6 +501,9 @@ export class CorrectionsService {
       assigneeId: c.assigneeId,
       filedAgainstVersion: c.filedAgainstVersion,
       resolvedInVersion: c.resolvedInVersion,
+      resolvedById: c.resolvedById ?? null,
+      resolvedByName: c.resolvedBy?.displayName ?? null,
+      verifiedAt: c.verifiedAt?.toISOString() ?? null,
       createdAt: c.createdAt.toISOString(),
     };
   }

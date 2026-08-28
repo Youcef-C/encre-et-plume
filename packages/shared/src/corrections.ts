@@ -18,6 +18,10 @@ export interface ScenarioAnchor {
   from: number;
   to: number;
   quote: string;
+  // CS-22 — base64 Yjs relative positions for the same range, carried onto the backing ScenarioComment
+  // so a correction highlight survives a reload too. Optional (pre-CS-22 clients omit them).
+  relFrom?: string;
+  relTo?: string;
 }
 
 /** dessin region — normalized 0–1 so it survives image scaling. */
@@ -45,6 +49,11 @@ export interface CorrectionDto {
   assigneeId: string | null;
   filedAgainstVersion: number;
   resolvedInVersion: number | null;
+  // CS-24 — who actually pressed « Corrigé » (neither authorId, the filer, nor assigneeId records it)
+  // and when the filer acknowledged it. Both null on a correction that was never resolved/verified.
+  resolvedById: string | null;
+  resolvedByName: string | null;
+  verifiedAt: string | null; // ISO
   createdAt: string; // ISO
 }
 
@@ -75,6 +84,9 @@ export interface ReviewVersionItem {
   authorName: string;
   createdAt: string;
   note: string | null;
+  // CS-24 — signed image URL of this version, so the before/after crops can address ANY listed
+  // version (not just the selected pair). Dessin surface only; null on the scenario surface.
+  url: string | null;
 }
 export interface ReviewFileItem {
   assetId: string;
@@ -108,4 +120,16 @@ export interface ReviewPayload {
 
 export interface ValidateReviewResponse {
   stage: 'propre';
+}
+
+/** CS-24 — resolves a notification's correction refId to the review screen that shows it. */
+export interface CorrectionLocationResponse {
+  projectSlug: string;
+  pageId: string;
+  /** CS-24 follow-up — which surface actually shows this correction. The review list is dessin-only
+   *  (CS-5 r4), so a `scenario` correction is read in the CS-4 editor as its tagged comment; sending
+   *  one to /revision lands the reader on a list that structurally cannot contain it. */
+  type: CorrectionType;
+  /** The scenario asset to open in the editor (`scenario` only; null for a dessin correction). */
+  assetId: string | null;
 }

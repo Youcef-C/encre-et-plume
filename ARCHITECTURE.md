@@ -44,6 +44,18 @@ monolith, sharing all modules — not a service). Queues: `stripe-events`, `payo
 **idempotency keys**, concurrency limits, graceful shutdown, and scheduled/repeatable jobs for reconciliation
 and retention purges. Feature code enqueues via a `QueueService.enqueue()` seam.
 
+### CRDT payloads: relayed, never interpreted — with one narrow exception (`CS-21`)
+The API treats Yjs bytes as opaque everywhere it stores or forwards them: the `/editor` gateway appends
+`ScenarioUpdate` rows without reading them, and a comment's persisted relative anchors (`CS-22`) are
+validated for shape and length only, never decoded.
+
+`CS-21`'s background compaction is the one place `yjs` is a server dependency, and it does not break that
+rule. Compaction folds a document's pending updates into `ScenarioDocument.ydocState` and must run with no
+browser open, which is a **byte-level merge** (`Y.mergeUpdates`) plus a decode into a throwaway doc whose
+only purpose is to prove the merged bytes are loadable before they are persisted. Nothing reads document
+*content*; no projection is derived server-side (`contentJson` is still written only by the client's
+autosave). The distinction that matters: the API decodes to **verify**, never to **interpret**.
+
 ## Payments — reliability & correctness (`MR-*`)
 Money requires **both** a queue **and** ACID DB transactions; they solve different problems:
 - **Queue** = reliable async orchestration. The Stripe webhook **verifies the signature, persists the raw

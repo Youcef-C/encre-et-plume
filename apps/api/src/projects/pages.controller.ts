@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { PageDetailResponse, WorkspacePage } from '@encre-et-plume/shared';
 import { SessionGuard, type AuthRequest } from '../auth/guards/session.guard';
 import { PagesService } from './pages.service';
@@ -27,6 +27,18 @@ export class PagesController {
   @Patch(':id/stage')
   stage(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdatePageStageDto): Promise<WorkspacePage> {
     return this.pages.updateStage(req.accountId, id, dto);
+  }
+
+  // CS-20 — the scenario handoff pin: acknowledge (re-pin to head) and drop it. Both « Écriture »,
+  // gated in the service through `loadWritablePage` like every other card write.
+  @Post(':id/handoff/acknowledge')
+  acknowledgeHandoff(@Req() req: AuthRequest, @Param('id') id: string): Promise<WorkspacePage> {
+    return this.pages.acknowledgeHandoff(req.accountId, id);
+  }
+
+  @Delete(':id/handoff')
+  removeHandoff(@Req() req: AuthRequest, @Param('id') id: string): Promise<WorkspacePage> {
+    return this.pages.deleteHandoff(req.accountId, id);
   }
 
   @Get(':id')

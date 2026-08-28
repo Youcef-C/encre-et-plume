@@ -127,12 +127,13 @@ async function typeIntoCase(page: Page, no: number, text: string) {
   await page.keyboard.type(text, { delay: 20 });
 }
 
-// FR9 (r3) — no autosave; persist explicitly via the icon-only header « Enregistrer » button (r5:
-// relocated next to the chapter switcher, icon-only — `aria-label="Enregistrer"` is the accessible
-// name Playwright resolves by role, regardless of the button having no visible text).
+// CS-21 — there is no « Enregistrer » button any more: the client compacts ~5s after the last edit
+// (and on hide/unmount). Wait for THAT request to land rather than pressing anything.
 async function saveDoc(page: Page) {
-  await expect(page.getByText('Modifications non enregistrées')).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await page.waitForResponse(
+    (r) => r.request().method() === 'PATCH' && /\/pages\/[^/]+\/document/.test(r.url()) && r.ok(),
+    { timeout: 20_000 },
+  );
   await expect(page.getByText('Enregistré', { exact: true })).toBeVisible({ timeout: 10_000 });
 }
 
@@ -184,7 +185,16 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     const card = kanbanCard(page, 'Page 1');
     await card.getByRole('button', { name: 'Menu' }).click();
     await page.getByRole('menuitem', { name: 'Déplacer vers une colonne' }).click();
+    // The board renders the move OPTIMISTICALLY, so the card appears under Corrections before
+    // `PATCH /pages/:id/stage` has committed — and the card modal opened right below re-reads the card
+    // with `GET /pages/:id`. Without waiting for the PATCH's response that read can still return the
+    // pre-move row, and « Voir les corrections → » (stage-gated) is legitimately absent. Wait for the
+    // write, not for the optimistic paint.
+    const stagePatch = page.waitForResponse(
+      (r) => r.request().method() === 'PATCH' && /\/pages\/[^/]+\/stage$/.test(new URL(r.url()).pathname),
+    );
     await page.getByRole('menuitem', { name: 'Corrections' }).click();
+    await stagePatch;
     await expect(kanbanCard(page, 'Page 1')).toBeVisible({ timeout: 10_000 });
 
     // CS-2 entry point: the kanban CardModal's "Voir les corrections →" link.
@@ -549,5 +559,350 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await ownerCtx.close();
     await collabCtx.close();
     await strangerCtx.close();
+  });
+
+  // ── CS-26 — the terminal column is gated the way Corrections → PROPRE already is ──────────
+  test('CS26: a card with an open correction against the CURRENT version is refused by VALIDÉ (409 + count + link), and moves once it is resolved', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    // Reuse "Page 2" — beforeAll already gave it a v1 scenario document and no correction (the CS5-5
+    // fixture). Reset its stage first so a Playwright RETRY of this test alone can't start from the
+    // `valide` it ended in (the guard is skipped for an already-`valide` card, by design).
+    const pid = pageId2;
+    expect((await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'scenario' } })).status()).toBe(200);
+
+    // One open scenario correction, filed from the editor against the document's CURRENT version.
+    await page.goto(`/projet/${MULTI_SLUG}/editeur/${pid}`);
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click({ clickCount: 3 });
+    await page.getByLabel('Commenter la sélection').fill('Revoir cette case avant validation.');
+    const createResp = page.waitForResponse((r) => r.url().includes('/corrections') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Demander une correction' }).click();
+    const correctionId = (await (await createResp).json()).id as string;
+
+    // The card face pre-empts the block: the open-correction count is on the card before any move.
+    await page.goto(`/projet/${MULTI_SLUG}`);
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveText('1', { timeout: 10_000 });
+
+    // The blocked move: 409 « Corrections non résolues », the board reverts, the banner names the
+    // count and links to the card's review screen.
+    const moveToValide = async () => {
+      await kanbanCard(page, 'Page 2').getByRole('button', { name: 'Menu' }).click();
+      await page.getByRole('menuitem', { name: 'Déplacer vers une colonne' }).click();
+      await page.getByRole('menuitem', { name: 'VALIDÉ' }).click();
+    };
+    const blocked = page.waitForResponse((r) => r.url().includes(`/pages/${pid}/stage`) && r.request().method() === 'PATCH');
+    await moveToValide();
+    expect((await blocked).status()).toBe(409);
+    const alert = page.getByRole('alert').filter({ hasText: 'Corrections non résolues' });
+    await expect(alert).toContainText('Corrections non résolues (1)', { timeout: 10_000 });
+    await expect(alert.getByRole('link', { name: 'Voir les corrections' })).toHaveAttribute('href', `/projet/${MULTI_SLUG}/revision/${pid}`);
+    // Reverted — the card is back in Scénario, never in VALIDÉ.
+    await expect(page.getByRole('group').filter({ hasText: 'VALIDÉ' }).getByText('Page 2', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('group').filter({ hasText: /^Scénario/ }).getByText('Page 2', { exact: true })).toBeVisible();
+
+    // The banner + the card chip survive the narrow breakpoints without overflowing, and F5's
+    // "dismissible at every width" half: the « Fermer » control is visible and ≥44px at each.
+    const dismiss = alert.getByRole('button', { name: 'Fermer' });
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(alert).toBeVisible();
+      await expect(dismiss).toBeVisible();
+      const box = await dismiss.boundingBox();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(await noHorizontalOverflow(page)).toBe(true);
+      await page.screenshot({ path: `e2e/screenshots/cs26-valide-blocked-${width}.png`, fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // Clicking it removes the banner.
+    await dismiss.click();
+    await expect(alert).toHaveCount(0);
+
+    // Resolve it → the same move now succeeds and the chip is gone.
+    expect((await page.request.patch(`${API}/corrections/${correctionId}`, { data: { status: 'corrige' } })).status()).toBe(200);
+    await page.reload();
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveCount(0, { timeout: 10_000 });
+    await moveToValide();
+    await expect(page.getByRole('group').filter({ hasText: 'VALIDÉ' }).getByText('Page 2', { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    // Idempotence + the unguarded reverse move: valide → valide is a no-op, valide → Encrage is free.
+    expect((await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'valide' } })).status()).toBe(200);
+    expect((await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'encrage' } })).status()).toBe(200);
+  });
+
+  // CS-26 follow-up — the OTHER half of the VALIDÉ rule, and the half that makes it usable: a
+  // correction filed against a version that has since been superseded must NOT block the terminal move.
+  // Without this the column becomes unreachable for any long-lived page (there is always some old open
+  // correction). Round 1 left this unit-covered only, on the belief that e2e could not append a real
+  // version — CS5-9 and CS25 both do, so that belief was simply wrong.
+  test('CS26b: corrections filed against a SUPERSEDED version do not block VALIDÉ (the move succeeds with them still open)', async ({ page }) => {
+    await login(page, OWNER_EMAIL);
+    const pid = pageId2;
+    expect((await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'scenario' } })).status()).toBe(200);
+
+    // One open scenario correction against the document's CURRENT version.
+    await page.goto(`/projet/${MULTI_SLUG}/editeur/${pid}`);
+    await expect(caseBlock(page, 1)).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(500);
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click({ clickCount: 3 });
+    await page.getByLabel('Commenter la sélection').fill('À revoir — filed against the current head.');
+    const createResp = page.waitForResponse((r) => r.url().includes('/corrections') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Demander une correction' }).click();
+    await createResp;
+
+    // Control: while it is against the CURRENT version, the terminal move is refused.
+    const blocked = await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'valide' } });
+    expect(blocked.status()).toBe(409);
+    expect((await blocked.json()).unresolved).toBeGreaterThanOrEqual(1);
+
+    // A new version lands. The correction is untouched — still `a_corriger` — but now filed against a
+    // version that is no longer head. (An edit first: the snapshot dedupe guard refuses to clone a head.)
+    await caseBlock(page, 1).locator('[data-case-description] p').first().click();
+    await page.keyboard.type(' Une ombre bouge au fond.');
+    await page.waitForTimeout(6_000); // CS-21: idle compaction persists the edit before the snapshot
+    await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    await expect(page.getByRole('combobox', { name: 'Version affichée' })).toContainText('v2', { timeout: 15_000 });
+
+    // The card face stops pre-empting a block that no longer applies…
+    await page.goto(`/projet/${MULTI_SLUG}`);
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveCount(0, { timeout: 15_000 });
+
+    // …and the move succeeds — with the correction still OPEN. Superseded is not resolved: the rule is
+    // "this file still has known problems AGAINST THE BYTES IT SHIPS", not "no correction ever existed".
+    const ok = await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'valide' } });
+    expect(ok.status()).toBe(200);
+    const list = await (await page.request.get(`${API}/pages/${pid}/corrections`)).json();
+    expect((list.items as { status: string }[]).some((c) => c.status !== 'corrige')).toBe(true);
+
+    // Leave the fixture where the next test expects it.
+    expect((await page.request.patch(`${API}/pages/${pid}/stage`, { data: { stage: 'scenario' } })).status()).toBe(200);
+  });
+
+  // ── CS-24 — the correction verification loop ──────────────────────────────────────────────
+  // The whole point: the filer is told when SOMEONE ELSE closes their correction, sees before/after,
+  // and can reopen it in one click. The resolving member must be the correction's ASSIGNEE (the
+  // author-or-assignee gate is unchanged). Follow-up 6 — the whole loop now runs THROUGH THE UI: A
+  // files it with the composer's « Assignée à » picker, B closes it from B's own row, A is notified.
+  test('CS24: a correction filed with an assignee and closed by them notifies the filer, deep-links to the review row with before/after crops, and « Rouvrir » puts it back to à-corriger', async ({ browser }) => {
+    const ownerCtx = await browser.newContext();
+    const collabCtx = await browser.newContext();
+    const owner = await ownerCtx.newPage();
+    const collab = await collabCtx.newPage();
+    await login(owner, OWNER_EMAIL);
+    await login(collab, COLLAB_EMAIL);
+
+    // Page 1 is in `propre` after CS5-4 — put it back in Corrections so validation can be exercised.
+    expect((await owner.request.patch(`${API}/pages/${pageId1}/stage`, { data: { stage: 'corrections' } })).status()).toBe(200);
+
+    const me = await (await owner.request.get(`${API}/auth/me`)).json();
+    const review = await (await owner.request.get(`${API}/pages/${pageId1}/review`)).json();
+    const assignee = (review.members as { accountId: string; displayName: string }[]).find((m) => m.accountId !== me.id)!;
+
+    // A files the correction from the composer and hands it to B with « Assignée à ».
+    await owner.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
+    await expect(owner.getByLabel('Décrire la correction (dessin)')).toBeVisible({ timeout: 15_000 });
+    await owner.getByRole('application', { name: 'Tracer une zone de correction' }).focus();
+    await owner.keyboard.press('Enter'); // keyboard fallback for the drawn region
+    await owner.getByLabel('Décrire la correction (dessin)').fill('La main de la case 3 est à l’envers.');
+    const picker = owner.getByRole('combobox', { name: 'Assignée à' });
+    await expect(picker).toContainText('Non assignée');
+    await picker.click();
+    await owner.getByRole('option', { name: assignee.displayName }).click();
+    const posted = owner.waitForResponse(
+      (r) => r.url().endsWith(`/pages/${pageId1}/corrections`) && r.request().method() === 'POST',
+    );
+    await owner.getByRole('button', { name: 'Demander' }).click();
+    const createdRes = await posted;
+    expect(createdRes.status()).toBe(201);
+    const createdBody = await createdRes.json();
+    expect(createdBody.assigneeId).toBe(assignee.accountId); // the picker really wrote the assignee
+    const correctionId = createdBody.id as string;
+    await expect(picker).toContainText('Non assignée'); // reset after a successful send
+
+    // B — the ASSIGNEE, not the filer — closes it from B's own review screen. Without the picker this
+    // row would carry no status control for B at all, and CS-24 could never fire.
+    await collab.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
+    const collabRow = collab.locator(`.ep-correction-card[data-correction-id="${correctionId}"]`);
+    await expect(collabRow).toBeVisible({ timeout: 15_000 });
+    for (const next of ['en_cours', 'corrige']) {
+      const patched = collab.waitForResponse(async (r) => {
+        if (!/\/corrections\/[^/]+$/.test(r.url()) || r.request().method() !== 'PATCH') return false;
+        return (r.request().postDataJSON() as { status?: string }).status === next;
+      });
+      await collabRow.getByRole('button', { name: /Statut de la correction/ }).click();
+      expect((await patched).status()).toBe(200);
+    }
+    await expect(collabRow.getByText('Corrigé', { exact: true })).toBeVisible({ timeout: 10_000 });
+
+    // The filer is told, in the notification centre, with the CS-24 copy.
+    await owner.goto('/notifications');
+    const notif = owner.getByRole('button', { name: 'Votre correction a été marquée corrigée' });
+    await expect(notif).toBeVisible({ timeout: 10_000 });
+
+    // Clicking it deep-links through the resolver to the review screen with THAT correction selected.
+    await notif.click();
+    await expect(owner).toHaveURL(new RegExp(`/projet/${MULTI_SLUG}/revision/${pageId1}\\?correction=${correctionId}`), { timeout: 15_000 });
+    // Scope to the list card — the surface's numbered box carries the same data-correction-id.
+    const row = owner.locator(`.ep-correction-card[data-correction-id="${correctionId}"]`);
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await expect(row).toHaveAttribute('data-selected', 'true');
+
+    // The unverified marker + the two crops of the SAME region, from the two existing image URLs.
+    await expect(row.getByText('en attente de vérification')).toBeVisible();
+    await expect(row.getByText(/^Avant · v\d+$/)).toBeVisible();
+    await expect(row.getByText(/^Après · v\d+$/)).toBeVisible();
+    await expect(row.locator('.ep-crop')).toHaveCount(2);
+
+    // F7 — the crops stack under 768px and sit side by side at 1280, with no horizontal overflow.
+    for (const width of [1280, 768, 375]) {
+      await owner.setViewportSize({ width, height: 900 });
+      const dir = await owner.evaluate(() => getComputedStyle(document.querySelector('.ep-crop-pair')!).flexDirection);
+      expect(dir).toBe(width > 768 ? 'row' : 'column');
+      expect(await noHorizontalOverflow(owner)).toBe(true);
+      await owner.screenshot({ path: `e2e/screenshots/cs24-verification-${width}.png`, fullPage: true });
+    }
+    await owner.setViewportSize({ width: 1280, height: 900 });
+
+    // « Vu » clears the marker WITHOUT changing the status.
+    await row.getByRole('button', { name: /^Vu/ }).click();
+    await expect(row.getByText('en attente de vérification')).toHaveCount(0, { timeout: 10_000 });
+    await expect(row.getByText('Corrigé', { exact: true })).toBeVisible();
+
+    // « Rouvrir » — one click, no confirmation — puts it back to à corriger and re-blocks validation.
+    // The row paints the new status OPTIMISTICALLY, so wait on the PATCH itself: the validate below
+    // depends on the server having committed the reopen, not on the optimistic text.
+    const reopened = owner.waitForResponse(
+      (r) => /\/corrections\/[^/]+$/.test(r.url()) && r.request().method() === 'PATCH',
+    );
+    await row.getByRole('button', { name: /Rouvrir/ }).click();
+    expect((await reopened).status()).toBe(200);
+    await expect(row.getByText('À corriger', { exact: true })).toBeVisible({ timeout: 10_000 });
+    const refused = await owner.request.post(`${API}/pages/${pageId1}/review/validate`);
+    expect(refused.status()).toBe(409);
+    expect((await refused.json()).unresolved).toBeGreaterThanOrEqual(1);
+
+    // Clean up so a retry (and any later spec) starts from the same slate.
+    expect((await owner.request.delete(`${API}/corrections/${correctionId}`)).status()).toBe(204);
+    await ownerCtx.close();
+    await collabCtx.close();
+  });
+
+  // ── CS-25 — new-version triage ────────────────────────────────────────────────────────────
+  // A new version lands on a page carrying open corrections filed against an older one: the header
+  // offers « Passer en revue (n) », the walkthrough draws the current region on BOTH panes, and each
+  // key is the EXISTING PATCH /corrections/:id — a real write that survives a reload.
+  test('CS25: « Passer en revue (n) » walks the corrections filed against an older version, writes each decision, and fades the new version over the old', async ({ browser }) => {
+    const ownerCtx = await browser.newContext();
+    const collabCtx = await browser.newContext();
+    const owner = await ownerCtx.newPage();
+    const collab = await collabCtx.newPage();
+    await login(owner, OWNER_EMAIL);
+    await login(collab, COLLAB_EMAIL);
+
+    expect((await owner.request.patch(`${API}/pages/${pageId1}/stage`, { data: { stage: 'corrections' } })).status()).toBe(200);
+    const before = await (await owner.request.get(`${API}/pages/${pageId1}/review`)).json();
+    const assetId = before.selected.assetId as string;
+
+    // Two corrections filed against TODAY's head…
+    const ids: string[] = [];
+    for (const description of ['Le décor de la case 1 manque de profondeur.', 'La trame du fond est trop dense.']) {
+      const created = await owner.request.post(`${API}/pages/${pageId1}/corrections`, {
+        data: { type: 'dessin', assetId, anchor: { region: { x: 0.15, y: 0.15, w: 0.35, h: 0.3 } }, description },
+      });
+      expect(created.status()).toBe(201);
+      ids.push((await created.json()).id as string);
+    }
+
+    // …then a NEWER version lands (the exact moment this story exists for).
+    await owner.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
+    await owner.getByRole('button', { name: '＋ Nouvelle version du dessin' }).click();
+    const modal = owner.getByRole('dialog', { name: 'Versions' });
+    await expect(modal).toBeVisible({ timeout: 5_000 });
+    await modal.getByLabel('Choisir un fichier pour la nouvelle version').setInputFiles(IMAGE_FIXTURE);
+    await expect(modal.getByRole('button', { name: 'Fermer' })).toBeVisible();
+    await owner.waitForTimeout(2_000);
+    await modal.getByRole('button', { name: 'Fermer' }).click();
+    await owner.reload();
+
+    // A1 — the count is the server's own arithmetic: open corrections filed against < head.
+    const after = await (await owner.request.get(`${API}/pages/${pageId1}/review`)).json();
+    const head = (after.files as { assetId: string; currentVersion: number }[]).find((f) => f.assetId === assetId)!.currentVersion;
+    const expected = (after.corrections.items as { type: string; assetId: string; status: string; filedAgainstVersion: number }[]).filter(
+      (c) => c.type === 'dessin' && c.assetId === assetId && c.status !== 'corrige' && c.filedAgainstVersion < head,
+    ).length;
+    expect(expected).toBeGreaterThanOrEqual(2);
+    const entry = owner.getByRole('button', { name: `Passer en revue (${expected})` });
+    await expect(entry).toBeVisible({ timeout: 15_000 });
+
+    // A5 — the onion-skin is opacity over two UNMODIFIED images: no canvas, no derivative.
+    const slider = owner.getByLabel(/^Fondu v\d+ → v\d+$/);
+    await expect(slider).toBeVisible();
+    const srcsBefore = await owner.locator('.ep-dessin-compare img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).src));
+    await slider.fill('70');
+    await expect(owner.getByText('70 %')).toBeVisible();
+    expect(await owner.locator('[data-onion-skin]').evaluate((e) => getComputedStyle(e).opacity)).toBe('0.7');
+    expect(await owner.locator('.ep-dessin-compare img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).src))).toEqual(srcsBefore);
+    expect(await owner.locator('.ep-dessin-compare canvas').count()).toBe(0);
+
+    // A2/A8 — enter: the mode announces its progress and draws the region on BOTH panes.
+    await entry.click();
+    const mode = owner.getByRole('region', { name: 'Passage en revue des corrections' });
+    await expect(mode).toBeVisible();
+    await expect(mode.getByText(`Correction 1 sur ${expected}`)).toBeVisible();
+    const firstId = await owner.locator('.ep-dessin-compare [data-correction-id]').first().getAttribute('data-correction-id');
+    await expect(owner.locator(`.ep-dessin-compare [data-correction-id="${firstId}"]`)).toHaveCount(2);
+    const [oldBox, newBox] = await owner.locator(`.ep-dessin-compare [data-correction-id="${firstId}"]`).evaluateAll((els) =>
+      els.map((e) => (e as HTMLElement).style.left + '|' + (e as HTMLElement).style.top),
+    );
+    expect(newBox).toBe(oldBox);
+
+    // A3/A4 — « C » is the existing PATCH, and it survives a reload.
+    const patched = owner.waitForResponse((r) => /\/corrections\/[^/]+$/.test(r.url()) && r.request().method() === 'PATCH');
+    await owner.keyboard.press('c');
+    expect((await patched).status()).toBe(200);
+    await expect(mode.getByText(`Correction 2 sur ${expected}`)).toBeVisible({ timeout: 10_000 });
+    await owner.reload();
+    await expect(owner.getByRole('button', { name: `Passer en revue (${expected - 1})` })).toBeVisible({ timeout: 15_000 });
+
+    // A7 — at 375 the panes stack, the slider is usable and every action target is ≥44px.
+    await owner.getByRole('button', { name: `Passer en revue (${expected - 1})` }).click();
+    for (const width of [1280, 768, 375]) {
+      await owner.setViewportSize({ width, height: 900 });
+      expect(await noHorizontalOverflow(owner)).toBe(true);
+      for (const name of [/^Corrigé/, /^Toujours à revoir/, /^En cours/]) {
+        const box = await mode.getByRole('button', { name }).boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+      }
+      await owner.screenshot({ path: `e2e/screenshots/cs25-walkthrough-${width}.png`, fullPage: true });
+    }
+    await owner.setViewportSize({ width: 375, height: 900 });
+    expect(
+      await owner.locator('.ep-dessin-compare').evaluate((e) => getComputedStyle(e).flexDirection),
+    ).toBe('column');
+    await expect(owner.getByLabel(/^Fondu v\d+ → v\d+$/)).toBeVisible();
+    await owner.setViewportSize({ width: 1280, height: 900 });
+
+    // A3 — Escape leaves the mode; the decision already written stays written.
+    await owner.keyboard.press('Escape');
+    await expect(mode).toHaveCount(0);
+    await expect(owner.getByRole('button', { name: `Passer en revue (${expected - 1})` })).toBeFocused();
+
+    // A6 — a member who is neither author nor assignee enters the mode read-only and is refused (403).
+    await collab.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
+    const collabEntry = collab.getByRole('button', { name: /^Passer en revue \(/ });
+    await expect(collabEntry).toBeVisible({ timeout: 15_000 });
+    await collabEntry.click();
+    const collabMode = collab.getByRole('region', { name: 'Passage en revue des corrections' });
+    await expect(collabMode).toBeVisible();
+    const refused = collab.waitForResponse((r) => /\/corrections\/[^/]+$/.test(r.url()) && r.request().method() === 'PATCH');
+    await collab.keyboard.press('c');
+    expect((await refused).status()).toBe(403);
+    await expect(collabMode.getByRole('alert')).toBeVisible({ timeout: 10_000 });
+    await expect(collabMode.getByText('Correction 1 sur')).toBeVisible(); // did not advance
+
+    for (const id of ids) await owner.request.delete(`${API}/corrections/${id}`);
+    await ownerCtx.close();
+    await collabCtx.close();
   });
 });

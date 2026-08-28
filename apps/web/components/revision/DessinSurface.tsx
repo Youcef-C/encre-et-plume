@@ -4,7 +4,7 @@
 // over the reviewed image; the draw-a-box composer is ALWAYS active (iter 6 A1 — no "Nouvelle
 // correction" toggle): a drag places a new normalized (0–1) region and the committed draft box stays
 // movable. Side-by-side old(with boxes) ↔ new compare when a newer version exists. NO pixel-diff.
-import { useRef, useState, type CSSProperties } from 'react';
+import { useId, useRef, useState, type CSSProperties } from 'react';
 import { CORRECTION_STATUS_LABELS, type CorrectionDto, type DessinRegion } from '@encre-et-plume/shared';
 import { statusColor } from './shared';
 
@@ -19,6 +19,12 @@ export interface DessinSurfaceProps {
   onSelect: (id: string | null) => void;
   draftRegion: DessinRegion | null;
   onDrawRegion: (r: DessinRegion | null) => void;
+  // CS-25 — walkthrough: the correction being triaged. Its box is drawn on BOTH panes and everything
+  // else is dimmed. null = normal review mode (no dimming).
+  activeId?: string | null;
+  // CS-25 — false while the walkthrough owns the surface: drawing/moving is suppressed so a stray drag
+  // mid-triage can't file a phantom region.
+  interactive?: boolean;
 }
 
 const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;
@@ -46,12 +52,18 @@ export default function DessinSurface({
   onSelect,
   draftRegion,
   onDrawRegion,
+  activeId = null,
+  interactive = true,
 }: DessinSurfaceProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ x0: number; y0: number; r: DessinRegion } | null>(null);
   // Item 6 (iter 5) — moving the not-yet-submitted draft box. Tracks the pointer origin + the region
   // at grab time; each move re-derives the region from the delta (coords stay normalized 0–1).
   const [moveDrag, setMoveDrag] = useState<{ px: number; py: number; r: DessinRegion } | null>(null);
+  // CS-25 — onion-skin: a viewing control, NOT a pixel diff. It only drives the opacity of a second
+  // <img> of the new version laid over the old one; both images are untouched (no canvas, no blend).
+  const [fade, setFade] = useState(0);
+  const fadeId = useId();
   const hasNewer = toImageUrl != null && toVersion > fromVersion;
   // Keep the box fully on the image: x ∈ [0, 1−w], y ∈ [0, 1−h].
   const clampPos = (v: number, size: number) => Math.min(1 - size, Math.max(0, v));
@@ -74,7 +86,7 @@ export default function DessinSurface({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // A1 — the surface is always drawable (no toggle gate). A press on empty image starts a new box.
-    if (!surfaceRef.current) return;
+    if (!interactive || !surfaceRef.current) return;
     e.preventDefault();
     // F2 — preventDefault suppresses the browser's click-to-focus; focus explicitly so a click-then-Enter
     // reaches the keyboard fallback (Entrée pour un cadre centré), not only Tab navigation.
@@ -90,18 +102,19 @@ export default function DessinSurface({
     }
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!drag || !surfaceRef.current) return;
+    if (!interactive || !drag || !surfaceRef.current) return;
     const { x, y } = toRegion(e.clientX, e.clientY, surfaceRef.current);
     setDrag({ ...drag, r: { x: Math.min(drag.x0, x), y: Math.min(drag.y0, y), w: Math.abs(x - drag.x0), h: Math.abs(y - drag.y0) } });
   };
   const onPointerUp = () => {
-    if (!drag) return;
+    if (!interactive || !drag) return;
     const r = drag.r;
     setDrag(null);
     if (r.w > 0.02 && r.h > 0.02) onDrawRegion(r);
   };
   const onKeyPlace = (e: React.KeyboardEvent) => {
     // Keyboard fallback: Enter on the (always-active) surface places a centered quarter box.
+    if (!interactive) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       onDrawRegion({ x: 0.375, y: 0.375, w: 0.25, h: 0.25 });
@@ -154,32 +167,31 @@ export default function DessinSurface({
   // The committed, movable draft box (whenever we're not mid-drag of a fresh one).
   const movable = !drag && draftRegion ? draftRegion : null;
 
-  const boxes = corrections.map((c) => {
-    if (c.type !== 'dessin' || !('region' in c.anchor)) return null;
-    const r = c.anchor.region;
-    const n = numberOf(c.id);
-    const active = selectedId === c.id;
-    return (
-      <button
-        key={c.id}
-        type="button"
-        data-correction-id={c.id}
-        onClick={() => onSelect(active ? null : c.id)}
-        aria-label={`Correction ${n} — ${CORRECTION_STATUS_LABELS[c.status]}`}
-        aria-pressed={active}
-        style={{
-          position: 'absolute',
-          left: pct(r.x),
-          top: pct(r.y),
-          width: pct(r.w),
-          height: pct(r.h),
-          border: `3px solid ${statusColor(c.status)}`,
-          background: 'transparent',
-          boxShadow: active ? '0 0 0 2px var(--accent)' : 'none',
-          cursor: 'pointer',
-          padding: 0,
-        }}
-      >
+  // A2 (CS-25) — ONE box factory for BOTH panes: identical normalized coordinates, so the region lands
+  // at the same place on the old and the new version. The new pane's copies are inert and aria-hidden —
+  // a second announcement of the same correction would only be noise.
+  const renderBoxes = (pane: 'old' | 'new') =>
+    corrections.map((c) => {
+      if (c.type !== 'dessin' || !('region' in c.anchor) || !c.anchor.region) return null;
+      const r = c.anchor.region;
+      const n = numberOf(c.id);
+      const selected = selectedId === c.id;
+      const highlight = selected || activeId === c.id;
+      // CS-25 — walkthrough: everything but the correction under triage is dimmed.
+      const dimmed = activeId != null && activeId !== c.id;
+      const box: CSSProperties = {
+        position: 'absolute',
+        left: pct(r.x),
+        top: pct(r.y),
+        width: pct(r.w),
+        height: pct(r.h),
+        border: `3px solid ${statusColor(c.status)}`,
+        background: 'transparent',
+        boxShadow: highlight ? '0 0 0 2px var(--accent)' : 'none',
+        opacity: dimmed ? 0.25 : 1,
+        padding: 0,
+      };
+      const badge = (
         <span
           aria-hidden="true"
           style={{
@@ -201,18 +213,61 @@ export default function DessinSurface({
         >
           {n}
         </span>
-      </button>
-    );
-  });
+      );
+      if (pane === 'new') {
+        return (
+          <div key={c.id} data-correction-id={c.id} data-pane="new" aria-hidden="true" style={{ ...box, pointerEvents: 'none' }}>
+            {badge}
+          </div>
+        );
+      }
+      return (
+        <button
+          key={c.id}
+          type="button"
+          data-correction-id={c.id}
+          data-pane="old"
+          onClick={() => onSelect(selected ? null : c.id)}
+          aria-label={`Correction ${n} — ${CORRECTION_STATUS_LABELS[c.status]}`}
+          aria-pressed={selected}
+          style={{ ...box, cursor: 'pointer' }}
+        >
+          {badge}
+        </button>
+      );
+    });
 
   return (
     <div>
       {/* A1 (iter 6) — no toggle button: the composer is always active. A persistent hint tells the
           reviewer how to place a zone (drag on the image, or Entrée for a centred box). */}
-      <div style={{ marginBottom: 12 }}>
-        <span style={{ fontSize: 12, color: 'var(--ink2)' }}>
-          Tracez un cadre sur l’image pour cibler la zone à corriger (ou Entrée pour un cadre centré).
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+        {interactive && (
+          <span style={{ fontSize: 12, color: 'var(--ink2)' }}>
+            Tracez un cadre sur l’image pour cibler la zone à corriger (ou Entrée pour un cadre centré).
+          </span>
+        )}
+        {/* CS-25 (F4) — onion-skin: fades the new version OVER the old one, in place. Opacity only;
+            both images stay untouched. Available outside the walkthrough too. */}
+        {hasNewer && (
+          <span className="ep-onion-skin" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto', fontSize: 12, fontWeight: 700 }}>
+            <label htmlFor={fadeId} style={{ whiteSpace: 'nowrap' }}>{`Fondu v${fromVersion} → v${toVersion}`}</label>
+            <input
+              id={fadeId}
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={fade}
+              onChange={(e) => setFade(Number(e.target.value))}
+              // A native range announces a bare number; this says WHAT the number means, so arrowing
+              // through it is intelligible without sight of the two panes.
+              aria-valuetext={`${fade}\u00a0% — v${toVersion} par-dessus v${fromVersion}`}
+              style={{ width: 140, minHeight: 44, accentColor: 'var(--accent)', cursor: 'pointer' }}
+            />
+            <span style={{ minWidth: 44, color: 'var(--ink2)' }}>{`${fade}\u00a0%`}</span>
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }} className="ep-dessin-compare">
@@ -223,21 +278,36 @@ export default function DessinSurface({
           </div>
           <div
             ref={surfaceRef}
+            data-dessin-surface=""
             // A1 — always an active drawing surface (no toggle): role/label/tabIndex/crosshair are on.
-            role="application"
-            aria-label="Tracer une zone de correction"
-            tabIndex={0}
+            // CS-25 — except while the walkthrough owns the surface: no role, no handlers, no crosshair,
+            // so a stray drag mid-triage can't file a phantom region.
+            {...(interactive
+              ? ({ role: 'application', 'aria-label': 'Tracer une zone de correction', tabIndex: 0 } as const)
+              : {})}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onKeyDown={onKeyPlace}
             // inline-block: the surface shrink-wraps the fitted image so its box === the rendered image
             // (region coords stay exact); relative positions the boxes; no transform on box start (feedback C).
-            style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', cursor: 'crosshair', touchAction: 'none' }}
+            style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', cursor: interactive ? 'crosshair' : 'default', touchAction: 'none' }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={fromImageUrl} alt={`Planche révisée (v${fromVersion})`} style={fittedImg} />
-            {boxes}
+            {/* CS-25 — the onion-skin layer: the SAME new-version image, opacity-faded over the old one.
+                Decorative (alt=""), never interactive, no canvas, no blend mode, no derivative. */}
+            {hasNewer && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                data-onion-skin=""
+                src={toImageUrl!}
+                alt=""
+                aria-hidden="true"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: fade / 100, pointerEvents: 'none' }}
+              />
+            )}
+            {renderBoxes('old')}
             {drawingPreview && (drawingPreview.w > 0 || drawingPreview.h > 0) && (
               <div
                 aria-hidden="true"
@@ -289,8 +359,12 @@ export default function DessinSurface({
               <div style={{ padding: '6px 10px', borderBottom: '2px solid var(--ink)', fontSize: 11, fontWeight: 700, background: 'var(--paper)' }}>
                 {`v${toVersion} · nouvelle`}
               </div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={toImageUrl!} alt={`Nouvelle planche (v${toVersion})`} style={fittedImg} />
+              {/* A2 (CS-25) — the same normalized regions drawn over the NEW version, read-only. */}
+              <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={toImageUrl!} alt={`Nouvelle planche (v${toVersion})`} style={fittedImg} />
+                {renderBoxes('new')}
+              </div>
             </div>
           </>
         )}

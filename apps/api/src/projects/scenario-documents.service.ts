@@ -18,7 +18,8 @@ import { MediaService } from '../media/media.service';
 import { S3StorageService } from '../media/s3-storage.service';
 import { AssetsService } from './assets.service';
 import { EditorGateway } from './editor.gateway';
-import { toCommentDto, type CommentRow } from './comment-mapper';
+import { decodeAnchorBytes, toCommentDto, type CommentRow } from './comment-mapper';
+import { compactDocument } from './scenario-compaction';
 import { isMemberOf } from './projects.service';
 import { GROUP_GATE_SELECT, assertCanWrite } from './members.service';
 
@@ -178,13 +179,10 @@ export class ScenarioDocumentsService {
       // Edit-existing (or a subsequent autosave): update the draft in place; NEVER touch AssetVersion.
       const existing = await this.prisma.scenarioDocument.findUnique({ where: { assetId: asset.id }, select: { id: true } });
       if (existing) {
-        await this.prisma.$transaction([
-          this.prisma.scenarioDocument.update({
-            where: { id: existing.id },
-            data: { ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) },
-          }),
-          this.prisma.scenarioUpdate.deleteMany({ where: { documentId: existing.id } }),
-        ]);
+        // CS-21 — compaction, not "save": merge the pending gateway updates into the client's state and
+        // delete exactly the rows merged. The blanket `deleteMany({ documentId })` this replaced dropped
+        // anything that arrived mid-transaction; on the idle timer that is routine. See scenario-compaction.ts.
+        await compactDocument(this.prisma, existing.id, { state: ydoc, contentJson: body.contentJson, ...(template ? { template } : {}) });
       } else {
         await this.prisma.scenarioDocument.create({ data: { assetId: asset.id, ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) } });
       }
@@ -200,7 +198,13 @@ export class ScenarioDocumentsService {
     const filename = await this.uniqueScenarioFilename(page.projectId, page.title);
     const created = await this.assets.createAsset(accountId, page.project.slug, { mediaId: media.id, filename, type: 'scenario' });
     await this.assets.linkToPage(accountId, created.id, { pageId, type: 'scenario' });
-    const doc = await this.prisma.scenarioDocument.create({ data: { assetId: created.id, ydocState: ydoc, contentJson: body.contentJson as never, ...(template ? { template } : {}) } });
+    // Follow-up 7 — this branch cuts v1, so the doc is born already versioned. `updatedAt` is pinned
+    // to the same instant as `versionedAt`: Prisma's auto-@updatedAt lands a hair later and the fresh
+    // draft would read as unsaved from birth.
+    const versionedAt = new Date();
+    const doc = await this.prisma.scenarioDocument.create({
+      data: { assetId: created.id, ydocState: ydoc, contentJson: body.contentJson as never, versionedAt, updatedAt: versionedAt, ...(template ? { template } : {}) },
+    });
 
     this.gateway.emitMaterialized(pageId, created.id); // pre-materialization clients rejoin the asset room
     return { savedAt: new Date().toISOString(), materialized: { assetId: created.id, filename: created.filename, documentId: doc.id } };
@@ -218,7 +222,13 @@ export class ScenarioDocumentsService {
     const media = await this.media.ingestAsset(accountId, Buffer.from(body.html, 'utf8'), HTML);
     // Item 22 — carry the optional note onto the AssetVersion (omit the key entirely when absent).
     const note = body.note?.trim();
-    return this.assets.addVersion(accountId, page.project.slug, asset.id, { mediaId: media.id, ...(note ? { note } : {}) });
+    const version = await this.assets.addVersion(accountId, page.project.slug, asset.id, { mediaId: media.id, ...(note ? { note } : {}) });
+    // Follow-up 7 — the draft now matches the version just cut: stamp `versionedAt` and pin `updatedAt`
+    // to the same instant, so `WorkspacePage.scenarioUnsaved` is false until the next real edit.
+    // updateMany (not update): a scenario asset versioned outside the editor may have no document row.
+    const versionedAt = new Date();
+    await this.prisma.scenarioDocument.updateMany({ where: { assetId: asset.id }, data: { versionedAt, updatedAt: versionedAt } });
+    return version;
   }
 
   async addComment(accountId: string, pageId: string, caseNo: number, body: CreateCaseCommentRequest, assetId?: string): Promise<CaseCommentDto> {
@@ -233,6 +243,10 @@ export class ScenarioDocumentsService {
     // otherwise it's a plain case-level comment (nulls).
     const hasRange = typeof body.anchorFrom === 'number' && typeof body.anchorTo === 'number' && body.anchorFrom < body.anchorTo;
     const quote = body.quote?.trim();
+    // CS-22 — the durable Yjs relative anchor for the same range. Validated (base64 + 512-byte cap) and
+    // stored as opaque bytes; never decoded here. Only meaningful with a range, like the quote.
+    const relFrom = decodeAnchorBytes(body.anchorRelFrom);
+    const relTo = decodeAnchorBytes(body.anchorRelTo);
     const created = await this.prisma.scenarioComment.create({
       data: {
         documentId: doc.id,
@@ -242,6 +256,8 @@ export class ScenarioDocumentsService {
         anchorFrom: hasRange ? body.anchorFrom! : null,
         anchorTo: hasRange ? body.anchorTo! : null,
         quote: hasRange && quote ? quote : null,
+        anchorRelFrom: hasRange ? relFrom : null,
+        anchorRelTo: hasRange ? relTo : null,
         // Fb-7 — stamp the version the comment was filed against (head at creation).
         version: asset?.currentVersion ?? null,
       },

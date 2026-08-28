@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PagesService, toWorkspacePage } from './pages.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -24,6 +24,10 @@ const PAGE = (o: Record<string, unknown> = {}) => ({
   description: null,
   dueDate: null,
   createdById: 'acc-me',
+  // CS-20 — no handoff pin by default (older cards, and every card before it leaves Scénario).
+  drawnAgainstAssetId: null,
+  drawnAgainstVersion: null,
+  drawnAgainstAsset: null,
   assignees: [],
   project: PROJECT(),
   ...o,
@@ -46,6 +50,10 @@ describe('PagesService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       chapter: { findUnique: jest.fn().mockResolvedValue({ id: 'ch-1', workId: 'work-1' }) },
+      // CS-20 reads nothing extra: the stamp and the acknowledge both come off the resolver's own
+      // include, so this stub deliberately exposes NO `asset` model — a per-write lookup would throw.
+
+      correction: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
       projectLabel: { findMany: jest.fn().mockResolvedValue([]) },
       pageLabel: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
       pageAssignee: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
@@ -364,6 +372,18 @@ describe('PagesService', () => {
       prisma.page.findUnique.mockResolvedValue(null);
       await expect(service.getDetail('acc-me', 'nope')).rejects.toThrow(NotFoundException);
     });
+
+    // CS-20 F5 — the card modal's file row states the pin, so the detail payload carries it too.
+    it('carries the CS-20 handoff pin (the modal states it even when current)', async () => {
+      prisma.page.findUnique.mockResolvedValue(
+        DETAIL({ drawnAgainstVersion: 2, drawnAgainstAsset: { id: 'as-1', currentVersion: 5 } }),
+      );
+      const res = await service.getDetail('acc-me', 'page-1');
+      expect(res.handoff).toEqual({ assetId: 'as-1', version: 2, headVersion: 5, stale: true });
+      expect(prisma.page.findUnique.mock.calls[0][0].include.drawnAgainstAsset).toEqual({
+        select: { id: true, currentVersion: true },
+      });
+    });
   });
 
   // ── deletePage ─────────────────────────────────────────────────────────────
@@ -386,7 +406,10 @@ describe('PagesService', () => {
 
     it('persists the new stage', async () => {
       const res = await service.updateStage('acc-me', 'page-1', { stage: 'nemu' });
-      expect(prisma.page.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'page-1' }, data: { stage: 'nemu' } }));
+      // CS-20: leaving Scénario also stamps the handoff pin in this same update (asserted below).
+      expect(prisma.page.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'page-1' }, data: expect.objectContaining({ stage: 'nemu' }) }),
+      );
       expect(res.stage).toBe('nemu');
     });
 
@@ -418,6 +441,82 @@ describe('PagesService', () => {
       prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'nemu' }));
       notifications.create.mockRejectedValue(new Error('notif down'));
       await expect(service.updateStage('acc-me', 'page-1', { stage: 'corrections' })).resolves.toMatchObject({ stage: 'corrections' });
+    });
+  });
+
+  // ── CS-26 — the terminal column is gated the way PROPRE already is ─────────
+  describe('updateStage → valide (CS-26 gate)', () => {
+    /** An open correction row as the version-qualified read selects it. */
+    const open = (filedAgainstVersion: number, currentVersion: number) => ({ filedAgainstVersion, asset: { currentVersion } });
+
+    it('409 « Corrections non résolues » with the count when one is filed against the CURRENT version', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'encrage' }));
+      prisma.correction.findMany.mockResolvedValue([open(5, 5), open(2, 5), open(1, 1)]);
+      await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).rejects.toMatchObject({
+        response: { message: 'Corrections non résolues', unresolved: 2 },
+      });
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it('allows the move when every open correction was filed against a SUPERSEDED version', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'encrage' }));
+      prisma.correction.findMany.mockResolvedValue([open(2, 5), open(3, 5)]);
+      await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).resolves.toMatchObject({ stage: 'valide' });
+    });
+
+    it('allows the move when everything is corrigé / the card has no linked assets (no open rows)', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'encrage' }));
+      prisma.correction.findMany.mockResolvedValue([]);
+      await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).resolves.toMatchObject({ stage: 'valide' });
+      expect(prisma.correction.findMany.mock.calls[0][0].where).toEqual({ pageId: 'page-1', status: { not: 'corrige' } });
+    });
+
+    it('is a no-op, not a 409, when the card is already valide (idempotent branch)', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'valide' }));
+      prisma.correction.findMany.mockResolvedValue([open(5, 5)]);
+      await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).resolves.toMatchObject({ stage: 'valide' });
+      expect(prisma.correction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('never reads corrections for a move OUT of valide, or any other transition (the guard cannot creep)', async () => {
+      for (const [from, to] of [
+        ['valide', 'encrage'],
+        ['valide', 'corrections'],
+        ['scenario', 'nemu'],
+        ['nemu', 'encrage'],
+        ['corrections', 'propre'],
+        ['propre', 'encrage'],
+      ] as [string, string][]) {
+        build();
+        prisma.page.findUnique.mockResolvedValue(PAGE({ stage: from }));
+        prisma.correction.findMany.mockResolvedValue([open(5, 5)]);
+        await expect(service.updateStage('acc-me', 'page-1', { stage: to as never })).resolves.toMatchObject({ stage: to });
+        expect(prisma.correction.findMany).not.toHaveBeenCalled();
+      }
+    });
+
+    it('403 takes precedence over the 409 — a member without « Écriture » never reaches the gate', async () => {
+      const project = PROJECT({
+        work: {
+          id: 'work-1',
+          creators: [
+            { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+            { accountId: 'acc-reader', groupRole: 'member', permissions: ['corrections'] },
+          ],
+        },
+      });
+      prisma.project.findUnique.mockResolvedValue(project);
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'encrage', project }));
+      prisma.correction.findMany.mockResolvedValue([open(5, 5)]);
+      await expect(service.updateStage('acc-reader', 'page-1', { stage: 'valide' })).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.correction.findMany).not.toHaveBeenCalled();
+      expect(prisma.page.update).not.toHaveBeenCalled();
+    });
+
+    it('the 409 is a ConflictException (same class as the PROPRE route)', async () => {
+      prisma.page.findUnique.mockResolvedValue(PAGE({ stage: 'encrage' }));
+      prisma.correction.findMany.mockResolvedValue([open(1, 1)]);
+      await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).rejects.toBeInstanceOf(ConflictException);
     });
   });
 
@@ -580,9 +679,259 @@ describe('PagesService', () => {
       expect(toWorkspacePage({ ...PAGE(), createdById: null } as never).createdById).toBeNull();
     });
 
+    // CS-26 — the board card carries the number that blocks VALIDÉ, so the block is predictable.
+    it('openCorrectionCount tallies only corrections filed against the current version', () => {
+      const row = (filedAgainstVersion: number, currentVersion: number) => ({ filedAgainstVersion, asset: { currentVersion } });
+      expect(toWorkspacePage({ ...PAGE(), corrections: [row(5, 5), row(2, 5), row(1, 1)] } as never).openCorrectionCount).toBe(2);
+      expect(toWorkspacePage({ ...PAGE(), corrections: [row(2, 5)] } as never).openCorrectionCount).toBe(0);
+      expect(toWorkspacePage(PAGE() as never).openCorrectionCount).toBe(0);
+    });
+
     it('is [] when the assetLinks join is absent or empty', () => {
       expect(toWorkspacePage(PAGE() as never).linkedFiles).toEqual([]);
       expect(toWorkspacePage({ ...PAGE(), assetLinks: [] } as never).linkedFiles).toEqual([]);
+    });
+  });
+  // ── CS-20 — the scenario handoff pin ───────────────────────────────────────
+  describe('CS-20 — handoff pin', () => {
+    const dataOf = () => prisma.page.update.mock.calls[0][0].data;
+    /** The write resolver's own read carries the card's scenario links — the stamp adds no query. */
+    const LINKED = (o: Record<string, unknown> = {}) =>
+      PAGE({ assetLinks: [{ asset: { id: 'asset-scn', filename: 'scenario.html', currentVersion: 5 } }], ...o });
+
+    describe('stamp on leaving Scénario (updateStage)', () => {
+      beforeEach(() => prisma.page.findUnique.mockResolvedValue(LINKED()));
+
+      it('stamps the card\'s linked scenario asset + its head version in the SAME update', async () => {
+        await service.updateStage('acc-me', 'page-1', { stage: 'nemu' });
+        expect(dataOf()).toEqual({ stage: 'nemu', drawnAgainstAssetId: 'asset-scn', drawnAgainstVersion: 5 });
+      });
+
+      it('moves with no pin and no error when the card has no linked scenario asset', async () => {
+        prisma.page.findUnique.mockResolvedValue(LINKED({ assetLinks: [] }));
+        await expect(service.updateStage('acc-me', 'page-1', { stage: 'nemu' })).resolves.toMatchObject({ stage: 'nemu' });
+        expect(dataOf()).toEqual({ stage: 'nemu' });
+      });
+
+      it('NEVER overwrites an existing pin (re-pinning is the explicit acknowledge)', async () => {
+        prisma.page.findUnique.mockResolvedValue(LINKED({ drawnAgainstAssetId: 'asset-old', drawnAgainstVersion: 2 }));
+        await service.updateStage('acc-me', 'page-1', { stage: 'nemu' });
+        expect(dataOf()).toEqual({ stage: 'nemu' });
+      });
+
+      it('never stamps on a move that does not leave Scénario', async () => {
+        prisma.page.findUnique.mockResolvedValue(LINKED({ stage: 'nemu' }));
+        await service.updateStage('acc-me', 'page-1', { stage: 'encrage' });
+        expect(dataOf()).toEqual({ stage: 'encrage' });
+      });
+
+      // The stamp sits AFTER the CS-26 VALIDÉ guard: a refused move pins nothing.
+      it('does not stamp when the CS-26 VALIDÉ guard refuses the move', async () => {
+        prisma.correction.findMany.mockResolvedValue([{ filedAgainstVersion: 5, asset: { currentVersion: 5 } }]);
+        await expect(service.updateStage('acc-me', 'page-1', { stage: 'valide' })).rejects.toBeInstanceOf(ConflictException);
+        expect(prisma.page.update).not.toHaveBeenCalled();
+      });
+
+      it('picks the scenario asset deterministically (lowest filename) among the card\'s links', async () => {
+        prisma.page.findUnique.mockResolvedValue(
+          LINKED({
+            assetLinks: [
+              { asset: { id: 'asset-b', filename: 'b-scenario.html', currentVersion: 9 } },
+              { asset: { id: 'asset-a', filename: 'a-scenario.html', currentVersion: 4 } },
+            ],
+          }),
+        );
+        await service.updateStage('acc-me', 'page-1', { stage: 'nemu' });
+        expect(dataOf()).toMatchObject({ drawnAgainstAssetId: 'asset-a', drawnAgainstVersion: 4 });
+      });
+
+      // The stage route is answered OPTIMISTICALLY by the board and the card modal re-reads the card
+      // right after: an extra round-trip here widens a real read-after-write window, so the stamp must
+      // add none. One resolver read, one update — exactly as many as before CS-20.
+      it('adds no extra query — the scenario link comes off the resolver read', async () => {
+        await service.updateStage('acc-me', 'page-1', { stage: 'nemu' });
+        expect(prisma.page.findUnique).toHaveBeenCalledTimes(1);
+        expect(prisma.page.update).toHaveBeenCalledTimes(1);
+        expect(prisma.asset).toBeUndefined();
+      });
+    });
+
+    describe('acknowledgeHandoff', () => {
+      const PINNED = (version: number, headVersion = 7) =>
+        PAGE({ drawnAgainstAssetId: 'asset-scn', drawnAgainstVersion: version, drawnAgainstAsset: { id: 'asset-scn', currentVersion: headVersion } });
+
+      it('re-pins the card to the asset\'s current head', async () => {
+        prisma.page.findUnique.mockResolvedValue(PINNED(2));
+        await service.acknowledgeHandoff('acc-me', 'page-1');
+        expect(dataOf()).toEqual({ drawnAgainstVersion: 7 });
+      });
+
+      it('is idempotent when the pin is already at head (no error, pin unchanged)', async () => {
+        prisma.page.findUnique.mockResolvedValue(PINNED(7));
+        await expect(service.acknowledgeHandoff('acc-me', 'page-1')).resolves.toBeDefined();
+        expect(dataOf()).toEqual({ drawnAgainstVersion: 7 });
+      });
+
+      it('409 « Aucune passation enregistrée » when the card has no pin', async () => {
+        await expect(service.acknowledgeHandoff('acc-me', 'page-1')).rejects.toBeInstanceOf(ConflictException);
+        await expect(service.acknowledgeHandoff('acc-me', 'page-1')).rejects.toThrow('Aucune passation enregistrée');
+        expect(prisma.page.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('deleteHandoff', () => {
+      it('drops both pin columns', async () => {
+        prisma.page.findUnique.mockResolvedValue(PAGE({ drawnAgainstAssetId: 'asset-scn', drawnAgainstVersion: 2, drawnAgainstAsset: { id: 'asset-scn', currentVersion: 7 } }));
+        await service.deleteHandoff('acc-me', 'page-1');
+        expect(dataOf()).toEqual({ drawnAgainstAssetId: null, drawnAgainstVersion: null });
+      });
+
+      it('404 « Aucune passation enregistrée » when there is no pin', async () => {
+        await expect(service.deleteHandoff('acc-me', 'page-1')).rejects.toBeInstanceOf(NotFoundException);
+        await expect(service.deleteHandoff('acc-me', 'page-1')).rejects.toThrow('Aucune passation enregistrée');
+        expect(prisma.page.update).not.toHaveBeenCalled();
+      });
+    });
+
+    // A5 — the banner is readable by everyone, but both writes need « Écriture ».
+    describe('« Écriture » gate', () => {
+      const READER_PROJECT = () =>
+        PROJECT({
+          work: {
+            id: 'work-1',
+            creators: [
+              { accountId: 'acc-me', groupRole: 'leader', permissions: [] },
+              { accountId: 'acc-reader', groupRole: 'member', permissions: ['corrections'] },
+            ],
+          },
+        });
+
+      it.each([
+        ['acknowledgeHandoff', (a: string) => service.acknowledgeHandoff(a, 'page-1')],
+        ['deleteHandoff', (a: string) => service.deleteHandoff(a, 'page-1')],
+      ] as [string, (a: string) => Promise<unknown>][])('%s refuses a member without « Écriture » (403), persists nothing', async (_n, call) => {
+        const project = READER_PROJECT();
+        prisma.project.findUnique.mockResolvedValue(project);
+        prisma.page.findUnique.mockResolvedValue(PAGE({ project, drawnAgainstAssetId: 'asset-scn', drawnAgainstVersion: 2, drawnAgainstAsset: { id: 'asset-scn', currentVersion: 7 } }));
+        await expect(call('acc-reader')).rejects.toBeInstanceOf(ForbiddenException);
+        expect(prisma.page.update).not.toHaveBeenCalled();
+      });
+    });
+
+    // B5 — `stale` is derived server-side from the ONE included pinned-asset row, never per card.
+    describe('toWorkspacePage handoff', () => {
+      const pinned = (version: number, headVersion: number) => ({
+        ...PAGE(),
+        drawnAgainstVersion: version,
+        drawnAgainstAsset: { id: 'asset-scn', currentVersion: headVersion },
+      });
+
+      it('is stale when the pin is behind the head', () => {
+        expect(toWorkspacePage(pinned(2, 5) as never).handoff).toEqual({ assetId: 'asset-scn', version: 2, headVersion: 5, stale: true });
+      });
+
+      it('is not stale when the pin is at head', () => {
+        expect(toWorkspacePage(pinned(5, 5) as never).handoff).toEqual({ assetId: 'asset-scn', version: 5, headVersion: 5, stale: false });
+      });
+
+      // A6 — the FK's SetNull drops the pin when the asset is deleted; nothing 500s, nothing renders.
+      it('is null when there is no pin (older card) or the pinned asset was deleted', () => {
+        expect(toWorkspacePage(PAGE() as never).handoff).toBeNull();
+        expect(toWorkspacePage({ ...PAGE(), drawnAgainstVersion: 3, drawnAgainstAsset: null } as never).handoff).toBeNull();
+      });
+    });
+
+    // D-5 — the handoff OFFER's signal: the scenario doc has edits newer than its head version.
+    describe('toWorkspacePage scenarioUnsaved', () => {
+      const link = (o: Record<string, unknown> = {}) => ({
+        asset: {
+          id: 'as-1',
+          type: 'scenario',
+          filename: 'scenario.txt',
+          currentVersion: 3,
+          scenarioDoc: { updatedAt: new Date('2026-08-02T10:00:00Z') },
+          versions: [{ createdAt: new Date('2026-08-01T10:00:00Z') }],
+          ...o,
+        },
+      });
+
+      it('is true when the editor draft is newer than the head version', () => {
+        expect(toWorkspacePage({ ...PAGE(), assetLinks: [link()] } as never).scenarioUnsaved).toBe(true);
+      });
+
+      // The first save creates v1 and THEN the document row, so a freshly-versioned doc is always a
+      // few ms "newer" than its own head — without the grace window every handoff would prompt.
+      it('is false for a doc written milliseconds after its own version (the materialize path)', () => {
+        expect(
+          toWorkspacePage({
+            ...PAGE(),
+            assetLinks: [
+              link({
+                scenarioDoc: { updatedAt: new Date('2026-08-01T10:00:03.000Z') },
+                versions: [{ createdAt: new Date('2026-08-01T10:00:00.000Z') }],
+              }),
+            ],
+          } as never).scenarioUnsaved,
+        ).toBe(false);
+      });
+
+      it('is false when the head version is newer than (or equal to) the draft', () => {
+        expect(
+          toWorkspacePage({ ...PAGE(), assetLinks: [link({ versions: [{ createdAt: new Date('2026-08-03T10:00:00Z') }] })] } as never).scenarioUnsaved,
+        ).toBe(false);
+      });
+
+      // Follow-up 7 — with the real `versionedAt` column the comparison is exact: an edit made one
+      // second after the version write IS flagged (the case the 5s grace window used to miss).
+      it('is true for an edit made immediately after the version write (versionedAt)', () => {
+        expect(
+          toWorkspacePage({
+            ...PAGE(),
+            assetLinks: [
+              link({
+                scenarioDoc: { updatedAt: new Date('2026-08-01T10:00:01.000Z'), versionedAt: new Date('2026-08-01T10:00:00.000Z') },
+                versions: [{ createdAt: new Date('2026-08-01T10:00:00.000Z') }],
+              }),
+            ],
+          } as never).scenarioUnsaved,
+        ).toBe(true);
+      });
+
+      it('is false right after a version write with no edit since (updatedAt === versionedAt)', () => {
+        expect(
+          toWorkspacePage({
+            ...PAGE(),
+            assetLinks: [
+              link({
+                scenarioDoc: { updatedAt: new Date('2026-08-01T10:00:00.000Z'), versionedAt: new Date('2026-08-01T10:00:00.000Z') },
+                versions: [{ createdAt: new Date('2026-08-01T10:00:00.000Z') }],
+              }),
+            ],
+          } as never).scenarioUnsaved,
+        ).toBe(false);
+      });
+
+      // Legacy rows (written before the column existed) keep the old timestamp comparison, grace
+      // window included — the migration back-fills nothing, so they must not change behaviour.
+      it('falls back to the grace window for a legacy row (versionedAt: null)', () => {
+        const legacy = (draft: string) =>
+          toWorkspacePage({
+            ...PAGE(),
+            assetLinks: [
+              link({
+                scenarioDoc: { updatedAt: new Date(draft), versionedAt: null },
+                versions: [{ createdAt: new Date('2026-08-01T10:00:00.000Z') }],
+              }),
+            ],
+          } as never).scenarioUnsaved;
+        expect(legacy('2026-08-01T10:00:03.000Z')).toBe(false); // inside the window
+        expect(legacy('2026-08-01T10:00:30.000Z')).toBe(true);
+      });
+
+      it('is false with no scenario asset and with no editor draft', () => {
+        expect(toWorkspacePage(PAGE() as never).scenarioUnsaved).toBe(false);
+        expect(toWorkspacePage({ ...PAGE(), assetLinks: [link({ scenarioDoc: null })] } as never).scenarioUnsaved).toBe(false);
+      });
     });
   });
 });

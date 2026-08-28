@@ -8,6 +8,14 @@ import { RedisService } from '../redis/redis.service';
 import { QueueService } from '../queue/queue.service';
 import { AssetsService } from './assets.service';
 import { EditorGateway } from './editor.gateway';
+import * as Y from 'yjs';
+
+/** CS-21 — a real Yjs update blob; compaction merges these for real, so fake bytes would not do. */
+function yUpdate(text: string): Uint8Array {
+  const doc = new Y.Doc();
+  doc.getText('t').insert(0, text);
+  return Y.encodeStateAsUpdate(doc);
+}
 
 const PROJECT = (o: Record<string, unknown> = {}) => ({
   id: 'proj-1',
@@ -77,8 +85,9 @@ function buildPrisma(over: Record<string, any> = {}) {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'doc-1', ...data })),
       update: jest.fn().mockResolvedValue({ id: 'doc-1' }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    scenarioUpdate: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    scenarioUpdate: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     assetVersion: { findUnique: jest.fn().mockResolvedValue(null) },
     media: { findUnique: jest.fn().mockResolvedValue(null) },
     scenarioComment: {
@@ -256,14 +265,83 @@ describe('ScenarioDocumentsService.autosave', () => {
     const prisma = buildPrisma();
     prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
     prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: {} });
+    // CS-21 — two updates the /editor gateway appended since the last compaction.
+    prisma.scenarioUpdate.findMany.mockResolvedValue([
+      { id: 'u-1', update: yUpdate('a') },
+      { id: 'u-2', update: yUpdate('b') },
+    ]);
     const { service, assets } = makeService(prisma);
-    const res = await service.autosave('acc-me', 'page-1', { ydocState: Buffer.from('yjs').toString('base64'), contentJson: CONTENT, html: '<p>x</p>' });
+    const res = await service.autosave('acc-me', 'page-1', { ydocState: Buffer.from(yUpdate('base')).toString('base64'), contentJson: CONTENT, html: '<p>x</p>' });
     expect(prisma.scenarioDocument.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'doc-1' }, data: expect.objectContaining({ contentJson: CONTENT }) }),
     );
-    expect(prisma.scenarioUpdate.deleteMany).toHaveBeenCalledWith({ where: { documentId: 'doc-1' } });
+    // CS-21 — the delete is scoped to the ids read inside the transaction, NEVER `{ documentId }`:
+    // a blanket delete drops updates the gateway appended mid-compaction (routine on the idle timer).
+    expect(prisma.scenarioUpdate.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['u-1', 'u-2'] } } });
+    expect(prisma.scenarioUpdate.deleteMany).not.toHaveBeenCalledWith({ where: { documentId: 'doc-1' } });
     expect(assets.addVersion).not.toHaveBeenCalled(); // never bumps the version
     expect(res.materialized).toBeNull();
+  });
+
+  // CS-21 (round 2, BF-1) — a malformed `ydocState` is a client error, not a 500 + Sentry alert on the
+  // highest-frequency write path. And it is fail-closed: nothing is consumed, every pending row survives.
+  it.each([
+    ['non-base64', 'not base64 !!'],
+    ['well-formed base64 that is not a Yjs update', 'notbase6'],
+  ])('rejects a malformed ydocState (%s) with 400 and leaves the pending updates untouched', async (_label, ydocState) => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: {} });
+    prisma.scenarioUpdate.findMany.mockResolvedValue([
+      { id: 'u-1', update: yUpdate('a') },
+      { id: 'u-2', update: yUpdate('b') },
+    ]);
+    const { service } = makeService(prisma);
+
+    await expect(
+      service.autosave('acc-me', 'page-1', { ydocState, contentJson: CONTENT, html: '<p>x</p>' }),
+    ).rejects.toMatchObject({ status: 400, message: 'Document invalide' });
+
+    // Fail-closed: the transaction wrote nothing and the pending rows are still there for the next pass.
+    expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
+    expect(prisma.scenarioUpdate.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // CS-21 follow-up — an EMPTY ydocState is the last hole in this boundary: `isBase64('')` is true, so
+  // '' passes the DTO; it decodes to zero bytes, gets filtered out of `parts`, and `Y.mergeUpdates([])`
+  // returns a VALID 2-byte empty document — so the guard could not catch it and the draft was overwritten
+  // with an empty doc. One crafted request from any member holding « Écriture » blanked a shared scenario.
+  it('rejects an EMPTY ydocState with 400 and never overwrites the stored draft', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: {} });
+    prisma.scenarioUpdate.findMany.mockResolvedValue([]); // nothing pending: `parts` would be empty
+
+    const { service } = makeService(prisma);
+
+    await expect(
+      service.autosave('acc-me', 'page-1', { ydocState: '', contentJson: CONTENT, html: '<p>x</p>' }),
+    ).rejects.toMatchObject({ status: 400, message: 'Document invalide' });
+
+    expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
+    expect(prisma.scenarioUpdate.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // CS-21 (round 3, BF-2) — the single-part path: with ZERO pending rows (the normal state under the 5s
+  // cadence) the merge used to be skipped entirely, so valid-base64-but-not-Yjs bytes were stored and
+  // every later client load threw. Validation must not depend on a pending row being there.
+  it('rejects a not-Yjs ydocState with 400 even when NOTHING is pending (the single-part path)', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1', contentJson: {} });
+    prisma.scenarioUpdate.findMany.mockResolvedValue([]); // no pending rows: the client's state is the only part
+    const { service } = makeService(prisma);
+
+    await expect(
+      service.autosave('acc-me', 'page-1', { ydocState: 'notbase6', contentJson: CONTENT, html: '<p>x</p>' }),
+    ).rejects.toMatchObject({ status: 400, message: 'Document invalide' });
+
+    expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
   });
 
   // B-I3 (U6): editing an already-linked scenario — the first save binds the doc to the SAME asset,
@@ -314,6 +392,26 @@ describe('ScenarioDocumentsService.autosave', () => {
     expect(prisma.scenarioDocument.create).toHaveBeenCalled();
     expect(res.materialized).toEqual({ assetId: 'asset-new', filename: 'scenario-page-5.html', documentId: 'doc-1' });
     expect(gateway.emitMaterialized).toHaveBeenCalledWith('page-1', 'asset-new');
+  });
+
+  // Follow-up 7 — this branch cuts v1, so the doc is born already versioned: `versionedAt` is set and
+  // `updatedAt` pinned to the same instant, otherwise the fresh draft reads as unsaved from birth.
+  it('stamps versionedAt on the document it materializes (v1 is cut here)', async () => {
+    const prisma = buildPrisma();
+    const { service } = makeService(prisma);
+    await service.autosave('acc-me', 'page-1', { ydocState: 'AA==', contentJson: CONTENT, html: '<p>x</p>' });
+    const { data } = prisma.scenarioDocument.create.mock.calls[0][0];
+    expect(data.versionedAt).toBeInstanceOf(Date);
+    expect(data.updatedAt.getTime()).toBe(data.versionedAt.getTime());
+  });
+
+  it('leaves versionedAt unset when the doc binds to an already-versioned asset (no version cut)', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-linked', filename: 'scenario-ch6.txt', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue(null);
+    const { service } = makeService(prisma);
+    await service.autosave('acc-me', 'page-1', { ydocState: 'AA==', contentJson: CONTENT, html: '<p>x</p>' });
+    expect(prisma.scenarioDocument.create.mock.calls[0][0].data.versionedAt).toBeUndefined();
   });
 
   it('dedupes the materialized filename against an existing scenario-<slug>.html', async () => {
@@ -394,6 +492,32 @@ describe('ScenarioDocumentsService.snapshotVersion', () => {
       mediaId: 'media-html',
       note: 'Relecture chapitre 2',
     });
+  });
+
+  // Follow-up 7 — the version write stamps `ScenarioDocument.versionedAt`, so `scenarioUnsaved`
+  // compares the draft against a real column instead of the old 5s grace window. `updatedAt` is
+  // pinned to the SAME instant (the draft now matches the version) — Prisma's auto-@updatedAt would
+  // land a hair later and make a freshly-versioned doc look unsaved.
+  it('stamps versionedAt on the scenario document when a version is cut', async () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'scenario-ch5.docx', currentVersion: 3 } });
+    const { service } = makeService(prisma);
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>final</p>' });
+    expect(prisma.scenarioDocument.updateMany).toHaveBeenCalledWith({
+      where: { assetId: 'asset-1' },
+      data: { versionedAt: expect.any(Date), updatedAt: expect.any(Date) },
+    });
+    const { data } = prisma.scenarioDocument.updateMany.mock.calls[0][0];
+    expect(data.updatedAt.getTime()).toBe(data.versionedAt.getTime());
+  });
+
+  it('does not stamp versionedAt when the dedupe guard cut no version', async () => {
+    const prisma = buildPrisma();
+    const s3 = withHtmlHead(prisma, '<p>same</p>');
+    const assets = { getAssetItem: jest.fn().mockResolvedValue({ id: 'asset-1', currentVersion: 3 }), addVersion: jest.fn() };
+    const { service } = makeService(prisma, { s3, assets });
+    await service.snapshotVersion('acc-me', 'page-1', { html: '<p>same</p>' });
+    expect(prisma.scenarioDocument.updateMany).not.toHaveBeenCalled();
   });
 
   it('omits the note key when none is given (no empty note)', async () => {
@@ -641,7 +765,13 @@ describe('ScenarioDocumentsService — « Écriture » permission on the REST wr
   }
 
   const autosave = (service: ScenarioDocumentsService, accountId: string) =>
-    service.autosave(accountId, 'page-1', { ydocState: 'AA==', contentJson: CONTENT, html: '<p>x</p>' });
+    // A REAL Yjs update: this row reaches compaction, which since round 3 rejects a state it cannot
+    // load. `'AA=='` was a placeholder byte that no client ever sends (it decodes to a truncated update).
+    service.autosave(accountId, 'page-1', {
+      ydocState: Buffer.from(yUpdate('écriture')).toString('base64'),
+      contentJson: CONTENT,
+      html: '<p>x</p>',
+    });
   const snapshot = (service: ScenarioDocumentsService, accountId: string) =>
     service.snapshotVersion(accountId, 'page-1', { html: '<p>final</p>' });
 
@@ -723,5 +853,69 @@ describe('ScenarioDocumentsService — « Écriture » permission on the REST wr
     await autosave(service, 'acc-me');
     const select = prisma.page.findUnique.mock.calls[0][0].select.project.select.work.select.creators.select;
     expect(select).toMatchObject({ accountId: true, groupRole: true, permissions: true });
+  });
+});
+
+// ── CS-22 — durable relative anchors persisted alongside the absolute pair ────────────────────────
+describe('ScenarioDocumentsService.addComment — CS-22 relative anchors', () => {
+  const withDoc = () => {
+    const prisma = buildPrisma();
+    prisma.assetPageLink.findFirst.mockResolvedValue({ asset: { id: 'asset-1', filename: 'x', currentVersion: 1 } });
+    prisma.scenarioDocument.findUnique.mockResolvedValue({ id: 'doc-1' });
+    return prisma;
+  };
+  const REL_FROM = Buffer.from([1, 2, 3, 4]).toString('base64');
+  const REL_TO = Buffer.from([5, 6, 7, 8]).toString('base64');
+
+  it('persists both encoded positions as bytes and returns them base64 (REST + WS)', async () => {
+    const prisma = withDoc();
+    const { service, gateway } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 2, {
+      text: 'À revoir', anchorFrom: 12, anchorTo: 20, quote: 'sous la pluie', anchorRelFrom: REL_FROM, anchorRelTo: REL_TO,
+    });
+    const data = prisma.scenarioComment.create.mock.calls[0][0].data;
+    expect(data.anchorRelFrom).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(data.anchorRelFrom).toString('base64')).toBe(REL_FROM);
+    expect(Buffer.from(data.anchorRelTo).toString('base64')).toBe(REL_TO);
+    expect(res.anchorRelFrom).toBe(REL_FROM);
+    expect(res.anchorRelTo).toBe(REL_TO);
+    expect(gateway.emitComment).toHaveBeenCalledWith('asset-1', expect.objectContaining({ anchorRelFrom: REL_FROM, anchorRelTo: REL_TO }));
+  });
+
+  it('a comment without relative anchors stores + returns nulls (pre-CS-22 fallback path)', async () => {
+    const prisma = withDoc();
+    const { service } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 1, { text: 'ok', anchorFrom: 3, anchorTo: 9, quote: 'x' });
+    const data = prisma.scenarioComment.create.mock.calls[0][0].data;
+    expect(data.anchorRelFrom).toBeNull();
+    expect(data.anchorRelTo).toBeNull();
+    expect(res.anchorRelFrom).toBeNull();
+    expect(res.anchorRelTo).toBeNull();
+  });
+
+  it('400s an anchor over 512 bytes and writes nothing', async () => {
+    const prisma = withDoc();
+    const { service } = makeService(prisma);
+    await expect(
+      service.addComment('acc-me', 'page-1', 1, { text: 'x', anchorFrom: 1, anchorTo: 4, quote: 'q', anchorRelFrom: Buffer.alloc(513).toString('base64') }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.scenarioComment.create).not.toHaveBeenCalled();
+  });
+
+  it('400s a non-base64 anchor payload', async () => {
+    const prisma = withDoc();
+    const { service } = makeService(prisma);
+    await expect(
+      service.addComment('acc-me', 'page-1', 1, { text: 'x', anchorFrom: 1, anchorTo: 4, quote: 'q', anchorRelTo: 'pas du base64 !!' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.scenarioComment.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores relative anchors on a case-level comment (no absolute range)', async () => {
+    const prisma = withDoc();
+    const { service } = makeService(prisma);
+    const res = await service.addComment('acc-me', 'page-1', 1, { text: 'ok', anchorRelFrom: REL_FROM, anchorRelTo: REL_TO });
+    expect(prisma.scenarioComment.create.mock.calls[0][0].data.anchorRelFrom).toBeNull();
+    expect(res.anchorRelFrom).toBeNull();
   });
 });
