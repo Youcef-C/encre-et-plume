@@ -26,6 +26,9 @@ export interface CommentRange {
    *  over `from`/`to`, which have drifted by every edit made since the comment was filed. */
   relFrom?: string | null;
   relTo?: string | null;
+  /** CS-4 item 5 — the durable quoted snippet. Used ONLY to rescue a legacy row whose absolute pair
+   *  has gone stale (see `findUniqueQuote`); a row with a relative pair never needs it. */
+  quote?: string | null;
 }
 
 // Item 5 (batch) — one distinct highlight colour per comment, assigned by MESSAGE ORDER (not a hash of
@@ -67,6 +70,7 @@ export function commentRangesFrom(
     // CS-22 — carried through untouched; the plugin prefers them over the (drifted) absolute pair.
     anchorRelFrom?: string | null;
     anchorRelTo?: string | null;
+    quote?: string | null;
   }[],
   docSize: number,
 ): CommentRange[] {
@@ -81,7 +85,7 @@ export function commentRangesFrom(
     // clamp to a degenerate range; dropping the row here discarded a relative anchor that still resolves
     // to live words. The plugin prefers `rel` anyway, and `buildAbsolute`'s pre-binding paint still
     // skips a degenerate range on its own.
-    if (to > from || rel) out.push({ id: c.id, from, to, ...(rel ?? {}) });
+    if (to > from || rel) out.push({ id: c.id, from, to, ...(rel ?? {}), ...(c.quote ? { quote: c.quote } : {}) });
   }
   return out;
 }
@@ -148,8 +152,12 @@ export function absPosToRelPos(
   assoc: -1 | 0,
 ): Y.RelativePosition {
   const t = type as any;
-  // Plain boolean (not a type predicate) so `n` keeps its `any` type through the Yjs-internal traversal.
-  const isXmlText = (x: any): boolean => x.constructor === Y.XmlText;
+  // Plain boolean (not a type predicate) so `n` keeps its `any` type through the Yjs-internal traversal
+  // — that is the only reason this is a helper. It uses `instanceof`, like upstream: `constructor ===`
+  // (what this file shipped with) additionally requires the EXACT class, so a subclass of Y.XmlText, or
+  // a second copy of yjs in the tree, would silently fall through to the structural branch and anchor
+  // on the wrong node. Neither is true today; both are the kind of thing that becomes true quietly.
+  const isXmlText = (x: any): boolean => x instanceof Y.XmlText;
   if (pos === 0) {
     return Y.createRelativePositionFromTypeIndex(type, 0, assoc);
   }
@@ -243,6 +251,28 @@ function decodeRelPos(b64: string | null | undefined): Y.RelativePosition | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Find `quote` in the document, but ONLY when it occurs exactly once — an unambiguous match is a fact,
+ * a first-of-several match is a guess, and this code paints on someone else's words when it guesses.
+ * Searches within single text nodes: a quote split across marks simply is not found, and the caller
+ * keeps today's behaviour. Returns null unless there is exactly one occurrence.
+ */
+function findUniqueQuote(doc: PMNode, quote: string): { from: number; to: number } | null {
+  let hit: { from: number; to: number } | null = null;
+  let count = 0;
+  doc.descendants((node, pos) => {
+    if (count > 1 || !node.isText || !node.text) return;
+    let i = node.text.indexOf(quote);
+    while (i >= 0) {
+      count += 1;
+      if (count > 1) return;
+      hit = { from: pos + i, to: pos + i + quote.length };
+      i = node.text.indexOf(quote, i + 1);
+    }
+  });
+  return count === 1 ? hit : null;
 }
 
 /** CS-22 follow-up — the absolute fallback, made total. Now that a row can be admitted on its relative
@@ -396,8 +426,19 @@ export const CommentHighlight = Extension.create({
                   // the highlight; typing at either outer boundary stays outside (Docs-like).
                   // CS-22 — prefer the PERSISTED relative pair (it hasn't drifted); only a missing or
                   // unusable payload falls back to converting the stored absolute pair, as before.
-                  const from = decodeRelPos(r.relFrom) ?? tryAbsPosToRelPos(r.from, y, 0);
-                  const to = decodeRelPos(r.relTo) ?? tryAbsPosToRelPos(r.to, y, -1);
+                  // A legacy row (no durable pair) carries absolute numbers that were correct when the
+                  // comment was filed and have drifted by every edit since — including edits made while
+                  // the create round-tripped. Derived as-is they anchor on the WRONG words and stay
+                  // there. When the stored quote still occurs exactly once, that occurrence is where the
+                  // comment belongs; when it does not (edited in place, or ambiguous) the stored range
+                  // is still the best guess and nothing changes.
+                  let { from: aFrom, to: aTo } = r;
+                  if (!r.relFrom && !r.relTo && r.quote && quoteChanged(r.quote, tr.doc.textBetween(aFrom, aTo, ' '))) {
+                    const found = findUniqueQuote(tr.doc, r.quote);
+                    if (found) ({ from: aFrom, to: aTo } = found);
+                  }
+                  const from = decodeRelPos(r.relFrom) ?? tryAbsPosToRelPos(aFrom, y, 0);
+                  const to = decodeRelPos(r.relTo) ?? tryAbsPosToRelPos(aTo, y, -1);
                   return from && to ? { id: r.id, color, correction, from, to } : null;
                 })
                 .filter((a): a is Anchor => a !== null);

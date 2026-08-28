@@ -323,6 +323,36 @@ describe('CS-22 durable comment anchors', () => {
     editor.destroy();
   });
 
+  // A legacy row (no CS-22 pair) whose stored absolute pair is ALREADY stale when the plugin first
+  // sees it — the user kept typing while the POST round-tripped, or the row predates CS-22 entirely.
+  // The anchor was derived once from those stale numbers and stayed wrong forever, painting the WRONG
+  // words. CS-15's own rule is that a stale range stops painting rather than mis-highlighting; when the
+  // stored `quote` still occurs exactly once we can do better than either and re-anchor on it.
+  it('re-anchors a legacy row on its quote when the stored range has gone stale', () => {
+    const ydoc = new Y.Doc();
+    const editor = makeEditor(ydoc);
+    seed(editor);
+    const stale = rangeOf(editor, QUOTE);
+    // The doc moves on BEFORE the comment is ever painted (the round-trip window).
+    editor.view.dispatch(editor.state.tr.insertText('AVANT. ', stale.from - LINE.indexOf(QUOTE)));
+    // Legacy row: stored absolute pair only, plus the durable quote. No relFrom/relTo.
+    editor.commands.setCommentHighlights([{ id: 'c1', ...stale, quote: QUOTE }]);
+    expect(highlightText(editor)).toBe(QUOTE);
+    editor.destroy();
+  });
+
+  it('leaves a legacy row alone when its quote was edited in place (the « modifié » case still paints)', () => {
+    const ydoc = new Y.Doc();
+    const editor = makeEditor(ydoc);
+    seed(editor);
+    const r = rangeOf(editor, QUOTE);
+    // Edited INSIDE the range: the quote no longer matches, but the stored range is still right.
+    editor.view.dispatch(editor.state.tr.insertText('XX', r.from + 5));
+    editor.commands.setCommentHighlights([{ id: 'c1', from: r.from, to: r.to + 2, quote: QUOTE }]);
+    expect(highlightText(editor)).toBe('sanctXXuaire');
+    editor.destroy();
+  });
+
   it('AC1 (control) — the same reload WITHOUT the relative pair paints the drifted words', () => {
     const ydoc = new Y.Doc();
     const editor = makeEditor(ydoc);
