@@ -106,7 +106,7 @@ interface Anchor {
 interface HighlightState {
   anchors: Anchor[];
   pending: CommentRange[] | null; // desired ranges awaiting a ready y-sync binding
-  set: DecorationSet;
+  set: DecorationSet; // the painted decorations (pre-binding absolute, or resolved from `anchors`)
 }
 
 interface YSyncState {
@@ -402,9 +402,23 @@ export const CommentHighlight = Extension.create({
                 })
                 .filter((a): a is Anchor => a !== null);
             } else if (!tr.docChanged && old.pending === null) {
-              return old; // nothing changed and nothing pending — reuse the current set
+              return old; // nothing changed and nothing pending — the anchors already say everything
             }
-            return { anchors, pending: null, set: buildDecos(anchors, y, tr.doc) };
+            // CS-15 defect fix — `binding.mapping` is NOT updated for the transaction that just changed
+            // the doc: y-sync refreshes it later in the cycle (later than this `apply`, and later than
+            // the `decorations` prop is read — both were measured). So on a LOCAL edit the mapping still
+            // describes the PRE-edit document, and resolving against the post-edit doc shifted every
+            // highlight by the edit's length until the next transaction repaired it.
+            //   The fix is to stop pretending the resolution is post-edit: resolve against `tr.before`,
+            // which is exactly the document the stale mapping describes, then carry the result forward
+            // with `tr.mapping` — ProseMirror's own record of what this edit moved where. A REMOTE
+            // transaction (y-sync's own, tagged with `ySyncPluginKey` meta) has its binding already
+            // refreshed, so it resolves against the new doc directly.
+            const stale = tr.docChanged && !tr.getMeta(ySyncPluginKey);
+            const set = stale
+              ? buildDecos(anchors, y, tr.before).map(tr.mapping, tr.doc)
+              : buildDecos(anchors, y, tr.doc);
+            return { anchors, pending: null, set };
           },
         },
         props: {

@@ -302,6 +302,27 @@ describe('CS-22 durable comment anchors', () => {
     editor.destroy();
   });
 
+  // CS-15 defect (misfiled in CS-22 frontend-notes §8.1 as a whole-line/`assoc` problem; it is neither).
+  // `buildDecos` runs inside the plugin's `apply` and resolves through `binding.mapping`, which has NOT
+  // been updated for the transaction that just changed the doc — so positions computed against the
+  // pre-edit mapping are applied to the post-edit doc and every highlight shifts by the edit's length.
+  // It is not whole-line specific (a mid-line anchor drifts identically) and it is not the structural
+  // fallback (it happens WITH the CS-22 relative pair, which never reaches those branches).
+  it('paints the right words in the SAME transaction as an edit above (no one-transaction lag)', () => {
+    const ydoc = new Y.Doc();
+    const editor = makeEditor(ydoc);
+    seed(editor);
+    const { from, to } = rangeOf(editor, QUOTE);
+    const rel = encodeCommentAnchor(editor.state, from, to)!;
+    editor.commands.setCommentHighlights([{ id: 'c1', from, to, relFrom: rel.relFrom, relTo: rel.relTo }]);
+    expect(highlightText(editor)).toBe(QUOTE);
+
+    // An edit ABOVE the anchor, and NO re-paint afterwards: the highlight must already be right.
+    editor.view.dispatch(editor.state.tr.insertText('AVANT. ', from - LINE.indexOf(QUOTE)));
+    expect(highlightText(editor)).toBe(QUOTE);
+    editor.destroy();
+  });
+
   it('AC1 (control) — the same reload WITHOUT the relative pair paints the drifted words', () => {
     const ydoc = new Y.Doc();
     const editor = makeEditor(ydoc);
