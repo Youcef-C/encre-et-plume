@@ -4,20 +4,11 @@
 import Link from 'next/link';
 import type { TrendingWork } from '@encre-et-plume/shared';
 import { formatLikeCount, growthLabel } from '../lib/home';
+import { coverStyle } from '../lib/cover';
 import { useSession } from '../lib/session';
 import { useAgeCleared } from '../lib/ageGate';
 import { HeartIcon } from './icons';
 import Cover18Overlay from './age/Cover18Overlay';
-
-function coverGradient(seed: number): React.CSSProperties {
-  const angles = [125, 215, 60, 150];
-  const dark = seed % 3 === 2;
-  return {
-    backgroundColor: dark ? 'var(--ink)' : 'var(--accent)',
-    backgroundImage: `radial-gradient(rgba(${dark ? '255,255,255,.16' : '22,19,15,.5'}) 1.6px,transparent 1.7px), linear-gradient(${angles[seed % angles.length]}deg, ${dark ? 'var(--accent) 36%,var(--ink) 36%' : 'var(--ink) 42%,var(--accent) 42%'})`,
-    backgroundSize: 'var(--dot) var(--dot), cover',
-  };
-}
 
 export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
   const { account } = useSession();
@@ -62,7 +53,9 @@ export default function TrendingGrid({ items }: { items: TrendingWork[] }) {
                   borderRadius: 8,
                   overflow: 'hidden',
                   boxShadow: '5px 5px 0 var(--shadow)',
-                  ...coverGradient(item.rank - 1),
+                  // Feedback 2026-09-01 — the REAL cover when the work has one; the shared
+                  // halftone placeholder (lib/cover) only as the no-cover fallback.
+                  ...coverStyle(item.id, item.cover),
                 }}
               >
                 <Cover18Overlay is18plus={item.is18plus} cleared={cleared} label="Œuvre 18+" />

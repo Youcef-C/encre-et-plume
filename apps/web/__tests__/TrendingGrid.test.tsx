@@ -28,6 +28,16 @@ describe('TrendingGrid', () => {
     expect(screen.queryByLabelText('Œuvre 18+')).not.toBeInTheDocument();
   });
 
+  // Feedback 2026-09-01 — the card must show the work's REAL cover when it has one; the halftone
+  // gradient is only the no-cover fallback.
+  it('renders the real cover image when the item has one, the halftone fallback otherwise', () => {
+    render(<TrendingGrid items={[{ ...items[0]!, cover: 'https://cdn/covers/neon.jpg' }, items[1]!]} />);
+    const covers = screen.getAllByTestId('trending-cover');
+    expect(covers[0]!.style.backgroundImage).toContain('https://cdn/covers/neon.jpg');
+    expect(covers[0]!.style.backgroundImage).not.toContain('radial-gradient');
+    expect(covers[1]!.style.backgroundImage).toContain('radial-gradient');
+  });
+
   // QA round-1 regression: the 18+ overlay must never change the cover box's own declared
   // height, or its title/meta siblings shift into the next grid row.
   it('QA round-1 regression: the cover box keeps its exact 290px height when is18plus (no stretch)', () => {
