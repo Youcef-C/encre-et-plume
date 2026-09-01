@@ -38,7 +38,7 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     checklistDone: 0,
     checklistTotal: 0,
     commentCount: 0,
-    openCorrectionCount: 0,
+    openCorrectionCount: 0, openCorrectionTypes: [],
     createdById: null, handoff: null, scenarioUnsaved: false,
     ...over,
   };

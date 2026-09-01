@@ -29,7 +29,7 @@ import {
   type AssetType,
   type PageLinkedFileRef,
 } from '@encre-et-plume/shared';
-import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon, CaretDownIcon, CheckIcon, XIcon } from '../icons';
+import { CalendarIcon, TagIcon, EyeIcon, FileTextIcon, ImageIcon, CaretDownIcon, CheckIcon, XIcon, WarningIcon } from '../icons';
 import OnBrandSelect from '../form/OnBrandSelect';
 import OnBrandCheckbox from '../form/OnBrandCheckbox';
 import ConfirmDialog from './ConfirmDialog';
@@ -713,6 +713,20 @@ export default function CardModal({
                             <span style={typeLabelStyle}>{sec.label}</span>
                             {sec.hint && <span style={subLabelStyle}>{sec.hint}</span>}
                             <span style={has ? pillFilled : pillOutline}>{has ? pillText : 'Vide'}</span>
+                            {/* Feedback 2026-09-01 — flag the file type that still has open corrections.
+                                ponytail: a dessin correction filed on a page-type asset flags DESSIN
+                                (the correction type doesn't carry the asset type). */}
+                            {((sec.canonical === 'scenario' && detail.openCorrectionTypes?.includes('scenario')) ||
+                              (sec.canonical === 'dessin' && detail.openCorrectionTypes?.includes('dessin'))) && (
+                              <span
+                                role="img"
+                                aria-label={`Corrections ouvertes — ${sec.label}`}
+                                title="Corrections ouvertes"
+                                style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--accent)' }}
+                              >
+                                <WarningIcon size={13} />
+                              </span>
+                            )}
                             {memberOnly && (
                               <button
                                 type="button"
@@ -834,6 +848,16 @@ export default function CardModal({
                                             style={{ ...rowBtn, textDecoration: 'none' }}
                                           >
                                             <FileTextIcon size={12} /> Éditer
+                                          </Link>
+                                        )}
+                                        {/* Feedback 2026-09-01 — a drawing/page goes straight to its review screen. */}
+                                        {(sec.canonical === 'dessin' || sec.canonical === 'page') && (
+                                          <Link
+                                            href={`/projet/${slug}/revision/${pageId}`}
+                                            aria-label={`Corrections — ${a.filename}`}
+                                            style={{ ...rowBtn, textDecoration: 'none' }}
+                                          >
+                                            <WarningIcon size={12} /> Corrections
                                           </Link>
                                         )}
                                         {memberOnly && (
@@ -1048,6 +1072,11 @@ export default function CardModal({
           assetId={previewTarget.id}
           filename={previewTarget.filename}
           version={previewTarget.currentVersion}
+          correctionsHref={
+            previewTarget.type === 'dessin' || previewTarget.type === 'page'
+              ? `/projet/${slug}/revision/${pageId}`
+              : undefined
+          }
           onClose={() => setPreviewTarget(null)}
         />
       )}

@@ -51,6 +51,7 @@ function makePage(over: Partial<WorkspacePage>): WorkspacePage {
     checklistTotal: 0,
     commentCount: 0,
     openCorrectionCount: 0,
+    openCorrectionTypes: [],
     createdById: null,
     handoff: null,
     scenarioUnsaved: false,
@@ -405,6 +406,13 @@ describe('KanbanBoard', () => {
     it('renders no count chip when there are no open corrections against the current version', () => {
       renderBoard([makePage({ id: 'pg7', title: 'Page 7', stage: 'encrage', openCorrectionCount: 0 })]);
       expect(screen.queryByTitle('Corrections ouvertes')).not.toBeInTheDocument();
+    });
+
+    // Feedback 2026-09-01 — the card face names WHICH file type still needs a correction.
+    it('shows a type tag per open-correction file type, and none otherwise', () => {
+      renderBoard([makePage({ id: 'pg7', title: 'Page 7', stage: 'encrage', openCorrectionCount: 2, openCorrectionTypes: ['dessin'] })]);
+      expect(screen.getByText('dessin')).toBeInTheDocument();
+      expect(screen.queryByText('scénario')).not.toBeInTheDocument();
     });
   });
 
@@ -895,7 +903,7 @@ describe('KanbanBoard', () => {
         renderBoard([unsaved]);
         await moveToColumn('Nemu');
         expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Créer une version puis passer en Nemu' })).toHaveAttribute(
+        expect(screen.getByRole('link', { name: 'Créer une version' })).toHaveAttribute(
           'href',
           '/projet/nuit-blanche/editeur/pg7',
         );
@@ -906,7 +914,7 @@ describe('KanbanBoard', () => {
         (api.updatePageStage as ReturnType<typeof vi.fn>).mockResolvedValue({ ...unsaved, stage: 'nemu' });
         renderBoard([unsaved]);
         await moveToColumn('Nemu');
-        await userEvent.click(await screen.findByRole('button', { name: 'Passer sans créer de version' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Passer sans version' }));
         await waitFor(() => expect(api.updatePageStage).toHaveBeenCalledWith('pg7', 'nemu'));
       });
 

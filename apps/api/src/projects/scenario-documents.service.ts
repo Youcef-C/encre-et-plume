@@ -113,6 +113,11 @@ export class ScenarioDocumentsService {
     const page = await this.resolveMemberPage(accountId, pageId);
     const { plancheNo, total } = await this.derivePlanche(page);
     const asset = await this.resolveEditorAsset(page, assetId);
+    // Feedback 2026-09-01 — gates the editor's « Corrections dessin » link (the /revision screen is
+    // dessin-only). Types mirror SURFACE_BY_TYPE's dessin surface (corrections.service.ts).
+    const dessinLinks = await this.prisma.assetPageLink.count({
+      where: { pageId: page.id, asset: { type: { in: ['dessin', 'page'] } } },
+    });
 
     let contentJson: PlancheDocJson | null = null;
     let ydocState: string | null = null;
@@ -164,6 +169,7 @@ export class ScenarioDocumentsService {
       cases: deriveCases(contentJson),
       comments,
       template,
+      hasDessin: dessinLinks > 0,
     };
   }
 

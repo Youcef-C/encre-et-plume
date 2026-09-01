@@ -8,16 +8,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../../lib/useScrollLock';
 import type { AssetPreviewResponse } from '@encre-et-plume/shared';
 import { getAssetPreview } from '../../lib/api';
-import { XIcon, DownloadIcon } from '../icons';
+import Link from 'next/link';
+import { XIcon, DownloadIcon, WarningIcon } from '../icons';
 
 export interface AssetPreviewOverlayProps {
   assetId: string;
   filename: string;
   version: number;
+  /** Feedback 2026-09-01 — when set (drawing/page assets), the header links to the review screen.
+   *  The caller derives it; the overlay stays fetch-free about corrections. */
+  correctionsHref?: string;
   onClose: () => void;
 }
 
-export default function AssetPreviewOverlay({ assetId, filename, version, onClose }: AssetPreviewOverlayProps) {
+export default function AssetPreviewOverlay({ assetId, filename, version, correctionsHref, onClose }: AssetPreviewOverlayProps) {
   useScrollLock();
   const [preview, setPreview] = useState<AssetPreviewResponse | null>(null);
   const [error, setError] = useState(false);
@@ -71,6 +75,11 @@ export default function AssetPreviewOverlay({ assetId, filename, version, onClos
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink2)', fontWeight: 700 }}>v{version}</div>
           </div>
+          {correctionsHref && (
+            <Link href={correctionsHref} className="ep-btn-secondary" style={dlLink} aria-label={`Corrections — ${filename}`}>
+              <WarningIcon size={15} /> Corrections
+            </Link>
+          )}
           {preview?.downloadUrl && (
             <a href={preview.downloadUrl} target="_blank" rel="noreferrer" className="ep-btn-secondary" style={dlLink}>
               <DownloadIcon size={15} /> Télécharger

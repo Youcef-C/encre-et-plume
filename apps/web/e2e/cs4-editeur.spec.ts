@@ -263,6 +263,8 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     // once that chip exists. Bug found in the PRE-EXISTING test (fixed here, test-only).
     await expect(toolbarVersion(page)).toContainText('v1', { timeout: 10_000 });
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
     await expect(toolbarVersion(page)).toContainText('v2');
 
@@ -366,13 +368,12 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     const correctionHighlight = caseBlock(page, 1).locator('[data-case-description] .ep-correction-highlight');
     await expect(correctionHighlight).toBeVisible({ timeout: 5_000 });
 
-    // FR14 — the author (owner, filing their own correction) sees a status stepper on the row; step
-    // à corriger → en cours → corrigé; the chip updates each time via PATCH /corrections/:id.
-    const stepper = correctionComment.getByRole('button', { name: /Statut de la correction/ });
-    await expect(stepper).toBeVisible();
-    await stepper.click();
+    // FR14 (reworked 2026-09-01) — the author sees the explicit status radiogroup on the row; set
+    // en cours then corrigé directly; the chip updates each time via PATCH /corrections/:id.
+    await expect(correctionComment.getByRole('radiogroup', { name: /Statut de la correction/ })).toBeVisible();
+    await correctionComment.getByRole('radio', { name: 'En cours' }).click();
     await expect(correctionComment.getByText('Correction · En cours')).toBeVisible({ timeout: 10_000 });
-    await stepper.click();
+    await correctionComment.getByRole('radio', { name: 'Corrigé' }).click();
     await expect(correctionComment.getByText('Correction · Corrigé')).toBeVisible({ timeout: 10_000 });
   });
 
@@ -544,6 +545,8 @@ test.describe('CS-4 Éditeur — bug fix: scenario version off-by-one (real cont
     await typeIntoCase(page, 1, v2Extra);
     await saveDoc(page);
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
     await expect(toolbarVersion(page)).toContainText('v2', { timeout: 10_000 });
     // v2 IS the head now — its content is the live canvas: v1's text + the new sentence (the real
@@ -643,14 +646,16 @@ test.describe('CS-4 Éditeur — version-note split button (item 22)', () => {
     await saveDoc(page);
     // Primary split-button click (no chevron) snapshots immediately, without a note — v1 → v2.
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('v2')).toBeVisible();
 
     await typeIntoCase(page, 1, ' Et encore une phrase avant la troisième version.');
     await saveDoc(page);
-    // The attached chevron opens an inline "NOTE (optionnelle)" form; submitting snapshots WITH the note.
-    await page.getByRole('button', { name: 'Ajouter une note à la version' }).click();
-    const noteForm = page.getByRole('dialog', { name: 'Note de version' });
+    // Feedback 2026-09-01 — the note lives in the version confirm modal (chevron popover superseded).
+    await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    const noteForm = page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' });
     await expect(noteForm).toBeVisible();
     await noteForm.getByLabel('NOTE (optionnelle)').fill('Version stable pour relecture');
     await noteForm.getByRole('button', { name: 'Enregistrer' }).click();
@@ -1177,6 +1182,8 @@ test.describe('CS-4 Éditeur — realtime collaboration (two browser contexts)',
     // A creates a new version, then edits DIRECTLY (same session, right after the version bump) and
     // comments — the exact repro shape from the original bug report.
     await a.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await a.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(a.getByText('Nouvelle version enregistrée')).toBeVisible({ timeout: 10_000 });
     await typeIntoCase(a, 1, ' Ajout de A juste après la nouvelle version.');
     await saveDoc(a);

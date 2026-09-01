@@ -36,9 +36,10 @@ import PageSwitcher from './PageSwitcher';
 import VersionSheet from './VersionSheet';
 import CompareVersionsModal from './CompareVersionsModal';
 import ConfirmDialog from '../projet/ConfirmDialog';
+import SnapshotConfirmModal from './SnapshotConfirmModal';
 import OnBrandSelect from '../form/OnBrandSelect';
-import { NEXT_STATUS } from '../revision/shared';
-import { FileTextIcon, ChatIcon, CaretDownIcon, TrashIcon, CompareIcon, CheckIcon } from '../icons';
+import CorrectionStatusControl from '../revision/CorrectionStatusControl';
+import { FileTextIcon, ChatIcon, TrashIcon, CompareIcon, CheckIcon } from '../icons';
 
 // CS-5 Fb-2 — a comment row's «Correction» tag colours: accent for open, green for resolved.
 const CORRECTION_TAG_GREEN = '#1f8a5b';
@@ -486,12 +487,13 @@ function EditorLoaded({
     }, COMPACT_IDLE_MS);
   }, []);
 
-  /** Compact NOW if a tick is pending — a closing tab compacts rather than leaving a long update log. */
-  const flushCompaction = useCallback(() => {
-    if (!compactTimer.current) return;
+  /** Compact NOW if a tick is pending — a closing tab compacts rather than leaving a long update log.
+   *  Returns the compact promise so a version snapshot can await the flush (feedback 2026-09-01). */
+  const flushCompaction = useCallback((): Promise<void> => {
+    if (!compactTimer.current) return Promise.resolve();
     clearTimeout(compactTimer.current);
     compactTimer.current = null;
-    void compactRef.current();
+    return compactRef.current();
   }, []);
 
   // Typing awareness + the compaction tick. `update` fires on local AND remote edits; either leaves
@@ -517,12 +519,12 @@ function EditorLoaded({
   // signal (`beforeunload` never fires on iOS); the unmount cleanup covers an in-app route change.
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flushCompaction();
+      if (document.visibilityState === 'hidden') void flushCompaction();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      flushCompaction();
+      void flushCompaction();
     };
   }, [flushCompaction]);
 
@@ -634,7 +636,9 @@ function EditorLoaded({
                 pageId={pageId}
                 assetId={assetId}
                 currentAsset={asset}
+                hasDessin={initial.hasDessin}
                 onSnapshot={onVersionSaved}
+                onBeforeSnapshot={flushCompaction}
                 onError={pushToast}
                 editor={editor}
                 canWrite={canWrite}
@@ -897,7 +901,9 @@ function ToolbarExtras({
   pageId,
   assetId,
   currentAsset,
+  hasDessin,
   onSnapshot,
+  onBeforeSnapshot,
   onError,
   editor,
   canWrite,
@@ -909,7 +915,10 @@ function ToolbarExtras({
   pageId: string;
   assetId?: string;
   currentAsset: EditorDocumentResponse['asset'];
+  hasDessin: boolean;
   onSnapshot: (a: AssetItem) => void;
+  /** Flush a pending idle compaction; snapshot awaits it so pre-save edits get versioned. */
+  onBeforeSnapshot: () => Promise<void>;
   onError: (msg: string) => void;
   editor: Editor | null;
   canWrite: boolean;
@@ -919,6 +928,7 @@ function ToolbarExtras({
 }) {
   const [snapping, setSnapping] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // Item 1 (iter 5) — the reviewable asset id for the compare modal. Use the loaded asset's own id
   // (the `assetId` prop is only the optional URL param and is absent for a page's default asset).
   const compareAssetId = currentAsset?.id;
@@ -936,10 +946,14 @@ function ToolbarExtras({
     snappingRef.current = true;
     setSnapping(true);
     try {
+      // Feedback 2026-09-01 — flush a pending compaction FIRST so those edits land and get versioned,
+      // instead of landing after versionedAt and reading as « Scénario non enregistré » on the board.
+      await onBeforeSnapshot();
       // Bug (off-by-one) — snapshot the OPENED/loaded asset in place (fall back to the ?asset URL param)
       // so "Enregistrer une nouvelle version" versions the right file instead of a materialized duplicate.
       const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML(), ...(note ? { note } : {}) }, currentAsset?.id ?? assetId);
       onSnapshot(updated);
+      setConfirmOpen(false);
     } catch (err) {
       onError((err as { message?: string })?.message ?? 'Impossible d’enregistrer la version');
     } finally {
@@ -984,7 +998,26 @@ function ToolbarExtras({
               Comparer
             </button>
           )}
-          <VersionSplitButton snapping={snapping} onSnapshot={snapshot} canWrite={canWrite} />
+          {/* Feedback 2026-09-01 — one button opening the confirm modal (base preview + note);
+              the Item 22 split control (chevron note popover) is superseded. */}
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={snapping || !canWrite}
+            title={canWrite ? undefined : 'Lecture seule — permission « Écriture » requise'}
+            style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
+          >
+            {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
+          </button>
+          {confirmOpen && editor && (
+            <SnapshotConfirmModal
+              version={version}
+              previewText={editor.getText()}
+              snapping={snapping}
+              onConfirm={(note) => void snapshot(note)}
+              onCancel={() => setConfirmOpen(false)}
+            />
+          )}
         </>
       )}
       {comparing && compareAssetId && version != null && (
@@ -996,89 +1029,14 @@ function ToolbarExtras({
           onClose={() => setComparing(false)}
         />
       )}
-      {/* FR1 mirror — cross-link to the review screen (the review toolbar links back to the editor). */}
-      <Link href={`/projet/${slug}/revision/${pageId}`} style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', textDecoration: 'none', border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 10px', minHeight: 32, display: 'inline-flex', alignItems: 'center' }}>
-        Révision · corrections →
-      </Link>
-    </>
-  );
-}
-
-// ── Item 22 — split control: primary snapshots now; the down-chevron opens an inline note form that
-// snapshots WITH a note. Same note UX (optional textarea) as the CS-3 history modal. ──
-function VersionSplitButton({ snapping, onSnapshot, canWrite }: { snapping: boolean; onSnapshot: (note?: string) => void; canWrite: boolean }) {
-  const [open, setOpen] = useState(false);
-  // CS-10 (F16-R3) — without « Écriture » the version route 403s: disable both halves of the split.
-  const blocked = snapping || !canWrite;
-  const [note, setNote] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [open]);
-
-  const submitNote = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSnapshot(note.trim() || undefined);
-    setNote('');
-    setOpen(false);
-  };
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
-      {/* Split button: primary (snapshot now) + attached chevron (snapshot with a note). */}
-      <button
-        type="button"
-        onClick={() => onSnapshot()}
-        disabled={blocked}
-        title={canWrite ? undefined : 'Lecture seule — permission « Écriture » requise'}
-        style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: '6px 0 0 6px', borderRight: 'none', padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
-      >
-        {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
-      </button>
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label="Ajouter une note à la version"
-        onClick={() => setOpen((o) => !o)}
-        disabled={blocked}
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, minHeight: 32, border: '2px solid var(--ink)', borderRadius: '0 6px 6px 0', background: open ? 'var(--accent)' : 'var(--card)', color: open ? '#fff' : 'var(--ink)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
-      >
-        <CaretDownIcon size={13} />
-      </button>
-      {open && (
-        <form
-          onSubmit={submitNote}
-          role="dialog"
-          aria-label="Note de version"
-          style={{ position: 'absolute', top: 40, right: 0, zIndex: 30, width: 260, maxWidth: 'calc(100vw - 32px)', background: 'var(--card)', border: '3px solid var(--ink)', borderRadius: 8, boxShadow: '5px 5px 0 var(--shadow)', padding: 12 }}
-        >
-          <label htmlFor="ep-version-note" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>NOTE (optionnelle)</label>
-          <textarea
-            id="ep-version-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Décrivez cette version…"
-            rows={2}
-            autoFocus
-            style={{ width: '100%', marginTop: 4, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)' }}
-          />
-          <button
-            type="submit"
-            disabled={snapping}
-            style={{ marginTop: 8, width: '100%', background: 'var(--accent)', color: '#fff', border: '2px solid var(--ink)', borderRadius: 6, padding: '7px 12px', minHeight: 36, fontSize: 12, fontWeight: 700, cursor: snapping ? 'wait' : 'pointer', fontFamily: 'inherit' }}
-          >
-            Enregistrer
-          </button>
-        </form>
+      {/* FR1 mirror — cross-link to the review screen. Feedback 2026-09-01: /revision is dessin-only,
+          so the link renders only when a dessin/page file is linked and names what it opens. */}
+      {hasDessin && (
+        <Link href={`/projet/${slug}/revision/${pageId}`} style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', textDecoration: 'none', border: '2px solid var(--ink)', borderRadius: 6, padding: '5px 10px', minHeight: 32, display: 'inline-flex', alignItems: 'center' }}>
+          Corrections dessin →
+        </Link>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1494,23 +1452,23 @@ function Sidebar({
               </div>
             )}
             <div style={{ color: 'var(--ink)', lineHeight: 1.3 }}>{c.text}</div>
-            {/* FR14 — author/assignee-only correction status stepper (à corriger → en cours → corrigé →
-                reopen). Persists via PATCH /corrections/:id; the server re-enforces the authz. */}
+            {/* FR14 (reworked 2026-09-01) — author/assignee-only explicit status control (every
+                status visible, one click to any other). Persists via PATCH /corrections/:id; the
+                server re-enforces the authz. */}
             {canStatus && c.correction && (
-              <button
-                type="button"
-                disabled={statusBusyId === c.id}
-                onClick={() => {
-                  setStatusBusyId(c.id);
-                  void onCorrectionStatus(c, NEXT_STATUS[c.correction!.status]).finally(() =>
-                    setStatusBusyId((id) => (id === c.id ? null : id)),
-                  );
-                }}
-                aria-label={`Statut de la correction : ${CORRECTION_STATUS_LABELS[c.correction.status]} — passer à « ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.correction.status]]} »`}
-                style={{ marginTop: 6, fontSize: 11, fontWeight: 700, border: '2px solid var(--ink)', borderRadius: 5, padding: '3px 8px', minHeight: 30, background: 'var(--card)', color: 'var(--ink)', cursor: statusBusyId === c.id ? 'default' : 'pointer', fontFamily: 'inherit' }}
-              >
-                {statusBusyId === c.id ? '…' : `→ ${CORRECTION_STATUS_LABELS[NEXT_STATUS[c.correction.status]]}`}
-              </button>
+              <div style={{ marginTop: 6 }}>
+                <CorrectionStatusControl
+                  status={c.correction.status}
+                  busy={statusBusyId === c.id}
+                  onChange={(s) => {
+                    setStatusBusyId(c.id);
+                    void onCorrectionStatus(c, s).finally(() =>
+                      setStatusBusyId((id) => (id === c.id ? null : id)),
+                    );
+                  }}
+                  label="Statut de la correction"
+                />
+              </div>
             )}
           </div>
           );

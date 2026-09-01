@@ -25,7 +25,7 @@ type PendingRow = { id: string; update: Uint8Array };
 /** The slice of Prisma this needs — structural, so the service passes PrismaService and specs pass a mock. */
 export type CompactionTx = {
   scenarioDocument: {
-    findUnique(args: { where: { id: string }; select: { ydocState: true } }): Promise<{ ydocState: Uint8Array | null } | null>;
+    findUnique(args: { where: { id: string }; select: { ydocState: true; updatedAt: true } }): Promise<{ ydocState: Uint8Array | null; updatedAt: Date } | null>;
     update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
   };
   scenarioUpdate: {
@@ -99,7 +99,10 @@ export async function compactDocument(
       return { compacted: 0 };
     }
 
-    const stored = opts.state ?? (await tx.scenarioDocument.findUnique({ where: { id: documentId }, select: { ydocState: true } }))?.ydocState;
+    const row = opts.state === undefined || opts.contentJson === undefined
+      ? await tx.scenarioDocument.findUnique({ where: { id: documentId }, select: { ydocState: true, updatedAt: true } })
+      : null;
+    const stored = opts.state ?? row?.ydocState;
     const parts = [stored, ...pending.map((r) => r.update)].filter(nonEmpty);
     // Nothing to merge (a contentJson/template-only write against a doc with no state and no pending
     // rows): leave `ydocState` alone. `mergeUpdates([])` would return an empty document and wipe it.
@@ -111,6 +114,9 @@ export async function compactDocument(
         ...(merged ? { ydocState: Buffer.from(merged) } : {}),
         ...(opts.contentJson !== undefined ? { contentJson: opts.contentJson } : {}),
         ...(opts.template ? { template: opts.template } : {}),
+        // A pure fold (no client payload — the queue job) is NOT an edit: pin updatedAt so
+        // hasUnsavedScenario doesn't flag a just-versioned doc as unsaved (feedback 2026-09-01).
+        ...(opts.contentJson === undefined && row ? { updatedAt: row.updatedAt } : {}),
       },
     });
 

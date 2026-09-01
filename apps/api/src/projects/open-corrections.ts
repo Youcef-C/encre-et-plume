@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { CorrectionType, Prisma } from '@prisma/client';
 
 /**
  * CS-26 — the ONE definition of "unresolved corrections", shared by the two invariant-checked
@@ -24,6 +24,12 @@ export type OpenCorrectionRow = { filedAgainstVersion: number; asset: { currentV
  *  no longer says "this file still has known problems". Only current-version rows count. */
 export const tallyAgainstCurrent = (rows: OpenCorrectionRow[]): number =>
   rows.filter((c) => c.filedAgainstVersion === c.asset.currentVersion).length;
+
+/** Feedback 2026-09-01 — the unique `type`s of the same against-current rows the tally counts, so
+ *  the card can say WHICH file kind (« dessin » / « scénario ») still needs a correction. */
+export const openTypesAgainstCurrent = (rows: (OpenCorrectionRow & { type: CorrectionType })[]): CorrectionType[] => [
+  ...new Set(rows.filter((c) => c.filedAgainstVersion === c.asset.currentVersion).map((c) => c.type)),
+];
 
 /** The subset of PrismaService this helper touches. Structural on purpose: importing PrismaService
  *  would re-open the assets↔corrections↔pages require cycle this module exists to avoid. The Prisma

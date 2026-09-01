@@ -623,21 +623,12 @@ describe('CorrectionsService', () => {
       expect(from).toContain('<strong>ok</strong>'); // safe formatting survives
     });
 
-    // CS-24 (D-4) — the before/after crops need the URL of EVERY listed version, not just the selected
-    // pair. Signed from rows already loaded: no extra DB query, no new derivative.
-    it('CS-24: fills versions[].url on the dessin surface without an extra query', async () => {
+    // The per-version signed URLs existed only for the CS-24 crops, removed on user feedback
+    // (2026-09-01) — the version list carries no url and signs only the selected pair.
+    it('lists versions without per-version urls (only the selected pair is signed)', async () => {
       const res = await service.getReview('acc-me', 'page-1', { from: 2, to: 3 });
-      expect(res.selected?.versions.map((v) => v.url)).toEqual(['https://img/signed', 'https://img/signed']);
+      expect(res.selected?.versions.every((v) => !('url' in v))).toBe(true);
       expect(prisma.assetVersion.findMany).toHaveBeenCalledTimes(1);
-    });
-
-    it('CS-24: leaves versions[].url null on the scenario surface', async () => {
-      prisma.assetPageLink.findMany.mockResolvedValue([
-        { asset: { id: 'asset-scenario', filename: 'scenario.html', type: 'scenario', currentVersion: 3 } },
-      ]);
-      prisma.media.findUnique.mockResolvedValue({ id: 'm', bucketKey: 'k', contentType: 'text/html' });
-      const res = await service.getReview('acc-me', 'page-1', { from: 2, to: 3 });
-      expect(res.selected?.versions.every((v) => v.url === null)).toBe(true);
     });
 
     it('returns selected = null when no reviewable file is linked', async () => {

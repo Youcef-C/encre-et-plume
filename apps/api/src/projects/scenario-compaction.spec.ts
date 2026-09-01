@@ -23,10 +23,12 @@ function textOf(state: Uint8Array): string {
   return doc.getText('t').toString();
 }
 
+const STORED_UPDATED_AT = new Date('2026-08-30T10:00:00.000Z');
+
 function buildPrisma(pending: { id: string; update: Uint8Array }[], ydocState: Uint8Array | null = null) {
   const prisma: any = {
     scenarioDocument: {
-      findUnique: jest.fn().mockResolvedValue(ydocState === null ? { ydocState: null } : { ydocState }),
+      findUnique: jest.fn().mockResolvedValue({ ydocState, updatedAt: STORED_UPDATED_AT }),
       update: jest.fn().mockResolvedValue({ id: 'doc-1' }),
     },
     scenarioUpdate: {
@@ -101,6 +103,26 @@ describe('compactDocument (CS-21)', () => {
     expect(res.compacted).toBe(0);
     expect(prisma.scenarioDocument.update).not.toHaveBeenCalled();
     expect(prisma.scenarioUpdate.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Feedback 2026-09-01 — a pure fold (the queue job: no client payload) is NOT an edit. Letting
+  // Prisma's @updatedAt bump on it made hasUnsavedScenario flag a just-versioned doc as unsaved.
+  it('a queue fold (no contentJson) preserves the stored updatedAt', async () => {
+    const prisma = buildPrisma([{ id: 'u-1', update: updateWithText('a') }], updateWithText(''));
+
+    await compactDocument(prisma, 'doc-1');
+
+    const { data } = prisma.scenarioDocument.update.mock.calls[0][0];
+    expect(data.updatedAt).toEqual(STORED_UPDATED_AT);
+  });
+
+  it('an autosave (with contentJson) still lets @updatedAt bump — a real edit IS unsaved', async () => {
+    const prisma = buildPrisma([], null);
+
+    await compactDocument(prisma, 'doc-1', { state: updateWithText('x'), contentJson: { type: 'doc' } });
+
+    const { data } = prisma.scenarioDocument.update.mock.calls[0][0];
+    expect(data.updatedAt).toBeUndefined();
   });
 
   it('does not issue a delete when the client state is written with nothing pending', async () => {

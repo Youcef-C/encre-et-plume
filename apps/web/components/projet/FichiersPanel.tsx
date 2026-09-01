@@ -601,6 +601,13 @@ export default function FichiersPanel({ slug, pages, chapters = [], readOnly = f
           assetId={previewTarget.id}
           filename={previewTarget.filename}
           version={previewTarget.currentVersion}
+          // Feedback 2026-09-01 — a linked drawing/page previews with a direct « Corrections » link.
+          // ponytail: first linked page wins (dessin/page are single-link per the schema).
+          correctionsHref={
+            (previewTarget.type === 'dessin' || previewTarget.type === 'page') && previewTarget.linkedPages.length > 0
+              ? `/projet/${slug}/revision/${previewTarget.linkedPages[0].id}`
+              : undefined
+          }
           onClose={() => setPreviewTarget(null)}
         />
       )}

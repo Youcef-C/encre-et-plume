@@ -6,6 +6,7 @@ import type { CreatorRole } from './onboarding.js';
 import type { CatalogAudienceRating } from './catalog.js';
 import type { RevenueSplitEntry, SoutienGoalInput, SoutienTier } from './collections.js';
 import type { AssetType } from './assets.js';
+import type { CorrectionType } from './corrections.js';
 
 export interface ProjectSummary {
   id: string;
@@ -234,6 +235,9 @@ export interface WorkspacePage {
   /** CS-26 — open corrections filed against the CURRENT version of their asset: the exact number that
    *  blocks entry into VALIDÉ. Superseded-version corrections are excluded, so 0 means "move allowed". */
   openCorrectionCount: number;
+  /** Feedback 2026-09-01 — WHICH file types those open corrections target (same against-current
+   *  filter as the count), so the card face / modal can say « dessin » / « scénario ». */
+  openCorrectionTypes: CorrectionType[];
   /** CS-10 D-1: the account that created the card. `null` on cards predating the column (and after
    *  the author's account is deleted) → only leadership may delete them. The FE mirrors that rule. */
   createdById: string | null;

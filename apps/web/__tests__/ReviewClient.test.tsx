@@ -71,8 +71,8 @@ const payload = (items = [correction()]): ReviewPayload => ({
     fromVersion: 2,
     toVersion: 3,
     versions: [
-      { version: 3, authorName: 'Yuki', createdAt: '2026-07-15T10:00:00.000Z', note: null, url: 'https://img/v3' },
-      { version: 2, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null, url: 'https://img/v2' },
+      { version: 3, authorName: 'Yuki', createdAt: '2026-07-15T10:00:00.000Z', note: null },
+      { version: 2, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null },
     ],
     fromHtml: null,
     toHtml: null,
@@ -128,7 +128,7 @@ describe('ReviewClient — CS-24 verification loop', () => {
     await userEvent.click(reopen);
     await waitFor(() => expect(mocked.updateCorrection).toHaveBeenCalledWith('corr-1', { status: 'a_corriger' }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    await waitFor(() => expect(screen.getByText('À corriger')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('À corriger').length).toBeGreaterThan(0));
   });
 
   it('surfaces the API refusal on the row when verify fails', async () => {

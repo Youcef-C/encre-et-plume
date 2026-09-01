@@ -394,18 +394,12 @@ export class CorrectionsService {
       surface: selectedFile.surface,
       fromVersion,
       toVersion,
-      // CS-24 — every listed version carries its signed URL on the dessin surface, so a correction's
-      // before/after crops can address ITS pair (filedAgainstVersion ↔ resolvedInVersion), which is
-      // usually not the selected one. Signed from rows already loaded: no extra query, no derivative.
-      versions: await Promise.all(
-        versionRows.map(async (v) => ({
-          version: v.version,
-          authorName: v.author.displayName,
-          createdAt: v.createdAt.toISOString(),
-          note: v.note,
-          url: selectedFile.surface === 'dessin' ? await this.versionImage(accountId, v.mediaId) : null,
-        })),
-      ),
+      versions: versionRows.map((v) => ({
+        version: v.version,
+        authorName: v.author.displayName,
+        createdAt: v.createdAt.toISOString(),
+        note: v.note,
+      })),
       fromHtml: null,
       toHtml: null,
       fromImageUrl: null,

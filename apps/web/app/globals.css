@@ -1827,23 +1827,47 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 }
 
 /* CS-5 (iter 6) — Révision UI restyled onto the app idiom (.ep-card / .ep-btn-primary): 3px ink
-   border, hard offset shadow, translate hover/press. */
+   border, hard offset shadow. No hover translate on these cards (user feedback 2026-09-01). */
 .ep-correction-card {
   position: relative;
   border: 3px solid var(--ink);
   border-radius: 8px;
   background: var(--card);
   box-shadow: 4px 4px 0 var(--shadow);
-  transition: transform 0.08s, box-shadow 0.08s;
   overflow: hidden;
-}
-.ep-correction-card:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--shadow);
 }
 .ep-correction-card[data-selected='true'] {
   border-color: var(--accent);
   box-shadow: 4px 4px 0 var(--accent);
+}
+
+/* Explicit correction-status chips (CorrectionStatusControl) — layout only; the status colour is
+   inline (display semantics from statusColor, not a button intent). */
+.ep-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  min-height: 30px;
+  cursor: pointer;
+  font-family: inherit;
+  background: var(--card);
+  color: var(--ink);
+}
+.ep-status-chip:disabled {
+  cursor: default;
+}
+.ep-status-chip[aria-checked='false']:disabled {
+  opacity: 0.6;
+}
+.ep-status-chip[aria-checked='false']:not(:disabled):hover {
+  background: var(--accent-soft);
 }
 
 /* Compact app-idiom buttons (3px ink border, hard offset shadow, translate hover/press) for the dense
@@ -1897,31 +1921,6 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
 .ep-btn-compact--dark { background: var(--ink); color: var(--paper); }
 .ep-btn-compact--success { background: #1f8a5b; color: #fff; }
 .ep-btn-compact--danger { background: var(--danger); color: #fff; }
-
-/* CS-24 — before/after crops of a correction's region, side by side. The crop is CSS over the two
-   signed URLs already in the review payload (background-size/position on the normalized region):
-   no derivative, no image job. F7: the pair stacks vertically under 768px.
-   ponytail: the box takes the region's own w/h ratio, which reads true on a square-ish planche and
-   stretches slightly on a tall one — read the image's naturalWidth/Height if that ever matters. */
-.ep-crop-pair {
-  display: flex;
-  gap: 8px;
-  margin: 0 14px 10px 18px;
-}
-.ep-crop-pair > figure {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.ep-crop {
-  width: 100%;
-  background-repeat: no-repeat;
-  background-color: var(--tone);
-}
-@media (max-width: 768px) {
-  .ep-crop-pair { flex-direction: column; }
-  /* Column mode: size on content, never on a 0 flex-basis (which collapses the panes to nothing). */
-  .ep-crop-pair > figure { flex: 0 0 auto; }
-}
 
 /* Green "Valider les modifications" CTA — legacy compact-green used in the editor/revision
    surfaces. Equivalent intent to .ep-btn-success (the canonical green); kept at its tuned

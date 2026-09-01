@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EditorDocumentResponse, CaseCommentDto } from '@encre-et-plume/shared';
 
@@ -72,6 +72,8 @@ const fakeEditor = {
   // Non-blank by default so the save/materialize tests exercise a real persist. The blank-gate test
   // overrides this to an empty document to assert the no-op (version off-by-one fix).
   getHTML: () => '<div data-case-block><p>Rin entre dans le sanctuaire.</p></div>',
+  // The snapshot-confirm modal previews the base as PLAIN TEXT (never HTML into a sink).
+  getText: () => 'Rin entre dans le sanctuaire.',
   // A truthy `view` lets the highlight-repaint + CS-15 liveTexts effects run (both guard on editor.view).
   view: {},
   isDestroyed: false,
@@ -135,6 +137,7 @@ function makeDoc(over: Partial<EditorDocumentResponse> = {}): EditorDocumentResp
     cases: [],
     comments: [],
     template: null,
+    hasDessin: false,
     ...over,
   };
 }
@@ -241,6 +244,7 @@ describe('EditorClient (Éditeur shell)', () => {
     act(() => getProvider().handlers.onSync!({ canWrite: true } as never));
 
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
     await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
   });
 
@@ -256,14 +260,57 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(screen.getByText('v1')).toBeInTheDocument();
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
     await waitFor(() => expect(screen.getByText('v2')).toBeInTheDocument());
     expect(screen.getByText('Nouvelle version enregistrée')).toBeInTheDocument();
+  });
+
+  // User feedback 2026-09-01 — creating a version is a confirm modal showing the base content
+  // (plain text, never HTML into a sink) and the version transition; nothing posts before confirm.
+  it('opens the version confirm modal with the base preview; Annuler aborts without a POST', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Enregistrer une nouvelle version' });
+    expect(within(dialog).getByText('v1 → v2')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Rin entre dans le sanctuaire/)).toBeInTheDocument();
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog', { name: 'Enregistrer une nouvelle version' })).not.toBeInTheDocument();
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+  });
+
+  it('carries the optional note typed in the modal into the version POST', async () => {
+    (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.type(await screen.findByLabelText(/NOTE \(optionnelle\)/i), 'Chapitre relu');
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
+    expect(api.snapshotEditorVersion).toHaveBeenCalledWith('pg1', expect.objectContaining({ note: 'Chapitre relu' }), 'a1');
+  });
+
+  // Feedback 2026-09-01 (phantom « Scénario non enregistré ») — a compaction pending at confirm time
+  // is flushed BEFORE the version POST, so the edits land and get versioned instead of landing after
+  // versionedAt and reading as unsaved.
+  it('flushes a pending compaction before the version POST', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({ savedAt: 'now', materialized: null });
+    (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
+    act(() => editorHandlers['update']?.()); // arms the 5s idle timer
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
+    expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1);
+    const autosaveOrder = (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const snapshotOrder = (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    expect(autosaveOrder).toBeLessThan(snapshotOrder);
   });
 
   it('surfaces a version-snapshot failure with the server message', async () => {
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockRejectedValue({ message: 'Aucun scénario à versionner' });
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
     expect(await screen.findByText('Aucun scénario à versionner')).toBeInTheDocument();
   });
 
@@ -756,8 +803,23 @@ describe('EditorClient (Éditeur shell)', () => {
     });
   });
 
-  // FR14 — the author sees a status stepper on a correction comment; steps via PATCH /corrections/:id.
-  it('FR14: the author steps a correction-comment status from the editor panel', async () => {
+  // Feedback 2026-09-01 — the review screen is dessin-only, so the editor's link to it renders only
+  // when a dessin/page file is linked, and says specifically what it opens.
+  it('shows « Corrections dessin » only when a dessin file is linked to the card', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, hasDessin: true }));
+    expect(screen.getByRole('link', { name: /Corrections dessin/ })).toHaveAttribute('href', '/projet/lames/revision/pg1');
+    expect(screen.queryByText(/Révision · corrections/)).not.toBeInTheDocument();
+  });
+
+  it('hides the review link entirely when no dessin file is linked', async () => {
+    await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 }, hasDessin: false }));
+    expect(screen.queryByRole('link', { name: /Corrections dessin/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Révision · corrections/)).not.toBeInTheDocument();
+  });
+
+  // FR14 (reworked 2026-09-01) — the author sets a correction-comment status through the explicit
+  // radiogroup (every status visible, one click to any other); persists via PATCH /corrections/:id.
+  it('FR14: the author sets a correction-comment status from the editor panel', async () => {
     (api.updateCorrection as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'x1', status: 'en_cours' });
     await renderEditor(
       makeDoc({
@@ -767,15 +829,16 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    const stepper = screen.getByRole('button', { name: /Statut de la correction/i });
-    await userEvent.click(stepper);
+    expect(screen.getByRole('radiogroup', { name: /Statut de la correction/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'À corriger' }).getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(screen.getByRole('radio', { name: 'En cours' }));
     await waitFor(() => expect(api.updateCorrection).toHaveBeenCalledWith('x1', { status: 'en_cours' }));
     // The chip reflects the server response.
     await waitFor(() => expect(screen.getByText(/Correction · En cours/)).toBeInTheDocument());
   });
 
-  // FR14 — the assignee (not the author) also sees the stepper (gated on correction.assigneeId).
-  it('FR14: the assignee sees the stepper even when not the author', async () => {
+  // FR14 — the assignee (not the author) also sees the control (gated on correction.assigneeId).
+  it('FR14: the assignee sees the status control even when not the author', async () => {
     await renderEditor(
       makeDoc({
         asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
@@ -784,10 +847,10 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    expect(screen.getByRole('button', { name: /Statut de la correction/i })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /Statut de la correction/i })).toBeInTheDocument();
   });
 
-  it('FR14: a member who is neither author nor assignee sees no status stepper', async () => {
+  it('FR14: a member who is neither author nor assignee sees no status control', async () => {
     await renderEditor(
       makeDoc({
         asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
@@ -796,7 +859,7 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    expect(screen.queryByRole('button', { name: /Statut de la correction/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup', { name: /Statut de la correction/i })).not.toBeInTheDocument();
   });
 
   // FR14 — a failed status change toasts and leaves the chip unchanged (no optimistic flip).
@@ -810,7 +873,7 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    await userEvent.click(screen.getByRole('button', { name: /Statut de la correction/i }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Corrigé' }));
     expect(await screen.findByText('Changement de statut refusé.')).toBeInTheDocument();
     expect(screen.getByText(/Correction · À corriger/)).toBeInTheDocument();
   });
@@ -820,6 +883,7 @@ describe('EditorClient (Éditeur shell)', () => {
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 1 });
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
     expect(await screen.findByText('Aucune modification depuis la v1')).toBeInTheDocument();
   });
 
@@ -874,6 +938,7 @@ describe('EditorClient (Éditeur shell)', () => {
     (api.snapshotEditorVersion as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'a1', filename: 'scenario.html', currentVersion: 2 });
     await renderEditor(makeDoc({ asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 } }));
     await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Enregistrer' }));
     await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
     expect(api.snapshotEditorVersion).toHaveBeenCalledWith('pg1', expect.any(Object), 'a1');
   });

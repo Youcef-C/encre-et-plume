@@ -58,6 +58,7 @@ function detail(over: Partial<PageDetailResponse> = {}): PageDetailResponse {
     checklistTotal: 0,
     commentCount: 0,
     openCorrectionCount: 0,
+    openCorrectionTypes: [],
     createdById: null,
     handoff: null,
     scenarioUnsaved: false,
@@ -448,6 +449,36 @@ describe('CardModal', () => {
     expect(screen.getByText('planche.png')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();
     expect(screen.getByText('v4')).toBeInTheDocument();
+  });
+
+  // Feedback 2026-09-01 — the section whose file type has open corrections carries a flag icon.
+  it('flags the DESSIN section when a dessin correction is open, and only that one', async () => {
+    mount({ openCorrectionCount: 1, openCorrectionTypes: ['dessin'] }, {}, [
+      asset({ id: 'a2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 }),
+    ]);
+    await screen.findByLabelText('TITRE');
+    await screen.findByText('DESSIN');
+    expect(screen.getByRole('img', { name: 'Corrections ouvertes — DESSIN' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Corrections ouvertes — SCÉNARIO' })).not.toBeInTheDocument();
+  });
+
+  it('shows no section flag when no correction is open', async () => {
+    mount({}, {}, [asset({ id: 'a2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 })]);
+    await screen.findByLabelText('TITRE');
+    await screen.findByText('DESSIN');
+    expect(screen.queryByRole('img', { name: /Corrections ouvertes/ })).not.toBeInTheDocument();
+  });
+
+  // Feedback 2026-09-01 — a drawing/page row links straight to the review screen.
+  it('a dessin file row exposes a « Corrections » link to the revision screen; a scenario row does not', async () => {
+    mount({}, {}, [
+      asset({ id: 'a1', type: 'scenario', filename: 's.txt' }),
+      asset({ id: 'a2', type: 'dessin', filename: 'nemu.png', currentVersion: 2 }),
+    ]);
+    await screen.findByLabelText('TITRE');
+    await screen.findByText('nemu.png');
+    expect(screen.getByRole('link', { name: 'Corrections — nemu.png' })).toHaveAttribute('href', '/projet/nuit-blanche/revision/pg7');
+    expect(screen.queryByRole('link', { name: 'Corrections — s.txt' })).not.toBeInTheDocument();
   });
 
   it('shows a total file-count label in the section header', async () => {

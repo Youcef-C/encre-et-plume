@@ -337,6 +337,19 @@ describe('PagesService', () => {
       ...o,
     });
 
+    // Latent-bug fix 2026-09-01 — the detail include used to omit corrections, so the modal's
+    // openCorrectionCount/Types were silently always 0/[].
+    it('includes the open corrections so openCorrectionCount/Types are truthful in the detail', async () => {
+      prisma.page.findUnique.mockResolvedValue(
+        DETAIL({ corrections: [{ filedAgainstVersion: 3, type: 'dessin', asset: { currentVersion: 3 } }] }),
+      );
+      const res = await service.getDetail('acc-me', 'page-1');
+      expect(res.openCorrectionCount).toBe(1);
+      expect(res.openCorrectionTypes).toEqual(['dessin']);
+      const { include } = prisma.page.findUnique.mock.calls[0][0];
+      expect(include.corrections).toBeDefined();
+    });
+
     it('returns the full detail shape for a member (dueDate YYYY-MM-DD, ordered checklist/comments)', async () => {
       prisma.page.findUnique.mockResolvedValue(DETAIL());
       const res = await service.getDetail('acc-me', 'page-1');
@@ -685,6 +698,15 @@ describe('PagesService', () => {
       expect(toWorkspacePage({ ...PAGE(), corrections: [row(5, 5), row(2, 5), row(1, 1)] } as never).openCorrectionCount).toBe(2);
       expect(toWorkspacePage({ ...PAGE(), corrections: [row(2, 5)] } as never).openCorrectionCount).toBe(0);
       expect(toWorkspacePage(PAGE() as never).openCorrectionCount).toBe(0);
+    });
+
+    // Feedback 2026-09-01 — the card also names WHICH file types those open corrections target.
+    it('openCorrectionTypes lists unique against-current types, superseded excluded', () => {
+      const row = (filedAgainstVersion: number, currentVersion: number, type: string) => ({ filedAgainstVersion, type, asset: { currentVersion } });
+      expect(
+        toWorkspacePage({ ...PAGE(), corrections: [row(5, 5, 'dessin'), row(5, 5, 'dessin'), row(1, 1, 'scenario'), row(2, 5, 'scenario')] } as never).openCorrectionTypes,
+      ).toEqual(['dessin', 'scenario']);
+      expect(toWorkspacePage(PAGE() as never).openCorrectionTypes).toEqual([]);
     });
 
     it('is [] when the assetLinks join is absent or empty', () => {

@@ -13,7 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isMemberOf } from './projects.service';
 import { GROUP_GATE_SELECT, assertCanWrite, canManageProject } from './members.service';
-import { OPEN_CORRECTION_STATUS, countOpenCorrections, tallyAgainstCurrent, type OpenCorrectionRow } from './open-corrections';
+import { OPEN_CORRECTION_STATUS, countOpenCorrections, openTypesAgainstCurrent, tallyAgainstCurrent, type OpenCorrectionRow } from './open-corrections';
 
 const STAGES = new Set<string>(PAGE_STAGES);
 const FILE_TAGS = new Set<string>(PAGE_FILE_TAGS);
@@ -47,7 +47,7 @@ export const WORKSPACE_PAGE_INCLUDE = {
   _count: { select: { comments: true } },
   // CS-26 — the open-correction count the card face shows and the VALIDÉ gate enforces. Filtered
   // nested relation = one batched query with the board list, no N+1 and no second endpoint.
-  corrections: { where: OPEN_CORRECTION_STATUS, select: { filedAgainstVersion: true, asset: { select: { currentVersion: true } } } },
+  corrections: { where: OPEN_CORRECTION_STATUS, select: { filedAgainstVersion: true, type: true, asset: { select: { currentVersion: true } } } },
 } as const;
 
 type PageRow = {
@@ -75,7 +75,7 @@ type PageRow = {
     };
   }[];
   _count?: { comments: number };
-  corrections?: OpenCorrectionRow[];
+  corrections?: (OpenCorrectionRow & { type: 'scenario' | 'dessin' })[];
   drawnAgainstVersion?: number | null;
   drawnAgainstAsset?: { id: string; currentVersion: number } | null;
 };
@@ -115,6 +115,7 @@ export function toWorkspacePage(p: PageRow): WorkspacePage {
     checklistTotal: checklist.length,
     commentCount: p._count?.comments ?? 0,
     openCorrectionCount: tallyAgainstCurrent(p.corrections ?? []),
+    openCorrectionTypes: openTypesAgainstCurrent(p.corrections ?? []),
     // CS-10 D-1: the FE mirrors the delete rule from this (never as the only gate).
     createdById: p.createdById ?? null,
     handoff: toHandoff(p),
@@ -321,6 +322,9 @@ export class PagesService {
         },
         drawnAgainstAsset: { select: { id: true, currentVersion: true } },
         _count: { select: { comments: true } },
+        // Latent-bug fix (found 2026-09-01): without this select toWorkspacePage computed
+        // openCorrectionCount/Types from `undefined` — always 0/[] in the detail response.
+        corrections: { where: OPEN_CORRECTION_STATUS, select: { filedAgainstVersion: true, type: true, asset: { select: { currentVersion: true } } } },
       },
     });
     if (!page) throw new NotFoundException('Carte introuvable');

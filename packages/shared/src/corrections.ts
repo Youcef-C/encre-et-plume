@@ -84,9 +84,6 @@ export interface ReviewVersionItem {
   authorName: string;
   createdAt: string;
   note: string | null;
-  // CS-24 — signed image URL of this version, so the before/after crops can address ANY listed
-  // version (not just the selected pair). Dessin surface only; null on the scenario surface.
-  url: string | null;
 }
 export interface ReviewFileItem {
   assetId: string;

@@ -97,7 +97,9 @@ export default function ConfirmDialog({
           }
         }}
         style={{
-          width: 360,
+          // A three-action dialog gets the wider panel so its buttons fit one row (feedback
+          // 2026-09-01); flexWrap still lets them stack on narrow viewports.
+          width: secondaryLabel ? 440 : 360,
           maxWidth: '100%',
           background: 'var(--card)',
           border: '3px solid var(--ink)',

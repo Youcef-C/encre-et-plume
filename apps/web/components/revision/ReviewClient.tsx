@@ -451,7 +451,6 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
               onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
               onStatusChange={changeStatus}
               onVerify={verify}
-              versions={sel?.versions ?? []}
               onDelete={setConfirmDel}
               busyId={busyId}
               // CS-25 follow-up — one `role="alert"` at a time. While walking, the Walkthrough already

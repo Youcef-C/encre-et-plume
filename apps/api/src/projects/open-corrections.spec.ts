@@ -1,4 +1,4 @@
-import { countOpenCorrections, openCorrectionWhere, tallyAgainstCurrent } from './open-corrections';
+import { countOpenCorrections, openCorrectionWhere, openTypesAgainstCurrent, tallyAgainstCurrent } from './open-corrections';
 
 describe('open-corrections (CS-26 — the one definition of "unresolved")', () => {
   describe('openCorrectionWhere', () => {
@@ -21,6 +21,25 @@ describe('open-corrections (CS-26 — the one definition of "unresolved")', () =
     it('is 0 for no rows and for superseded-only rows', () => {
       expect(tallyAgainstCurrent([])).toBe(0);
       expect(tallyAgainstCurrent([{ filedAgainstVersion: 2, asset: { currentVersion: 5 } }])).toBe(0);
+    });
+  });
+
+  // Feedback 2026-09-01 — the card face names WHICH file types still have open corrections.
+  describe('openTypesAgainstCurrent', () => {
+    it('returns the unique types of against-current rows, superseded excluded', () => {
+      expect(
+        openTypesAgainstCurrent([
+          { filedAgainstVersion: 5, asset: { currentVersion: 5 }, type: 'dessin' },
+          { filedAgainstVersion: 5, asset: { currentVersion: 5 }, type: 'dessin' }, // duplicate type
+          { filedAgainstVersion: 1, asset: { currentVersion: 1 }, type: 'scenario' },
+          { filedAgainstVersion: 2, asset: { currentVersion: 5 }, type: 'scenario' }, // superseded
+        ]),
+      ).toEqual(['dessin', 'scenario']);
+    });
+
+    it('is empty for no rows and for superseded-only rows', () => {
+      expect(openTypesAgainstCurrent([])).toEqual([]);
+      expect(openTypesAgainstCurrent([{ filedAgainstVersion: 2, asset: { currentVersion: 5 }, type: 'dessin' }])).toEqual([]);
     });
   });
 

@@ -66,6 +66,10 @@ export interface EditorDocumentResponse {
   cases: CaseSummary[]; // derived from contentJson (story shape)
   comments: CaseCommentDto[];
   template: EditorTemplate | null; // persisted scheme; null when the doc doesn't exist yet (blank card)
+  /** Feedback 2026-09-01 — a file with the dessin review surface (type dessin | page) is linked to
+   *  this card. Gates the editor's « Corrections dessin » link: /revision is dessin-only, so the
+   *  link only renders when that screen can actually show something. */
+  hasDessin: boolean;
 }
 
 export interface AutosaveDocumentRequest {

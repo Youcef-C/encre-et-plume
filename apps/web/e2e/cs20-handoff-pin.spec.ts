@@ -112,7 +112,7 @@ test.describe('CS-20 — scenario handoff pin', () => {
     await expect(page.getByText(MARKER)).toHaveCount(0);
   });
 
-  test('CS20-E2: an unsaved scenario offers « Créer une version puis passer en Nemu »; « Passer sans créer de version » still moves and pins the head', async ({ page }) => {
+  test('CS20-E2: an unsaved scenario offers « Créer une version »; « Passer sans version » still moves and pins the head', async ({ page }) => {
     await login(page, OWNER_EMAIL);
 
     // v1 — the first real content materializes the scenario asset.
@@ -138,11 +138,20 @@ test.describe('CS-20 — scenario handoff pin', () => {
 
     const offer = page.getByRole('alertdialog');
     await expect(offer).toBeVisible({ timeout: 5_000 });
-    await expect(offer.getByRole('link', { name: 'Créer une version puis passer en Nemu' })).toHaveAttribute(
+    await expect(offer.getByRole('link', { name: 'Créer une version' })).toHaveAttribute(
       'href',
       new RegExp(`/projet/${slug}/editeur/`),
     );
-    await offer.getByRole('button', { name: 'Passer sans créer de version' }).click();
+    // Feedback 2026-09-01 — the three actions fit on ONE row (short labels + wider panel).
+    const boxes = await Promise.all(
+      [
+        offer.getByRole('button', { name: 'Annuler' }),
+        offer.getByRole('button', { name: 'Passer sans version' }),
+        offer.getByRole('link', { name: 'Créer une version' }),
+      ].map((l) => l.boundingBox()),
+    );
+    expect(new Set(boxes.map((b) => Math.round(b!.y))).size).toBe(1);
+    await offer.getByRole('button', { name: 'Passer sans version' }).click();
 
     const nemuCol = page.getByRole('group').filter({ hasText: 'Nemu' });
     await expect(nemuCol.getByText('Page 1', { exact: true })).toBeVisible({ timeout: 5_000 });
@@ -161,6 +170,8 @@ test.describe('CS-20 — scenario handoff pin', () => {
     await typeIntoCase(page, 1, ' Une ombre bouge au fond.');
     await saveDoc(page);
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByRole('combobox', { name: 'Version affichée' })).toContainText('v2', { timeout: 10_000 });
 
     await page.goto(`/projet/${slug}`);

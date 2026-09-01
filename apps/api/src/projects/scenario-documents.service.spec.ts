@@ -79,7 +79,7 @@ function buildPrisma(over: Record<string, any> = {}) {
         { id: 'page-2', createdAt: new Date('2026-07-11T00:00:00Z') },
       ]),
     },
-    assetPageLink: { findFirst: jest.fn().mockResolvedValue(null) },
+    assetPageLink: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0) },
     asset: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
     scenarioDocument: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -139,6 +139,20 @@ describe('ScenarioDocumentsService.getDocument', () => {
     expect(res.ydocState).toBeNull();
     expect(res.initialHtml).toBeNull();
     expect(res.cases).toEqual([]);
+  });
+
+  // Feedback 2026-09-01 — the editor's « Corrections dessin » link renders only when a dessin/page
+  // file is linked to the card; the payload carries that fact.
+  it('hasDessin is true iff a dessin/page file is linked to the card', async () => {
+    const prisma = buildPrisma();
+    const { service } = makeService(prisma);
+    prisma.assetPageLink.count.mockResolvedValueOnce(1);
+    expect((await service.getDocument('acc-me', 'page-1')).hasDessin).toBe(true);
+    expect(prisma.assetPageLink.count).toHaveBeenCalledWith({
+      where: { pageId: 'page-1', asset: { type: { in: ['dessin', 'page'] } } },
+    });
+    prisma.assetPageLink.count.mockResolvedValueOnce(0);
+    expect((await service.getDocument('acc-me', 'page-1')).hasDessin).toBe(false);
   });
 
   it('derives plancheNo/total from chapter siblings (page-1 is 2/3)', async () => {

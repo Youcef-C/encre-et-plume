@@ -15,8 +15,8 @@ const files: ReviewFileItem[] = [
 ];
 const versions: ReviewVersionItem[] = [
   // CS-24 — ReviewVersionItem now carries the version's signed URL (dessin surface only).
-  { version: 3, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null, url: null },
-  { version: 2, authorName: 'Camille', createdAt: '2026-07-13T10:00:00.000Z', note: null, url: null },
+  { version: 3, authorName: 'Camille', createdAt: '2026-07-14T10:00:00.000Z', note: null },
+  { version: 2, authorName: 'Camille', createdAt: '2026-07-13T10:00:00.000Z', note: null },
 ];
 
 const base = {

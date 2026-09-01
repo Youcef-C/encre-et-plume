@@ -425,7 +425,9 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     // committed server-side yet (only `busyId`/disabled-button state does, and that's a subtler thing to
     // assert reliably under load). Wait on the real PATCH response instead, so the second click can never
     // race the first one's server-side commit — the exact condition the `unresolved` count below depends on.
-    const stepperOnDessinRow = () => dessinRow.getByRole('button', { name: /Statut de la correction/ });
+    // Feedback 2026-09-01 — the cycler is now an explicit radiogroup: click the target status chip.
+    // The card's data-status is the unambiguous state read (the chip labels repeat the pill text).
+    const chipOnDessinRow = (label: string) => dessinRow.getByRole('radio', { name: label });
     const patchResp = (status: string) =>
       page.waitForResponse(
         async (r) => {
@@ -435,13 +437,13 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
         },
       );
     const toEnCours = patchResp('en_cours');
-    await stepperOnDessinRow().click(); // à corriger → en cours
+    await chipOnDessinRow('En cours').click();
     expect((await toEnCours).status()).toBe(200);
-    await expect(dessinRow.getByText('En cours', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(dessinRow.locator('.ep-correction-card')).toHaveAttribute('data-status', 'en_cours', { timeout: 10_000 });
     const toCorrige = patchResp('corrige');
-    await stepperOnDessinRow().click(); // en cours → corrigé
+    await chipOnDessinRow('Corrigé').click();
     expect((await toCorrige).status()).toBe(200);
-    await expect(dessinRow.getByText('Corrigé', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(dessinRow.locator('.ep-correction-card')).toHaveAttribute('data-status', 'corrige', { timeout: 10_000 });
 
     // Valider STAYS blocked — the scenario correction (not shown here) is still à corriger.
     await expect(validateBtn).toBeDisabled();
@@ -456,10 +458,9 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await expect(scenarioComment.getByText('Correction · À corriger')).toBeVisible();
     // Tagged highlight is visually differentiated from a plain comment highlight (double-underline class).
     await expect(caseBlock(page, 1).locator('.ep-correction-highlight')).toBeVisible({ timeout: 5_000 });
-    const stepper = scenarioComment.getByRole('button', { name: /Statut de la correction/ });
-    await stepper.click(); // à corriger → en cours
+    await scenarioComment.getByRole('radio', { name: 'En cours' }).click();
     await expect(scenarioComment.getByText('Correction · En cours')).toBeVisible({ timeout: 10_000 });
-    await stepper.click(); // en cours → corrigé
+    await scenarioComment.getByRole('radio', { name: 'Corrigé' }).click();
     await expect(scenarioComment.getByText('Correction · Corrigé')).toBeVisible({ timeout: 10_000 });
 
     // Now Valider succeeds — both corrections are corrigé.
@@ -550,7 +551,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await collab.goto(`/projet/${MULTI_SLUG}/editeur/${pid}`);
     const commentAsCollab = collab.locator('aside .ep-comments-scroll > div').filter({ hasText: 'Corriger cette case.' });
     await expect(commentAsCollab).toBeVisible({ timeout: 10_000 });
-    await expect(commentAsCollab.getByRole('button', { name: /Statut de la correction/ })).toHaveCount(0);
+    await expect(commentAsCollab.getByRole('radiogroup', { name: /Statut de la correction/ })).toHaveCount(0);
 
     // Validate by STRANGER (signed in, NOT a project member) → 403.
     const forgedValidate = await stranger.request.post(`${API}/pages/${pid}/review/validate`);
@@ -582,7 +583,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
 
     // The card face pre-empts the block: the open-correction count is on the card before any move.
     await page.goto(`/projet/${MULTI_SLUG}`);
-    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveText('1', { timeout: 10_000 });
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes', { exact: true })).toHaveText('1', { timeout: 10_000 });
 
     // The blocked move: 409 « Corrections non résolues », the board reverts, the banner names the
     // count and links to the card's review screen.
@@ -622,7 +623,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     // Resolve it → the same move now succeeds and the chip is gone.
     expect((await page.request.patch(`${API}/corrections/${correctionId}`, { data: { status: 'corrige' } })).status()).toBe(200);
     await page.reload();
-    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveCount(0, { timeout: 10_000 });
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes', { exact: true })).toHaveCount(0, { timeout: 10_000 });
     await moveToValide();
     await expect(page.getByRole('group').filter({ hasText: 'VALIDÉ' }).getByText('Page 2', { exact: true })).toBeVisible({ timeout: 10_000 });
 
@@ -662,11 +663,13 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await page.keyboard.type(' Une ombre bouge au fond.');
     await page.waitForTimeout(6_000); // CS-21: idle compaction persists the edit before the snapshot
     await page.getByRole('button', { name: 'Enregistrer une nouvelle version' }).click();
+    // Feedback 2026-09-01 — the version flow confirms through the base-preview modal.
+    await page.getByRole('dialog', { name: 'Enregistrer une nouvelle version' }).getByRole('button', { name: 'Enregistrer' }).click();
     await expect(page.getByRole('combobox', { name: 'Version affichée' })).toContainText('v2', { timeout: 15_000 });
 
     // The card face stops pre-empting a block that no longer applies…
     await page.goto(`/projet/${MULTI_SLUG}`);
-    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes')).toHaveCount(0, { timeout: 15_000 });
+    await expect(kanbanCard(page, 'Page 2').getByTitle('Corrections ouvertes', { exact: true })).toHaveCount(0, { timeout: 15_000 });
 
     // …and the move succeeds — with the correction still OPEN. Superseded is not resolved: the rule is
     // "this file still has known problems AGAINST THE BYTES IT SHIPS", not "no correction ever existed".
@@ -684,7 +687,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
   // and can reopen it in one click. The resolving member must be the correction's ASSIGNEE (the
   // author-or-assignee gate is unchanged). Follow-up 6 — the whole loop now runs THROUGH THE UI: A
   // files it with the composer's « Assignée à » picker, B closes it from B's own row, A is notified.
-  test('CS24: a correction filed with an assignee and closed by them notifies the filer, deep-links to the review row with before/after crops, and « Rouvrir » puts it back to à-corriger', async ({ browser }) => {
+  test('CS24: a correction filed with an assignee and closed by them notifies the filer, deep-links to the review row (crops removed 2026-09-01), and « Rouvrir » puts it back to à-corriger', async ({ browser }) => {
     const ownerCtx = await browser.newContext();
     const collabCtx = await browser.newContext();
     const owner = await ownerCtx.newPage();
@@ -725,15 +728,15 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await collab.goto(`/projet/${MULTI_SLUG}/revision/${pageId1}`);
     const collabRow = collab.locator(`.ep-correction-card[data-correction-id="${correctionId}"]`);
     await expect(collabRow).toBeVisible({ timeout: 15_000 });
-    for (const next of ['en_cours', 'corrige']) {
+    for (const [next, label] of [['en_cours', 'En cours'], ['corrige', 'Corrigé']] as const) {
       const patched = collab.waitForResponse(async (r) => {
         if (!/\/corrections\/[^/]+$/.test(r.url()) || r.request().method() !== 'PATCH') return false;
         return (r.request().postDataJSON() as { status?: string }).status === next;
       });
-      await collabRow.getByRole('button', { name: /Statut de la correction/ }).click();
+      await collabRow.getByRole('radio', { name: label }).click();
       expect((await patched).status()).toBe(200);
     }
-    await expect(collabRow.getByText('Corrigé', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(collabRow).toHaveAttribute('data-status', 'corrige', { timeout: 10_000 });
 
     // The filer is told, in the notification centre, with the CS-24 copy.
     await owner.goto('/notifications');
@@ -748,17 +751,14 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await expect(row).toBeVisible({ timeout: 10_000 });
     await expect(row).toHaveAttribute('data-selected', 'true');
 
-    // The unverified marker + the two crops of the SAME region, from the two existing image URLs.
+    // The unverified marker + the version transition; the Avant/Après crop pair was removed on
+    // user feedback (2026-09-01).
     await expect(row.getByText('en attente de vérification')).toBeVisible();
-    await expect(row.getByText(/^Avant · v\d+$/)).toBeVisible();
-    await expect(row.getByText(/^Après · v\d+$/)).toBeVisible();
-    await expect(row.locator('.ep-crop')).toHaveCount(2);
+    await expect(row.getByText(/^v\d+ → v\d+$/)).toBeVisible();
+    await expect(row.locator('.ep-crop')).toHaveCount(0);
 
-    // F7 — the crops stack under 768px and sit side by side at 1280, with no horizontal overflow.
     for (const width of [1280, 768, 375]) {
       await owner.setViewportSize({ width, height: 900 });
-      const dir = await owner.evaluate(() => getComputedStyle(document.querySelector('.ep-crop-pair')!).flexDirection);
-      expect(dir).toBe(width > 768 ? 'row' : 'column');
       expect(await noHorizontalOverflow(owner)).toBe(true);
       await owner.screenshot({ path: `e2e/screenshots/cs24-verification-${width}.png`, fullPage: true });
     }
@@ -777,7 +777,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     );
     await row.getByRole('button', { name: /Rouvrir/ }).click();
     expect((await reopened).status()).toBe(200);
-    await expect(row.getByText('À corriger', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(row).toHaveAttribute('data-status', 'a_corriger', { timeout: 10_000 });
     const refused = await owner.request.post(`${API}/pages/${pageId1}/review/validate`);
     expect(refused.status()).toBe(409);
     expect((await refused.json()).unresolved).toBeGreaterThanOrEqual(1);

@@ -677,11 +677,11 @@ export default function KanbanBoard({
       {handoffOffer && (
         <ConfirmDialog
           title="Scénario non enregistré"
-          message="Cette carte serait rattachée à la dernière version enregistrée, sans les modifications en cours dans l’éditeur."
-          confirmLabel={`Créer une version puis passer en ${STAGE_META[handoffOffer.stage].label}`}
+          message={`Cette carte passerait en ${STAGE_META[handoffOffer.stage].label}, rattachée à la dernière version enregistrée, sans les modifications en cours dans l’éditeur.`}
+          confirmLabel="Créer une version"
           confirmIntent="success"
           confirmHref={`/projet/${slug}/editeur/${handoffOffer.id}`}
-          secondaryLabel="Passer sans créer de version"
+          secondaryLabel="Passer sans version"
           onSecondary={() => {
             const offer = handoffOffer;
             setHandoffOffer(null);
@@ -1194,13 +1194,23 @@ function PageCard({
               {card.commentCount}
             </span>
           )}
-          {/* CS-26 — the number that will refuse the VALIDÉ move, shown before the move is attempted. */}
+          {/* CS-26 — the number that will refuse the VALIDÉ move, shown before the move is attempted.
+              Feedback 2026-09-01: plus WHICH file type still needs a correction. */}
           {card.openCorrectionCount > 0 && (
             <span title="Corrections ouvertes" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--accent)' }}>
               <WarningIcon size={12} />
               {card.openCorrectionCount}
             </span>
           )}
+          {(card.openCorrectionTypes ?? []).map((t) => (
+            <span
+              key={t}
+              title={`Corrections ouvertes (${t === 'scenario' ? 'scénario' : 'dessin'})`}
+              style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--accent)', border: '1.5px solid var(--accent)', borderRadius: 4, padding: '0 4px' }}
+            >
+              {t === 'scenario' ? 'scénario' : 'dessin'}
+            </span>
+          ))}
           {card.assignees.length > 0 && (
             <span
               style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}
