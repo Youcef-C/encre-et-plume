@@ -1,11 +1,10 @@
 'use client';
 
-// User feedback 2026-09-01 — the « → next » cycling stepper was ambiguous. This is the explicit
-// replacement, shared by the revision list and the editor comment cards: every status visible as a
-// chip, the current one checked (filled with its status colour), one click to any other.
+// Feedback round 2 (2026-09-01) — the status control is a DROPDOWN (OnBrandSelect), not a row of
+// titled chips. Shared by the revision correction rows and the editor comment cards: the trigger
+// shows the current status, the popover lists all three, one pick to any other.
 import { CORRECTION_STATUSES, CORRECTION_STATUS_LABELS, type CorrectionStatus } from '@encre-et-plume/shared';
-import { CheckIcon } from '../icons';
-import { statusColor } from './shared';
+import OnBrandSelect from '../form/OnBrandSelect';
 
 export default function CorrectionStatusControl({
   status,
@@ -19,28 +18,21 @@ export default function CorrectionStatusControl({
   label: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-      {CORRECTION_STATUSES.map((s) => {
-        const selected = s === status;
-        return (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            disabled={busy || selected}
-            onClick={() => onChange(s)}
-            className="ep-status-chip"
-            // Status colours are display semantics (same source as the pill/stripe), not button
-            // intents; unselected paint lives on the class so its hover works.
-            style={selected ? { background: statusColor(s), borderColor: statusColor(s), color: '#fff' } : undefined}
-          >
-            {/* U-4 — the "corrigé" check is a pictogram, never the "✓" character. */}
-            {s === 'corrige' && <CheckIcon size={10} />}
-            {CORRECTION_STATUS_LABELS[s]}
-          </button>
-        );
-      })}
-    </div>
+    <OnBrandSelect
+      aria-label={label}
+      value={status}
+      disabled={busy}
+      onChange={(e) => {
+        const next = e.target.value as CorrectionStatus;
+        if (next !== status) onChange(next);
+      }}
+      style={{ minWidth: 130 }}
+    >
+      {CORRECTION_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {CORRECTION_STATUS_LABELS[s]}
+        </option>
+      ))}
+    </OnBrandSelect>
   );
 }

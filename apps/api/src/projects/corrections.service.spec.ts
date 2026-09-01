@@ -274,6 +274,40 @@ describe('CorrectionsService', () => {
       await expect(service.updateStatus('acc-me', 'corr-1', { status: 'corrige' })).rejects.toThrow(ForbiddenException);
     });
 
+    // ── Feedback round 2 (2026-09-01) — (re)assign after creation via the same PATCH ──
+    it('an assignee-only PATCH sets assigneeId and leaves the status untouched', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me' }));
+      await service.updateStatus('acc-me', 'corr-1', { assigneeId: 'acc-yuki' });
+      const { data } = prisma.correction.update.mock.calls[0][0];
+      expect(data).toMatchObject({ assigneeId: 'acc-yuki' });
+      expect(data.status).toBeUndefined();
+      expect(data.resolvedInVersion).toBeUndefined();
+    });
+
+    it('assigneeId: null unassigns', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: 'acc-yuki' }));
+      await service.updateStatus('acc-me', 'corr-1', { assigneeId: null });
+      expect(prisma.correction.update.mock.calls[0][0].data).toMatchObject({ assigneeId: null });
+    });
+
+    it('assigning a non-member is a 400', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me' }));
+      await expect(service.updateStatus('acc-me', 'corr-1', { assigneeId: 'stranger' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('an empty PATCH (neither status nor assigneeId) is a 400', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me' }));
+      await expect(service.updateStatus('acc-me', 'corr-1', {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('a new assignee (not the actor) is notified', async () => {
+      prisma.correction.findUnique.mockResolvedValue(CORRECTION({ authorId: 'acc-me', assigneeId: null }));
+      await service.updateStatus('acc-me', 'corr-1', { assigneeId: 'acc-yuki' });
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientId: 'acc-yuki', refId: 'corr-1' }),
+      );
+    });
+
     it('a non-member is rejected (loadMemberPage throws)', async () => {
       pages.loadMemberPage.mockRejectedValue(new ForbiddenException());
       await expect(service.updateStatus('stranger', 'corr-1', { status: 'corrige' })).rejects.toThrow(ForbiddenException);

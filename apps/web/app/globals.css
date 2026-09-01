@@ -1841,35 +1841,6 @@ body:has([data-ep-reader]) footer[aria-label="Informations légales"] [aria-hidd
   box-shadow: 4px 4px 0 var(--accent);
 }
 
-/* Explicit correction-status chips (CorrectionStatusControl) — layout only; the status colour is
-   inline (display semantics from statusColor, not a button intent). */
-.ep-status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 2px solid var(--ink);
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 3px 8px;
-  min-height: 30px;
-  cursor: pointer;
-  font-family: inherit;
-  background: var(--card);
-  color: var(--ink);
-}
-.ep-status-chip:disabled {
-  cursor: default;
-}
-.ep-status-chip[aria-checked='false']:disabled {
-  opacity: 0.6;
-}
-.ep-status-chip[aria-checked='false']:not(:disabled):hover {
-  background: var(--accent-soft);
-}
-
 /* Compact app-idiom buttons (3px ink border, hard offset shadow, translate hover/press) for the dense
    Révision surfaces — the stepper + composer actions. Primary = accent fill, ghost = outline. */
 .ep-btn-compact {

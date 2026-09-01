@@ -408,10 +408,12 @@ describe('KanbanBoard', () => {
       expect(screen.queryByTitle('Corrections ouvertes')).not.toBeInTheDocument();
     });
 
-    // Feedback 2026-09-01 — the card face names WHICH file type still needs a correction.
-    it('shows a type tag per open-correction file type, and none otherwise', () => {
-      renderBoard([makePage({ id: 'pg7', title: 'Page 7', stage: 'encrage', openCorrectionCount: 2, openCorrectionTypes: ['dessin'] })]);
-      expect(screen.getByText('dessin')).toBeInTheDocument();
+    // Feedback round 2 (2026-09-01) — the card face stays icon+count only; the correction file
+    // types show in the card modal's FICHIERS sections, never as chips on the card.
+    it('renders no type chips on the card face even when openCorrectionTypes is set', () => {
+      renderBoard([makePage({ id: 'pg7', title: 'Page 7', stage: 'encrage', openCorrectionCount: 2, openCorrectionTypes: ['dessin', 'scenario'] })]);
+      expect(screen.getByTitle('Corrections ouvertes')).toHaveTextContent('2');
+      expect(screen.queryByText('dessin')).not.toBeInTheDocument();
       expect(screen.queryByText('scénario')).not.toBeInTheDocument();
     });
   });

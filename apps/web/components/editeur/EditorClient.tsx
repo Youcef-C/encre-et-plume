@@ -196,7 +196,7 @@ function EditorLoaded({
   // CS-21 — the idle-compaction debounce, the live `compact` callback (so the unmount/hide flush never
   // fires a stale closure), and the consecutive-failure counter behind the toast.
   const compactTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const compactRef = useRef<() => Promise<void>>(async () => {});
+  const compactRef = useRef<() => Promise<{ assetId: string; filename: string } | null | undefined>>(async () => undefined);
   const failuresRef = useRef(0);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -426,21 +426,40 @@ function EditorLoaded({
     [pushToast],
   );
 
+  // Feedback round 2 (2026-09-01) — (re)assign a correction-comment after creation, same PATCH.
+  const changeCorrectionAssignee = useCallback(
+    async (c: CaseCommentDto, assigneeId: string | null) => {
+      if (!c.correction) return;
+      try {
+        const updated = await api.updateCorrection(c.correction.id, { assigneeId });
+        setComments((list) =>
+          list.map((x) => (x.id === c.id && x.correction ? { ...x, correction: { ...x.correction, assigneeId: updated.assigneeId } } : x)),
+        );
+      } catch {
+        pushToast('Assignation refusée.');
+      }
+    },
+    [pushToast],
+  );
+
   // ── CS-21 — compaction. Same endpoint, same payload as the old « Enregistrer »; only the trigger
   // changed (idle tick / hide / unmount instead of a button). It folds the live CRDT update log into
   // ScenarioDocument.ydocState; it does NOT create an AssetVersion — « Enregistrer une nouvelle
   // version » stays the only version-creating action, and now carries all the ceremony.
-  const compact = useCallback(async () => {
-    if (!editor || editor.isDestroyed) return;
+  // Returns the freshly materialized asset (feedback round 2 — a blank card's « Enregistrer une
+  // nouvelle version » creates v1 through this path), null when the save updated an existing doc,
+  // undefined when nothing was persisted (blank / no permission / error).
+  const compact = useCallback(async (): Promise<{ assetId: string; filename: string } | null | undefined> => {
+    if (!editor || editor.isDestroyed) return undefined;
     // CS-10 — no « Écriture » permission: the server 403s this route, so don't even ask (the button
     // is disabled too; this also covers the Ctrl/Cmd-S path). UX only — the gate is server-side.
-    if (!canWrite) return;
+    if (!canWrite) return undefined;
     const html = editor.getHTML();
     // Bug (scenario version off-by-one) — never persist a blank document. An empty first Save would
     // materialize an EMPTY v1 (the reported v1=empty / v1==v2 shift), and an on-mount/early Ctrl+S could
     // race the imported content before it seeds. Mirror the server's isBlankHtml and no-op silently (the
     // server guards this too, but suppressing the request means the empty save never even tries).
-    if (isBlankHtml(html)) return;
+    if (isBlankHtml(html)) return undefined;
     setCompacting(true);
     try {
       const res = await api.autosaveEditorDocument(
@@ -462,11 +481,13 @@ function EditorLoaded({
         setDocumentId((d) => d ?? res.materialized!.documentId);
       }
       failuresRef.current = 0;
+      return res.materialized ? { assetId: res.materialized.assetId, filename: res.materialized.filename } : null;
     } catch {
       // F5 — a failed compaction loses nothing: the updates are still in Postgres and the next tick
       // retries. Stay silent on the first failure; only a SECOND consecutive one is worth a word.
       failuresRef.current += 1;
       if (failuresRef.current === 2) pushToast('L’enregistrement continu a échoué. Vos modifications restent partagées.');
+      return undefined;
     } finally {
       setCompacting(false);
     }
@@ -487,12 +508,21 @@ function EditorLoaded({
     }, COMPACT_IDLE_MS);
   }, []);
 
-  /** Compact NOW if a tick is pending — a closing tab compacts rather than leaving a long update log.
-   *  Returns the compact promise so a version snapshot can await the flush (feedback 2026-09-01). */
-  const flushCompaction = useCallback((): Promise<void> => {
-    if (!compactTimer.current) return Promise.resolve();
+  /** Compact NOW if a tick is pending — a closing tab compacts rather than leaving a long update log. */
+  const flushCompaction = useCallback(() => {
+    if (!compactTimer.current) return Promise.resolve(undefined);
     clearTimeout(compactTimer.current);
     compactTimer.current = null;
+    return compactRef.current();
+  }, []);
+
+  /** Feedback round 2 (2026-09-01) — save NOW unconditionally (cancelling any pending tick): a
+   *  version snapshot always persists the draft first, and on a blank card this is what cuts v1. */
+  const forceSave = useCallback(() => {
+    if (compactTimer.current) {
+      clearTimeout(compactTimer.current);
+      compactTimer.current = null;
+    }
     return compactRef.current();
   }, []);
 
@@ -638,7 +668,7 @@ function EditorLoaded({
                 currentAsset={asset}
                 hasDessin={initial.hasDessin}
                 onSnapshot={onVersionSaved}
-                onBeforeSnapshot={flushCompaction}
+                onForceSave={forceSave}
                 onError={pushToast}
                 editor={editor}
                 canWrite={canWrite}
@@ -714,6 +744,8 @@ function EditorLoaded({
             liveTexts={liveTexts}
             onDelete={deleteComment}
             onCorrectionStatus={changeCorrectionStatus}
+            onCorrectionAssign={changeCorrectionAssignee}
+            members={initial.members}
             notify={pushToast}
           />
         </div>
@@ -903,7 +935,7 @@ function ToolbarExtras({
   currentAsset,
   hasDessin,
   onSnapshot,
-  onBeforeSnapshot,
+  onForceSave,
   onError,
   editor,
   canWrite,
@@ -917,8 +949,9 @@ function ToolbarExtras({
   currentAsset: EditorDocumentResponse['asset'];
   hasDessin: boolean;
   onSnapshot: (a: AssetItem) => void;
-  /** Flush a pending idle compaction; snapshot awaits it so pre-save edits get versioned. */
-  onBeforeSnapshot: () => Promise<void>;
+  /** Save the draft NOW (cancelling any pending idle tick) so pre-save edits get versioned; on a
+   *  blank card the save itself materializes v1 and returns the new asset. */
+  onForceSave: () => Promise<{ assetId: string; filename: string } | null | undefined>;
   onError: (msg: string) => void;
   editor: Editor | null;
   canWrite: boolean;
@@ -946,9 +979,20 @@ function ToolbarExtras({
     snappingRef.current = true;
     setSnapping(true);
     try {
-      // Feedback 2026-09-01 — flush a pending compaction FIRST so those edits land and get versioned,
+      // Feedback 2026-09-01 — persist the draft FIRST so those edits land and get versioned,
       // instead of landing after versionedAt and reading as « Scénario non enregistré » on the board.
-      await onBeforeSnapshot();
+      const saved = await onForceSave();
+      // Feedback round 2 — on a blank card the save above materializes v1: that IS the new version
+      // (a snapshot POST would just dedupe against the identical bytes), so report it and stop.
+      if (!currentAsset && !assetId) {
+        if (!saved?.assetId) {
+          onError('Rien à enregistrer — le scénario est vide.');
+          return;
+        }
+        onSnapshot({ id: saved.assetId, filename: saved.filename, currentVersion: 1 } as AssetItem);
+        setConfirmOpen(false);
+        return;
+      }
       // Bug (off-by-one) — snapshot the OPENED/loaded asset in place (fall back to the ?asset URL param)
       // so "Enregistrer une nouvelle version" versions the right file instead of a materialized duplicate.
       const updated = await api.snapshotEditorVersion(pageId, { html: editor.getHTML(), ...(note ? { note } : {}) }, currentAsset?.id ?? assetId);
@@ -998,27 +1042,28 @@ function ToolbarExtras({
               Comparer
             </button>
           )}
-          {/* Feedback 2026-09-01 — one button opening the confirm modal (base preview + note);
-              the Item 22 split control (chevron note popover) is superseded. */}
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            disabled={snapping || !canWrite}
-            title={canWrite ? undefined : 'Lecture seule — permission « Écriture » requise'}
-            style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
-          >
-            {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
-          </button>
-          {confirmOpen && editor && (
-            <SnapshotConfirmModal
-              version={version}
-              previewText={editor.getText()}
-              snapping={snapping}
-              onConfirm={(note) => void snapshot(note)}
-              onCancel={() => setConfirmOpen(false)}
-            />
-          )}
         </>
+      )}
+      {/* Feedback 2026-09-01 — one button opening the confirm modal (base preview + note); the Item 22
+          split control is superseded. Round 2: also available on a BLANK card (version == null) —
+          confirming saves the draft, which materializes v1, instead of waiting for the first autosave. */}
+      <button
+        type="button"
+        onClick={() => setConfirmOpen(true)}
+        disabled={snapping || !canWrite}
+        title={canWrite ? undefined : 'Lecture seule — permission « Écriture » requise'}
+        style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', border: '2px solid var(--ink)', borderRadius: 6, padding: '4px 12px', minHeight: 32, background: 'var(--card)', cursor: snapping ? 'wait' : canWrite ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}
+      >
+        {snapping ? 'Enregistrement…' : 'Enregistrer une nouvelle version'}
+      </button>
+      {confirmOpen && editor && (
+        <SnapshotConfirmModal
+          version={version ?? 0}
+          previewText={editor.getText()}
+          snapping={snapping}
+          onConfirm={(note) => void snapshot(note)}
+          onCancel={() => setConfirmOpen(false)}
+        />
       )}
       {comparing && compareAssetId && version != null && (
         <CompareVersionsModal
@@ -1180,6 +1225,8 @@ function Sidebar({
   liveTexts,
   onDelete,
   onCorrectionStatus,
+  onCorrectionAssign,
+  members,
   notify,
 }: {
   comments: CaseCommentDto[];
@@ -1202,6 +1249,9 @@ function Sidebar({
   onDelete: (c: CaseCommentDto) => Promise<void>;
   /** CS-5 r4 (FR14) — step a correction-comment's status; author/assignee-only (server re-enforced). */
   onCorrectionStatus: (c: CaseCommentDto, status: CorrectionStatus) => Promise<void>;
+  /** Feedback round 2 (2026-09-01) — (re)assign a correction-comment; null unassigns. */
+  onCorrectionAssign: (c: CaseCommentDto, assigneeId: string | null) => Promise<void>;
+  members: { accountId: string; displayName: string }[];
   /** Toast seam owned by the parent (correction-filed confirmation). */
   notify: (msg: string) => void;
 }) {
@@ -1456,7 +1506,7 @@ function Sidebar({
                 status visible, one click to any other). Persists via PATCH /corrections/:id; the
                 server re-enforces the authz. */}
             {canStatus && c.correction && (
-              <div style={{ marginTop: 6 }}>
+              <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <CorrectionStatusControl
                   status={c.correction.status}
                   busy={statusBusyId === c.id}
@@ -1468,6 +1518,28 @@ function Sidebar({
                   }}
                   label="Statut de la correction"
                 />
+                {/* Feedback round 2 (2026-09-01) — (re)assign after creation, author/assignee only. */}
+                <OnBrandSelect
+                  aria-label="Assignée à"
+                  value={c.correction.assigneeId ?? ''}
+                  disabled={statusBusyId === c.id}
+                  onChange={(e) => {
+                    const next = e.target.value || null;
+                    if (next === (c.correction!.assigneeId ?? null)) return;
+                    setStatusBusyId(c.id);
+                    void onCorrectionAssign(c, next).finally(() =>
+                      setStatusBusyId((id) => (id === c.id ? null : id)),
+                    );
+                  }}
+                  style={{ minWidth: 130 }}
+                >
+                  <option value="">Non assignée</option>
+                  {members.map((m) => (
+                    <option key={m.accountId} value={m.accountId}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </OnBrandSelect>
               </div>
             )}
           </div>

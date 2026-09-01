@@ -36,6 +36,11 @@ const baseProps = {
   selectedId: null,
   onSelect: vi.fn(),
   onStatusChange: vi.fn(),
+  onAssign: vi.fn(),
+  members: [
+    { accountId: 'me', displayName: 'Camille' },
+    { accountId: 'yuki', displayName: 'Yuki' },
+  ],
   onVerify: vi.fn(),
   onDelete: vi.fn(),
   busyId: null,
@@ -91,31 +96,29 @@ describe('CorrectionList', () => {
     expect(screen.getByText(/Aucune demande/i)).toBeTruthy();
   });
 
-  // User feedback 2026-09-01 — the cycling « → next » stepper is replaced by an explicit
-  // radiogroup: every status visible, the current one checked, one click to any other.
-  it('shows the explicit status radiogroup for the author and reports the current status', () => {
+  // Feedback round 2 (2026-09-01) — the status control is a DROPDOWN (OnBrandSelect), not titled
+  // buttons: the trigger shows the current status, the popover lists all three.
+  it('shows the status dropdown for the author with the current status on the trigger', () => {
     render(<CorrectionList {...baseProps} items={[mk({ authorId: 'me', status: 'en_cours' })]} />);
-    const group = screen.getByRole('radiogroup', { name: /Statut de la correction/i });
-    expect(group).toBeTruthy();
-    expect(screen.getByRole('radio', { name: 'À corriger' }).getAttribute('aria-checked')).toBe('false');
-    expect(screen.getByRole('radio', { name: 'En cours' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: 'Corrigé' }).getAttribute('aria-checked')).toBe('false');
+    const select = screen.getByRole('combobox', { name: /Statut de la correction/i });
+    expect(select).toBeTruthy();
+    expect(select.textContent).toContain('En cours');
   });
 
-  it('clicking another status chip calls onStatusChange with that status', () => {
+  it('picking another status in the dropdown calls onStatusChange with that status', () => {
     const onStatusChange = vi.fn();
     const item = mk({ authorId: 'me', status: 'a_corriger' });
     render(<CorrectionList {...baseProps} onStatusChange={onStatusChange} items={[item]} />);
-    fireEvent.click(screen.getByRole('radio', { name: 'En cours' }));
+    fireEvent.click(screen.getByRole('combobox', { name: /Statut de la correction/i }));
+    fireEvent.click(screen.getByRole('option', { name: 'En cours' }));
     expect(onStatusChange).toHaveBeenCalledWith(item, 'en_cours');
-    fireEvent.click(screen.getByRole('radio', { name: 'Corrigé' }));
-    expect(onStatusChange).toHaveBeenCalledWith(item, 'corrige');
   });
 
-  it('clicking the current status chip is a no-op', () => {
+  it('picking the current status is a no-op', () => {
     const onStatusChange = vi.fn();
     render(<CorrectionList {...baseProps} onStatusChange={onStatusChange} items={[mk({ authorId: 'me', status: 'a_corriger' })]} />);
-    fireEvent.click(screen.getByRole('radio', { name: 'À corriger' }));
+    fireEvent.click(screen.getByRole('combobox', { name: /Statut de la correction/i }));
+    fireEvent.click(screen.getByRole('option', { name: 'À corriger' }));
     expect(onStatusChange).not.toHaveBeenCalled();
   });
 
@@ -141,7 +144,29 @@ describe('CorrectionList', () => {
 
   it('hides the status control for a member who is neither author nor assignee', () => {
     render(<CorrectionList {...baseProps} items={[mk({ authorId: 'someone', assigneeId: null })]} />);
-    expect(screen.queryByRole('radiogroup', { name: /Statut de la correction/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /Statut de la correction/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /Assignée à/i })).toBeNull();
+  });
+
+  // Feedback round 2 (2026-09-01) — a correction can be (re)assigned after creation.
+  it('the author reassigns a correction through the « Assignée à » dropdown', () => {
+    const onAssign = vi.fn();
+    const item = mk({ authorId: 'me', assigneeId: null });
+    render(<CorrectionList {...baseProps} onAssign={onAssign} items={[item]} />);
+    const picker = screen.getByRole('combobox', { name: /Assignée à — correction 1/i });
+    expect(picker.textContent).toContain('Non assignée');
+    fireEvent.click(picker);
+    fireEvent.click(screen.getByRole('option', { name: 'Yuki' }));
+    expect(onAssign).toHaveBeenCalledWith(item, 'yuki');
+  });
+
+  it('picking « Non assignée » unassigns (null)', () => {
+    const onAssign = vi.fn();
+    const item = mk({ authorId: 'me', assigneeId: 'yuki' });
+    render(<CorrectionList {...baseProps} onAssign={onAssign} items={[item]} />);
+    fireEvent.click(screen.getByRole('combobox', { name: /Assignée à — correction 1/i }));
+    fireEvent.click(screen.getByRole('option', { name: 'Non assignée' }));
+    expect(onAssign).toHaveBeenCalledWith(item, null);
   });
 
   it('shows a delete affordance only for the author', () => {

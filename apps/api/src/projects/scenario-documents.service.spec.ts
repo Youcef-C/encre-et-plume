@@ -80,6 +80,7 @@ function buildPrisma(over: Record<string, any> = {}) {
       ]),
     },
     assetPageLink: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0) },
+    account: { findMany: jest.fn().mockResolvedValue([{ id: 'acc-me', displayName: 'Moi' }]) },
     asset: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
     scenarioDocument: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -139,6 +140,14 @@ describe('ScenarioDocumentsService.getDocument', () => {
     expect(res.ydocState).toBeNull();
     expect(res.initialHtml).toBeNull();
     expect(res.cases).toEqual([]);
+  });
+
+  // Feedback round 2 (2026-09-01) — members ride along for the comment-card « Assignée à » picker.
+  it('ships the project members (owner included, deduped)', async () => {
+    const prisma = buildPrisma();
+    const { service } = makeService(prisma);
+    const res = await service.getDocument('acc-me', 'page-1');
+    expect(res.members).toEqual([{ accountId: 'acc-me', displayName: 'Moi' }]);
   });
 
   // Feedback 2026-09-01 — the editor's « Corrections dessin » link renders only when a dessin/page

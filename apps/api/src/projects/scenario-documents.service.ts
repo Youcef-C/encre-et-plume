@@ -118,6 +118,11 @@ export class ScenarioDocumentsService {
     const dessinLinks = await this.prisma.assetPageLink.count({
       where: { pageId: page.id, asset: { type: { in: ['dessin', 'page'] } } },
     });
+    // Feedback round 2 (2026-09-01) — members ride along so the comment cards can (re)assign a
+    // correction without a second fetch. Same assembly as CorrectionsService.getReview.
+    const memberIds = new Set<string>([page.project.ownerId, ...(page.project.work?.creators.map((c: { accountId: string }) => c.accountId) ?? [])]);
+    const memberRows = await this.prisma.account.findMany({ where: { id: { in: [...memberIds] } }, select: { id: true, displayName: true } });
+    const members = memberRows.map((m) => ({ accountId: m.id, displayName: m.displayName }));
 
     let contentJson: PlancheDocJson | null = null;
     let ydocState: string | null = null;
@@ -170,6 +175,7 @@ export class ScenarioDocumentsService {
       comments,
       template,
       hasDessin: dessinLinks > 0,
+      members,
     };
   }
 

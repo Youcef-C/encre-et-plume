@@ -62,7 +62,9 @@ export type CreateCorrectionRequest =
   | { type: 'dessin'; assetId: string; anchor: DessinAnchor; description: string; caseRef?: string; assigneeId?: string };
 
 export interface UpdateCorrectionRequest {
-  status: CorrectionStatus;
+  status?: CorrectionStatus;
+  /** Feedback round 2 (2026-09-01) — (re)assign after creation; null unassigns. Must be a member. */
+  assigneeId?: string | null;
 }
 
 export interface CorrectionListQuery {

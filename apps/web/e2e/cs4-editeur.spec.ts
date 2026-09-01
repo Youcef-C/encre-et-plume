@@ -368,12 +368,15 @@ test.describe('CS-4 Éditeur — blank scenario, autosave, versions, comments', 
     const correctionHighlight = caseBlock(page, 1).locator('[data-case-description] .ep-correction-highlight');
     await expect(correctionHighlight).toBeVisible({ timeout: 5_000 });
 
-    // FR14 (reworked 2026-09-01) — the author sees the explicit status radiogroup on the row; set
-    // en cours then corrigé directly; the chip updates each time via PATCH /corrections/:id.
-    await expect(correctionComment.getByRole('radiogroup', { name: /Statut de la correction/ })).toBeVisible();
-    await correctionComment.getByRole('radio', { name: 'En cours' }).click();
+    // FR14 (feedback round 2, 2026-09-01) — the author sets the status through the on-brand status
+    // DROPDOWN; the chip updates each time via PATCH /corrections/:id.
+    const statusSelect = correctionComment.getByRole('combobox', { name: 'Statut de la correction' });
+    await expect(statusSelect).toBeVisible();
+    await statusSelect.click();
+    await page.getByRole('option', { name: 'En cours' }).click();
     await expect(correctionComment.getByText('Correction · En cours')).toBeVisible({ timeout: 10_000 });
-    await correctionComment.getByRole('radio', { name: 'Corrigé' }).click();
+    await statusSelect.click();
+    await page.getByRole('option', { name: 'Corrigé' }).click();
     await expect(correctionComment.getByText('Correction · Corrigé')).toBeVisible({ timeout: 10_000 });
   });
 

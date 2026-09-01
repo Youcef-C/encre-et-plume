@@ -19,7 +19,9 @@ export default function SnapshotConfirmModal({
   onConfirm,
   onCancel,
 }: {
-  /** The current head version — the modal announces v{version} → v{version + 1}. */
+  /** The current head version — the modal announces v{version} → v{version + 1}. Pass 0 for a
+   *  not-yet-materialized card: the modal announces « v1 » (first version) and hides the note field
+   *  (v1 is cut by the save itself, which carries no note). */
   version: number;
   previewText: string;
   snapping: boolean;
@@ -61,7 +63,7 @@ export default function SnapshotConfirmModal({
           Enregistrer une nouvelle version
         </div>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 10 }}>
-          {`v${version} → v${version + 1}`}
+          {version === 0 ? 'v1' : `v${version} → v${version + 1}`}
         </div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 4 }}>
           Contenu de la version
@@ -69,15 +71,19 @@ export default function SnapshotConfirmModal({
         <div style={{ maxHeight: '40vh', overflow: 'auto', border: '2px solid var(--ink)', borderRadius: 6, background: 'var(--paper)', padding: '8px 10px', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap', color: 'var(--ink)', marginBottom: 12 }}>
           {previewText.trim() || '(Document vide)'}
         </div>
-        <label htmlFor="ep-version-note" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>NOTE (optionnelle)</label>
-        <textarea
-          id="ep-version-note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Décrivez cette version…"
-          rows={2}
-          style={{ width: '100%', marginTop: 4, marginBottom: 14, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)', boxSizing: 'border-box' }}
-        />
+        {version > 0 && (
+          <>
+            <label htmlFor="ep-version-note" style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink2)' }}>NOTE (optionnelle)</label>
+            <textarea
+              id="ep-version-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Décrivez cette version…"
+              rows={2}
+              style={{ width: '100%', marginTop: 4, marginBottom: 14, border: '2px solid var(--ink)', borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', resize: 'vertical', background: 'var(--card)', color: 'var(--ink)', boxSizing: 'border-box' }}
+            />
+          </>
+        )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button ref={cancelRef} type="button" onClick={onCancel} className="ep-btn-secondary" style={{ padding: '9px 16px', minHeight: 40 }}>
             Annuler

@@ -243,6 +243,23 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
     }
   };
 
+  // Feedback round 2 (2026-09-01) — (re)assign after creation, same optimistic shape as changeStatus.
+  const changeAssignee = async (c: CorrectionDto, assigneeId: string | null) => {
+    setBusyId(c.id);
+    setRowError(null);
+    const prev = all;
+    setAll((list) => list.map((x) => (x.id === c.id ? { ...x, assigneeId } : x)));
+    try {
+      const updated = await api.updateCorrection(c.id, { assigneeId });
+      setAll((list) => list.map((x) => (x.id === c.id ? updated : x)));
+    } catch (err) {
+      setAll(prev); // rollback
+      setRowError({ id: c.id, message: (err as { message?: string }).message ?? 'Assignation refusée.' });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   // CS-24 — « Vu »: the filer acknowledges a fix someone else marked corrigé. The status is NOT
   // touched; only the « en attente de vérification » marker clears.
   const verify = async (c: CorrectionDto) => {
@@ -450,6 +467,8 @@ export default function ReviewClient({ slug, pageId }: ReviewClientProps) {
               selectedId={selectedId}
               onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
               onStatusChange={changeStatus}
+              onAssign={changeAssignee}
+              members={payload.members}
               onVerify={verify}
               onDelete={setConfirmDel}
               busyId={busyId}

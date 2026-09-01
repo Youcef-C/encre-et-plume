@@ -195,7 +195,10 @@ export class CorrectionsService {
 
   // ── update status (PATCH /corrections/:id) ────────────────────────────────
   async updateStatus(accountId: string, correctionId: string, dto: UpdateCorrectionRequest): Promise<CorrectionDto> {
-    if (!STATUS_SET.has(dto.status)) throw new BadRequestException('Statut invalide');
+    // Feedback round 2 (2026-09-01) — the same PATCH also (re)assigns; both fields are optional but
+    // an empty body is a mistake, not a no-op.
+    if (dto.status === undefined && dto.assigneeId === undefined) throw new BadRequestException('Aucune modification');
+    if (dto.status !== undefined && !STATUS_SET.has(dto.status)) throw new BadRequestException('Statut invalide');
     const correction = (await this.prisma.correction.findUnique({
       where: { id: correctionId },
       include: { ...CORRECTION_INCLUDE, asset: { select: { currentVersion: true } } },
@@ -208,28 +211,43 @@ export class CorrectionsService {
       throw new ForbiddenException("Réservé à l'auteur·rice ou à la personne assignée");
     }
 
+    const data: Record<string, unknown> = {};
+    if (dto.assigneeId !== undefined) {
+      if (dto.assigneeId && !isMemberOf(page.project, dto.assigneeId)) throw new BadRequestException('Personne assignée invalide');
+      data.assigneeId = dto.assigneeId; // null unassigns
+    }
     // corrige stamps the resolving head + WHO pressed it (CS-24); reopening (a_corriger/en_cours)
     // clears the whole resolution, verification included — the loop starts over.
     const resolving = dto.status === 'corrige';
-    const data = resolving
-      ? { status: dto.status, resolvedInVersion: correction.asset.currentVersion, resolvedById: accountId }
-      : { status: dto.status, resolvedInVersion: null, resolvedById: null, verifiedAt: null };
+    if (dto.status !== undefined) {
+      Object.assign(
+        data,
+        resolving
+          ? { status: dto.status, resolvedInVersion: correction.asset.currentVersion, resolvedById: accountId }
+          : { status: dto.status, resolvedInVersion: null, resolvedById: null, verifiedAt: null },
+      );
+    }
     const updated = (await this.prisma.correction.update({
       where: { id: correctionId },
       data,
       include: CORRECTION_INCLUDE,
     })) as unknown as CorrectionRow;
 
-    if (resolving) {
-      // CS-24 — the filer is the one person who has to be told, with copy that says so and a refId
-      // the notification centre can resolve back to this row. Self-resolution notifies nobody.
-      if (correction.authorId !== accountId) {
-        await this.notifyUsers([correction.authorId], accountId, page.projectId, 'Votre correction a été marquée corrigée', correction.id);
+    if (dto.status !== undefined) {
+      if (resolving) {
+        // CS-24 — the filer is the one person who has to be told, with copy that says so and a refId
+        // the notification centre can resolve back to this row. Self-resolution notifies nobody.
+        if (correction.authorId !== accountId) {
+          await this.notifyUsers([correction.authorId], accountId, page.projectId, 'Votre correction a été marquée corrigée', correction.id);
+        }
+      } else {
+        const recipients = new Set<string>([correction.authorId, ...(correction.assigneeId ? [correction.assigneeId] : [])]);
+        recipients.delete(accountId);
+        await this.notifyUsers([...recipients], accountId, page.projectId, `Correction « ${short(correction.description)} » : ${statusLabel(dto.status)}`);
       }
-    } else {
-      const recipients = new Set<string>([correction.authorId, ...(correction.assigneeId ? [correction.assigneeId] : [])]);
-      recipients.delete(accountId);
-      await this.notifyUsers([...recipients], accountId, page.projectId, `Correction « ${short(correction.description)} » : ${statusLabel(dto.status)}`);
+    }
+    if (dto.assigneeId && dto.assigneeId !== accountId && dto.assigneeId !== correction.assigneeId) {
+      await this.notifyUsers([dto.assigneeId], accountId, page.projectId, `Correction « ${short(correction.description)} » vous a été assignée`, correction.id);
     }
     return this.toDto(updated);
   }

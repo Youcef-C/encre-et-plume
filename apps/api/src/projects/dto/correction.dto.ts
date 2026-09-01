@@ -42,6 +42,13 @@ export class CreateCorrectionDto {
 }
 
 export class UpdateCorrectionDto implements UpdateCorrectionRequest {
+  @IsOptional()
   @IsIn(CORRECTION_STATUSES as unknown as string[])
-  status!: CorrectionStatus;
+  status?: CorrectionStatus;
+
+  // Feedback round 2 (2026-09-01) — (re)assign after creation. `null` unassigns (IsOptional lets
+  // null through); membership is validated in the service. At least one field must be present.
+  @IsOptional()
+  @IsString()
+  assigneeId?: string | null;
 }

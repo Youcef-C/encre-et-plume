@@ -425,9 +425,12 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     // committed server-side yet (only `busyId`/disabled-button state does, and that's a subtler thing to
     // assert reliably under load). Wait on the real PATCH response instead, so the second click can never
     // race the first one's server-side commit — the exact condition the `unresolved` count below depends on.
-    // Feedback 2026-09-01 — the cycler is now an explicit radiogroup: click the target status chip.
-    // The card's data-status is the unambiguous state read (the chip labels repeat the pill text).
-    const chipOnDessinRow = (label: string) => dessinRow.getByRole('radio', { name: label });
+    // Feedback round 2 (2026-09-01) — the status control is a DROPDOWN: open it, pick the option.
+    // The card's data-status is the unambiguous state read (the option labels repeat the pill text).
+    const pickStatus = async (label: string) => {
+      await dessinRow.getByRole('combobox', { name: /Statut de la correction/ }).click();
+      await page.getByRole('option', { name: label }).click();
+    };
     const patchResp = (status: string) =>
       page.waitForResponse(
         async (r) => {
@@ -437,11 +440,11 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
         },
       );
     const toEnCours = patchResp('en_cours');
-    await chipOnDessinRow('En cours').click();
+    await pickStatus('En cours');
     expect((await toEnCours).status()).toBe(200);
     await expect(dessinRow.locator('.ep-correction-card')).toHaveAttribute('data-status', 'en_cours', { timeout: 10_000 });
     const toCorrige = patchResp('corrige');
-    await chipOnDessinRow('Corrigé').click();
+    await pickStatus('Corrigé');
     expect((await toCorrige).status()).toBe(200);
     await expect(dessinRow.locator('.ep-correction-card')).toHaveAttribute('data-status', 'corrige', { timeout: 10_000 });
 
@@ -458,9 +461,11 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await expect(scenarioComment.getByText('Correction · À corriger')).toBeVisible();
     // Tagged highlight is visually differentiated from a plain comment highlight (double-underline class).
     await expect(caseBlock(page, 1).locator('.ep-correction-highlight')).toBeVisible({ timeout: 5_000 });
-    await scenarioComment.getByRole('radio', { name: 'En cours' }).click();
+    await scenarioComment.getByRole('combobox', { name: 'Statut de la correction' }).click();
+    await page.getByRole('option', { name: 'En cours' }).click();
     await expect(scenarioComment.getByText('Correction · En cours')).toBeVisible({ timeout: 10_000 });
-    await scenarioComment.getByRole('radio', { name: 'Corrigé' }).click();
+    await scenarioComment.getByRole('combobox', { name: 'Statut de la correction' }).click();
+    await page.getByRole('option', { name: 'Corrigé' }).click();
     await expect(scenarioComment.getByText('Correction · Corrigé')).toBeVisible({ timeout: 10_000 });
 
     // Now Valider succeeds — both corrections are corrigé.
@@ -551,7 +556,7 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await collab.goto(`/projet/${MULTI_SLUG}/editeur/${pid}`);
     const commentAsCollab = collab.locator('aside .ep-comments-scroll > div').filter({ hasText: 'Corriger cette case.' });
     await expect(commentAsCollab).toBeVisible({ timeout: 10_000 });
-    await expect(commentAsCollab.getByRole('radiogroup', { name: /Statut de la correction/ })).toHaveCount(0);
+    await expect(commentAsCollab.getByRole('combobox', { name: /Statut de la correction/ })).toHaveCount(0);
 
     // Validate by STRANGER (signed in, NOT a project member) → 403.
     const forgedValidate = await stranger.request.post(`${API}/pages/${pid}/review/validate`);
@@ -708,7 +713,8 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
     await owner.getByRole('application', { name: 'Tracer une zone de correction' }).focus();
     await owner.keyboard.press('Enter'); // keyboard fallback for the drawn region
     await owner.getByLabel('Décrire la correction (dessin)').fill('La main de la case 3 est à l’envers.');
-    const picker = owner.getByRole('combobox', { name: 'Assignée à' });
+    // exact — the correction rows now carry their own « Assignée à — correction N » pickers.
+    const picker = owner.getByRole('combobox', { name: 'Assignée à', exact: true });
     await expect(picker).toContainText('Non assignée');
     await picker.click();
     await owner.getByRole('option', { name: assignee.displayName }).click();
@@ -733,7 +739,8 @@ test.describe('CS-5 Révision & corrections (dessin-only, r4/r5)', () => {
         if (!/\/corrections\/[^/]+$/.test(r.url()) || r.request().method() !== 'PATCH') return false;
         return (r.request().postDataJSON() as { status?: string }).status === next;
       });
-      await collabRow.getByRole('radio', { name: label }).click();
+      await collabRow.getByRole('combobox', { name: /Statut de la correction/ }).click();
+      await collab.getByRole('option', { name: label }).click();
       expect((await patched).status()).toBe(200);
     }
     await expect(collabRow).toHaveAttribute('data-status', 'corrige', { timeout: 10_000 });

@@ -26,6 +26,9 @@ export interface CorrectionListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onStatusChange: (c: CorrectionDto, status: CorrectionStatus) => void;
+  // Feedback round 2 (2026-09-01) — (re)assign after creation; null unassigns.
+  onAssign: (c: CorrectionDto, assigneeId: string | null) => void;
+  members: { accountId: string; displayName: string }[];
   // CS-24 — the filer acknowledges a fix someone else marked corrigé.
   onVerify: (c: CorrectionDto) => void;
   onDelete: (c: CorrectionDto) => void;
@@ -54,6 +57,8 @@ export default function CorrectionList({
   selectedId,
   onSelect,
   onStatusChange,
+  onAssign,
+  members,
   onVerify,
   onDelete,
   busyId,
@@ -234,6 +239,26 @@ export default function CorrectionList({
                         label={`Statut de la correction ${n}`}
                       />
                     )
+                  )}
+                  {/* Feedback round 2 (2026-09-01) — (re)assign after creation, author/assignee only. */}
+                  {canStatus && (
+                    <OnBrandSelect
+                      aria-label={`Assignée à — correction ${n}`}
+                      value={c.assigneeId ?? ''}
+                      disabled={busyId === c.id}
+                      onChange={(e) => {
+                        const next = e.target.value || null;
+                        if (next !== (c.assigneeId ?? null)) onAssign(c, next);
+                      }}
+                      style={{ minWidth: 130 }}
+                    >
+                      <option value="">Non assignée</option>
+                      {members.map((m) => (
+                        <option key={m.accountId} value={m.accountId}>
+                          {m.displayName}
+                        </option>
+                      ))}
+                    </OnBrandSelect>
                   )}
                   {awaitingCheck && (
                     <button

@@ -138,6 +138,7 @@ function makeDoc(over: Partial<EditorDocumentResponse> = {}): EditorDocumentResp
     comments: [],
     template: null,
     hasDessin: false,
+    members: [{ accountId: 'me', displayName: 'Moi' }, { accountId: 'yuki', displayName: 'Yuki' }],
     ...over,
   };
 }
@@ -248,11 +249,29 @@ describe('EditorClient (Éditeur shell)', () => {
     await waitFor(() => expect(api.snapshotEditorVersion).toHaveBeenCalledTimes(1));
   });
 
-  it('hides the version chip until materialized; blank card cannot comment yet', async () => {
+  // Feedback round 2 (2026-09-01) — « Enregistrer une nouvelle version » no longer waits for the
+  // first autosave: it is available on a blank card and materializes v1 itself.
+  it('hides the version chip until materialized but keeps the save-version button available', async () => {
     await renderEditor(makeDoc({ asset: null }));
     expect(screen.queryByText(/^v\d+$/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Enregistrer une nouvelle version' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' })).toBeInTheDocument();
     expect(screen.getByText(/Enregistrez d’abord le scénario/)).toBeInTheDocument();
+  });
+
+  it('on a blank card, confirming the version modal materializes v1 via autosave (no snapshot POST)', async () => {
+    (api.autosaveEditorDocument as ReturnType<typeof vi.fn>).mockResolvedValue({
+      savedAt: 'now',
+      materialized: { assetId: 'a-new', filename: 'scenario-page-5.html', documentId: 'doc-new' },
+    });
+    await renderEditor(makeDoc({ asset: null }));
+    await userEvent.click(screen.getByRole('button', { name: 'Enregistrer une nouvelle version' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Enregistrer une nouvelle version' });
+    expect(within(dialog).getByText('v1')).toBeInTheDocument(); // first version — no v0 → v1 arrow
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }));
+    await waitFor(() => expect(api.autosaveEditorDocument).toHaveBeenCalledTimes(1));
+    expect(api.snapshotEditorVersion).not.toHaveBeenCalled();
+    expect(await screen.findByText('Nouvelle version enregistrée')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('v1')).toBeInTheDocument()); // chip materialized
   });
 
   it('snapshots a new version and confirms', async () => {
@@ -817,8 +836,8 @@ describe('EditorClient (Éditeur shell)', () => {
     expect(screen.queryByText(/Révision · corrections/)).not.toBeInTheDocument();
   });
 
-  // FR14 (reworked 2026-09-01) — the author sets a correction-comment status through the explicit
-  // radiogroup (every status visible, one click to any other); persists via PATCH /corrections/:id.
+  // FR14 (feedback round 2, 2026-09-01) — the author sets a correction-comment status through the
+  // on-brand status DROPDOWN; persists via PATCH /corrections/:id.
   it('FR14: the author sets a correction-comment status from the editor panel', async () => {
     (api.updateCorrection as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'x1', status: 'en_cours' });
     await renderEditor(
@@ -829,9 +848,10 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    expect(screen.getByRole('radiogroup', { name: /Statut de la correction/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'À corriger' }).getAttribute('aria-checked')).toBe('true');
-    await userEvent.click(screen.getByRole('radio', { name: 'En cours' }));
+    const select = screen.getByRole('combobox', { name: /Statut de la correction/i });
+    expect(select.textContent).toContain('À corriger');
+    await userEvent.click(select);
+    await userEvent.click(screen.getByRole('option', { name: 'En cours' }));
     await waitFor(() => expect(api.updateCorrection).toHaveBeenCalledWith('x1', { status: 'en_cours' }));
     // The chip reflects the server response.
     await waitFor(() => expect(screen.getByText(/Correction · En cours/)).toBeInTheDocument());
@@ -847,7 +867,25 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    expect(screen.getByRole('radiogroup', { name: /Statut de la correction/i })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /Statut de la correction/i })).toBeInTheDocument();
+  });
+
+  // Feedback round 2 (2026-09-01) — a correction-comment can be (re)assigned after creation.
+  it('FR14bis: the author assigns a correction-comment through « Assignée à »; persists via PATCH', async () => {
+    (api.updateCorrection as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'x1', status: 'a_corriger', assigneeId: 'yuki' });
+    await renderEditor(
+      makeDoc({
+        asset: { id: 'a1', filename: 'scenario.html', currentVersion: 1 },
+        comments: [
+          mkComment({ id: 'corr', authorId: 'me', quote: null, anchorFrom: null, anchorTo: null, correction: mkCorrection({ status: 'a_corriger', assigneeId: null }) }),
+        ],
+      }),
+    );
+    const picker = screen.getByRole('combobox', { name: 'Assignée à' });
+    expect(picker.textContent).toContain('Non assignée');
+    await userEvent.click(picker);
+    await userEvent.click(screen.getByRole('option', { name: 'Yuki' }));
+    await waitFor(() => expect(api.updateCorrection).toHaveBeenCalledWith('x1', { assigneeId: 'yuki' }));
   });
 
   it('FR14: a member who is neither author nor assignee sees no status control', async () => {
@@ -859,7 +897,7 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    expect(screen.queryByRole('radiogroup', { name: /Statut de la correction/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /Statut de la correction/i })).not.toBeInTheDocument();
   });
 
   // FR14 — a failed status change toasts and leaves the chip unchanged (no optimistic flip).
@@ -873,7 +911,8 @@ describe('EditorClient (Éditeur shell)', () => {
         ],
       }),
     );
-    await userEvent.click(screen.getByRole('radio', { name: 'Corrigé' }));
+    await userEvent.click(screen.getByRole('combobox', { name: /Statut de la correction/i }));
+    await userEvent.click(screen.getByRole('option', { name: 'Corrigé' }));
     expect(await screen.findByText('Changement de statut refusé.')).toBeInTheDocument();
     expect(screen.getByText(/Correction · À corriger/)).toBeInTheDocument();
   });

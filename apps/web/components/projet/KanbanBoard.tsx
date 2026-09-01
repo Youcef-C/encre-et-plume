@@ -1195,22 +1195,14 @@ function PageCard({
             </span>
           )}
           {/* CS-26 — the number that will refuse the VALIDÉ move, shown before the move is attempted.
-              Feedback 2026-09-01: plus WHICH file type still needs a correction. */}
+              Feedback round 2 (2026-09-01): icon+count only on the card face — the file TYPES with
+              open corrections show in the card modal's FICHIERS sections, not here. */}
           {card.openCorrectionCount > 0 && (
             <span title="Corrections ouvertes" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--accent)' }}>
               <WarningIcon size={12} />
               {card.openCorrectionCount}
             </span>
           )}
-          {(card.openCorrectionTypes ?? []).map((t) => (
-            <span
-              key={t}
-              title={`Corrections ouvertes (${t === 'scenario' ? 'scénario' : 'dessin'})`}
-              style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--accent)', border: '1.5px solid var(--accent)', borderRadius: 4, padding: '0 4px' }}
-            >
-              {t === 'scenario' ? 'scénario' : 'dessin'}
-            </span>
-          ))}
           {card.assignees.length > 0 && (
             <span
               style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}

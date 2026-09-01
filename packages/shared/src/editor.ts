@@ -70,6 +70,9 @@ export interface EditorDocumentResponse {
    *  this card. Gates the editor's « Corrections dessin » link: /revision is dessin-only, so the
    *  link only renders when that screen can actually show something. */
   hasDessin: boolean;
+  /** Feedback round 2 (2026-09-01) — the project members, so a correction-comment can be (re)assigned
+   *  from the editor (« Assignée à » picker on the comment card). */
+  members: { accountId: string; displayName: string }[];
 }
 
 export interface AutosaveDocumentRequest {
